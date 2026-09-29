@@ -1,8 +1,8 @@
 # 用 GitHub Action 部署 FlareMo
 
-这份教程面向**自己的部署仓库**（FlareMo 的 fork 或副本）。Workflow 是 `.github/workflows/deploy-cloudflare.yml`，只响应手动 `Run workflow`，push 不会自动发布。上游仓库 `realchendahuang/FlareMo` 不会执行这个 job。
+这份教程面向**自己的部署仓库**（FlareMo 的 fork 或副本）。Workflow 是 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 以及手动 `Run workflow` 时发布。上游仓库 `realchendahuang/FlareMo` 不会执行这个 job。`cloudflare/wrangler-action` 负责远端 D1 migration 和 `wrangler deploy`。
 
-官方维护路径仍是本地 `pnpm deploy`，或 [Deploy to Cloudflare](./deploy.md#一键部署社区支持) 按钮配合 Workers Builds。不要把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 写进 workflow 文件、issue、PR 或聊天，也不要放进 `workflow_dispatch` 输入框：GitHub 会把启动表单明文记在运行记录里。密钥只放在仓库 **Settings → Secrets**。
+不要把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET`、`RESEND_API_KEY` 写进 workflow 文件、issue、PR 或聊天，也不要放进 `workflow_dispatch` 输入框：GitHub 会把启动表单明文记在运行记录里。认证密钥只放在仓库 **Settings → Secrets**；邮件密钥只放在 Cloudflare Worker secret store（`wrangler secret put`）。
 
 ## 前置
 
@@ -47,17 +47,30 @@ Account ID 在 Cloudflare Dashboard 首页右侧。
 | `BETTER_AUTH_SECRET` | 要登录则必填 | ≥32 字符；部署后写入 Worker secret store |
 | `FLAREMO_BOOTSTRAP_SECRET` | 要完成 `/setup` 则必填 | ≥32 字符，与上一行不同 |
 
+仓库 **Variables**（非 secret）可选：
+
+| 名称 | 说明 |
+| --- | --- |
+| `FLAREMO_PUBLIC_URL` | 自定义域名 origin；留空则写成 `https://flaremo.<账号 workers.dev 子域>.workers.dev` |
+| `FLAREMO_EMAIL_PROVIDER` | 自助找回密码：设为 `resend` |
+| `FLAREMO_EMAIL_FROM` | 已验证发件地址 |
+
+**不要**把 `RESEND_API_KEY` 配成 GitHub Actions secret。邮件密钥只通过 Worker secret 设置：
+
+```bash
+pnpm exec wrangler secret put RESEND_API_KEY --config ./wrangler.jsonc
+```
+
 不要配置：
 
 - `FLAREMO_D1_DATABASE_ID`：workflow 会按名字创建或复用 D1 `flaremo`。
-- `FLAREMO_PUBLIC_URL`：留空则自动设为 `https://flaremo.<账号 workers.dev 子域>.workers.dev`。
 - `WRANGLER_JSONC`：仅当本地已有一份不能从模板生成的完整 `wrangler.jsonc` 时，才把全文放进这个 Secret。
 
 自定义域名：先在 Cloudflare 绑定到 Worker，再把仓库 **Variable** `FLAREMO_PUBLIC_URL` 设成该 origin（例如 `https://notes.example.com`，不要带 path），然后重新跑 workflow。
 
 ## 4. 运行 Deploy to Cloudflare
 
-打开仓库 `Actions` → `Deploy to Cloudflare` → `Run workflow`：
+push 到 `main` 会自动跑正式发布（`dry_run` 关闭、`provision` 开启）。也可以打开仓库 `Actions` → `Deploy to Cloudflare` → `Run workflow`：
 
 1. 第一次建议勾选 `dry_run`：构建、Wrangler dry-run，并对 D1 / R2 / Queue / Vectorize 资源和 API Token 权限做**只读校验**。不创建任何资源，不执行远端 D1 migration、不发布、不同步 secret；资源缺失或 Token 权限不足会在这一步直接报出来。
 2. `provision` 保持勾选：创建缺失的 D1、R2、Queue、Vectorize。已存在的资源会跳过，不会再建一套。
@@ -65,11 +78,11 @@ Account ID 在 Cloudflare Dashboard 首页右侧。
 
 正式运行会依次：
 
-1. 从 `wrangler.jsonc.example` 生成本次 job 的 `wrangler.jsonc`（不提交进 Git）。
+1. 从 `wrangler.jsonc.example` 生成本次 job 的 `wrangler.jsonc`（不提交进 Git），并可写入 Variables 里的 `FLAREMO_EMAIL_PROVIDER` / `FLAREMO_EMAIL_FROM`。
 2. 创建或复用 D1 `flaremo`、R2 `flaremo-attachments`、Queue `flaremo-member-removal` 与 `flaremo-data-export`、Vectorize `flaremo-memos` 与 `flaremo-memories`（1024 维、cosine）。
 3. 若未配置 `FLAREMO_PUBLIC_URL`，用账号 workers.dev 子域写成 `https://flaremo.<子域>.workers.dev`。
-4. 执行 `pnpm deploy`：构建前端、应用远端 D1 migrations、发布 Worker。
-5. 把 GitHub Secrets 里的 `BETTER_AUTH_SECRET` 和 `FLAREMO_BOOTSTRAP_SECRET` 同步到 Worker。日志里的密钥显示为 `***`。
+4. 构建前端；用 `cloudflare/wrangler-action` 应用远端 D1 migrations 并 `wrangler deploy`。
+5. 把 GitHub Secrets 里的 `BETTER_AUTH_SECRET` 和 `FLAREMO_BOOTSTRAP_SECRET` 同步到 Worker。日志里的密钥显示为 `***`。**不会**同步 `RESEND_API_KEY`。
 6. 冒烟检查：访问 `FLAREMO_PUBLIC_URL` 确认 Worker 正在服务，重试约一分钟；仍不可达则把 run 标红。
 
 若这两个 GitHub Secret 未设置，同步步骤会跳过，不阻断发布；但 `/setup` 和登录会失败，需要补上 Secret 后再跑一次（不要勾 `dry_run`），或在 Cloudflare Dashboard 的 Worker → Settings → Variables and Secrets 里手动添加。
@@ -89,18 +102,24 @@ https://flaremo.<子域>.workers.dev
 
 成功后转到 `/login`，公共 signup 关闭。不要把 secret 或密码贴进 issue、PR、日志或聊天。
 
+启用 Resend 后按这个清单冒烟（不要把密钥或邮件正文贴进 issue）：
+
+1. `/forgot-password` 提交已注册邮箱。
+2. 邮件到达，链接是本 origin 的 `/reset?token=…`。
+3. 设置新密码。
+4. 用新密码登录成功。自助重置会撤销全部 cookie session，但不会吊销已有 `memos_pat_`。
+
 ## 6. 之后如何更新
 
 | 场景 | 做法 |
 | --- | --- |
-| 自己改了代码 | 推到默认分支，再手动运行 `Deploy to Cloudflare`。资源已存在时可取消勾选 `provision`。 |
-| 上游发布了新的稳定版 | 按 [更新指南](./update.md) 运行 `Prepare FlareMo update`，审查并合并升级 PR，再运行 `Deploy to Cloudflare`。使用本 workflow 时，合并 PR **不会**自动发布。 |
+| 自己改了代码 | 推到 `main`：workflow 自动发布。资源已存在时 push 仍会跑幂等 provision。也可用 `Run workflow`。 |
+| 上游发布了新的稳定版 | 按 [更新指南](./update.md) 运行 `Prepare FlareMo update`，审查并合并升级 PR。本 workflow 在合并进 `main` 后会自动发布。 |
 | 只轮换认证密钥 | 改 GitHub Secret，再运行一次正式部署（会覆盖 Worker 上的对应 secret）。 |
 | 改用自定义域名 | Cloudflare 绑定域名，设置 Variable `FLAREMO_PUBLIC_URL`，再部署。 |
+| 启用邮件找回密码 | 设置 Variables `FLAREMO_EMAIL_PROVIDER=resend` 与 `FLAREMO_EMAIL_FROM`，并用 `wrangler secret put RESEND_API_KEY` 写入 Worker，然后部署。 |
 
-本 workflow 不会在 push 时发布。每次生产发布都要点 `Run workflow`。
-
-`Prepare FlareMo update` 只创建升级 PR，不持有 Cloudflare 凭据。真正发布仍是 `Deploy to Cloudflare` 或本地 `pnpm deploy` / Workers Builds。
+`Prepare FlareMo update` 只创建升级 PR，不持有 Cloudflare 凭据。真正发布是本 workflow（push 到 `main` 或 `Run workflow`）、本地 `pnpm deploy`，或 Workers Builds。
 
 ## 7. 首次不必配置的项
 
@@ -108,7 +127,8 @@ https://flaremo.<子域>.workers.dev
 
 | 项 | 何时需要 |
 | --- | --- |
-| `FLAREMO_RECOVERY_SECRET` | 没有邮件找回、需要破窗重置 owner 密码时；用完删除或轮换 |
+| `RESEND_API_KEY` | 自助找回密码 / 注册验证；**只**用 `wrangler secret put`，不要放进 GitHub Actions secrets |
+| `FLAREMO_RECOVERY_SECRET` | 没有邮件找回、需要破窗重置 owner 密码时；用完删除或轮换。已配置 Resend 时不必启用 |
 | `FLAREMO_ASR_DASHSCOPE_API_KEY` | 使用默认 DashScope 语音转写时 |
 | 腾讯 ASR 的 Secret ID / Key | 把 `FLAREMO_ASR_PROVIDER` 改成 `tencent` 时 |
 | VAPID 公钥/私钥 | 浏览器 Web Push；这是 vars，不是 secret，改完需要重新部署 |

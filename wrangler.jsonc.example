@@ -103,6 +103,12 @@
     "FLAREMO_PUBLIC_URL": "",
     // Optional comma-separated additional browser origins for trusted clients.
     "FLAREMO_TRUSTED_ORIGINS": "",
+    // Transactional email (forgot-password, verification). Leave empty for
+    // none. Set provider to "resend" and put RESEND_API_KEY as a Worker
+    // secret, never a public var:
+    //   pnpm exec wrangler secret put RESEND_API_KEY
+    "FLAREMO_EMAIL_PROVIDER": "",
+    "FLAREMO_EMAIL_FROM": "",
     // Optional Web Push reminders (daily review, overdue tasks). Generate a
     // keypair with `npx web-push generate-vapid-keys`; both values go here
     // (the public key is not secret). Omitting either disables push.

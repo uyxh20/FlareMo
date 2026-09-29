@@ -14,9 +14,9 @@ FlareMo 部署到 Cloudflare Workers。Worker 同时承载前端静态资源和 
 
 手动部署仍是受支持的完整路径，按钮流程更适合快速试用。
 
-## GitHub Action 手动部署（自托管 fork）
+## GitHub Action 部署（自托管 fork）
 
-自己的 fork 或部署仓库可以使用 `.github/workflows/deploy-cloudflare.yml`：在 Actions 里手动 `Run workflow`，创建缺失的 D1 / R2 / Queue / Vectorize，发布 Worker，并把仓库 Secrets 里的 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 同步到 Cloudflare。push 不会自动发布；上游 `realchendahuang/FlareMo` 不会跑这个 job。
+自己的 fork 或部署仓库可以使用 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 或 Actions 里手动 `Run workflow` 时，创建缺失的 D1 / R2 / Queue / Vectorize，用 `cloudflare/wrangler-action` 发布 Worker，并把仓库 Secrets 里的 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 同步到 Cloudflare。上游 `realchendahuang/FlareMo` 不会跑这个 job。邮件密钥（`RESEND_API_KEY`）只放在 Worker secret store，不要放进 GitHub Actions secrets。
 
 完整步骤见 [用 GitHub Action 部署](./github-action-deploy.md)。
 
@@ -154,11 +154,41 @@ curl "$FLAREMO_URL/api/auth/flaremo/bootstrap/status"
 - `/api/auth/change-password`：修改密码；密码修改时可以撤销其他 session。
 - `/api/app/account/personal-access-tokens`：在 cookie session 下创建、列出和撤销 `memos_pat_` PAT。
 
-当前没有配置邮件 provider，因此 Better Auth 的普通 `request-password-reset` 邮件流程保持关闭；账户页提供的是“知道当前密码时修改密码”。如需忘记密码自助找回，应先接入真实 transactional email provider，再配置 Better Auth 的 `sendResetPassword` 和 reset 页面，不要把一个假的成功提示当作恢复能力。
+### 事务邮件与自助找回密码（Resend）
+
+配置真实 transactional email 后，登录页「忘记密码」可用：请求重置 → 邮件里的 `/reset?token=…` 链接 → 设置新密码 → 用新密码登录。应用 UI 走 `POST /api/auth/flaremo/forgot-password`（地址未注册时也返回成功，避免枚举）。同一套发送函数也接到 Better Auth 的 `emailAndPassword.sendResetPassword`，因此原生 `POST /api/auth/forget-password` 同样发信。无邮件 provider 时这些端点保持关闭，账户页仍是「知道当前密码时修改密码」，不要把一个假的成功提示当作恢复能力。
+
+Worker **vars**（非 secret，可写在 `wrangler.jsonc` 或 GitHub Actions **Variables**，由部署 workflow 写入配置）：
+
+| 名称 | 说明 |
+| --- | --- |
+| `FLAREMO_EMAIL_PROVIDER` | 设为 `resend` 启用 Resend。`cloudflare` 使用 Workers Paid 的 `EMAIL` binding。留空或 `none` 关闭邮件。 |
+| `FLAREMO_EMAIL_FROM` | 已在 Resend（或 Cloudflare Email Sending）验证过的发件地址，例如 `FlareMo <no-reply@example.com>`。 |
+
+Worker **secret**（不要写进 Git、workflow 文件、issue 或 GitHub Actions secrets）：
+
+```bash
+pnpm exec wrangler secret put RESEND_API_KEY --config ./wrangler.jsonc
+```
+
+也可用 Cloudflare Dashboard → Worker → Settings → Variables and Secrets。环境变量把 provider 配全时优先于后台「邮件设置」里保存的 D1 配置。`RESEND_API_KEY` 必须留在 Worker secret store；GitHub Action 不会同步它。
+
+冒烟清单：
+
+1. 打开 `/forgot-password`，提交已注册邮箱（未注册地址也应显示同一成功文案）。
+2. 收件箱出现重置邮件，链接指向本实例 `/reset?token=…`（约 1 小时有效）。
+3. 在重置页设置新密码（8–128 字符）。
+4. 用新密码在 `/login` 登录成功；旧密码失败。
+
+重置成功后的凭据行为（保持现有策略，本改动没有另造吊销规则）：
+
+- **Cookie session**：Better Auth `revokeSessionsOnPasswordReset` 会立刻撤销该身份的全部浏览器 session，需要重新登录。
+- **`memos_pat_` PAT**：自助找回密码**不会**吊销 PAT。脚本、MCP 和 Memos 客户端令牌继续有效，直到账户页或 operator recovery 明确撤销。
+- **Operator recovery**（`FLAREMO_RECOVERY_SECRET` / `/recover`）：破窗路径仍会同时撤销 session **和** 全部 PAT。这不是普通用户忘记密码；配置了 Resend 后不必启用它。
 
 ### Break-glass operator recovery
 
-没有邮件 provider 时，已完成 bootstrap 的单用户实例可以使用单独的 `FLAREMO_RECOVERY_SECRET` 做受限恢复。这个入口只重置现有 owner，不创建用户、不重建 `auth_user_links`，并通过 Better Auth 的 reset-password 流程完成密码校验、哈希、一次性 verification 消费和 session 撤销；现有 `memos_pat_` 也会全部撤销。它是运维破窗能力，不是普通用户的忘记密码功能。
+没有邮件 provider 时，已完成 bootstrap 的单用户实例可以使用单独的 `FLAREMO_RECOVERY_SECRET` 做受限恢复。这个入口只重置现有 owner，不创建用户、不重建 `auth_user_links`，并通过 Better Auth 的 reset-password 流程完成密码校验、哈希、一次性 verification 消费和 session 撤销；现有 `memos_pat_` 也会全部撤销。它是运维破窗能力，不是普通用户的忘记密码功能。已配置 Resend 时优先使用自助邮件重置。
 
 ### Web Push 推送提醒（可选）
 
@@ -388,7 +418,7 @@ http://localhost:8787
 
 ## 升级
 
-应用内左下角的“系统更新”会显示当前版本和最新稳定版本。使用 Workers Builds 的 GitHub 部署可以按 [更新指南](./update.md) 运行更新 workflow、审查升级 PR，并在合并后自动发布。若使用 [GitHub Action 手动部署](./github-action-deploy.md)，合并升级 PR 之后还要再运行一次 `Deploy to Cloudflare`。
+应用内左下角的“系统更新”会显示当前版本和最新稳定版本。使用 Workers Builds 的 GitHub 部署可以按 [更新指南](./update.md) 运行更新 workflow、审查升级 PR，并在合并后自动发布。若使用 [GitHub Action 部署](./github-action-deploy.md)，合并升级 PR 到 `main` 后会自动发布。
 
 手工升级前先看 `CHANGELOG.md` 和 release notes，然后执行：
 

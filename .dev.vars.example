@@ -11,6 +11,13 @@ BETTER_AUTH_SECRET=<local-secret-at-least-32-characters>
 FLAREMO_BOOTSTRAP_SECRET=<local-one-time-bootstrap-secret>
 FLAREMO_RECOVERY_SECRET=<local-break-glass-recovery-secret>
 
+# Optional transactional email for forgot-password and verification.
+# Leave unset for none. Provider "resend" also needs RESEND_API_KEY
+# (wrangler secret put in production; local value only in ignored .dev.vars).
+# FLAREMO_EMAIL_PROVIDER=resend
+# FLAREMO_EMAIL_FROM=FlareMo <no-reply@example.com>
+# RESEND_API_KEY=<resend-api-key>
+
 # 可选：Cloudflare 资源用量面板（设置→用量）。生产用 `pnpm setup:usage`
 # 写入 Worker secret；本地 dev 想看这块时手动填入（token 只需要
 # Account Analytics: Read 权限）。留空则面板隐藏该区块。

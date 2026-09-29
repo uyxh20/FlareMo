@@ -1,8 +1,8 @@
 # Deploy FlareMo with GitHub Actions
 
-This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It only runs from a manual `Run workflow` click; pushes do not publish. The upstream repository `realchendahuang/FlareMo` never runs this job.
+This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on push to `main` and on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
 
-The maintained paths remain local `pnpm deploy`, or the [Deploy to Cloudflare](./deploy.md#one-click-deploy-community-supported) button with Workers Builds. Do not put `BETTER_AUTH_SECRET` or `FLAREMO_BOOTSTRAP_SECRET` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs: GitHub stores those form values in the run record. Keep them in repository **Settings → Secrets**.
+Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs: GitHub stores those form values in the run record. Keep auth secrets in repository **Settings → Secrets**. Keep mail credentials in the Cloudflare Worker secret store (`wrangler secret put`).
 
 ## Prerequisites
 
@@ -47,17 +47,30 @@ Open `Settings` → `Secrets and variables` → `Actions` and add:
 | `BETTER_AUTH_SECRET` | Yes if you need login | ≥32 characters; synced to the Worker secret store |
 | `FLAREMO_BOOTSTRAP_SECRET` | Yes if you need `/setup` | ≥32 characters, different from the previous value |
 
+Optional repository **Variables** (not secrets):
+
+| Name | Purpose |
+| --- | --- |
+| `FLAREMO_PUBLIC_URL` | Custom-domain origin; if empty, `https://flaremo.<account workers.dev subdomain>.workers.dev` |
+| `FLAREMO_EMAIL_PROVIDER` | Self-service reset: set to `resend` |
+| `FLAREMO_EMAIL_FROM` | Verified sender address |
+
+Do **not** store `RESEND_API_KEY` as a GitHub Actions secret. Set it only as a Worker secret:
+
+```bash
+pnpm exec wrangler secret put RESEND_API_KEY --config ./wrangler.jsonc
+```
+
 Do not set:
 
 - `FLAREMO_D1_DATABASE_ID`: the workflow creates or reuses D1 `flaremo` by name.
-- `FLAREMO_PUBLIC_URL`: if empty, it becomes `https://flaremo.<account workers.dev subdomain>.workers.dev`.
 - `WRANGLER_JSONC`: only if you already have a full `wrangler.jsonc` that cannot be generated from the example.
 
 For a custom domain, bind it to the Worker in Cloudflare, set repository **Variable** `FLAREMO_PUBLIC_URL` to that origin (for example `https://notes.example.com`, no path), then run the workflow again.
 
 ## 4. Run Deploy to Cloudflare
 
-Open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
+A push to `main` runs a production publish (`dry_run` off, `provision` on). You can also open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
 
 1. On the first attempt, enable `dry_run`: build, Wrangler dry-run, and a **read-only check** of the D1 / R2 / Queue / Vectorize resources plus API token permissions. Nothing is created; remote D1 migration, publish, and secret sync are skipped. Missing resources or insufficient token permissions are reported right here.
 2. Leave `provision` enabled: create missing D1, R2, Queue, and Vectorize resources. Existing names are skipped.
@@ -65,11 +78,11 @@ Open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
 
 A production run will:
 
-1. Generate a job-local `wrangler.jsonc` from `wrangler.jsonc.example` (not committed).
+1. Generate a job-local `wrangler.jsonc` from `wrangler.jsonc.example` (not committed), including Variables `FLAREMO_EMAIL_PROVIDER` / `FLAREMO_EMAIL_FROM` when set.
 2. Create or reuse D1 `flaremo`, R2 `flaremo-attachments`, queues `flaremo-member-removal` and `flaremo-data-export`, and Vectorize indexes `flaremo-memos` and `flaremo-memories` (1024 dimensions, cosine).
 3. If `FLAREMO_PUBLIC_URL` is unset, write `https://flaremo.<subdomain>.workers.dev`.
-4. Run `pnpm deploy`: build the web app, apply remote D1 migrations, publish the Worker.
-5. Copy GitHub Secrets `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` onto the Worker. Logs show `***`.
+4. Build the web app; `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
+5. Copy GitHub Secrets `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` onto the Worker. Logs show `***`. **`RESEND_API_KEY` is not synced.**
 6. Smoke check: request `FLAREMO_PUBLIC_URL` to confirm the Worker serves traffic, retrying for about a minute; a site that stays unreachable marks the run red.
 
 If those two GitHub Secrets are missing, the sync step skips and deploy still finishes; `/setup` and login will fail until you add the Secrets and run again without `dry_run`, or add them in Cloudflare Dashboard → Worker → Settings → Variables and Secrets.
@@ -89,18 +102,24 @@ Open `https://<that origin>/setup` and enter:
 
 Success redirects to `/login` and public signup closes. Do not paste secrets or passwords into issues, PRs, logs, or chat.
 
+After Resend is configured, smoke-test (do not paste secrets or mail bodies into issues):
+
+1. Submit a registered address on `/forgot-password`.
+2. The email arrives; the link is this origin's `/reset?token=…`.
+3. Set a new password.
+4. Sign in with the new password. Self-service reset revokes cookie sessions and does not revoke existing `memos_pat_` tokens.
+
 ## 6. Later updates
 
 | Situation | What to do |
 | --- | --- |
-| You changed application code | Push the default branch, then run `Deploy to Cloudflare`. You can uncheck `provision` once resources exist. |
-| Upstream published a stable release | Follow the [update guide](./update.md) to run `Prepare FlareMo update`, review and merge the PR, then run `Deploy to Cloudflare`. Merging the PR does **not** publish when you use this workflow. |
+| You changed application code | Push to `main`; the workflow publishes. Existing resource names are skipped. `Run workflow` still works. |
+| Upstream published a stable release | Follow the [update guide](./update.md) to run `Prepare FlareMo update`, review and merge the PR. This workflow publishes after the merge lands on `main`. |
 | Rotate auth secrets | Change the GitHub Secrets and run a production deploy (overwrites the Worker secrets). |
 | Switch to a custom domain | Bind the domain in Cloudflare, set Variable `FLAREMO_PUBLIC_URL`, deploy again. |
+| Enable forgot-password email | Set Variables `FLAREMO_EMAIL_PROVIDER=resend` and `FLAREMO_EMAIL_FROM`, then `wrangler secret put RESEND_API_KEY` on the Worker, then deploy. |
 
-This workflow never publishes on push. Every production deploy is a `Run workflow` click.
-
-`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is still `Deploy to Cloudflare`, local `pnpm deploy`, or Workers Builds.
+`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is this workflow (push to `main` or `Run workflow`), local `pnpm deploy`, or Workers Builds.
 
 ## 7. Not required on first install
 
@@ -108,7 +127,8 @@ These cannot be set in the FlareMo UI. Add them in Cloudflare when you need the 
 
 | Item | When |
 | --- | --- |
-| `FLAREMO_RECOVERY_SECRET` | Break-glass owner password reset without email; delete or rotate after use |
+| `RESEND_API_KEY` | Forgot-password / verification mail; **only** `wrangler secret put`, never a GitHub Actions secret |
+| `FLAREMO_RECOVERY_SECRET` | Break-glass owner password reset without email; delete or rotate after use. Skip this when Resend is configured |
 | `FLAREMO_ASR_DASHSCOPE_API_KEY` | Default DashScope voice capture |
 | Tencent ASR secret ID / key | When `FLAREMO_ASR_PROVIDER` is `tencent` |
 | VAPID public/private keys | Web Push; these are vars, not secrets, and need a redeploy |

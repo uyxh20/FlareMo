@@ -467,4 +467,221 @@ describe("FlareMo registration and email API", () => {
     expect(takenRequest.status).toBe(400);
     expect(sent).toHaveLength(5);
   });
+
+  it("revokes browser sessions on self-service reset but leaves memos_pat_ tokens enabled", async () => {
+    const emailApp = createFlareMoApp();
+    const open = await emailApp.fetch(
+      new Request("http://flaremo.test/api/app/admin/settings", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          cookie: sessionCookie,
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({ registration_open: true }),
+      }),
+      env,
+    );
+    expect(open.status).toBe(200);
+
+    const sent: Array<{ to: string; subject: string; text: string }> = [];
+    const appEnv = {
+      ...env,
+      FLAREMO_EMAIL_PROVIDER: "cloudflare",
+      FLAREMO_EMAIL_FROM: "no-reply@flaremo.test",
+      EMAIL: {
+        send: async (msg: { to: string; subject: string; text: string }) => {
+          sent.push(msg);
+          return { ok: true };
+        },
+      },
+    } as Env;
+
+    const register = await emailApp.fetch(
+      new Request("http://flaremo.test/api/auth/flaremo/register", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({
+          name: "Pat Member",
+          email: "pat-reset@example.com",
+          password: TEST_PASSWORD,
+        }),
+      }),
+      appEnv,
+    );
+    expect(register.status).toBe(201);
+
+    const signIn = await emailApp.fetch(
+      new Request("http://flaremo.test/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({
+          email: "pat-reset@example.com",
+          password: TEST_PASSWORD,
+        }),
+      }),
+      appEnv,
+    );
+    expect(signIn.status).toBe(200);
+    const cookie = extractCookieHeader(signIn);
+
+    const createdPat = await emailApp.fetch(
+      new Request(
+        "http://flaremo.test/api/app/account/personal-access-tokens",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie,
+            origin: "http://flaremo.test",
+          },
+          body: JSON.stringify({ name: "reset-survival", expires_in_days: 30 }),
+        },
+      ),
+      appEnv,
+    );
+    expect(createdPat.status).toBe(201);
+    const pat = (await createdPat.json()) as { token: string };
+    expect(pat.token).toMatch(/^memos_pat_/);
+
+    const forgot = await emailApp.fetch(
+      new Request("http://flaremo.test/api/auth/flaremo/forgot-password", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({ email: "pat-reset@example.com" }),
+      }),
+      appEnv,
+    );
+    expect(forgot.status).toBe(200);
+    const resetToken = /reset\?token=([A-Za-z0-9-]+)/.exec(
+      sent.at(-1)?.text ?? "",
+    )?.[1];
+    expect(resetToken).toBeDefined();
+
+    const reset = await emailApp.fetch(
+      new Request("http://flaremo.test/api/auth/reset-password", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({
+          newPassword: `${TEST_PASSWORD}-rotated`,
+          token: resetToken,
+        }),
+      }),
+      appEnv,
+    );
+    expect(reset.status).toBe(200);
+
+    const staleSessionWithCookie = await emailApp.fetch(
+      new Request("http://flaremo.test/api/app/memos", {
+        headers: { cookie },
+      }),
+      appEnv,
+    );
+    expect(staleSessionWithCookie.status).toBe(401);
+
+    const livePat = await emailApp.fetch(
+      new Request("http://flaremo.test/api/v1/memos", {
+        headers: { authorization: `Bearer ${pat.token}` },
+      }),
+      appEnv,
+    );
+    expect(livePat.status).toBe(200);
+  });
+
+  it("sends reset mail through Better Auth forget-password when Resend is configured", async () => {
+    const emailApp = createFlareMoApp();
+    const open = await emailApp.fetch(
+      new Request("http://flaremo.test/api/app/admin/settings", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          cookie: sessionCookie,
+          origin: "http://flaremo.test",
+        },
+        body: JSON.stringify({ registration_open: true }),
+      }),
+      env,
+    );
+    expect(open.status).toBe(200);
+
+    const resendBodies: Array<{ subject?: string; text?: string }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      if (String(input).includes("api.resend.com")) {
+        resendBodies.push(
+          JSON.parse(String(init?.body)) as {
+            subject?: string;
+            text?: string;
+          },
+        );
+        return new Response(JSON.stringify({ id: "email_test" }), {
+          status: 200,
+        });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
+    const appEnv = {
+      ...env,
+      FLAREMO_EMAIL_PROVIDER: "resend",
+      FLAREMO_EMAIL_FROM: "no-reply@flaremo.test",
+      RESEND_API_KEY: "re_test_placeholder",
+    } as Env;
+
+    try {
+      const register = await emailApp.fetch(
+        new Request("http://flaremo.test/api/auth/flaremo/register", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://flaremo.test",
+          },
+          body: JSON.stringify({
+            name: "Resend Member",
+            email: "resend-reset@example.com",
+            password: TEST_PASSWORD,
+          }),
+        }),
+        appEnv,
+      );
+      expect(register.status).toBe(201);
+      expect(
+        resendBodies.some((mail) => mail.subject?.includes("Verify")),
+      ).toBe(true);
+
+      const forgot = await emailApp.fetch(
+        new Request("http://flaremo.test/api/auth/request-password-reset", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://flaremo.test",
+          },
+          body: JSON.stringify({ email: "resend-reset@example.com" }),
+        }),
+        appEnv,
+      );
+      expect(forgot.status).toBe(200);
+      const resetMail = resendBodies.find((mail) =>
+        mail.subject?.includes("Reset"),
+      );
+      expect(resetMail?.text).toContain("/reset?token=");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
