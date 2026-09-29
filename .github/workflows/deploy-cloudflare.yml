@@ -1,9 +1,15 @@
-# 自托管 fork 的手动生产部署。只响应 workflow_dispatch，不在 push 时发布。
-# 上游仓库 realchendahuang/FlareMo 不会跑这个 job。
-# 真正执行的仍是仓库里的 `pnpm deploy`：构建前端、远端 D1 migration、再 wrangler deploy。
+# Self-hosted fork production deploy. Runs on push to main and on
+# workflow_dispatch. Upstream realchendahuang/FlareMo never runs this job.
+#
+# The job still generates wrangler.jsonc, provisions resources, builds the
+# frontend, and syncs auth Worker secrets. cloudflare/wrangler-action runs
+# D1 migrations and wrangler deploy. Mail credentials (RESEND_API_KEY) stay
+# as Cloudflare Worker secrets — do not put them in GitHub Actions secrets.
 name: Deploy to Cloudflare
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -64,33 +70,51 @@ jobs:
           FLAREMO_D1_DATABASE_ID: ${{ secrets.FLAREMO_D1_DATABASE_ID }}
           FLAREMO_PUBLIC_URL: ${{ vars.FLAREMO_PUBLIC_URL || secrets.FLAREMO_PUBLIC_URL }}
           FLAREMO_DEPLOY_REPOSITORY: ${{ vars.FLAREMO_DEPLOY_REPOSITORY }}
+          FLAREMO_EMAIL_PROVIDER: ${{ vars.FLAREMO_EMAIL_PROVIDER }}
+          FLAREMO_EMAIL_FROM: ${{ vars.FLAREMO_EMAIL_FROM }}
         run: node ./scripts/write-wrangler-config.mjs
 
       - name: Provision / verify Cloudflare resources
         run: |
           set -euo pipefail
-          if [[ "${{ inputs.provision }}" == "true" && "${{ inputs.dry_run }}" != "true" ]]; then
+          DRY_RUN="${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}"
+          PROVISION="${{ github.event_name != 'workflow_dispatch' && true || inputs.provision }}"
+          if [[ "${PROVISION}" == "true" && "${DRY_RUN}" != "true" ]]; then
             pnpm provision:remote
           else
             pnpm provision:remote -- --check
           fi
 
-      - name: Deploy
-        run: |
-          set -euo pipefail
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            pnpm deploy:dry-run
-          else
-            pnpm deploy
-          fi
+      - name: Deploy preflight
+        run: pnpm deploy:preflight
+
+      - name: Build web app
+        run: pnpm --filter @flaremo/web build
+
+      - name: Apply D1 migrations
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.129.1"
+          command: d1 migrations apply DB --remote --config ./wrangler.jsonc
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.129.1"
+          command: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'deploy --config ./wrangler.jsonc --dry-run' || 'deploy --config ./wrangler.jsonc' }}
 
       - name: Sync Worker secrets
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
         env:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           FLAREMO_BOOTSTRAP_SECRET: ${{ secrets.FLAREMO_BOOTSTRAP_SECRET }}
         run: pnpm secrets:sync
 
       - name: Smoke check deployed site
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
         run: pnpm smoke:check

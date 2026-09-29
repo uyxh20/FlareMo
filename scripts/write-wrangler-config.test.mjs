@@ -50,6 +50,30 @@ test("keeps the D1 placeholder when no database id is provided", () => {
   assert.match(text, /"FLAREMO_PUBLIC_URL": ""/);
 });
 
+test("fills optional transactional email vars when provided", () => {
+  const text = buildWranglerConfig({
+    configText: exampleText,
+    databaseId: "",
+    publicUrl: "",
+    repository: "octocat/flaremo",
+    emailProvider: "resend",
+    emailFrom: "FlareMo <no-reply@example.com>",
+  });
+  assert.match(text, /"FLAREMO_EMAIL_PROVIDER": "resend"/);
+  assert.match(text, /"FLAREMO_EMAIL_FROM": "FlareMo <no-reply@example.com>"/);
+});
+
+test("leaves email vars empty when they are not provided", () => {
+  const text = buildWranglerConfig({
+    configText: exampleText,
+    databaseId: "",
+    publicUrl: "",
+    repository: "octocat/flaremo",
+  });
+  assert.match(text, /"FLAREMO_EMAIL_PROVIDER": ""/);
+  assert.match(text, /"FLAREMO_EMAIL_FROM": ""/);
+});
+
 test("rejects a template without the D1 placeholder", () => {
   assert.throws(
     () => buildWranglerConfig({ configText: '"name": "flaremo"' }),

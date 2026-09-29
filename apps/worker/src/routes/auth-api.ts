@@ -441,11 +441,13 @@ authApi.post("/bootstrap", zValidator("json", bootstrapSchema), async (c) => {
 /**
  * Break-glass recovery for an already completed single-user instance.
  *
- * This is deliberately not a public "forgot password" flow: no email
- * provider is configured yet, and the endpoint is disabled unless a separate
- * recovery secret is explicitly present. It preserves the existing owner
- * mapping and enters Better Auth's own one-time reset/password hashing flow.
- * Rotate or remove FLAREMO_RECOVERY_SECRET immediately after use.
+ * This is not the public forgot-password flow. Self-service reset uses
+ * transactional email (Resend or Cloudflare Email Sending) via
+ * POST /api/auth/flaremo/forgot-password and Better Auth's sendResetPassword
+ * hook. This operator route stays disabled unless FLAREMO_RECOVERY_SECRET is
+ * explicitly present. It preserves the existing owner mapping and enters
+ * Better Auth's own one-time reset/password hashing flow. Rotate or remove
+ * the recovery secret immediately after use.
  */
 authApi.post(
   "/recover",

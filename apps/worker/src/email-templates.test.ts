@@ -148,6 +148,59 @@ describe("localized sends", () => {
     expect(ok).toBe(true);
     expect(sent[0].subject).toBe(emailCopy("en-US").verifyEmail.subject);
   });
+
+  it("posts reset mail to Resend when FLAREMO_EMAIL_PROVIDER is resend", async () => {
+    const captured: Array<{
+      url: string;
+      authorization: string | null;
+      body: { from?: string; to?: string[]; subject?: string; text?: string };
+    }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const headers = new Headers(init?.headers);
+      captured.push({
+        url: String(input),
+        authorization: headers.get("authorization"),
+        body: JSON.parse(String(init?.body)) as {
+          from?: string;
+          to?: string[];
+          subject?: string;
+          text?: string;
+        },
+      });
+      return new Response(JSON.stringify({ id: "email_test" }), {
+        status: 200,
+      });
+    }) as typeof fetch;
+    try {
+      const ok = await sendPasswordResetEmail(
+        {
+          FLAREMO_EMAIL_PROVIDER: "resend",
+          FLAREMO_EMAIL_FROM: "FlareMo <no-reply@example.com>",
+          RESEND_API_KEY: "re_test_placeholder",
+        } as never,
+        {} as never,
+        baseInput("en-US"),
+      );
+      expect(ok).toBe(true);
+      expect(captured).toHaveLength(1);
+      expect(captured[0].url).toBe("https://api.resend.com/emails");
+      expect(captured[0].authorization).toBe("Bearer re_test_placeholder");
+      expect(captured[0].body.from).toBe("FlareMo <no-reply@example.com>");
+      expect(captured[0].body.to).toEqual(["user@example.com"]);
+      expect(captured[0].body.subject).toBe(
+        emailCopy("en-US").resetPassword.subject,
+      );
+      expect(captured[0].body.text).toContain(
+        "https://app.example.com/reset?token=tok",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("interpolate", () => {

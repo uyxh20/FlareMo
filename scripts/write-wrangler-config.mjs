@@ -37,6 +37,8 @@ export function buildWranglerConfig({
   databaseId,
   publicUrl,
   repository,
+  emailProvider,
+  emailFrom,
 }) {
   if (!configText.includes(D1_PLACEHOLDER)) {
     throw new Error("wrangler.jsonc.example is missing the D1 placeholder.");
@@ -55,6 +57,20 @@ export function buildWranglerConfig({
     text = text.replace(
       '"FLAREMO_PUBLIC_URL": ""',
       `"FLAREMO_PUBLIC_URL": ${JSON.stringify(canonical)}`,
+    );
+  }
+  const provider = String(emailProvider ?? "").trim();
+  if (provider) {
+    text = text.replace(
+      '"FLAREMO_EMAIL_PROVIDER": ""',
+      `"FLAREMO_EMAIL_PROVIDER": ${JSON.stringify(provider)}`,
+    );
+  }
+  const from = String(emailFrom ?? "").trim();
+  if (from) {
+    text = text.replace(
+      '"FLAREMO_EMAIL_FROM": ""',
+      `"FLAREMO_EMAIL_FROM": ${JSON.stringify(from)}`,
     );
   }
   return text.replace(
@@ -91,6 +107,8 @@ function main() {
     process.env.FLAREMO_DEPLOY_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY ||
     "";
+  const emailProvider = process.env.FLAREMO_EMAIL_PROVIDER?.trim() ?? "";
+  const emailFrom = process.env.FLAREMO_EMAIL_FROM?.trim() ?? "";
 
   const configText = readFileSync("wrangler.jsonc.example", "utf8");
   writeFileSync(
@@ -100,6 +118,8 @@ function main() {
       databaseId,
       publicUrl,
       repository,
+      emailProvider,
+      emailFrom,
     }),
   );
   console.log("Wrote wrangler.jsonc from wrangler.jsonc.example.");

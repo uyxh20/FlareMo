@@ -16,7 +16,7 @@ Manual deployment remains the fully supported path; the button flow is best for 
 
 ## GitHub Action deploy (self-hosted fork)
 
-A fork or deployment repository can use `.github/workflows/deploy-cloudflare.yml`: run it manually from Actions, provision missing D1 / R2 / Queue / Vectorize resources, publish the Worker, and sync `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` from repository Secrets. Pushes do not publish. Upstream `realchendahuang/FlareMo` never runs this job.
+A fork or deployment repository can use `.github/workflows/deploy-cloudflare.yml`: on push to `main` or a manual `Run workflow`, it provisions missing D1 / R2 / Queue / Vectorize resources, publishes the Worker with `cloudflare/wrangler-action`, and syncs `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` from repository Secrets. Upstream `realchendahuang/FlareMo` never runs this job. Mail credentials (`RESEND_API_KEY`) stay in the Worker secret store; do not add them as GitHub Actions secrets.
 
 Full steps: [Deploy with GitHub Actions](./github-action-deploy.md).
 
@@ -57,9 +57,41 @@ pnpm deploy
 
 FlareMo's application authentication is provided by Better Auth. The first deployment uses the one-time `/setup` flow to create the single owner; browsers use an `HttpOnly` cookie session, while scripts, MCP, and Memos-compatible clients use a revocable `memos_pat_` PAT. Cloudflare Access is optional outer policy and never replaces the application session or PAT.
 
-The current release supports username/password login and authenticated password changes. No email provider is configured, so Better Auth's self-service forgot-password email flow remains disabled rather than pretending to work. A completed single-user instance has a separately configured break-glass operator recovery route; it targets the existing owner, revokes sessions and PATs, and must be rotated or removed immediately after use.
+The current release supports username/password login, authenticated password changes, and self-service forgot-password when transactional email is configured. Set `FLAREMO_EMAIL_PROVIDER=resend`, `FLAREMO_EMAIL_FROM`, and Worker secret `RESEND_API_KEY` (see below). Without a provider, forgot-password stays disabled rather than pretending to work. A completed single-user instance may still use a separately configured break-glass operator recovery route; it targets the existing owner, revokes sessions and PATs, and must be rotated or removed immediately after use. Prefer Resend when you need user-facing password recovery.
 
 The current `/api/v1` wire is the current Memos-style camelCase/protobuf-JSON subset. The legacy snake_case wire is selected explicitly with `X-FlareMo-Wire: legacy`. Better Auth remains the identity source while the current auth facade returns a Memos-style HS256 access JWT and rotates the `memos_refresh` HttpOnly cookie. The release also exposes the bounded social REST subset, UserService webhook/notification resource subset, a bounded D1 outbox for four memo webhook events with retries, Connect JSON/protobuf/gRPC-Web unary subset, heartbeat SSE, and stateless `/mcp` Streamable HTTP subset; complete upstream webhook event/egress semantics, full notification filtering and multi-user ACL, complete Memos Server, protobuf/gRPC, and third-party-client parity are not promised.
+
+### Transactional email (Resend) and forgot-password
+
+The app flow is request reset on `/forgot-password` → email link to `/reset?token=…` → set a new password → sign in. The UI posts to `POST /api/auth/flaremo/forgot-password` (same success body for unknown addresses). The same `sendPasswordResetEmail` function is Better Auth's `emailAndPassword.sendResetPassword` hook, so native `POST /api/auth/forget-password` also sends mail.
+
+Worker **vars** (not secrets; `wrangler.jsonc` or GitHub Actions **Variables** that the deploy workflow writes into config):
+
+| Name | Purpose |
+| --- | --- |
+| `FLAREMO_EMAIL_PROVIDER` | `resend` enables Resend. `cloudflare` uses the Workers Paid `EMAIL` binding. Empty or `none` disables mail. |
+| `FLAREMO_EMAIL_FROM` | Verified sender, for example `FlareMo <no-reply@example.com>`. |
+
+Worker **secret** (not git, not the workflow file, not GitHub Actions secrets):
+
+```bash
+pnpm exec wrangler secret put RESEND_API_KEY --config ./wrangler.jsonc
+```
+
+A fully configured environment wins over owner-saved D1 email settings. Keep `RESEND_API_KEY` in the Worker secret store; the GitHub Action does not sync it.
+
+Smoke-test:
+
+1. Open `/forgot-password` and submit a registered address (unknown addresses show the same success copy).
+2. The reset email arrives; the link is this origin's `/reset?token=…` (about one hour).
+3. Set a new password (8–128 characters) on the reset page.
+4. Sign in on `/login` with the new password; the old password fails.
+
+Credential behavior after a successful self-service reset (unchanged policy):
+
+- **Cookie sessions**: Better Auth `revokeSessionsOnPasswordReset` immediately invalidates every browser session for that identity.
+- **`memos_pat_` PATs**: self-service reset does **not** revoke PATs. Scripts, MCP, and Memos clients keep working until the account page or operator recovery revokes them.
+- **Operator recovery** (`FLAREMO_RECOVERY_SECRET` / `/recover`): still revokes sessions **and** every PAT. Do not use that path when Resend is configured.
 
 Recommended boundary:
 
@@ -230,7 +262,7 @@ http://localhost:8787
 
 Read `CHANGELOG.md` and GitHub Release notes before upgrading.
 
-The “System update” entry in the lower-left corner shows the installed and latest stable versions. GitHub deployments that use Workers Builds can follow the [update guide](./update.md) to prepare an update pull request and publish after merge. If you use [GitHub Action deploy](./github-action-deploy.md), run `Deploy to Cloudflare` again after merging the upgrade PR.
+The “System update” entry in the lower-left corner shows the installed and latest stable versions. GitHub deployments that use Workers Builds can follow the [update guide](./update.md) to prepare an update pull request and publish after merge. If you use [GitHub Action deploy](./github-action-deploy.md), merging the upgrade PR onto `main` publishes automatically.
 
 For a manual update, read the changelog and release notes, then deploy. This command applies pending migrations before publishing the Worker:
 

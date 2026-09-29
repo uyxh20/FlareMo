@@ -1,0 +1,19 @@
+[Cursor Rules]
+Use the real FlareMo auth integration points instead of inventing a second password-reset stack. Self-service reset is POST /api/auth/flaremo/forgot-password plus Better Auth emailAndPassword.sendResetPassword; both send mail through sendPasswordResetEmail. The reset page posts to Better Auth /api/auth/reset-password.
+Do not put RESEND_API_KEY, BETTER_AUTH_SECRET, or FLAREMO_BOOTSTRAP_SECRET in git, PR bodies, or GitHub Actions secret-sync for mail. Mail keys stay as Worker secrets via wrangler secret put.
+Do not implement FLAREMO_RECOVERY_SECRET as the user-facing forgot-password path when Resend is the chosen recovery option.
+Self-hosted fork deploy uses .github/workflows/deploy-cloudflare.yml on push to main and workflow_dispatch with cloudflare/wrangler-action. Do not duplicate that workflow.
+
+[Plan]
+Wire Resend into Better Auth sendResetPassword using the existing sendPasswordResetEmail helper; keep the FlareMo forgot-password UI; document Worker var/secret names and PAT/session behavior; extend deploy-cloudflare.yml for push to main with wrangler-action; open a PR and do not merge or deploy.
+
+[Knowledge Learned]
+2026-09-29: Live Worker https://flaremo.ulysse-ha-19.workers.dev reported email_verification_required=false, so forgot-password stayed off until FLAREMO_EMAIL_PROVIDER=resend, FLAREMO_EMAIL_FROM, and Worker secret RESEND_API_KEY are set. The UI was already present.
+2026-09-29: Better Auth only calls sendResetPassword for an existing user. Throwing from that hook would 500 known addresses and 200 unknown ones, which enumerates accounts. Delivery failures stay logged inside sendPasswordResetEmail.
+2026-09-29: revokeSessionsOnPasswordReset invalidates cookie sessions. memos_pat_ tokens survive self-service reset. Operator /recover still revokes sessions and PATs. Do not invent a new revocation policy without stating it.
+2026-09-29: GitHub Action must not sync RESEND_API_KEY. Wrangler deploy preserves existing Worker secrets.
+
+[Project Styles]
+Deployment and auth docs exist in docs/deploy.md and docs/en/deploy.md; keep the secret-name tables in both.
+Worker public flags are wrangler vars (FLAREMO_EMAIL_PROVIDER, FLAREMO_EMAIL_FROM). API keys are wrangler secrets.
+Auth pages use AuthPageFrame plus existing i18n keys; do not add unimplemented recovery UI.

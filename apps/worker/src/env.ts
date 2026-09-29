@@ -38,11 +38,11 @@ export type FlareMoEnv = Env & {
   // (per IP) and paid ASR connection starts (per authenticated user; see
   // src/rate-limit.ts). Unbound deployments skip throttling entirely.
   RATE_LIMITER?: RateLimiterBinding;
-  // Transactional email for registration verification (see src/email.ts).
+  // Transactional email for verification and forgot-password (see src/email.ts).
   // `cloudflare` uses the EMAIL binding (Workers Paid); `resend` uses the
-  // Resend HTTP API (needs RESEND_API_KEY); `none` skips verification entirely
-  // (self-host default). Owner-configured D1 settings take precedence over
-  // these env vars when both exist (see src/integrations/config.ts).
+  // Resend HTTP API (needs RESEND_API_KEY); unset/`none` skips mail entirely
+  // (self-host default). Env wins when it fully configures a provider; the
+  // owner's encrypted D1 settings apply otherwise (see integrations/config.ts).
   FLAREMO_EMAIL_PROVIDER?: string;
   FLAREMO_EMAIL_FROM?: string;
   RESEND_API_KEY?: string;
