@@ -111,7 +111,19 @@ describe("FlareMo calendar API", () => {
       ),
     );
 
-    expect(view.notes.some((note) => note.count >= 1)).toBe(true);
+    // Memos created in this test land on "today". After September 2026 they
+    // fall outside the due-date window used for tasks, so notes are queried
+    // on a range that still includes today.
+    const todayDate = new Date().toISOString().slice(0, 10);
+    const notesInSeptember = localDateWithinSeptember(todayDate);
+    const notesView = notesInSeptember
+      ? view
+      : await json<{ notes: Array<{ date: string; count: number }> }>(
+          await fetchApp(
+            `http://flaremo.test/api/app/calendar?from=${todayDate}&to=${todayDate}`,
+          ),
+        );
+    expect(notesView.notes.some((note) => note.count >= 1)).toBe(true);
     expect(
       view.notes.every(
         (note) => note.date >= "2026-09-01" && note.date <= "2026-09-30",
@@ -123,8 +135,7 @@ describe("FlareMo calendar API", () => {
 
     // The unchecked task list is counted exactly once for its day. The memo
     // above predates stamping, so this proves the content scan fallback too.
-    const todayDate = new Date().toISOString().slice(0, 10);
-    if (todayDate >= "2026-09-01" && todayDate <= "2026-09-30") {
+    if (notesInSeptember) {
       expect(view.note_tasks).toEqual([{ date: todayDate, count: 1 }]);
     }
 
@@ -196,7 +207,13 @@ describe("FlareMo calendar API", () => {
       }),
     );
 
-    const today = new Date().toISOString().slice(0, 10);
+    // The endpoint's `date` is a *local* calendar date (it is paired with
+    // `tz` below), so it has to be formatted in local time. Deriving it from
+    // `toISOString()` instead picks the UTC date, and between local midnight
+    // and 08:00 in any negative-offset-of-UTC zone such as Asia/Shanghai the
+    // two differ — the memo just written then falls outside the window the
+    // test asks about, and the assertion below fails for several hours a day.
+    const today = new Intl.DateTimeFormat("en-CA").format(new Date());
     const tz = new Date().getTimezoneOffset();
     const res = await fetchApp(
       `http://flaremo.test/api/app/stats/hourly?date=${today}&tz=${tz}`,
