@@ -142,20 +142,23 @@ jobs:
             exit 0
           fi
 
-          pr_spec="$(node --input-type=module -e '
+          pr_dir="$(mktemp -d)"
+          node --input-type=module -e '
+            import { writeFileSync } from "node:fs";
             import { updatePullRequest } from "./scripts/prepare-flaremo-update.mjs";
             const files = JSON.parse(process.argv[3]);
-            process.stdout.write(JSON.stringify(updatePullRequest({
+            const pr = updatePullRequest({
               currentVersion: process.argv[1],
               targetVersion: process.argv[2],
               files,
               upstreamRepository: process.env.UPSTREAM_REPOSITORY,
-            })));
-          ' "${current_version}" "${target_version}" "${files_json}")"
-          pr_title="$(node -p "JSON.parse(process.argv[1]).title" "${pr_spec}")"
-          pr_body="$(node -p "JSON.parse(process.argv[1]).body" "${pr_spec}")"
+            });
+            writeFileSync(process.argv[4], pr.title);
+            writeFileSync(process.argv[5], pr.body);
+          ' "${current_version}" "${target_version}" "${files_json}" \
+            "${pr_dir}/title" "${pr_dir}/body"
           gh pr create \
             --base "${BASE_BRANCH}" \
             --head "${update_branch}" \
-            --title "${pr_title}" \
-            --body "${pr_body}"
+            --title "$(cat "${pr_dir}/title")" \
+            --body-file "${pr_dir}/body"
