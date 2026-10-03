@@ -16,11 +16,19 @@ describe("formatDate", () => {
 
 describe("formatDateTime", () => {
   it("renders medium date + short time like the token expiry rows", () => {
-    expect(formatDateTime("2026-01-05T15:07:00Z", "en-US")).toMatch(
+    const value = "2026-01-05T15:07:00Z";
+    expect(formatDateTime(value, "en-US")).toMatch(
       /^Jan \d{1,2}, 2026(,)? \d{1,2}:\d{2} (AM|PM)$/,
     );
-    expect(formatDateTime("2026-01-05T15:07:00Z", "zh-CN")).toBe(
-      "2026年1月5日 23:07",
+    // formatDateTime uses the host timezone (CI is UTC; many laptops are UTC+8).
+    // Pin the contract to Intl, not a Shanghai-only wall clock.
+    const zh = formatDateTime(value, "zh-CN");
+    expect(zh).toMatch(/^2026年1月[56]日 \d{1,2}:07$/);
+    expect(zh).toBe(
+      new Intl.DateTimeFormat("zh-CN", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(value)),
     );
   });
 });

@@ -16,7 +16,7 @@ FlareMo 部署到 Cloudflare Workers。Worker 同时承载前端静态资源和 
 
 ## GitHub Action 部署（自托管 fork）
 
-自己的 fork 或部署仓库可以使用 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 或 Actions 里手动 `Run workflow` 时，创建缺失的 D1 / R2 / Queue / Vectorize，用 `cloudflare/wrangler-action` 发布 Worker，并把仓库 Secrets 里的 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 同步到 Cloudflare。上游 `realchendahuang/FlareMo` 不会跑这个 job。邮件密钥（`RESEND_API_KEY`）只放在 Worker secret store，不要放进 GitHub Actions secrets。
+自己的 fork 或部署仓库可以从 GitHub 发布已有 Worker。**优先**在 Cloudflare Dashboard 把现有 Worker `flaremo` 的 Settings → Builds 接到这个仓库，生产部署命令用 `pnpm deploy:ci`（不必把 API Token 放进 GitHub Secrets；`wrangler-action` 没有 OIDC）。也可以给 `.github/workflows/deploy-cloudflare.yml` 配置 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`，在 push 到 `main` 或手动 `Run workflow` 时用 `cloudflare/wrangler-action` 发布。上游 `realchendahuang/FlareMo` 不会跑这个 job。邮件密钥（`RESEND_API_KEY`）只放在 Worker secret store，不要放进 GitHub Actions secrets。
 
 完整步骤见 [用 GitHub Action 部署](./github-action-deploy.md)。
 
@@ -418,7 +418,7 @@ http://localhost:8787
 
 ## 升级
 
-应用内左下角的“系统更新”会显示当前版本和最新稳定版本。使用 Workers Builds 的 GitHub 部署可以按 [更新指南](./update.md) 运行更新 workflow、审查升级 PR，并在合并后自动发布。若使用 [GitHub Action 部署](./github-action-deploy.md)，合并升级 PR 到 `main` 后会自动发布。
+应用内左下角的“系统更新”会显示当前版本和最新稳定版本。使用 Workers Builds 的 GitHub 部署可以按 [更新指南](./update.md) 运行更新 workflow、审查升级 PR，并在合并后用 `pnpm deploy:ci` 发布。若仓库 Secret 已配置 API Token，合并升级 PR 到 `main` 后 **Deploy to Cloudflare** 会发布。
 
 手工升级前先看 `CHANGELOG.md` 和 release notes，然后执行：
 

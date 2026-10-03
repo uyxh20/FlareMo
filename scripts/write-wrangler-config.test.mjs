@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildWranglerConfig,
   canonicalPublicUrl,
+  stripEmptyOptionalVars,
 } from "./write-wrangler-config.mjs";
 
 const exampleText = readFileSync(
@@ -72,6 +73,34 @@ test("leaves email vars empty when they are not provided", () => {
   });
   assert.match(text, /"FLAREMO_EMAIL_PROVIDER": ""/);
   assert.match(text, /"FLAREMO_EMAIL_FROM": ""/);
+});
+
+test("strips unspecified email vars so deploy --keep-vars can keep Worker values", () => {
+  const text = stripEmptyOptionalVars(
+    buildWranglerConfig({
+      configText: exampleText,
+      databaseId: "",
+      publicUrl: "",
+      repository: "octocat/flaremo",
+    }),
+  );
+  assert.doesNotMatch(text, /"FLAREMO_EMAIL_PROVIDER"/);
+  assert.doesNotMatch(text, /"FLAREMO_EMAIL_FROM"/);
+  const filled = stripEmptyOptionalVars(
+    buildWranglerConfig({
+      configText: exampleText,
+      databaseId: "",
+      publicUrl: "",
+      repository: "octocat/flaremo",
+      emailProvider: "resend",
+      emailFrom: "FlareMo <no-reply@example.com>",
+    }),
+  );
+  assert.match(filled, /"FLAREMO_EMAIL_PROVIDER": "resend"/);
+  assert.match(
+    filled,
+    /"FLAREMO_EMAIL_FROM": "FlareMo <no-reply@example.com>"/,
+  );
 });
 
 test("rejects a template without the D1 placeholder", () => {

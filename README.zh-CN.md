@@ -154,7 +154,7 @@ Agent 将自动完成创建 D1/R2 资源、写入配置、运行数据库迁移�
 
 ### 方式三：GitHub Action 部署
 
-自己的 fork 在 push 到 `main` 或手动运行 `Deploy to Cloudflare` 时发布 Worker（`cloudflare/wrangler-action`），并同步认证密钥。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [GitHub Action 部署教程](./docs/github-action-deploy.md)。
+自己的 fork 优先把现有 Worker `flaremo` 在 Cloudflare Dashboard → Settings → Builds 接到仓库，生产命令用 `pnpm deploy:ci`（GitHub 里不必放长期 API Token；`wrangler-action` 没有 OIDC）。**Deploy to Cloudflare** 这条 Actions 路只有配置了 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID` 才会真正发布。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [GitHub Action 部署教程](./docs/github-action-deploy.md)。
 
 ---
 

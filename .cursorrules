@@ -2,18 +2,22 @@
 Use the real FlareMo auth integration points instead of inventing a second password-reset stack. Self-service reset is POST /api/auth/flaremo/forgot-password plus Better Auth emailAndPassword.sendResetPassword; both send mail through sendPasswordResetEmail. The reset page posts to Better Auth /api/auth/reset-password.
 Do not put RESEND_API_KEY, BETTER_AUTH_SECRET, or FLAREMO_BOOTSTRAP_SECRET in git, PR bodies, or GitHub Actions secret-sync for mail. Mail keys stay as Worker secrets via wrangler secret put.
 Do not implement FLAREMO_RECOVERY_SECRET as the user-facing forgot-password path when Resend is the chosen recovery option.
-Self-hosted fork deploy uses .github/workflows/deploy-cloudflare.yml on push to main and workflow_dispatch with cloudflare/wrangler-action. Do not duplicate that workflow.
+Self-hosted fork deploy uses .github/workflows/deploy-cloudflare.yml on push to main and workflow_dispatch with cloudflare/wrangler-action. Do not duplicate that workflow. wrangler-action has no GitHub OIDC; the no-token publish path is Workers Builds on Worker `flaremo` with production command `pnpm deploy:ci`.
 
 [Plan]
-Wire Resend into Better Auth sendResetPassword using the existing sendPasswordResetEmail helper; keep the FlareMo forgot-password UI; document Worker var/secret names and PAT/session behavior; extend deploy-cloudflare.yml for push to main with wrangler-action; open a PR and do not merge or deploy.
+Stop the daily Prepare FlareMo update job from failing on known three-way conflicts by opening a review PR that keeps both sides; document Workers Builds (`pnpm deploy:ci`) as the GitHub publish path that does not store CLOUDFLARE_API_TOKEN; keep wrangler-action as an optional token path with an honest missing-secret message; fix CI unit tests for wrangler.json fallback and timezone-safe date formatting; open a PR and do not merge or deploy.
 
 [Knowledge Learned]
 2026-09-29: Live Worker https://flaremo.ulysse-ha-19.workers.dev reported email_verification_required=false, so forgot-password stayed off until FLAREMO_EMAIL_PROVIDER=resend, FLAREMO_EMAIL_FROM, and Worker secret RESEND_API_KEY are set. The UI was already present.
 2026-09-29: Better Auth only calls sendResetPassword for an existing user. Throwing from that hook would 500 known addresses and 200 unknown ones, which enumerates accounts. Delivery failures stay logged inside sendPasswordResetEmail.
 2026-09-29: revokeSessionsOnPasswordReset invalidates cookie sessions. memos_pat_ tokens survive self-service reset. Operator /recover still revokes sessions and PATs. Do not invent a new revocation policy without stating it.
 2026-09-29: GitHub Action must not sync RESEND_API_KEY. Wrangler deploy preserves existing Worker secrets.
+2026-10-03: Deploy run 36638224841 failed in one second because CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID were empty. cloudflare/wrangler-action has no GitHub OIDC (issue 402 / discussion 435). Workers Builds can publish without a GitHub-stored token after Dashboard → Worker `flaremo` → Settings → Builds → Connect uyxh20/FlareMo. Default `npx wrangler deploy` would read committed wrangler.json placeholder D1 — use `pnpm deploy:ci` (write-wrangler-config + provision by name + wrangler deploy --config wrangler.jsonc --keep-vars).
+2026-10-03: Prepare FlareMo update applies v0.20.1→v0.22.0; git apply --3way returns 1 after applying files with conflicts (e2e specs, auth.ts, and others). The job never opened a PR, so every daily run failed. Opening a conflict PR and exiting 0 when that branch exists stops the red loop without dropping fork hunks.
+2026-10-03: wrangler.jsonc is gitignored; CI unit tests must read wrangler.json / wrangler.jsonc.example. date-format.test.ts hardcoded UTC+8 (23:07) and failed on UTC CI (15:07).
 
 [Project Styles]
 Deployment and auth docs exist in docs/deploy.md and docs/en/deploy.md; keep the secret-name tables in both.
 Worker public flags are wrangler vars (FLAREMO_EMAIL_PROVIDER, FLAREMO_EMAIL_FROM). API keys are wrangler secrets.
 Auth pages use AuthPageFrame plus existing i18n keys; do not add unimplemented recovery UI.
+Committed wrangler.json and wrangler.jsonc.example must keep the same assets.run_worker_first list as apps/web/vite.config.ts server.proxy.

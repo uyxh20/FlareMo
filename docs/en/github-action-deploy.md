@@ -1,8 +1,27 @@
 # Deploy FlareMo with GitHub Actions
 
-This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on push to `main` and on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
+This guide is for **your deployment repository** (a fork or copy of FlareMo). Upstream `realchendahuang/FlareMo` never runs `.github/workflows/deploy-cloudflare.yml`.
 
-Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs: GitHub stores those form values in the run record. Keep auth secrets in repository **Settings → Secrets**. Keep mail credentials in the Cloudflare Worker secret store (`wrangler secret put`).
+There are **two** ways to publish an existing Worker from GitHub. `cloudflare/wrangler-action` has **no** GitHub OIDC ([issue 402](https://github.com/cloudflare/wrangler-action/issues/402)), so the Actions path needs repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. When those secrets are empty, a push no longer dies in one second with no checkout: the log prints the dashboard step below. A manual `Run workflow` still fails until the secrets exist, so nobody thinks Actions published.
+
+Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs. Mail keys stay in the Cloudflare Worker secret store (`wrangler secret put`).
+
+## Preferred: Workers Builds (no long-lived token in GitHub)
+
+The live Worker `flaremo` (for example `https://flaremo.ulysse-ha-19.workers.dev`) can publish on push to `main` after one Cloudflare dashboard connect. Cloudflare injects the API token. GitHub does not store it.
+
+**The one action Ulysse must take:**
+
+1. [Cloudflare Dashboard](https://dash.cloudflare.com) → Workers & Pages → existing Worker **`flaremo`**.
+2. **Settings → Builds → Connect**, authorize GitHub, select **`uyxh20/FlareMo`**.
+3. Production branch: `main`.
+4. Build command: `pnpm install --frozen-lockfile`.
+5. Deploy command: `pnpm deploy:ci` (writes `wrangler.jsonc`, reuses D1 `flaremo` by name, builds the web app, applies remote migrations, `wrangler deploy --config ./wrangler.jsonc --keep-vars`).
+6. Leave non-production as `wrangler versions upload`. Do **not** point preview branches at `pnpm deploy:ci` (that applies production D1 migrations).
+
+Before connecting, confirm Worker → Settings → Bindings that D1 is named `flaremo` (the default). `pnpm deploy:ci` reuses that name; a different name would create an empty database. `--keep-vars` keeps Worker vars such as `FLAREMO_EMAIL_PROVIDER` / `FLAREMO_EMAIL_FROM`. Leave `RESEND_API_KEY` as a Worker secret; do not add it to GitHub or Builds environment variables.
+
+Do not run plain `npx wrangler deploy` against the committed `wrangler.json`: its D1 `database_id` is a placeholder.
 
 ## Prerequisites
 
@@ -17,7 +36,7 @@ openssl rand -base64 48
 
 Use them as `BETTER_AUTH_SECRET` (session signing) and `FLAREMO_BOOTSTRAP_SECRET` (one-time `/setup` passphrase). GitHub cannot show a saved Secret again.
 
-## 1. Create a Cloudflare API token
+## 1. Optional: create a Cloudflare API token (Actions path only)
 
 Open [API Tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token. Start from **Edit Cloudflare Workers** and add:
 
@@ -42,8 +61,8 @@ Open `Settings` → `Secrets and variables` → `Actions` and add:
 
 | Name | Required | Purpose |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Yes | Token from step 1 |
-| `CLOUDFLARE_ACCOUNT_ID` | Yes | Cloudflare account ID |
+| `CLOUDFLARE_API_TOKEN` | Only for Actions publish | Token from step 1. Skip when using Workers Builds |
+| `CLOUDFLARE_ACCOUNT_ID` | Only for Actions publish | Cloudflare account ID. Skip when using Workers Builds |
 | `BETTER_AUTH_SECRET` | Yes if you need login | ≥32 characters; synced to the Worker secret store |
 | `FLAREMO_BOOTSTRAP_SECRET` | Yes if you need `/setup` | ≥32 characters, different from the previous value |
 
@@ -119,7 +138,7 @@ After Resend is configured, smoke-test (do not paste secrets or mail bodies into
 | Switch to a custom domain | Bind the domain in Cloudflare, set Variable `FLAREMO_PUBLIC_URL`, deploy again. |
 | Enable forgot-password email | Set Variables `FLAREMO_EMAIL_PROVIDER=resend` and `FLAREMO_EMAIL_FROM`, then `wrangler secret put RESEND_API_KEY` on the Worker, then deploy. |
 
-`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is this workflow (push to `main` or `Run workflow`), local `pnpm deploy`, or Workers Builds.
+`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is Workers Builds (`pnpm deploy:ci`), this workflow (push / `Run workflow` once the two secrets exist), or local `pnpm deploy`.
 
 ## 7. Not required on first install
 

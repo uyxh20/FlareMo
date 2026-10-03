@@ -79,6 +79,20 @@ export function buildWranglerConfig({
   );
 }
 
+// Empty email vars in the generated config would overwrite the live Worker
+// (Resend was set on the Worker, not via GitHub). Drop unspecified keys so
+// `wrangler deploy --keep-vars` can keep the existing values.
+export function stripEmptyOptionalVars(
+  text,
+  keys = ["FLAREMO_EMAIL_PROVIDER", "FLAREMO_EMAIL_FROM"],
+) {
+  let result = String(text ?? "");
+  for (const key of keys) {
+    result = result.replace(new RegExp(`\\n\\s*"${key}": "",`), "\n");
+  }
+  return result;
+}
+
 if (
   process.argv[1] &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1])
@@ -113,14 +127,16 @@ function main() {
   const configText = readFileSync("wrangler.jsonc.example", "utf8");
   writeFileSync(
     "wrangler.jsonc",
-    buildWranglerConfig({
-      configText,
-      databaseId,
-      publicUrl,
-      repository,
-      emailProvider,
-      emailFrom,
-    }),
+    stripEmptyOptionalVars(
+      buildWranglerConfig({
+        configText,
+        databaseId,
+        publicUrl,
+        repository,
+        emailProvider,
+        emailFrom,
+      }),
+    ),
   );
   console.log("Wrote wrangler.jsonc from wrangler.jsonc.example.");
 }

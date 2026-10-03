@@ -1,10 +1,17 @@
 # Self-hosted fork production deploy. Runs on push to main and on
 # workflow_dispatch. Upstream realchendahuang/FlareMo never runs this job.
 #
-# The job still generates wrangler.jsonc, provisions resources, builds the
-# frontend, and syncs auth Worker secrets. cloudflare/wrangler-action runs
-# D1 migrations and wrangler deploy. Mail credentials (RESEND_API_KEY) stay
-# as Cloudflare Worker secrets — do not put them in GitHub Actions secrets.
+# Token path: generate wrangler.jsonc, provision resources, build the
+# frontend, and sync auth Worker secrets. cloudflare/wrangler-action runs
+# D1 migrations and wrangler deploy. This path needs repository secrets
+# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID. wrangler-action has no
+# GitHub OIDC (see cloudflare/wrangler-action#402).
+#
+# No-token path: connect Workers Builds on the existing Worker `flaremo`
+# (Dashboard → Settings → Builds → Connect uyxh20/FlareMo) and set the
+# production deploy command to `pnpm deploy:ci`. Cloudflare injects the
+# token; GitHub stores none. Mail credentials (RESEND_API_KEY) stay as
+# Cloudflare Worker secrets — do not put them in GitHub Actions secrets.
 name: Deploy to Cloudflare
 
 on:
@@ -40,31 +47,27 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - name: Check Cloudflare credentials
-        run: |
-          set -euo pipefail
-          if [[ -z "${CLOUDFLARE_API_TOKEN}" ]]; then
-            echo "Missing repository secret CLOUDFLARE_API_TOKEN." >&2
-            exit 1
-          fi
-          if [[ -z "${CLOUDFLARE_ACCOUNT_ID}" ]]; then
-            echo "Missing repository secret CLOUDFLARE_ACCOUNT_ID." >&2
-            exit 1
-          fi
-
       - uses: actions/checkout@v4
 
+      - name: Check Cloudflare credentials
+        id: cf
+        run: node ./scripts/check-cloudflare-deploy-env.mjs
+
       - uses: pnpm/action-setup@v4
+        if: steps.cf.outputs.ready == 'true'
 
       - uses: actions/setup-node@v4
+        if: steps.cf.outputs.ready == 'true'
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.cf.outputs.ready == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Write wrangler.jsonc
+        if: steps.cf.outputs.ready == 'true'
         env:
           WRANGLER_JSONC: ${{ secrets.WRANGLER_JSONC }}
           FLAREMO_D1_DATABASE_ID: ${{ secrets.FLAREMO_D1_DATABASE_ID }}
@@ -75,6 +78,7 @@ jobs:
         run: node ./scripts/write-wrangler-config.mjs
 
       - name: Provision / verify Cloudflare resources
+        if: steps.cf.outputs.ready == 'true'
         run: |
           set -euo pipefail
           DRY_RUN="${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}"
@@ -86,13 +90,15 @@ jobs:
           fi
 
       - name: Deploy preflight
+        if: steps.cf.outputs.ready == 'true'
         run: pnpm deploy:preflight
 
       - name: Build web app
+        if: steps.cf.outputs.ready == 'true'
         run: pnpm --filter @flaremo/web build
 
       - name: Apply D1 migrations
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        if: ${{ steps.cf.outputs.ready == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -101,20 +107,21 @@ jobs:
           command: d1 migrations apply DB --remote --config ./wrangler.jsonc
 
       - name: Deploy Worker
+        if: steps.cf.outputs.ready == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.129.1"
-          command: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'deploy --config ./wrangler.jsonc --dry-run' || 'deploy --config ./wrangler.jsonc' }}
+          command: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'deploy --config ./wrangler.jsonc --dry-run --keep-vars' || 'deploy --config ./wrangler.jsonc --keep-vars' }}
 
       - name: Sync Worker secrets
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        if: ${{ steps.cf.outputs.ready == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
         env:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
           FLAREMO_BOOTSTRAP_SECRET: ${{ secrets.FLAREMO_BOOTSTRAP_SECRET }}
         run: pnpm secrets:sync
 
       - name: Smoke check deployed site
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run != true }}
+        if: ${{ steps.cf.outputs.ready == 'true' && (github.event_name != 'workflow_dispatch' || inputs.dry_run != true) }}
         run: pnpm smoke:check

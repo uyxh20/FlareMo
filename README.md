@@ -140,7 +140,7 @@ Clones the repository into your GitHub account and provisions D1, R2, Queues, an
 
 ### Method 2: GitHub Action (self-hosted fork)
 
-On your fork, **Deploy to Cloudflare** runs on push to `main` and on a manual Actions run: provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/github-action-deploy.md](./docs/github-action-deploy.md) or the [English guide](./docs/en/github-action-deploy.md).
+On your fork, prefer Cloudflare **Workers Builds** on the existing Worker `flaremo` (Dashboard → Settings → Builds → Connect, deploy command `pnpm deploy:ci`) so GitHub does not store a Cloudflare API token. `cloudflare/wrangler-action` has no GitHub OIDC; the **Deploy to Cloudflare** workflow only publishes when `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/github-action-deploy.md](./docs/github-action-deploy.md) or the [English guide](./docs/en/github-action-deploy.md).
 
 ### Method 3: Deploy with an AI Agent (Recommended)
 

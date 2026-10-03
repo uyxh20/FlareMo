@@ -1,8 +1,27 @@
 # 用 GitHub Action 部署 FlareMo
 
-这份教程面向**自己的部署仓库**（FlareMo 的 fork 或副本）。Workflow 是 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 以及手动 `Run workflow` 时发布。上游仓库 `realchendahuang/FlareMo` 不会执行这个 job。`cloudflare/wrangler-action` 负责远端 D1 migration 和 `wrangler deploy`。
+这份教程面向**自己的部署仓库**（FlareMo 的 fork 或副本）。上游仓库 `realchendahuang/FlareMo` 不会执行 `.github/workflows/deploy-cloudflare.yml`。
 
-不要把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET`、`RESEND_API_KEY` 写进 workflow 文件、issue、PR 或聊天，也不要放进 `workflow_dispatch` 输入框：GitHub 会把启动表单明文记在运行记录里。认证密钥只放在仓库 **Settings → Secrets**；邮件密钥只放在 Cloudflare Worker secret store（`wrangler secret put`）。
+从 GitHub 发布已有 Worker **有两条路**。`cloudflare/wrangler-action` **没有** GitHub OIDC（[issue 402](https://github.com/cloudflare/wrangler-action/issues/402)），所以 Actions 这条路必须有仓库 Secret `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`。Secret 为空时，push 不会再假装发布成功或一秒闪退：日志会写明下面这一步。`workflow_dispatch`（手动 Run workflow）在 Secret 仍空时会失败。
+
+不要把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET`、`RESEND_API_KEY` 写进 workflow 文件、issue、PR 或聊天，也不要放进 `workflow_dispatch` 输入框：GitHub 会把启动表单明文记在运行记录里。邮件密钥只放在 Cloudflare Worker secret store（`wrangler secret put`）。
+
+## 推荐：Workers Builds（GitHub 里不放长期 Token）
+
+已经在跑的 Worker `flaremo`（例如 `https://flaremo.ulysse-ha-19.workers.dev`）只要在 Cloudflare 接上这个仓库，就可以在 push 到 `main` 时发布。Cloudflare 自己注入 API token，**不必**把 token 放进 GitHub Secrets。
+
+Ulysse 需要做的**一件事**（Dashboard，一次）：
+
+1. [Cloudflare Dashboard](https://dash.cloudflare.com) → Workers & Pages → 打开现有 Worker **`flaremo`**。
+2. **Settings → Builds → Connect**，授权 GitHub 后选择仓库 **`uyxh20/FlareMo`**。
+3. Production branch：`main`。
+4. Build command：`pnpm install --frozen-lockfile`。
+5. Deploy command：`pnpm deploy:ci`（会生成 `wrangler.jsonc`、按名字复用 D1 `flaremo`、构建前端、应用远端 migration、`wrangler deploy --config ./wrangler.jsonc --keep-vars`）。
+6. Non-production 保持 Cloudflare 默认的 `wrangler versions upload`。**不要**把预览分支改成 `pnpm deploy:ci`（那会打生产 D1 migration）。
+
+连接前先在 Worker → Settings → Bindings 确认 D1 名称是 `flaremo`（默认）。`pnpm deploy:ci` 按这个名字复用；如果线上 D1 叫别的名字，脚本会再造一个空库。`--keep-vars` 保留已在 Worker 上的 `FLAREMO_EMAIL_PROVIDER` / `FLAREMO_EMAIL_FROM`；`RESEND_API_KEY` 继续只放 Worker secret，不要写进 GitHub 或 Builds 环境变量。
+
+不要用仓库里的 `wrangler.json` 直接 `npx wrangler deploy`：那份文件的 D1 `database_id` 是占位值，会绑错或新建资源。
 
 ## 前置
 
@@ -17,7 +36,7 @@ openssl rand -base64 48
 
 分别作为 `BETTER_AUTH_SECRET`（登录 session）和 `FLAREMO_BOOTSTRAP_SECRET`（首次 `/setup` 安装口令）。GitHub 保存 Secret 后不能再完整查看原文。
 
-## 1. 创建 Cloudflare API Token
+## 1. 可选：创建 Cloudflare API Token（只要走 Actions，不走 Builds）
 
 打开 [API Tokens](https://dash.cloudflare.com/profile/api-tokens) → Create Token。用 **Edit Cloudflare Workers** 模板，并补上：
 
@@ -42,8 +61,8 @@ Account ID 在 Cloudflare Dashboard 首页右侧。
 
 | 名称 | 必填 | 说明 |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | 是 | 上一步的 API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | 是 | Cloudflare Account ID |
+| `CLOUDFLARE_API_TOKEN` | 仅 Actions 发布需要 | 上一步的 API Token。走 Workers Builds 时不要设 |
+| `CLOUDFLARE_ACCOUNT_ID` | 仅 Actions 发布需要 | Cloudflare Account ID。走 Workers Builds 时不要设 |
 | `BETTER_AUTH_SECRET` | 要登录则必填 | ≥32 字符；部署后写入 Worker secret store |
 | `FLAREMO_BOOTSTRAP_SECRET` | 要完成 `/setup` 则必填 | ≥32 字符，与上一行不同 |
 
@@ -119,7 +138,7 @@ https://flaremo.<子域>.workers.dev
 | 改用自定义域名 | Cloudflare 绑定域名，设置 Variable `FLAREMO_PUBLIC_URL`，再部署。 |
 | 启用邮件找回密码 | 设置 Variables `FLAREMO_EMAIL_PROVIDER=resend` 与 `FLAREMO_EMAIL_FROM`，并用 `wrangler secret put RESEND_API_KEY` 写入 Worker，然后部署。 |
 
-`Prepare FlareMo update` 只创建升级 PR，不持有 Cloudflare 凭据。真正发布是本 workflow（push 到 `main` 或 `Run workflow`）、本地 `pnpm deploy`，或 Workers Builds。
+`Prepare FlareMo update` 只创建升级 PR，不持有 Cloudflare 凭据。真正发布是 Workers Builds（`pnpm deploy:ci`）、本 workflow（Secret 已配置时的 push / `Run workflow`），或本地 `pnpm deploy`。
 
 ## 7. 首次不必配置的项
 

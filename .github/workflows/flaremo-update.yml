@@ -68,12 +68,21 @@ jobs:
             exit 0
           fi
 
+          update_branch="flaremo-update/${target_version}"
+          if git ls-remote --exit-code --heads origin "${update_branch}" >/dev/null 2>&1; then
+            existing_pr="$(gh pr list --head "${update_branch}" --state open --json url --jq '.[0].url // empty')"
+            echo "Update branch ${update_branch} already exists; not re-applying."
+            if [[ -n "${existing_pr}" ]]; then
+              echo "Update pull request already exists: ${existing_pr}"
+            fi
+            exit 0
+          fi
+
           git remote add flaremo-upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
           git fetch --no-tags flaremo-upstream \
             "refs/tags/v${current_version}:refs/tags/v${current_version}" \
             "refs/tags/${target_version}:refs/tags/${target_version}"
 
-          update_branch="flaremo-update/${target_version}"
           git config user.name "flaremo-update[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "${update_branch}" "origin/${BASE_BRANCH}"
@@ -82,16 +91,50 @@ jobs:
           git diff --binary --full-index \
             "refs/tags/v${current_version}" \
             "refs/tags/${target_version}" > "${update_patch}"
-          if ! git apply --3way --index "${update_patch}"; then
-            echo "The deployment repository conflicts with ${target_version}. Resolve the update manually." >&2
+
+          apply_status=0
+          git apply --3way --index "${update_patch}" || apply_status=$?
+          unmerged="$(git diff --name-only --diff-filter=U || true)"
+          outcome="$(node --input-type=module -e '
+            import { updateApplyOutcome } from "./scripts/prepare-flaremo-update.mjs";
+            const applyExitCode = Number(process.argv[1]);
+            const unmergedFiles = process.argv[2] ? process.argv[2].split("\n") : [];
+            const outcome = updateApplyOutcome({ applyExitCode, unmergedFiles });
+            process.stdout.write(JSON.stringify(outcome));
+          ' "${apply_status}" "${unmerged}")"
+          kind="$(node -p "JSON.parse(process.argv[1]).kind" "${outcome}")"
+          fail_job="$(node -p "JSON.parse(process.argv[1]).failJob" "${outcome}")"
+          files_json="$(node -p "JSON.stringify(JSON.parse(process.argv[1]).files)" "${outcome}")"
+
+          if [[ "${fail_job}" == "true" ]]; then
+            echo "The deployment repository conflicts with ${target_version} and Git could not open a three-way apply." >&2
             exit 1
           fi
-          git commit -m "Update FlareMo from v${current_version} to ${target_version}"
 
-          if git ls-remote --exit-code --heads origin "${update_branch}" >/dev/null 2>&1; then
-            git fetch origin "refs/heads/${update_branch}:refs/remotes/origin/${update_branch}"
+          if [[ "${kind}" == "conflicts" ]]; then
+            node --input-type=module -e '
+              import { writeFileSync } from "node:fs";
+              import { conflictReportMarkdown } from "./scripts/prepare-flaremo-update.mjs";
+              const files = JSON.parse(process.argv[3]);
+              writeFileSync(
+                "FLAREMO_UPDATE_CONFLICTS.md",
+                conflictReportMarkdown({
+                  currentVersion: process.argv[1],
+                  targetVersion: process.argv[2],
+                  files,
+                  upstreamRepository: process.env.UPSTREAM_REPOSITORY,
+                }),
+              );
+            ' "${current_version}" "${target_version}" "${files_json}"
+            if [[ -n "${unmerged}" ]]; then
+              # Stage markers so both sides stay in the PR. Do not checkout --theirs.
+              git add -- ${unmerged}
+            fi
+            git add -- FLAREMO_UPDATE_CONFLICTS.md
           fi
-          git push --force-with-lease --set-upstream origin "${update_branch}"
+
+          git commit -m "Update FlareMo from v${current_version} to ${target_version}"
+          git push --set-upstream origin "${update_branch}"
 
           existing_pr="$(gh pr list --head "${update_branch}" --state open --json url --jq '.[0].url // empty')"
           if [[ -n "${existing_pr}" ]]; then
@@ -99,11 +142,20 @@ jobs:
             exit 0
           fi
 
-          pr_body="A new stable FlareMo release is available. Review the release notes and merge this pull request to let Cloudflare Workers Builds deploy it.
-
-          Release notes: https://github.com/${UPSTREAM_REPOSITORY}/releases/tag/${target_version}"
+          pr_spec="$(node --input-type=module -e '
+            import { updatePullRequest } from "./scripts/prepare-flaremo-update.mjs";
+            const files = JSON.parse(process.argv[3]);
+            process.stdout.write(JSON.stringify(updatePullRequest({
+              currentVersion: process.argv[1],
+              targetVersion: process.argv[2],
+              files,
+              upstreamRepository: process.env.UPSTREAM_REPOSITORY,
+            })));
+          ' "${current_version}" "${target_version}" "${files_json}")"
+          pr_title="$(node -p "JSON.parse(process.argv[1]).title" "${pr_spec}")"
+          pr_body="$(node -p "JSON.parse(process.argv[1]).body" "${pr_spec}")"
           gh pr create \
             --base "${BASE_BRANCH}" \
             --head "${update_branch}" \
-            --title "Update FlareMo to ${target_version}" \
+            --title "${pr_title}" \
             --body "${pr_body}"

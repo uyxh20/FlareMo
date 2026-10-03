@@ -16,7 +16,7 @@ Manual deployment remains the fully supported path; the button flow is best for 
 
 ## GitHub Action deploy (self-hosted fork)
 
-A fork or deployment repository can use `.github/workflows/deploy-cloudflare.yml`: on push to `main` or a manual `Run workflow`, it provisions missing D1 / R2 / Queue / Vectorize resources, publishes the Worker with `cloudflare/wrangler-action`, and syncs `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` from repository Secrets. Upstream `realchendahuang/FlareMo` never runs this job. Mail credentials (`RESEND_API_KEY`) stay in the Worker secret store; do not add them as GitHub Actions secrets.
+A fork or deployment repository can publish an existing Worker from GitHub. **Prefer** connecting the live Worker `flaremo` under Dashboard → Settings → Builds to this repository and setting the production deploy command to `pnpm deploy:ci` (no API token in GitHub secrets; `wrangler-action` has no OIDC). You can instead set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` for `.github/workflows/deploy-cloudflare.yml` and publish with `cloudflare/wrangler-action` on push to `main` or `Run workflow`. Upstream `realchendahuang/FlareMo` never runs that job. Mail credentials (`RESEND_API_KEY`) stay in the Worker secret store; do not add them as GitHub Actions secrets.
 
 Full steps: [Deploy with GitHub Actions](./github-action-deploy.md).
 
@@ -262,7 +262,7 @@ http://localhost:8787
 
 Read `CHANGELOG.md` and GitHub Release notes before upgrading.
 
-The “System update” entry in the lower-left corner shows the installed and latest stable versions. GitHub deployments that use Workers Builds can follow the [update guide](./update.md) to prepare an update pull request and publish after merge. If you use [GitHub Action deploy](./github-action-deploy.md), merging the upgrade PR onto `main` publishes automatically.
+The “System update” entry in the lower-left corner shows the installed and latest stable versions. GitHub deployments that use Workers Builds can follow the [update guide](./update.md) to prepare an update pull request and publish with `pnpm deploy:ci` after merge. If repository secrets already hold an API token, **Deploy to Cloudflare** publishes after the upgrade PR lands on `main`.
 
 For a manual update, read the changelog and release notes, then deploy. This command applies pending migrations before publishing the Worker:
 

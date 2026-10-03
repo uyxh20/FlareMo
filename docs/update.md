@@ -22,11 +22,11 @@ octocat/flaremo
 - 在 `Workflow permissions` 中允许 workflow 读取和写入仓库。
 - 允许 GitHub Actions 创建 pull request。
 
-再到 Cloudflare Worker 的 `Settings` -> `Build` 确认：
+再到 Cloudflare Worker 的 `Settings` -> `Builds` 确认（或第一次 [Connect](./github-action-deploy.md)）：
 
 - Production branch 是部署仓库的默认分支，通常为 `main`。
-- Production deploy command 是 `pnpm run deploy`。
-- Non-production branch deploy command 保持 Cloudflare 默认的 `wrangler versions upload`，不要改成 `pnpm run deploy`。
+- Production deploy command 是 `pnpm deploy:ci`（会生成 `wrangler.jsonc` 并按名字复用 D1）。不要用会读到占位 `wrangler.json` 的裸 `npx wrangler deploy`。
+- Non-production branch deploy command 保持 Cloudflare 默认的 `wrangler versions upload`，不要改成 `pnpm deploy:ci`（预览分支不得打生产 D1 migration）。
 
 这个 workflow 只向当前部署仓库创建更新分支和 pull request。它不持有 Cloudflare 凭据，也不负责生产部署。若生产发布走的是 [GitHub Action 部署](./github-action-deploy.md)，合并升级 PR 到 `main` 后会自动发布。
 
@@ -40,7 +40,7 @@ octocat/flaremo
 2. 点击 `Run workflow`；版本留空表示使用最新稳定版。
 3. 等待升级 pull request 创建。
 4. 查看版本说明和文件变化，然后合并 pull request。
-5. Cloudflare Workers Builds 会自动构建前端、执行尚未应用的 D1 migrations，并发布新的 Worker 版本。若未接入 Workers Builds、而是使用 [GitHub Action 部署](./github-action-deploy.md)，合并 PR 到 `main` 后会自动发布。
+5. 若已按 [GitHub Action 部署](./github-action-deploy.md) 接上 Workers Builds，合并后会跑 `pnpm deploy:ci`。若改走仓库 Secret 里的 API Token，合并进 `main` 后 **Deploy to Cloudflare** 会发布。两条路都不要把 `RESEND_API_KEY` 放进 GitHub secrets。
 
 更新 PR 可以生成 preview version，但不会执行生产 D1 migration。合并到 production branch 后，生产部署才会先执行 migration 再发布 Worker；期间旧版本继续服务。如果构建或 migration 失败，新 Worker 不会发布；到 GitHub 的 Cloudflare check 或 Cloudflare Dashboard 的 Build history 查看错误。
 
@@ -48,7 +48,9 @@ octocat/flaremo
 
 更新会计算“当前已安装 Release 到目标 Release”的差异，再用 Git three-way apply 把差异应用到部署仓库，因此不要求部署仓库保留上游提交历史，也能保留自定义内容。无冲突时，更新 PR 可以使用仓库允许的任意合并方式。
 
-如果本地修改与新版本冲突，workflow 会失败并停止，不会覆盖 `main`。这时按照失败日志手工应用更新，或在本地运行：
+如果本地修改与新版本冲突，workflow **不会把每日任务标红**：它会打开（或复用）升级 PR，冲突文件里保留双方 hunk（`<<<<<<<` 标记），并写 `FLAREMO_UPDATE_CONFLICTS.md`。fork 的改动不会被丢掉。不要在标记消失前合并。同一版本的分支已存在时，之后的定时运行直接成功退出。
+
+仍可按失败日志或下面的命令在本地继续：
 
 ```bash
 git remote add flaremo-upstream https://github.com/realchendahuang/FlareMo.git

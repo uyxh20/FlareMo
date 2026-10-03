@@ -1,12 +1,29 @@
 // node:fs is type-available under the app tsconfig and runs only in vitest's
 // node runtime; this contract test reads sibling config files.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parse as parseJsonc } from "jsonc-parser";
 import { describe, expect, it } from "vitest";
 
-const wranglerConfig = parseJsonc(
-  readFileSync(new URL("../../../wrangler.jsonc", import.meta.url), "utf8"),
-) as { assets?: { run_worker_first?: string[] } };
+function workerFirstPaths(configUrl: URL): string[] {
+  const config = parseJsonc(readFileSync(configUrl, "utf8")) as {
+    assets?: { run_worker_first?: string[] };
+  };
+  return config.assets?.run_worker_first ?? [];
+}
+
+function committedWorkerConfigs(): URL[] {
+  const localJsonc = new URL("../../../wrangler.jsonc", import.meta.url);
+  const configs = [
+    new URL("../../../wrangler.json", import.meta.url),
+    new URL("../../../wrangler.jsonc.example", import.meta.url),
+  ];
+  // Local operator copies are gitignored; CI only has the committed files.
+  if (existsSync(fileURLToPath(localJsonc))) {
+    configs.push(localJsonc);
+  }
+  return configs;
+}
 
 const viteConfigSource = readFileSync(
   new URL("../vite.config.ts", import.meta.url),
@@ -34,14 +51,18 @@ function proxyPaths(source: string): string[] {
 
 describe("dev:hot worker proxy", () => {
   it("proxies every path the Worker owns", () => {
-    const workerFirst = wranglerConfig.assets?.run_worker_first ?? [];
-    expect(workerFirst.length).toBeGreaterThan(0);
-    // Cloudflare's entries are globs ("/share/*"), Vite's keys are prefixes,
-    // so dropping the trailing "*" is what makes the two lists comparable.
-    // The separator stays: "/share/…" is proxied, the SPA's own "/share" path
-    // is not.
-    const expected = workerFirst.map((path) => path.replace(/\*$/, ""));
-    expect(proxyPaths(viteConfigSource).sort()).toEqual([...expected].sort());
+    const configs = committedWorkerConfigs();
+    expect(configs.length).toBeGreaterThan(0);
+    for (const configUrl of configs) {
+      const workerFirst = workerFirstPaths(configUrl);
+      expect(workerFirst.length).toBeGreaterThan(0);
+      // Cloudflare's entries are globs ("/share/*"), Vite's keys are prefixes,
+      // so dropping the trailing "*" is what makes the two lists comparable.
+      // The separator stays: "/share/…" is proxied, the SPA's own "/share" path
+      // is not.
+      const expected = workerFirst.map((path) => path.replace(/\*$/, ""));
+      expect(proxyPaths(viteConfigSource).sort()).toEqual([...expected].sort());
+    }
   });
 
   it("does not shadow frontend routes that share a prefix", () => {
