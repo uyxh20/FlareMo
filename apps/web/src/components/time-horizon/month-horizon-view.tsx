@@ -2,6 +2,7 @@
 // 2. Month Horizon View (Seamless Full-Tile Calendar Heatmap Carpet)
 // ============================================================================
 import { useMemo } from "react";
+import { useI18n } from "@/i18n";
 import {
   buildMonthGrid,
   type WeekStart,
@@ -42,6 +43,7 @@ export function MonthHorizonPureView({
   onHoverDate?: (day: string | null) => void;
   onHoverTip: (tip: string | null) => void;
 }) {
+  const { t } = useI18n();
   const grid = useMemo(
     () => buildMonthGrid(monthKey, weekStart, true),
     [monthKey, weekStart],
@@ -128,10 +130,16 @@ export function MonthHorizonPureView({
                 onHoverDate?.(cell.key);
                 if (totalCount > 0) {
                   onHoverTip(
-                    `${cell.key} · ${totalCount} 条笔记 (早:${q1} 午:${q2} 晚:${q3} 夜:${q0})`,
+                    `${cell.key} · ${t("explorer.dayBreakdown", {
+                      count: totalCount,
+                      q0,
+                      q1,
+                      q2,
+                      q3,
+                    })}`,
                   );
                 } else {
-                  onHoverTip(`${cell.key} · 无记录`);
+                  onHoverTip(`${cell.key} · ${t("explorer.noRecords")}`);
                 }
               }}
               onMouseLeave={() => {
@@ -179,7 +187,7 @@ export function MonthHorizonPureView({
                       ? "bg-primary"
                       : "bg-muted-foreground/20 dark:bg-muted/40",
                   )}
-                  title="夜间 (00-06)"
+                  title={t("explorer.periodNight")}
                 />
                 <div
                   className={cn(
@@ -188,7 +196,7 @@ export function MonthHorizonPureView({
                       ? "bg-primary"
                       : "bg-muted-foreground/20 dark:bg-muted/40",
                   )}
-                  title="早晨 (06-12)"
+                  title={t("explorer.periodMorning")}
                 />
                 <div
                   className={cn(
@@ -197,7 +205,7 @@ export function MonthHorizonPureView({
                       ? "bg-primary"
                       : "bg-muted-foreground/20 dark:bg-muted/40",
                   )}
-                  title="下午 (12-18)"
+                  title={t("explorer.periodAfternoon")}
                 />
                 <div
                   className={cn(
@@ -206,7 +214,7 @@ export function MonthHorizonPureView({
                       ? "bg-primary"
                       : "bg-muted-foreground/20 dark:bg-muted/40",
                   )}
-                  title="晚间 (18-24)"
+                  title={t("explorer.periodEvening")}
                 />
               </div>
             </button>

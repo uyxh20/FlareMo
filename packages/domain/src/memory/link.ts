@@ -37,6 +37,7 @@ export async function checkpointMemory(
   scope?: QuotaScope,
 ) {
   const scopeKey = input.scope_key ?? input.project_key ?? null;
+  const now = new Date().toISOString();
   const episode = await createMemory(
     db,
     user,
@@ -62,6 +63,7 @@ export async function checkpointMemory(
 
   const episodeId = episode.memory.id;
   const createdIds: string[] = [];
+
   for (const item of input.items) {
     const result = await createMemory(
       db,
@@ -69,6 +71,8 @@ export async function checkpointMemory(
       actor,
       {
         content: item.content,
+        factKey: item.fact_key ?? null,
+        tags: item.tags ?? [],
         type: item.type,
         kind: item.kind,
         scopeType: input.scope_type,
@@ -78,11 +82,21 @@ export async function checkpointMemory(
         confidence: actor.type === "user" ? 100 : 50,
         verification: actor.type === "user" ? "confirmed" : "observed",
         sourceAgent: actor.type === "agent" ? actor.name : null,
+        evidence: [
+          {
+            sourceType: "session",
+            sourceId: episodeId,
+            relationType: "derived_from",
+            observedAt: now,
+            excerpt: input.summary.slice(0, 500),
+          },
+        ],
       },
       scope,
     );
     const itemId = result.memory.id;
     createdIds.push(itemId);
+
     await db
       .insert(memoryRelations)
       .values({
@@ -90,8 +104,8 @@ export async function checkpointMemory(
         memoryId: itemId,
         relatedMemoryId: episodeId,
         userId: user.id,
-        type: "related_to",
-        createdAt: new Date().toISOString(),
+        type: "part_of",
+        createdAt: now,
       })
       .onConflictDoNothing();
   }

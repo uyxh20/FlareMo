@@ -1,7 +1,11 @@
 import type { authApiKeys, authBootstrap, authUsers, users } from "./auth";
 import type { articles, attachments, shares } from "./content";
 import type {
+  memoryCompileArchives,
+  memoryEvents,
+  memoryEvidence,
   memoryItems,
+  memoryRejections,
   memoryRelations,
   memoryResourceLinks,
   memoryRevisions,
@@ -69,6 +73,15 @@ export type NewMemoryItemRow = typeof memoryItems.$inferInsert;
 export type MemoryRevisionRow = typeof memoryRevisions.$inferSelect;
 export type MemoryRelationRow = typeof memoryRelations.$inferSelect;
 export type MemoryResourceLinkRow = typeof memoryResourceLinks.$inferSelect;
+export type MemoryEvidenceRow = typeof memoryEvidence.$inferSelect;
+export type NewMemoryEvidenceRow = typeof memoryEvidence.$inferInsert;
+export type MemoryEventRow = typeof memoryEvents.$inferSelect;
+export type NewMemoryEventRow = typeof memoryEvents.$inferInsert;
+export type MemoryRejectionRow = typeof memoryRejections.$inferSelect;
+export type NewMemoryRejectionRow = typeof memoryRejections.$inferInsert;
+export type MemoryCompileArchiveRow = typeof memoryCompileArchives.$inferSelect;
+export type NewMemoryCompileArchiveRow =
+  typeof memoryCompileArchives.$inferInsert;
 export type EmbeddingTaskRow = typeof embeddingTasks.$inferSelect;
 export type NewEmbeddingTaskRow = typeof embeddingTasks.$inferInsert;
 export type UsageCounterRow = typeof usageCounters.$inferSelect;

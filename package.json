@@ -44,6 +44,7 @@
     "smoke:check": "node ./scripts/smoke-check.mjs",
     "smoke:test": "node --test ./scripts/smoke-check.test.mjs",
     "write-wrangler-config:test": "node --test ./scripts/write-wrangler-config.test.mjs",
+    "upstream-take:test": "node --test ./scripts/take-upstream-files.test.mjs",
     "screenshots": "node ./scripts/capture-screenshots.mjs",
     "plugins:build": "tsx ./scripts/plugins-build.ts",
     "plugin:check": "tsx ./scripts/plugin-check.ts",

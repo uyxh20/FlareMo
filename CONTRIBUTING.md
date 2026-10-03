@@ -33,7 +33,7 @@ pnpm format:check
 pnpm deploy:dry-run
 ```
 
-仓库带一个瘦 CI（`.github/workflows/ci.yml`：format / lint / typecheck / 单元测试，约 3 分钟），作为兜底与外部 PR 的强制门禁。它不跑 E2E、不部署；如果维护者要求，PR 作者再在本地跑完整门禁 `pnpm verify`（含 Playwright E2E）并在 PR 里写明结果。仓库中的 `flaremo-update.yml` 只服务自部署用户自己的部署仓库，用于把上游 Release 准备成升级 PR。
+仓库带一个瘦 CI（`.github/workflows/ci.yml`：format / lint / typecheck / 单元测试，约 3 分钟），作为兜底与外部 PR 的强制门禁。它不跑 E2E、不部署；如果维护者要求，PR 作者再在本地跑完整门禁 `pnpm verify`（含 Playwright E2E）并在 PR 里写明结果。仓库中的 `flaremo-update.yml` 只服务自部署用户自己的部署仓库，每周把可安全整文件取用的上游变更准备成升级 PR（不 1:1 套用、不自合并）。
 
 如需自动修复格式：
 

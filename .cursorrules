@@ -5,9 +5,12 @@ Do not implement FLAREMO_RECOVERY_SECRET as the user-facing forgot-password path
 Self-hosted fork deploy uses .github/workflows/deploy-cloudflare.yml on push to main and workflow_dispatch with cloudflare/wrangler-action. Do not duplicate that workflow.
 
 [Plan]
-Wire Resend into Better Auth sendResetPassword using the existing sendPasswordResetEmail helper; keep the FlareMo forgot-password UI; document Worker var/secret names and PAT/session behavior; extend deploy-cloudflare.yml for push to main with wrangler-action; open a PR and do not merge or deploy.
+Close the wrong GitHub Actions PR without merging. From current main, take upstream v0.22.0 copies of the eight shared-history files plus the minimum extras they need to compile and keep tests coherent. Keep the fork sendResetPassword / Resend hook, PAT-vs-session reset tests, deploy-on-push workflow, and README push-to-main / Resend Worker-secret sentences. Remove the daily 1:1 flaremo-update schedule, disable that live workflow if the API allows, and replace it with a weekly deterministic whole-file take that never merges itself. Stay on a branch and open a PR; do not merge to main or deploy.
 
 [Knowledge Learned]
+2026-10-03: uyxh20/FlareMo PR #2 tried to keep the daily 1:1 flaremo-update apply and paper over conflicts. That is the wrong fix. Close it without merge; replace with a weekly whole-file take that skips protected auth/reset/deploy/README paths.
+2026-10-03: Against merge-base e42d98f, the eight requested v0.22.0 files had zero fork-only commits. They were safe whole-file takes. recall.ts + memory.test.ts needed ledger v2 extras (schema, migrations 0030-0032, domain memory helpers, import-export v5) to compile and stay coherent.
+2026-10-03: GitHub Actions "disable workflow" API returned 403 Resource not accessible by integration for both the gh token and the origin x-access-token. Removing the daily cron from the branch does not stop the live workflow until that file reaches default branch or a token with actions:write disables it.
 2026-09-29: Live Worker https://flaremo.ulysse-ha-19.workers.dev reported email_verification_required=false, so forgot-password stayed off until FLAREMO_EMAIL_PROVIDER=resend, FLAREMO_EMAIL_FROM, and Worker secret RESEND_API_KEY are set. The UI was already present.
 2026-09-29: Better Auth only calls sendResetPassword for an existing user. Throwing from that hook would 500 known addresses and 200 unknown ones, which enumerates accounts. Delivery failures stay logged inside sendPasswordResetEmail.
 2026-09-29: revokeSessionsOnPasswordReset invalidates cookie sessions. memos_pat_ tokens survive self-service reset. Operator /recover still revokes sessions and PATs. Do not invent a new revocation policy without stating it.

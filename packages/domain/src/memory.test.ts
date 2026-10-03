@@ -18,6 +18,7 @@ import {
   createMemory,
   createMemoryFromMemo,
   forgetMemory,
+  getMemoryLineage,
   hardDeleteMemory,
   linkMemory,
   listMemories,
@@ -405,7 +406,7 @@ describe("memory domain services", () => {
     expect(result.episode.type).toBe("episodic");
     expect(result.items).toHaveLength(2);
 
-    const listed = await listMemories(db, user, {
+    const { memories: listed } = await listMemories(db, user, {
       scopeKey: "github:realchendahuang/FlareMo",
     });
     expect(listed).toHaveLength(3);
@@ -489,7 +490,7 @@ describe("memory domain services", () => {
 
     // The disputed memory itself is untouched — even though it is user-
     // confirmed — and an agent dispute can never retire it.
-    const target = (await listMemories(db, user, {})).find(
+    const target = (await listMemories(db, user, {})).memories.find(
       (m) => m.id === confirmed.memory.id,
     );
     expect(target?.needs_review).toBe(false);
@@ -553,13 +554,14 @@ describe("memory domain services", () => {
     await confirmMemory(db, user, USER, id);
     await lockMemory(db, user, USER, id);
     expect(
-      (await listMemories(db, user, {})).find((m) => m.id === id)?.verification,
+      (await listMemories(db, user, {})).memories.find((m) => m.id === id)
+        ?.verification,
     ).toBe("locked");
     await unlockMemory(db, user, USER, id);
     await archiveMemory(db, user, USER, id);
-    expect(await listMemories(db, user, { status: "archived" })).toHaveLength(
-      1,
-    );
+    expect(
+      (await listMemories(db, user, { status: "archived" })).memories,
+    ).toHaveLength(1);
   });
 
   it("links a memo to a memory and promotes a memory back to a memo", async () => {
@@ -619,7 +621,7 @@ describe("memory domain services", () => {
     });
 
     const bundle = await exportData(db, user);
-    expect(bundle.version).toBe(4);
+    expect(bundle.version).toBe(5);
     expect(bundle.memories).toHaveLength(1);
     expect(bundle.memories[0]?.name).toBe(created.memory.id);
 
@@ -633,10 +635,57 @@ describe("memory domain services", () => {
     const result = await importData(db, user, bundle);
     expect(result.imported_memories).toBe(1);
 
-    const restored = await listMemories(db, user, {});
+    const { memories: restored } = await listMemories(db, user, {});
     expect(restored).toHaveLength(1);
     expect(restored[0]?.id).toBe(created.memory.id);
     expect(restored[0]?.content).toBe("FlareMo 必须保持 Cloudflare Native");
     expect(restored[0]?.verification).toBe("confirmed");
+
+    // v5 carries the ledger's evidence chain and lifecycle trail. A round-trip
+    // that dropped them would silently erase why a fact exists and how it
+    // evolved, which is the product's central promise.
+    const lineage = await getMemoryLineage(db, user, created.memory.id);
+    expect(lineage.events.length).toBeGreaterThan(0);
+    expect(
+      lineage.events.some((event) => event.event_type === "confirmed"),
+    ).toBe(true);
+  });
+
+  it("pages the ledger with a cursor and rejects forged tokens", async () => {
+    for (let index = 0; index < 5; index++) {
+      await createMemory(db, user, USER, {
+        content: `分页测试记忆 ${index}`,
+        type: "semantic",
+        kind: "fact",
+        scopeType: "global",
+        scopeKey: null,
+        tier: "normal",
+        importance: 40,
+        confidence: 80,
+      });
+    }
+
+    const first = await listMemories(db, user, { pageSize: 2 });
+    expect(first.memories).toHaveLength(2);
+    expect(first.nextPageToken).toBeTruthy();
+
+    const seen = new Set(first.memories.map((m) => m.id));
+    let token = first.nextPageToken;
+    while (token) {
+      const page = await listMemories(db, user, {
+        pageSize: 2,
+        pageToken: token,
+      });
+      for (const memory of page.memories) {
+        expect(seen.has(memory.id)).toBe(false);
+        seen.add(memory.id);
+      }
+      token = page.nextPageToken;
+    }
+    expect(seen.size).toBe(5);
+
+    await expect(
+      listMemories(db, user, { pageToken: "not-a-token" }),
+    ).rejects.toThrow(/invalid page token/i);
   });
 });

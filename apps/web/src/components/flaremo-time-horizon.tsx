@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { memo, useMemo, useState } from "react";
-import { getHourlyActivity, listMemos } from "@/api";
+import { getHourlyActivity, getMemoStats, listMemos } from "@/api";
 import { useI18n } from "@/i18n";
 import {
   addMonths,
@@ -28,6 +28,7 @@ import {
   type WeekStart,
 } from "@/lib/calendar-date";
 import {
+  ACTIVITY_WINDOW_DAYS,
   buildActivityCountMap,
   monthRangeOf,
   parseDayKey,
@@ -58,7 +59,8 @@ export type {
 export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
   stats,
   streak: _streak,
-  monthLabels,
+  timeZone,
+  space,
   onDaySelect,
   onNavigate,
   hoveredDate,
@@ -87,6 +89,31 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
     () => buildActivityCountMap(stats.activity),
     [stats.activity],
   );
+
+  // The shared stats query is anchored to today, so a historical year would
+  // inherit a trailing-366-days slice that covers at most its tail and render
+  // the rest as zeroes (issue #144). The year view asks for the navigated
+  // year's own window (until Dec 31); the counter read behind it scales with
+  // active hours in the range, not memo count, so 2019 costs no more than
+  // today. Falls back to the shared array while it loads.
+  const yearStatsQuery = useQuery({
+    queryKey: ["memo-stats-year", space, timeZone, currentYear],
+    queryFn: ({ signal }) =>
+      getMemoStats(
+        timeZone,
+        space,
+        ACTIVITY_WINDOW_DAYS,
+        `${currentYear}-12-31`,
+        signal,
+      ),
+    enabled: tab === "year",
+    staleTime: 60_000,
+    retry: false,
+  });
+  const yearActivity =
+    tab === "year"
+      ? (yearStatsQuery.data?.activity ?? stats.activity)
+      : stats.activity;
 
   // Hourly query for Day view (24 hours)
   const dayHourlyQuery = useQuery({
@@ -175,7 +202,7 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
 
   // ── Range Title ────────────────────────────────────────────────────────────
   const rangeTitle = useMemo(() => {
-    if (tab === "year") return `${currentYear}年`;
+    if (tab === "year") return t("explorer.yearTitle", { year: currentYear });
     if (tab === "month") return formatMonthTitle(currentMonthKey, locale);
     if (tab === "week") {
       const first = weekDays[0];
@@ -195,7 +222,7 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
       weekday: "short",
     });
     return fmt.format(d);
-  }, [tab, currentYear, currentMonthKey, weekDays, selectedDay, locale]);
+  }, [tab, currentYear, currentMonthKey, weekDays, selectedDay, locale, t]);
 
   // ── Navigation ─────────────────────────────────────────────────────────────
   const handlePrev = () => {
@@ -238,10 +265,10 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
         >
           {(
             [
-              ["year", "年"],
-              ["month", "月"],
-              ["week", "周"],
-              ["day", "日"],
+              ["year", t("explorer.tab.year")],
+              ["month", t("explorer.tab.month")],
+              ["week", t("explorer.tab.week")],
+              ["day", t("explorer.tab.day")],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -265,12 +292,12 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
         {/* Quick Return to Today when navigated away */}
         {isAwayFromToday ? (
           <button
-            aria-label="回到今日"
-            className="rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-foreground/80 shadow-2xs transition-colors hover:border-brand-500/50 hover:bg-background hover:text-brand-600 dark:border-border/40 dark:bg-muted/30 dark:hover:text-brand-400 cursor-pointer"
+            aria-label={t("explorer.backToToday")}
+            className="rounded-md border border-border/60 bg-background/80 px-2 py-0.5 text-xs font-medium text-foreground/80 shadow-2xs transition-colors hover:border-brand-500/50 hover:bg-background hover:text-brand-600 dark:border-border/40 dark:bg-muted/30 dark:hover:text-brand-400 cursor-pointer"
             type="button"
             onClick={handleJumpToday}
           >
-            今日
+            {t("explorer.today")}
           </button>
         ) : null}
       </div>
@@ -278,7 +305,7 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
       {/* ── Range Navigator ────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-1">
         <button
-          aria-label="上一期"
+          aria-label={t("explorer.previousPeriod")}
           className="rounded p-1 text-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
           type="button"
           onClick={handlePrev}
@@ -289,7 +316,7 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
           {rangeTitle}
         </span>
         <button
-          aria-label="下一期"
+          aria-label={t("explorer.nextPeriod")}
           className="rounded p-1 text-foreground/70 hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
           type="button"
           onClick={handleNext}
@@ -319,7 +346,7 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
           {/* YEAR VIEW: 365 Days across 12 Month Dot Clusters */}
           {tab === "year" && (
             <YearHorizonPureView
-              activity={stats.activity}
+              activity={yearActivity}
               displayMode={displayMode}
               today={today}
               weekStart={weekStart}
@@ -376,13 +403,6 @@ export const FlareMoTimeHorizon = memo(function FlareMoTimeHorizon({
             />
           )}
         </div>
-      </div>
-
-      {/* ── Hidden monthLabels container for E2E Contract Parity ─────────── */}
-      <div aria-hidden="true" className="hidden">
-        {monthLabels.map((m) => (
-          <span key={m.date}>{m.label}</span>
-        ))}
       </div>
 
       {/* ── Bottom Single-Line Micro Tooltip (Hover Details Only) ────────── */}

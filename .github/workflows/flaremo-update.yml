@@ -1,12 +1,16 @@
-name: Prepare FlareMo update
+# Weekly deterministic upstream file take for self-hosted forks.
+# This is not a 1:1 replay of upstream history onto main, and it never
+# merges its own pull request. Pushing a merge to main still publishes
+# the Worker via Deploy to Cloudflare.
+name: Weekly upstream file take
 
 on:
   schedule:
-    - cron: "43 4 * * *"
+    - cron: "17 8 * * 1"
   workflow_dispatch:
     inputs:
       version:
-        description: "Release tag to install, for example v0.3.1. Leave empty for latest."
+        description: "Release tag to compare, for example v0.22.0. Leave empty for latest."
         required: false
         type: string
 
@@ -15,11 +19,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: flaremo-update
+  group: flaremo-weekly-upstream-take
   cancel-in-progress: false
 
 jobs:
-  prepare-update:
+  take-upstream-files:
     if: github.repository != 'realchendahuang/FlareMo'
     runs-on: ubuntu-latest
     env:
@@ -34,7 +38,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
 
-      - name: Prepare update pull request
+      - name: Compare upstream and open a file-take pull request
         shell: bash
         run: |
           set -euo pipefail
@@ -49,61 +53,60 @@ jobs:
           fi
 
           current_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
-          if [[ ! "${current_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Invalid installed FlareMo version: ${current_version}" >&2
-            exit 1
-          fi
-
-          target_number="${target_version#v}"
-          IFS=. read -r current_major current_minor current_patch <<< "${current_version}"
-          IFS=. read -r target_major target_minor target_patch <<< "${target_number}"
-          if (( target_major < current_major ||
-                (target_major == current_major && target_minor < current_minor) ||
-                (target_major == current_major && target_minor == current_minor && target_patch < current_patch) )); then
-            echo "Refusing to downgrade FlareMo from v${current_version} to ${target_version}." >&2
-            exit 1
-          fi
-          if [[ "${target_number}" == "${current_version}" ]]; then
-            echo "${target_version} is already installed."
-            exit 0
-          fi
 
           git remote add flaremo-upstream "https://github.com/${UPSTREAM_REPOSITORY}.git"
           git fetch --no-tags flaremo-upstream \
-            "refs/tags/v${current_version}:refs/tags/v${current_version}" \
             "refs/tags/${target_version}:refs/tags/${target_version}"
 
-          update_branch="flaremo-update/${target_version}"
+          if ! merge_base="$(git merge-base "origin/${BASE_BRANCH}" "refs/tags/${target_version}")"; then
+            echo "No merge-base with ${target_version}; refusing a guessy file take." >&2
+            exit 1
+          fi
+
+          report="$(mktemp)"
+          body="$(mktemp)"
+          node ./scripts/run-weekly-upstream-take.mjs \
+            --ours "origin/${BASE_BRANCH}" \
+            --base "${merge_base}" \
+            --theirs "refs/tags/${target_version}" \
+            --target-version "${target_version}" \
+            --current-version "${current_version}" \
+            --report "${report}" \
+            --body "${body}"
+
+          open_pr="$(node -p "JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')).openPullRequest" "${report}")"
+          if [[ "${open_pr}" != "true" ]]; then
+            echo "No eligible upstream files to take. Exiting green."
+            cat "${report}"
+            exit 0
+          fi
+
+          update_branch="flaremo-weekly/${target_version}"
           git config user.name "flaremo-update[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "${update_branch}" "origin/${BASE_BRANCH}"
+          node ./scripts/run-weekly-upstream-take.mjs \
+            --ours HEAD \
+            --base "${merge_base}" \
+            --theirs "refs/tags/${target_version}" \
+            --target-version "${target_version}" \
+            --current-version "${current_version}" \
+            --apply
+          git add -A
+          git commit -m "Take eligible files from FlareMo ${target_version}"
 
-          update_patch="$(mktemp)"
-          git diff --binary --full-index \
-            "refs/tags/v${current_version}" \
-            "refs/tags/${target_version}" > "${update_patch}"
-          if ! git apply --3way --index "${update_patch}"; then
-            echo "The deployment repository conflicts with ${target_version}. Resolve the update manually." >&2
-            exit 1
-          fi
-          git commit -m "Update FlareMo from v${current_version} to ${target_version}"
-
-          if git ls-remote --exit-code --heads origin "${update_branch}" >/dev/null 2>&1; then
-            git fetch origin "refs/heads/${update_branch}:refs/remotes/origin/${update_branch}"
-          fi
           git push --force-with-lease --set-upstream origin "${update_branch}"
 
           existing_pr="$(gh pr list --head "${update_branch}" --state open --json url --jq '.[0].url // empty')"
           if [[ -n "${existing_pr}" ]]; then
             echo "Update pull request already exists: ${existing_pr}"
+            gh pr edit "${existing_pr}" --body-file "${body}"
             exit 0
           fi
 
-          pr_body="A new stable FlareMo release is available. Review the release notes and merge this pull request to let Cloudflare Workers Builds deploy it.
-
-          Release notes: https://github.com/${UPSTREAM_REPOSITORY}/releases/tag/${target_version}"
           gh pr create \
             --base "${BASE_BRANCH}" \
             --head "${update_branch}" \
-            --title "Update FlareMo to ${target_version}" \
-            --body "${pr_body}"
+            --title "Take eligible FlareMo ${target_version} files" \
+            --body-file "${body}"
+          echo "Opened a pull request. This job does not merge it."

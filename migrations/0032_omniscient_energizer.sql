@@ -1,0 +1,2 @@
+CREATE INDEX `memory_items_inferred_review_sweep_idx` ON `memory_items` (`created_at`) WHERE "memory_items"."verification" = 'inferred' AND "memory_items"."status" = 'active' AND "memory_items"."needs_review" = 1;--> statement-breakpoint
+CREATE INDEX `memory_items_vector_reclaim_sweep_idx` ON `memory_items` (`embedding_status`) WHERE "memory_items"."embedding_status" IN ('indexed', 'pending', 'error');

@@ -114,12 +114,12 @@ https://flaremo.<子域>.workers.dev
 | 场景 | 做法 |
 | --- | --- |
 | 自己改了代码 | 推到 `main`：workflow 自动发布。资源已存在时 push 仍会跑幂等 provision。也可用 `Run workflow`。 |
-| 上游发布了新的稳定版 | 按 [更新指南](./update.md) 运行 `Prepare FlareMo update`，审查并合并升级 PR。本 workflow 在合并进 `main` 后会自动发布。 |
+| 上游发布了新的稳定版 | 按 [更新指南](./update.md) 运行 `Weekly upstream file take`，审查并合并升级 PR。本 workflow 在合并进 `main` 后会自动发布。 |
 | 只轮换认证密钥 | 改 GitHub Secret，再运行一次正式部署（会覆盖 Worker 上的对应 secret）。 |
 | 改用自定义域名 | Cloudflare 绑定域名，设置 Variable `FLAREMO_PUBLIC_URL`，再部署。 |
 | 启用邮件找回密码 | 设置 Variables `FLAREMO_EMAIL_PROVIDER=resend` 与 `FLAREMO_EMAIL_FROM`，并用 `wrangler secret put RESEND_API_KEY` 写入 Worker，然后部署。 |
 
-`Prepare FlareMo update` 只创建升级 PR，不持有 Cloudflare 凭据。真正发布是本 workflow（push 到 `main` 或 `Run workflow`）、本地 `pnpm deploy`，或 Workers Builds。
+`Weekly upstream file take` 只创建升级 PR，不持有 Cloudflare 凭据，也不会合并自己的 PR。真正发布是本 workflow（push 到 `main` 或 `Run workflow`）、本地 `pnpm deploy`，或 Workers Builds。
 
 ## 7. 首次不必配置的项
 

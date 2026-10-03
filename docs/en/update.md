@@ -32,32 +32,25 @@ The workflow can only create an update branch and pull request in the deployment
 
 ## Install an update
 
-The `Prepare FlareMo update` workflow checks the latest stable Release once per day and opens an update pull request when needed.
+The `Weekly upstream file take` workflow (`.github/workflows/flaremo-update.yml`) compares the latest stable Release every Monday morning. It does **not** replay upstream history 1:1 onto `main`, and it does **not** merge its own pull request.
 
-To check immediately, open “System update” in the lower-left corner of FlareMo, select “Go to update,” and then:
+It only opens a PR for files that:
 
-1. Open `Actions` -> `Prepare FlareMo update`.
+- differ from upstream
+- are outside the protected set (`apps/worker/src/auth.ts`, password-reset tests and routes, `deploy-cloudflare.yml`, and the README files that state push-to-main publishing and that the Resend key is a Worker secret)
+- can be taken as the whole upstream file without dropping unique fork content (the fork matches the merge-base, or a 3-way is clean and equals the upstream file)
+
+Conflicts and protected diffs are listed in the PR body and left untouched. If nothing is eligible, the job exits green and opens no PR.
+
+To run it immediately:
+
+1. Open `Actions` -> `Weekly upstream file take`.
 2. Select `Run workflow`; leave the version empty to use the latest stable release.
-3. Wait for the update pull request.
-4. Review the release notes and changes, then merge the pull request.
-5. Cloudflare Workers Builds builds the web app, applies pending D1 migrations, and deploys the new Worker version. If you publish with [GitHub Action deploy](./github-action-deploy.md) instead of Workers Builds, merging the PR onto `main` publishes automatically.
+3. If any files qualify, wait for the pull request.
+4. Review the Taken / Protected / Conflicts lists in the PR body, then decide whether to merge.
+5. If you publish with [GitHub Action deploy](./github-action-deploy.md), merging the PR onto `main` publishes automatically.
 
-The update pull request can produce a preview version without running a production D1 migration. After merge, the production build applies migrations before publishing the new Worker while the old version remains available. If the build or migration fails, the new Worker is not deployed; inspect the Cloudflare check on GitHub or Build history in the Cloudflare dashboard.
-
-## Custom code and conflicts
-
-The workflow calculates the difference between the installed and target Releases, then uses Git three-way apply against the deployment repository. It does not depend on preserved upstream commit history, keeps customizations, and allows any merge method supported by the repository when there is no conflict.
-
-If a customization conflicts with a release, the workflow stops without changing `main`. Follow the failure log and apply the update manually, or run:
-
-```bash
-git remote add flaremo-upstream https://github.com/realchendahuang/FlareMo.git
-git fetch flaremo-upstream --tags
-git diff --binary --full-index v0.3.0 v0.3.1 > flaremo-update.patch
-git apply --3way --index flaremo-update.patch
-```
-
-After resolving conflicts, push `main` and Cloudflare Workers Builds will complete the deployment.
+The update pull request can produce a preview version without running a production D1 migration. After merge, the production build applies migrations before publishing the new Worker.
 
 ## Existing instances
 

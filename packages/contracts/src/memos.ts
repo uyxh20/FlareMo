@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  exportMemoryEventSchema,
+  exportMemoryEvidenceSchema,
   exportMemoryRelationSchema,
   exportMemoryResourceLinkSchema,
   exportMemoryRevisionSchema,
@@ -329,7 +331,13 @@ const importShareSchema = shareDtoSchema.partial({
 
 export const importBundleSchema = z.object({
   version: z
-    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+    .union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+    ])
     .default(1),
   memos: z
     .array(
@@ -369,6 +377,10 @@ export const importBundleSchema = z.object({
     .array(exportMemoryResourceLinkSchema)
     .max(100_000)
     .default([]),
+  // v5: the memory ledger's evidence chain and lifecycle trail joined the
+  // bundle. Both are user-owned source data (not derived state).
+  memory_evidence: z.array(exportMemoryEvidenceSchema).max(200_000).default([]),
+  memory_events: z.array(exportMemoryEventSchema).max(200_000).default([]),
   // v4: projects/tasks/task_activity joined the self-service bundle. Rows keep
   // their namespaced ids; soft-deleted (recycle-bin) rows travel with
   // `deleted_at` so nothing is silently dropped from a backup.

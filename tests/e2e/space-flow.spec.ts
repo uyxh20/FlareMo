@@ -1,5 +1,6 @@
 import type { MemoDto } from "@flaremo/contracts";
 import { expect, test } from "@playwright/test";
+import { startWithCleanClientState } from "./workspace-helpers";
 
 function note(id: string, visibility: MemoDto["visibility"]): MemoDto {
   return {
@@ -86,13 +87,26 @@ test("switching spaces scopes the timeline request and keeps the URL restorable"
 test("a private capture in the team space only appears in its own timeline", async ({
   page,
 }) => {
+  // This case asserts the space-derived send target, so clear any send-target
+  // preference a previous test remembered for the personal space — otherwise
+  // that preference (correctly) wins over the team default and the optimistic
+  // card never enters the team timeline.
+  await startWithCleanClientState(page);
   // The composer's send target follows the active space, so a capture typed
   // in the team space travels as protected and the optimistic card may show
   // in the team timeline. This case pins the counterpart: when the wire
   // records the memo private (the server files private into the personal
   // corpus), the settle invalidation must move the card out of the team
   // timeline — no stale optimistic copy may stay behind.
-  await page.route("**/api/app/memos", async (route) => {
+  // Hold the POST open so the optimistic phase is observable. Without this the
+  // mock answers in the same tick as the click, the settle invalidation lands
+  // immediately, and the transient optimistic card is gone before Playwright's
+  // first poll — the assertion would be racing rather than testing.
+  let releasePost: (() => void) | undefined;
+  const postHeld = new Promise<void>((resolve) => {
+    releasePost = resolve;
+  });
+  await page.route("**/api/app/memos*", async (route) => {
     if (route.request().method() === "POST") {
       // The server files a private memo into the personal corpus even when
       // the composer's target was the team space; simulate a server that
@@ -101,6 +115,7 @@ test("a private capture in the team space only appears in its own timeline", asy
         content: string;
         visibility: string;
       };
+      await postHeld;
       await route.fulfill({
         status: 201,
         contentType: "application/json",
@@ -143,14 +158,17 @@ test("a private capture in the team space only appears in its own timeline", asy
   await page.getByRole("button", { name: /^(send|发送)$/i }).click();
 
   // The composer's target follows the active space (protected), so the
-  // optimistic card legitimately appears in the team timeline…
+  // optimistic card legitimately appears in the team timeline while the POST
+  // is still in flight…
   await expect(
     page.locator("article").filter({
       hasText: "Private note typed in the team space",
     }),
   ).toBeVisible();
-  // …and after the settle the server-filed private memo leaves the team
-  // timeline again (the inbox shows it under personal/all instead).
+  // …and once the server answers with a private visibility, the settle
+  // invalidation drops it from the team timeline (the inbox shows it under
+  // personal/all instead).
+  releasePost?.();
   await expect(
     page.locator("article").filter({
       hasText: "Private note typed in the team space",

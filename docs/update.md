@@ -32,32 +32,25 @@ octocat/flaremo
 
 ## 日常更新
 
-仓库中的 `Prepare FlareMo update` workflow 每天检查一次最新稳定 Release。发现新版后会创建一个升级 pull request。
+仓库中的 `Weekly upstream file take` workflow（`.github/workflows/flaremo-update.yml`）每周一上午对照最新稳定 Release。它**不会**把上游整段历史 1:1 套到 `main`，也**不会**合并自己的 pull request。
 
-你也可以在 FlareMo 左下角打开“系统更新”，点击“前往更新”，然后在 GitHub 手动运行 workflow：
+它只把同时满足这些条件的文件放进 PR：
 
-1. 打开 `Actions` -> `Prepare FlareMo update`。
+- 与上游不同
+- 不在保护集合里（`apps/worker/src/auth.ts`、自助重置测试与路由、`deploy-cloudflare.yml`、README 里 push-to-main / Resend Worker secret 的句子所在文件）
+- 可以整文件取上游且不丢掉本 fork 的独有内容（fork 相对 merge-base 没改过，或 3-way 干净且结果等于上游文件）
+
+冲突和受保护文件的差异写在 PR 正文里，文件保持原样。没有可取文件时 job 绿色退出、不开 PR。
+
+你也可以在 GitHub 手动运行：
+
+1. 打开 `Actions` -> `Weekly upstream file take`。
 2. 点击 `Run workflow`；版本留空表示使用最新稳定版。
-3. 等待升级 pull request 创建。
-4. 查看版本说明和文件变化，然后合并 pull request。
-5. Cloudflare Workers Builds 会自动构建前端、执行尚未应用的 D1 migrations，并发布新的 Worker 版本。若未接入 Workers Builds、而是使用 [GitHub Action 部署](./github-action-deploy.md)，合并 PR 到 `main` 后会自动发布。
+3. 若有合格文件，等待升级 pull request 创建。
+4. 查看 PR 正文里的 Taken / Protected / Conflicts 列表，再决定是否合并。
+5. 若使用 [GitHub Action 部署](./github-action-deploy.md)，合并 PR 到 `main` 后会自动发布。
 
-更新 PR 可以生成 preview version，但不会执行生产 D1 migration。合并到 production branch 后，生产部署才会先执行 migration 再发布 Worker；期间旧版本继续服务。如果构建或 migration 失败，新 Worker 不会发布；到 GitHub 的 Cloudflare check 或 Cloudflare Dashboard 的 Build history 查看错误。
-
-## 自定义代码和冲突
-
-更新会计算“当前已安装 Release 到目标 Release”的差异，再用 Git three-way apply 把差异应用到部署仓库，因此不要求部署仓库保留上游提交历史，也能保留自定义内容。无冲突时，更新 PR 可以使用仓库允许的任意合并方式。
-
-如果本地修改与新版本冲突，workflow 会失败并停止，不会覆盖 `main`。这时按照失败日志手工应用更新，或在本地运行：
-
-```bash
-git remote add flaremo-upstream https://github.com/realchendahuang/FlareMo.git
-git fetch flaremo-upstream --tags
-git diff --binary --full-index v0.3.0 v0.3.1 > flaremo-update.patch
-git apply --3way --index flaremo-update.patch
-```
-
-解决冲突后推送 `main`，Cloudflare Workers Builds 会继续完成部署。
+更新 PR 可以生成 preview version，但不会执行生产 D1 migration。合并到 production branch 后，生产部署才会先执行 migration 再发布 Worker。
 
 ## 现有实例
 

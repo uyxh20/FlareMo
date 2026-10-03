@@ -114,12 +114,12 @@ After Resend is configured, smoke-test (do not paste secrets or mail bodies into
 | Situation | What to do |
 | --- | --- |
 | You changed application code | Push to `main`; the workflow publishes. Existing resource names are skipped. `Run workflow` still works. |
-| Upstream published a stable release | Follow the [update guide](./update.md) to run `Prepare FlareMo update`, review and merge the PR. This workflow publishes after the merge lands on `main`. |
+| Upstream published a stable release | Follow the [update guide](./update.md) to run `Weekly upstream file take`, review and merge the PR. This workflow publishes after the merge lands on `main`. |
 | Rotate auth secrets | Change the GitHub Secrets and run a production deploy (overwrites the Worker secrets). |
 | Switch to a custom domain | Bind the domain in Cloudflare, set Variable `FLAREMO_PUBLIC_URL`, deploy again. |
 | Enable forgot-password email | Set Variables `FLAREMO_EMAIL_PROVIDER=resend` and `FLAREMO_EMAIL_FROM`, then `wrangler secret put RESEND_API_KEY` on the Worker, then deploy. |
 
-`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is this workflow (push to `main` or `Run workflow`), local `pnpm deploy`, or Workers Builds.
+`Weekly upstream file take` only opens an upgrade PR, does not hold Cloudflare credentials, and does not merge itself. Publishing is this workflow (push to `main` or `Run workflow`), local `pnpm deploy`, or Workers Builds.
 
 ## 7. Not required on first install
 

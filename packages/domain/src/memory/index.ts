@@ -29,6 +29,7 @@ export {
 } from "./memo-link";
 export {
   getMemory,
+  getMemoryLineage,
   listMemories,
   listMemoryRelations,
   listMemoryReview,

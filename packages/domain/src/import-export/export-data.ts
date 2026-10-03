@@ -3,6 +3,8 @@ import type { FlareMoDb, UserRow } from "@flaremo/db";
 import {
   attachments,
   memoRelations,
+  memoryEvents,
+  memoryEvidence,
   memoryItems,
   memoryRelations,
   memoryResourceLinks,
@@ -32,6 +34,8 @@ export async function exportData(
     memoryRevisionRows,
     memoryRelationRows,
     memoryResourceLinkRows,
+    memoryEvidenceRows,
+    memoryEventRows,
     projectRows,
     taskRows,
     taskActivityRows,
@@ -52,6 +56,8 @@ export async function exportData(
       .select()
       .from(memoryResourceLinks)
       .where(eq(memoryResourceLinks.userId, user.id)),
+    db.select().from(memoryEvidence).where(eq(memoryEvidence.userId, user.id)),
+    db.select().from(memoryEvents).where(eq(memoryEvents.userId, user.id)),
     db.select().from(projects).where(eq(projects.userId, user.id)),
     db.select().from(tasks).where(eq(tasks.userId, user.id)),
     db
@@ -76,7 +82,7 @@ export async function exportData(
     );
   }
   return {
-    version: 4,
+    version: 5,
     exported_at: new Date().toISOString(),
     memos: memoRows.map((memo) => ({
       name: memo.id,
@@ -133,6 +139,8 @@ export async function exportData(
       kind: memory.kind,
       scope_type: memory.scopeType,
       scope_key: memory.scopeKey,
+      fact_key: memory.factKey ?? null,
+      tags: Array.isArray(memory.tags) ? memory.tags : [],
       tier: memory.tier,
       verification: memory.verification,
       status: memory.status,
@@ -146,6 +154,11 @@ export async function exportData(
       source_ref: memory.sourceRef,
       valid_from: memory.validFrom,
       valid_to: memory.validTo,
+      observed_at: memory.observedAt ?? null,
+      expires_at: memory.expiresAt ?? null,
+      superseded_by_id: memory.supersededById ?? null,
+      superseded_at: memory.supersededAt ?? null,
+      rejected_at: memory.rejectedAt ?? null,
       created_at: memory.createdAt,
       updated_at: memory.updatedAt,
     })),
@@ -171,6 +184,26 @@ export async function exportData(
       relation_type: link.relationType,
       metadata: link.metadata,
       created_at: link.createdAt,
+    })),
+    memory_evidence: memoryEvidenceRows.map((evidence) => ({
+      memory_id: evidence.memoryId,
+      source_type: evidence.sourceType,
+      source_id: evidence.sourceId,
+      source_revision: evidence.sourceRevision,
+      relation_type: evidence.relationType,
+      observed_at: evidence.observedAt,
+      excerpt: evidence.excerpt,
+      excerpt_hash: evidence.excerptHash,
+      metadata: evidence.metadata,
+      created_at: evidence.createdAt,
+    })),
+    memory_events: memoryEventRows.map((event) => ({
+      memory_id: event.memoryId,
+      event_type: event.eventType,
+      actor_type: event.actorType,
+      actor_name: event.actorName,
+      metadata: event.metadata,
+      created_at: event.createdAt,
     })),
     // Recycle-bin rows travel too: a backup that quietly drops soft-deleted
     // data is a lossy backup. `deleted_at` rides along so an import into a
