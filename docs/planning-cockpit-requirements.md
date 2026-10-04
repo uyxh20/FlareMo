@@ -23,6 +23,15 @@ FlareMo already has `tasks`, `projects`, a kanban board at `/projects`, overdue 
 4. **Notion**: fresh start. Open items are moved by hand and history starts at cutover. No importer and no sync.
 5. **Build strategy**: an isolated add-on in the fork. It has its own tables, migrations and pages, and touches upstream code only at named hook-in points so upstream update PRs keep applying.
 
+Follow-up decisions, 2026-10-04:
+
+6. **Kanban columns**: by status, like the Notion board: Backlog, To Do, Doing, Done.
+7. **Dates**: the plan date (day, week or month) is separate from the due date (upstream `due_at`).
+8. **Review timing**: the weekly and monthly review stays in "Next".
+9. **Cost**: Cloudflare pricing is accepted, with no new services.
+
+The implementation plan is `docs/planning-cockpit-implementation-plan.md`, audited v2.
+
 ## Requirements
 
 ### v1 (must)
@@ -69,14 +78,14 @@ Notion import or sync. Shared or multi-user tasks.
   - Nav entry and i18n keys.
   - Table classification in `scripts/persistence-manifest.mjs`.
 
-## Open design questions
+## Design questions (settled)
 
-- Kanban columns: horizons (Backlog, Month, Week, Today, Done) or statuses (To Do, Doing, Done)?
-- Is a day plan the same as upstream `due_at`, which drives overdue reminders, or a separate plan date next to a real deadline?
-- Roll-forward: lazy (computed when read, no cron), automatic at period end (cron), or a carry-over prompt?
-- Does the cockpit replace `/projects` in navigation or sit beside it?
-- How do upstream `projects` relate to goals?
-- Week start day and time zone.
+- Kanban columns: statuses, like the Notion board (decision 6).
+- Plan date versus due date: separate (decision 7).
+- Roll-forward: rollover when the cockpit opens, as an idempotent set-based batch. No cron.
+- Navigation: the cockpit sits beside `/projects` (plan default D2).
+- Projects and goals: not linked in v1 (plan default D2).
+- Week start and time zone: Monday, with date maths on the client's local date (plan section 4).
 
 ## Cost
 
