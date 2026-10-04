@@ -6,7 +6,7 @@ import { bridgeCapture } from "../asr/bridge";
 import { resolveVoiceService } from "../asr/configuration";
 import { sniffAudioMimeType } from "../asr/minimax";
 import { AsrProviderError } from "../asr/types";
-import { getTrustedOrigins } from "../auth";
+import { getTrustedOrigins } from "../auth-env";
 import { getBrowserRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
@@ -55,7 +55,7 @@ captureApi.get("/ws", async (c) => {
     bridgeCapture(pair[1], configured.provider, async () => {
       const context = await getBrowserRequestContext(c);
       const service = await resolveVoiceService(c.env, context.db);
-      if (!service || service.kind !== "streaming")
+      if (service?.kind !== "streaming")
         throw new Error("Voice service disabled");
       return context;
     });
@@ -91,7 +91,7 @@ captureApi.post("/transcribe", async (c) => {
     // rule for unsafe methods itself.
     const { user, db } = await getBrowserRequestContext(c);
     const configured = await resolveVoiceService(c.env, db);
-    if (!configured || configured.kind !== "batch")
+    if (configured?.kind !== "batch")
       return c.json(
         { error: { message: "Batch transcription is not configured" } },
         503,

@@ -1,9 +1,12 @@
 {
   "name": "flaremo",
   "license": "AGPL-3.0-only",
-  "version": "0.20.1",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "flaremo": "./bin/flaremo"
+  },
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "pnpm --filter @flaremo/web build && pnpm --filter @flaremo/worker dev",
@@ -14,11 +17,12 @@
     "build": "pnpm -r build",
     "build:site": "pnpm plugins:build && pnpm --filter @flaremo/site build",
     "check": "pnpm --filter @flaremo/site check && pnpm --filter @flaremo/telegram-bot-example check && pnpm --filter @flaremo/web check && pnpm --filter @flaremo/worker check && pnpm --filter @flaremo/contracts check && pnpm --filter @flaremo/db check && pnpm --filter @flaremo/domain check && pnpm --filter @flaremo/memos check && pnpm --filter @flaremo/plugins check",
-    "lint": "biome check AGENTS.md CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md README.md README.*.md ROADMAP.md SECURITY.md SUPPORT.md llms.txt package.json tsconfig.json tsconfig.base.json vitest.config.ts playwright.config.ts drizzle.config.ts wrangler.jsonc .github docs scripts apps packages plugins tests",
+    "lint": "biome check AGENTS.md CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md README.md README.*.md ROADMAP.md SECURITY.md SUPPORT.md llms.txt package.json tsconfig.json tsconfig.base.json vitest.config.ts playwright.config.ts drizzle.config.ts wrangler.jsonc .github docs scripts harness apps packages plugins tests",
     "format": "pnpm lint --write",
-    "format:check": "biome ci AGENTS.md CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md README.md README.*.md ROADMAP.md SECURITY.md SUPPORT.md llms.txt package.json tsconfig.json tsconfig.base.json vitest.config.ts playwright.config.ts drizzle.config.ts wrangler.jsonc .github docs scripts apps packages plugins tests",
+    "format:check": "biome ci AGENTS.md CHANGELOG.md CODE_OF_CONDUCT.md CONTRIBUTING.md README.md README.*.md ROADMAP.md SECURITY.md SUPPORT.md llms.txt package.json tsconfig.json tsconfig.base.json vitest.config.ts playwright.config.ts drizzle.config.ts wrangler.jsonc .github docs scripts harness apps packages plugins tests",
     "typecheck": "pnpm --filter @flaremo/site typecheck && pnpm --filter @flaremo/telegram-bot-example typecheck && pnpm --filter @flaremo/web typecheck && pnpm --filter @flaremo/worker typecheck && pnpm --filter @flaremo/contracts typecheck && pnpm --filter @flaremo/db typecheck && pnpm --filter @flaremo/domain typecheck && pnpm --filter @flaremo/memos typecheck && pnpm --filter @flaremo/plugins typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm test:root && pnpm -r test",
+    "test:root": "vitest run --config ./vitest.config.ts tests/harness tests/team-projects",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:capture:webkit": "playwright test --config ./tests/playwright.capture-webkit.config.ts",
@@ -52,6 +56,7 @@
     "migrate:local": "wrangler d1 migrations apply DB --local --config ./wrangler.jsonc",
     "migrate:remote": "wrangler d1 migrations apply DB --remote --config ./wrangler.jsonc",
     "deploy:dry-run": "pnpm --filter @flaremo/web build && wrangler deploy --config ./wrangler.jsonc --dry-run",
+    "startup-graph": "node scripts/startup-graph.mjs",
     "deploy:dry-run:site": "pnpm build:site && wrangler deploy --config ./apps/site/wrangler.jsonc --dry-run",
     "deploy": "pnpm deploy:preflight && pnpm --filter @flaremo/web build && pnpm migrate:remote && pnpm --filter @flaremo/worker deploy",
     "deploy:site": "pnpm build:site && wrangler deploy --config ./apps/site/wrangler.jsonc"
@@ -82,6 +87,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.8",
+    "esbuild": "0.28.2",
     "jsdom": "^30.0.1",
     "jsonc-parser": "^3.3.1",
     "miniflare": "^4.20260722.0",

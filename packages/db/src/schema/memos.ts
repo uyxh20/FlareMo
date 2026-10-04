@@ -96,6 +96,45 @@ export const memos = sqliteTable(
   ],
 );
 
+// Per-author, per-UTC-hour memo counters.
+//
+// Why this exists: the stats endpoint used to answer every number by scanning
+// `memos`, so a 4.7k-memo instance burned roughly 20k rows_read per request
+// against D1's 5M/day free allowance — a few hundred heatmap tab switches
+// exhausted the day. These counters make those reads scale with *when the user
+// actually wrote* instead of with their total memo count.
+//
+// Hour granularity, not day: the heatmap answers a caller-supplied IANA time
+// zone, and a UTC day always straddles two local days, so day buckets could
+// only ever be approximately re-bucketed. Hour buckets re-bucket exactly for
+// every modern zone (all are whole or half hours), and `currentStreak` walks
+// the resulting array and breaks on the first zero — an off-by-one-day
+// boundary here would silently break a streak.
+//
+// Each counter counts memos *currently* in that status, so a status
+// transition moves one unit between columns instead of moving date buckets.
+// The daily recalibration drops rows whose counters are all zero.
+//
+// This is a derived cache, never a source of truth: `memos` stays
+// authoritative and the scheduled recalibration rebuilds it, so drift from a
+// missed write self-heals within a day.
+export const memoHourlyCounts = sqliteTable(
+  "memo_hourly_counts",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    // `substr(created_at, 1, 13)` — "2026-01-31T09". Always UTC, never a
+    // viewer-local value: the requested time zone is applied when reading.
+    utcHour: text("utc_hour").notNull(),
+    normalCount: integer("normal_count").notNull().default(0),
+    archivedCount: integer("archived_count").notNull().default(0),
+    trashedCount: integer("trashed_count").notNull().default(0),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.utcHour] })],
+);
+
 // D1 is shared by independent Worker isolates, so the Memos SSE stream needs
 // a durable event cursor rather than an in-memory broadcaster. Event rows are
 // deliberately not foreign-keyed to a memo: delete events must remain

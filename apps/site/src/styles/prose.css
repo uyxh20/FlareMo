@@ -8,6 +8,7 @@
   font-size: 1rem;
   line-height: 1.75;
   max-width: 72ch;
+  overflow-wrap: anywhere;
 }
 
 .prose-doc > * + * {
@@ -111,10 +112,14 @@
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
   border: 1px solid color-mix(in oklab, var(--border) 60%, transparent);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .prose-doc pre {
   overflow-x: auto;
+  overflow-wrap: normal;
+  word-break: normal;
   background: var(--muted);
   padding: 1rem;
   border-radius: 0.75rem;
@@ -128,6 +133,14 @@
   border: 0;
   padding: 0;
   font-size: inherit;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.prose-doc .prose-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
 }
 
 .prose-doc table {

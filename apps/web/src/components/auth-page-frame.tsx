@@ -25,7 +25,7 @@ export function AuthPageFrame({
   const { t } = useI18n();
 
   return (
-    <main className="grid min-h-svh lg:grid-cols-2">
+    <main className="grid min-h-svh lg:grid-cols-2" data-auth-page>
       <aside className="relative hidden bg-muted lg:flex lg:flex-col lg:justify-between lg:border-r lg:border-border/60 lg:p-12">
         <div className="flex items-center gap-2.5">
           <FlareMoLogo labelClassName="text-lg" markClassName="size-8" />

@@ -2,11 +2,17 @@
 
 这份文档描述 FlareMo 当前的架构方向。它是开源仓库里的结果型设计文档，不是过程记录。后续架构变化应直接修改本文原文。
 
-本地参考仓库放在 `Temp/` 下，并通过 `.gitignore` 排除在版本库之外：
+## 参考仓库
 
-- `Temp/MeowNocode`：来自 `XuYouo/MeowNocode`
-- `Temp/blinko`：来自 `blinkospace/blinko`
-- `Temp/memos`：来自 `usememos/memos`
+对标与参考对象是三个外部项目，**不随仓库分发**，需要时按下表重新克隆到 `Temp/`（该目录已在 `.gitignore` 中）：
+
+| 项目 | 来源 | 在 FlareMo 中的权重 |
+| --- | --- | --- |
+| `usememos/memos` | `git clone https://github.com/usememos/memos Temp/memos` | 模型、API 与兼容层的主参考 |
+| `blinkospace/blinko` | `git clone https://github.com/blinkospace/blinko Temp/blinko` | 功能参考（AI 检索、附件、引用、编辑器交互） |
+| `XuYouo/MeowNocode` | `git clone https://github.com/XuYouo/MeowNocode Temp/MeowNocode` | 轻量 Cloudflare/D1 笔记应用参考 |
+
+本文下面的权重判断、借鉴点与边界结论都已沉淀在此，克隆只是为了核对上游细节；只读结论不需要本地副本。
 
 ## 目标
 

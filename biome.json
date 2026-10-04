@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.12/schema.json",
   "files": {
     "includes": [
       "AGENTS.md",
@@ -22,8 +22,12 @@
       ".github/**/*.yml",
       "docs/**/*.md",
       "scripts/**/*.mjs",
+      "harness/**/*.mjs",
       "apps/**/*.ts",
       "apps/**/*.tsx",
+      "apps/web/src/features/team-projects/**/*.js",
+      "apps/web/src/features/team-projects/**/*.jsx",
+      "apps/web/src/features/team-projects/**/*.css",
       "apps/site/**/*.css",
       "apps/**/*.json",
       "packages/**/*.ts",

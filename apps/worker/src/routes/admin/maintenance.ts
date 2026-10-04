@@ -16,8 +16,11 @@ import {
 } from "@flaremo/domain";
 import type { Hono } from "hono";
 import { cleanupFlaremoArtifacts } from "../../artifact-cleanup";
-import { createFlareMoAuth } from "../../auth";
-import { getBrowserRequestContext, type HonoBindings } from "../../context";
+import {
+  getBrowserRequestContext,
+  type HonoBindings,
+  loadAuthFactory,
+} from "../../context";
 import { createEmbeddingProvider, createVectorIndex } from "../../embedding";
 import { jsonError } from "../../http";
 import { ownerContext, teamAdminContext, teamMembershipInfo } from "./context";
@@ -187,6 +190,7 @@ export function registerMaintenanceRoutes(app: Hono<HonoBindings>) {
       if (!authUserId) {
         throw new NotFoundError("Member not found");
       }
+      const { createFlareMoAuth } = await loadAuthFactory();
       const auth = createFlareMoAuth(c.env, context.db);
       const token = await auth.createPasswordResetToken(authUserId);
       const response = c.json({

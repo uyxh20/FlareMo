@@ -1,25 +1,22 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArchiveIcon,
   CheckIcon,
-  LockIcon,
-  LockOpenIcon,
+  CornerUpLeftIcon,
+  EyeIcon,
+  FolderIcon,
+  HistoryIcon,
+  LinkIcon,
   MoreHorizontalIcon,
   NotebookPenIcon,
   PencilIcon,
+  PinIcon,
+  PinOffIcon,
+  SparklesIcon,
   Trash2Icon,
+  XIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-  archiveMemory,
-  confirmMemory,
-  deleteMemory,
-  lockMemory,
-  type Memory,
-  promoteMemoryToMemo,
-  unlockMemory,
-} from "@/api";
+import { memo, useState } from "react";
+import type { Memory } from "@/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +29,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,170 +36,110 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n";
-import { errorMessage } from "@/lib/error";
-import { stripResourceName } from "@/lib/utils";
+import { formatMemoRelativeTime, formatMemoTime } from "@/lib/memo";
+import { cn, stripResourceName } from "@/lib/utils";
+import { formatProjectName } from "./memory-filters";
 import { MemoryFormDialog } from "./memory-form-dialog";
 import { MemoryRevisions } from "./memory-revisions";
+import { useMemoryMutations } from "./use-memory-mutations";
 
-export function MemoryCard({
+export const MemoryCard = memo(function MemoryCard({
   memory,
   showSource,
   review,
+  onSelectProject,
   onMutated,
 }: {
   memory: Memory;
   showSource: boolean;
   review: boolean;
+  onSelectProject?: (projectKey: string) => void;
   onMutated: () => void;
 }) {
-  const { t } = useI18n();
-  const queryClient = useQueryClient();
+  const { locale, t } = useI18n();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showRevisions, setShowRevisions] = useState(false);
 
-  const confirmMutation = useMutation({
-    mutationFn: () => confirmMemory(stripResourceName(memory.id, "memories")),
-    onSuccess: () => {
-      toast.success(t("toast.memoryConfirmed"));
-      onMutated();
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryConfirmFailed"))),
-  });
-
-  const lockMutation = useMutation({
-    mutationFn: () => lockMemory(stripResourceName(memory.id, "memories")),
-    onSuccess: () => {
-      toast.success(t("toast.memoryLocked"));
-      onMutated();
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryLockFailed"))),
-  });
-
-  const unlockMutation = useMutation({
-    mutationFn: () => unlockMemory(stripResourceName(memory.id, "memories")),
-    onSuccess: () => {
-      toast.success(t("toast.memoryUnlocked"));
-      onMutated();
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryUnlockFailed"))),
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: () => archiveMemory(stripResourceName(memory.id, "memories")),
-    onSuccess: () => {
-      toast.success(t("toast.memoryArchived"));
-      onMutated();
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryArchiveFailed"))),
-  });
-
-  const promoteMutation = useMutation({
-    mutationFn: () =>
-      promoteMemoryToMemo(stripResourceName(memory.id, "memories")),
-    // A promoted memory produces a memo: the timeline and stats must refresh,
-    // otherwise the promoted note only appears after some unrelated action.
-    onSuccess: () => {
-      toast.success(t("toast.saved"));
-      onMutated();
-      void queryClient.invalidateQueries({ queryKey: ["memos"] });
-      void queryClient.invalidateQueries({ queryKey: ["memo-stats"] });
-      void queryClient.invalidateQueries({ queryKey: ["tag-hierarchy"] });
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryPromoteFailed"))),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteMemory(stripResourceName(memory.id, "memories")),
-    onSuccess: () => {
-      toast.success(t("toast.memoryDeleted"));
-      onMutated();
-    },
-    onError: (error) =>
-      toast.error(errorMessage(error, t("toast.memoryDeleteFailed"))),
-  });
-
+  const mutation = useMemoryMutations(memory, onMutated);
   const id = stripResourceName(memory.id, "memories");
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm whitespace-pre-wrap">{memory.content}</p>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="outline">{t(`memory.type.${memory.type}`)}</Badge>
-          <Badge variant="outline">{t(`memory.kind.${memory.kind}`)}</Badge>
-          <Badge variant="secondary">
-            {t(`memory.scope.${memory.scope_type}`)}
-          </Badge>
-          <Badge variant="brand">
-            {t(`memory.verification.${memory.verification}`)}
-          </Badge>
-          {memory.tier === "core" && <Badge>{t("memory.tier.core")}</Badge>}
-          {showSource && memory.source_agent && (
-            <span className="text-xs text-muted-foreground">
-              {t("memory.sourceAgent")}: {memory.source_agent}
+    <article
+      data-memory-id={memory.id}
+      className={cn(
+        "group relative flex w-full flex-col gap-2 rounded-xl border border-border/50 bg-card/60 px-3.5 py-4 text-card-foreground [content-visibility:auto] motion-safe:animate-rise motion-safe:transition-[background-color,border-color,transform,box-shadow] motion-safe:duration-150 hover:border-border hover:bg-card hover:shadow-xs motion-safe:hover:-translate-y-px",
+      )}
+    >
+      {/* Header row: Timestamp & scope on left, Status badges + ⋯ menu on right */}
+      <div className="flex w-full items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <span className="inline-grid [grid-template-areas:'stack'] items-center truncate">
+            <span className="[grid-area:stack] transition-opacity duration-150 group-hover:opacity-0 pointer-events-none">
+              {formatMemoRelativeTime(memory.created_at, locale)}
             </span>
+            <span className="[grid-area:stack] opacity-0 transition-opacity duration-150 group-hover:opacity-100 whitespace-nowrap">
+              {formatMemoTime(memory.created_at, locale)}
+            </span>
+          </span>
+
+          {memory.scope_type === "project" && memory.scope_key && (
+            <button
+              type="button"
+              onClick={() => {
+                if (memory.scope_key) onSelectProject?.(memory.scope_key);
+              }}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer truncate max-w-[180px]"
+              title={memory.scope_key}
+            >
+              <FolderIcon className="size-3 shrink-0" />
+              <span>{formatProjectName(memory.scope_key)}</span>
+            </button>
           )}
-          {review && memory.review_reason && (
-            <span className="text-xs text-muted-foreground">
-              {memory.review_reason}
+
+          {showSource && memory.source_agent && (
+            <span className="truncate max-w-[120px]">
+              · {memory.source_agent}
             </span>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {memory.verification !== "locked" &&
-            memory.verification !== "confirmed" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => confirmMutation.mutate()}
-              >
-                <CheckIcon data-icon="inline-start" />
-                {t("memory.confirm")}
-              </Button>
-            )}
-          {memory.verification === "locked" ? (
-            <Button
-              size="sm"
+        <div className="flex shrink-0 items-center gap-1.5">
+          {memory.tier === "core" || memory.verification === "locked" ? (
+            <Badge variant="default" className="gap-1 text-xs font-normal">
+              <PinIcon className="size-3 fill-current" />
+              <span>{t("memory.pinned")}</span>
+            </Badge>
+          ) : memory.verification === "observed" ? (
+            <Badge variant="secondary" className="gap-1 text-xs font-normal">
+              <EyeIcon className="size-3" />
+              <span>{t("memory.observedBadge")}</span>
+            </Badge>
+          ) : memory.needs_review || memory.verification === "inferred" ? (
+            <Badge
               variant="outline"
-              onClick={() => unlockMutation.mutate()}
+              className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400 text-xs font-normal"
             >
-              <LockOpenIcon data-icon="inline-start" />
-              {t("memory.unlock")}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
+              <SparklesIcon className="size-3" />
+              <span>{t("memory.inferredBadge")}</span>
+            </Badge>
+          ) : null}
+
+          {memory.status === "archived" && (
+            <Badge
               variant="outline"
-              onClick={() => lockMutation.mutate()}
+              className="text-xs font-normal text-muted-foreground"
             >
-              <LockIcon data-icon="inline-start" />
-              {t("memory.lock")}
-            </Button>
+              {t("memory.status.archivedShort")}
+            </Badge>
           )}
-          {memory.status === "active" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => archiveMutation.mutate()}
-            >
-              <ArchiveIcon data-icon="inline-start" />
-              {t("memory.archive")}
-            </Button>
-          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <Button
                   aria-label={t("common.actions")}
-                  className="ml-auto"
+                  className="opacity-70 hover:opacity-100 group-hover:opacity-100 transition-opacity"
                   size="icon-sm"
                   variant="ghost"
                 >
@@ -216,15 +152,43 @@ export function MemoryCard({
                 <PencilIcon />
                 {t("common.edit")}
               </DropdownMenuItem>
+
+              {memory.verification === "locked" ? (
+                <DropdownMenuItem onClick={() => mutation.mutate("unpin")}>
+                  <PinOffIcon />
+                  {t("memory.unpin")}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => mutation.mutate("pin")}>
+                  <PinIcon />
+                  {t("memory.pin")}
+                </DropdownMenuItem>
+              )}
+
+              {memory.status === "active" ? (
+                <DropdownMenuItem onClick={() => mutation.mutate("archive")}>
+                  <ArchiveIcon />
+                  {t("memory.archive")}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => mutation.mutate("restore")}>
+                  <CornerUpLeftIcon />
+                  {t("memory.restore")}
+                </DropdownMenuItem>
+              )}
+
               <DropdownMenuItem
                 onClick={() => setShowRevisions((value) => !value)}
               >
+                <HistoryIcon />
                 {t("memory.revisions")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => promoteMutation.mutate()}>
+
+              <DropdownMenuItem onClick={() => mutation.mutate("promote")}>
                 <NotebookPenIcon />
                 {t("memory.toMemo")}
               </DropdownMenuItem>
+
               <DropdownMenuItem
                 variant="destructive"
                 onClick={() => setConfirmDelete(true)}
@@ -235,48 +199,110 @@ export function MemoryCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
 
-        {showRevisions && <MemoryRevisions memoryId={id} />}
+      {/* Body: clean typography */}
+      <div className="flex flex-col gap-2 pt-0.5">
+        <p className="text-sm leading-relaxed whitespace-pre-wrap select-text">
+          {memory.content}
+        </p>
 
-        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-          <AlertDialogContent size="sm">
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t("memory.deleteConfirm")}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {memory.content.slice(0, 80)}
-                {memory.content.length > 80 ? "…" : ""}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel variant="ghost">
-                {t("common.cancel")}
-              </AlertDialogCancel>
-              <AlertDialogAction
-                variant="destructive"
-                onClick={() => deleteMutation.mutate()}
+        {Array.isArray(memory.tags) && memory.tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {memory.tags.map((tag) => (
+              <span
+                key={tag}
+                className="text-xs text-brand-600 dark:text-brand-400"
               >
-                {t("common.delete")}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
 
-        <MemoryFormDialog
-          key={[
-            memory.id,
-            memory.content,
-            memory.type,
-            memory.kind,
-            memory.scope_type,
-            memory.scope_key ?? "",
-            memory.importance,
-          ].join("|")}
-          memory={memory}
-          open={editing}
-          onOpenChange={setEditing}
-          onSaved={onMutated}
-        />
-      </CardContent>
-    </Card>
+        {memory.evidence && memory.evidence.length > 0 && (
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5 border-t border-border/30 pt-1.5 mt-0.5">
+            <LinkIcon className="size-3 shrink-0 opacity-70" />
+            <span>{t("memory.evidenceLabel")}:</span>
+            <span className="truncate max-w-[400px]">
+              {memory.evidence[0].excerpt ||
+                `${t("memory.evidenceFrom")} ${memory.evidence[0].source_type}`}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Review action buttons (ONLY when review || memory.needs_review) */}
+      {(review || memory.needs_review) && (
+        <div className="flex items-center gap-2 pt-2 border-t border-border/40 mt-1">
+          <Button
+            size="sm"
+            variant="default"
+            onClick={() => mutation.mutate("confirm")}
+            disabled={mutation.isPending && mutation.variables === "confirm"}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <CheckIcon className="size-3.5" />
+            {t("memory.acceptProposal")}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => mutation.mutate("reject")}
+            disabled={mutation.isPending && mutation.variables === "reject"}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <XIcon className="size-3.5" />
+            {t("memory.rejectProposal")}
+          </Button>
+          {memory.review_reason && (
+            <span className="text-xs text-amber-500 font-medium ml-auto truncate max-w-[200px]">
+              {memory.review_reason}
+            </span>
+          )}
+        </div>
+      )}
+
+      {showRevisions && <MemoryRevisions memoryId={id} />}
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("memory.deleteConfirm")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {memory.content.slice(0, 80)}
+              {memory.content.length > 80 ? "…" : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel variant="ghost">
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => mutation.mutate("delete")}
+            >
+              {t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <MemoryFormDialog
+        key={[
+          memory.id,
+          memory.content,
+          memory.type,
+          memory.kind,
+          memory.scope_type,
+          memory.scope_key ?? "",
+          memory.importance,
+        ].join("|")}
+        memory={memory}
+        open={editing}
+        onOpenChange={setEditing}
+        onSaved={onMutated}
+      />
+    </article>
   );
-}
+});

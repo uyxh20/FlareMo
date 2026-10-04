@@ -4,7 +4,6 @@ import { CalendarDaysIcon, PlusIcon } from "lucide-react";
 import { useMemo } from "react";
 import { getDailyReview, listMemos, type Memo } from "@/api";
 import { MemoSnapshotCard } from "@/components/memo-snapshot-card";
-import { SubpageHeader } from "@/components/subpage-header";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -15,6 +14,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { type TranslationKey, type TranslationParams, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 
@@ -43,17 +44,35 @@ export function DailyReviewPage() {
       : (intervalQuery.data?.memos ?? []);
 
   const groups = useMemo(
-    () => buildReviewGroups(rawMemos, today, locale, t),
-    [rawMemos, today, locale, t],
+    () => buildReviewGroups(rawMemos, today, t),
+    [rawMemos, today, t],
   );
 
   const isInitialLoading = reviewQuery.isLoading;
 
   return (
-    <div className="min-h-svh bg-background px-4 py-5 sm:py-8">
-      <main className="mx-auto flex w-full max-w-[640px] flex-col gap-4">
-        <SubpageHeader title={t("nav.dailyReview")} />
-
+    <WorkspaceLayout
+      header={({
+        sidebarCollapsed,
+        toggleSidebarCollapsed,
+        mobileSheetOpen,
+        setMobileSheetOpen,
+        explorer,
+      }) => (
+        <WorkspacePageHeader
+          explorer={explorer}
+          icon={
+            <CalendarDaysIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
+          }
+          mobileSheetOpen={mobileSheetOpen}
+          setMobileSheetOpen={setMobileSheetOpen}
+          sidebarCollapsed={sidebarCollapsed}
+          title={t("nav.dailyReview")}
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
+        />
+      )}
+    >
+      <div className="flex flex-col gap-4 py-2">
         {isInitialLoading && (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-6 w-32" />
@@ -128,8 +147,8 @@ export function DailyReviewPage() {
             ))}
           </section>
         ))}
-      </main>
-    </div>
+      </div>
+    </WorkspaceLayout>
   );
 }
 
@@ -142,7 +161,6 @@ type ReviewGroup = {
 function buildReviewGroups(
   memos: Memo[],
   todayStr: string,
-  locale: string,
   t: (key: TranslationKey, params?: TranslationParams) => string,
 ): ReviewGroup[] {
   const currentYear = new Date().getFullYear();
@@ -175,16 +193,16 @@ function buildReviewGroups(
       );
       if (diffDays <= 7) {
         key = "ladder-7d";
-        title = locale.startsWith("zh") ? "7 天前" : "7 days ago";
+        title = t("review.ladder7d");
       } else if (diffDays <= 30) {
         key = "ladder-30d";
-        title = locale.startsWith("zh") ? "30 天前" : "30 days ago";
+        title = t("review.ladder30d");
       } else if (diffDays <= 90) {
         key = "ladder-90d";
-        title = locale.startsWith("zh") ? "90 天前" : "90 days ago";
+        title = t("review.ladder90d");
       } else {
         key = "ladder-180d";
-        title = locale.startsWith("zh") ? "半年前" : "6 months ago";
+        title = t("review.ladder180d");
       }
     }
 

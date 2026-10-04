@@ -26,11 +26,6 @@ export function pushKeysConfigured(keys: PushKeys | null): boolean {
   return Boolean(keys?.publicKey && keys?.privateKey);
 }
 
-type WebPushSubscription = {
-  endpoint: string;
-  keys: { p256dh: string; auth: string };
-};
-
 function base64UrlToBytes(value: string): Uint8Array {
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const padded = normalized.padEnd(

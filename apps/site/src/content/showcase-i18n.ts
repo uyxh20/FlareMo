@@ -1,23 +1,4 @@
-import type { SupportedLocale } from "@/lib/seo";
-import { AR_SHOWCASE } from "./showcase/ar";
-import { EN_SHOWCASE } from "./showcase/en";
-import { ES_SHOWCASE } from "./showcase/es";
-import { FR_SHOWCASE } from "./showcase/fr";
-import { JA_SHOWCASE } from "./showcase/ja";
-import { KO_SHOWCASE } from "./showcase/ko";
-import { RU_SHOWCASE } from "./showcase/ru";
-import { ZH_SHOWCASE } from "./showcase/zh";
-
-export {
-  AR_SHOWCASE,
-  EN_SHOWCASE,
-  ES_SHOWCASE,
-  FR_SHOWCASE,
-  JA_SHOWCASE,
-  KO_SHOWCASE,
-  RU_SHOWCASE,
-  ZH_SHOWCASE,
-};
+import { type Locale, normalizeLocale, type SupportedLocale } from "@/lib/seo";
 
 export type ShowcaseContent = {
   memo1: {
@@ -65,16 +46,22 @@ export type ShowcaseContent = {
   };
 };
 
-/** Translation completeness guard: every supported locale must be present,
- *  so a locale file that is added (or removed) without touching this map is a
- *  compile error. */
-export const SHOWCASE_I18N: Record<SupportedLocale, ShowcaseContent> = {
-  en: EN_SHOWCASE,
-  zh: ZH_SHOWCASE,
-  ja: JA_SHOWCASE,
-  fr: FR_SHOWCASE,
-  es: ES_SHOWCASE,
-  ko: KO_SHOWCASE,
-  ru: RU_SHOWCASE,
-  ar: AR_SHOWCASE,
+/** Keep locale modules out of the entry chunk; the homepage route loads one
+ *  translation set in parallel with the rest of its copy. */
+const SHOWCASE_LOADERS: Record<
+  SupportedLocale,
+  () => Promise<ShowcaseContent>
+> = {
+  en: () => import("./showcase/en").then(({ EN_SHOWCASE }) => EN_SHOWCASE),
+  zh: () => import("./showcase/zh").then(({ ZH_SHOWCASE }) => ZH_SHOWCASE),
+  ja: () => import("./showcase/ja").then(({ JA_SHOWCASE }) => JA_SHOWCASE),
+  fr: () => import("./showcase/fr").then(({ FR_SHOWCASE }) => FR_SHOWCASE),
+  es: () => import("./showcase/es").then(({ ES_SHOWCASE }) => ES_SHOWCASE),
+  ko: () => import("./showcase/ko").then(({ KO_SHOWCASE }) => KO_SHOWCASE),
+  ru: () => import("./showcase/ru").then(({ RU_SHOWCASE }) => RU_SHOWCASE),
+  ar: () => import("./showcase/ar").then(({ AR_SHOWCASE }) => AR_SHOWCASE),
 };
+
+export function loadShowcaseContent(locale: Locale): Promise<ShowcaseContent> {
+  return SHOWCASE_LOADERS[normalizeLocale(locale)]();
+}

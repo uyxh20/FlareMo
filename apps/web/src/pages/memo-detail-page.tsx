@@ -1,6 +1,6 @@
-import { BrainIcon } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowLeftIcon, BrainIcon, FileTextIcon } from "lucide-react";
 import type { Memo, MemoContext, RelatedMemo } from "@/api";
-import { SubpageHeader } from "@/components/subpage-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { useI18n } from "@/i18n";
 import { formatMemoTime } from "@/lib/memo";
 import type { MemoDetailTaskInteraction } from "./memo-detail/content-tab";
@@ -38,10 +40,57 @@ export function MemoDetailPage({ memoId }: { memoId: string }) {
   } = useMemoDetail(memoId);
 
   return (
-    <div className="min-h-svh bg-background px-4 py-5 sm:py-8">
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        <SubpageHeader />
-
+    <WorkspaceLayout
+      maxWidthClass="max-w-3xl"
+      header={({
+        sidebarCollapsed,
+        toggleSidebarCollapsed,
+        mobileSheetOpen,
+        setMobileSheetOpen,
+        explorer,
+      }) => (
+        <WorkspacePageHeader
+          actions={
+            <Button
+              className="h-8 gap-1.5 px-2.5 text-xs text-muted-foreground hover:text-foreground"
+              render={
+                <Link
+                  search={{
+                    compose: undefined,
+                    q: undefined,
+                    space: undefined,
+                    tag: undefined,
+                    untagged: undefined,
+                    view: undefined,
+                  }}
+                  to="/"
+                />
+              }
+              size="sm"
+              variant="ghost"
+            >
+              <ArrowLeftIcon className="size-3.5 rtl:-rotate-180" />
+              {t("common.back")}
+            </Button>
+          }
+          explorer={explorer}
+          icon={
+            <FileTextIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
+          }
+          maxWidthClass="max-w-3xl"
+          mobileSheetOpen={mobileSheetOpen}
+          setMobileSheetOpen={setMobileSheetOpen}
+          sidebarCollapsed={sidebarCollapsed}
+          title={
+            <span className="font-mono text-xs text-muted-foreground">
+              {contextQuery.data?.memo.name ?? memoId}
+            </span>
+          }
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
+        />
+      )}
+    >
+      <div className="flex flex-col gap-4 py-2">
         {contextQuery.isLoading && (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-8 w-40" />
@@ -113,8 +162,8 @@ export function MemoDetailPage({ memoId }: { memoId: string }) {
             sharePending={shareMutation.isPending}
           />
         )}
-      </main>
-    </div>
+      </div>
+    </WorkspaceLayout>
   );
 }
 

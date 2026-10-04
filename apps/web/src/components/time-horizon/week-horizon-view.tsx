@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useI18n } from "@/i18n";
 import { heatmapColor } from "@/lib/activity";
 import { buildWeekSlotCountMap } from "@/lib/time-horizon";
 import { cn } from "@/lib/utils";
@@ -23,12 +24,19 @@ export function WeekHorizonPureView({
   onDrillToDay: (day: string) => void;
   onHoverTip: (tip: string | null) => void;
 }) {
+  const { locale, t } = useI18n();
   const countMap = useMemo(
     () => buildWeekSlotCountMap(hourlyData),
     [hourlyData],
   );
 
   const hours = useMemo(() => Array.from({ length: 24 }, (_, i) => i), []);
+  // Narrow weekday from Intl, not a hardcoded character table: zh renders
+  // 日/一/二…, en S/M/T…, and every other locale gets its own shape.
+  const weekdayNarrow = useMemo(
+    () => new Intl.DateTimeFormat(locale, { weekday: "narrow" }),
+    [locale],
+  );
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -42,9 +50,7 @@ export function WeekHorizonPureView({
             const dateObj = parseDayKey(d.key);
             const isToday = d.key === today;
             const isSelected = d.key === selectedDay;
-            const weekdayStr = ["日", "一", "二", "三", "四", "五", "六"][
-              dateObj.getDay()
-            ];
+            const weekdayStr = weekdayNarrow.format(dateObj);
 
             return (
               <button
@@ -118,8 +124,10 @@ export function WeekHorizonPureView({
             <div className="flex flex-col gap-[2px]" key={`col-${d.key}`}>
               {hours.map((h) => {
                 const count = countMap.get(`${d.key}_${h}`) ?? 0;
+                const tip = `${d.key} ${String(h).padStart(2, "0")}:00 · ${t("explorer.notesCount", { count })}`;
                 return (
                   <button
+                    aria-label={tip}
                     className={cn(
                       "h-[7px] w-full rounded-[1.5px] transition-all cursor-pointer active:scale-95",
                       heatmapColor(count),
@@ -127,16 +135,15 @@ export function WeekHorizonPureView({
                       count <= 0 &&
                         "hover:bg-muted-foreground/25 dark:hover:bg-muted/45",
                       isLoading && "animate-pulse",
+                      "outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                       "hover:scale-110 hover:z-10",
                     )}
                     key={`${d.key}_${h}`}
                     type="button"
                     onClick={() => onDrillToDay(d.key)}
-                    onMouseEnter={() =>
-                      onHoverTip(
-                        `${d.key} ${String(h).padStart(2, "0")}:00 · ${count} 条笔记`,
-                      )
-                    }
+                    onFocus={() => onHoverTip(tip)}
+                    onBlur={() => onHoverTip(null)}
+                    onMouseEnter={() => onHoverTip(tip)}
                     onMouseLeave={() => onHoverTip(null)}
                   />
                 );

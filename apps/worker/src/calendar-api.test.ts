@@ -101,22 +101,21 @@ describe("FlareMo calendar API", () => {
       }),
     );
 
+    const window = calendarWindow();
     const view = await json<{
       notes: Array<{ date: string; count: number }>;
       note_tasks: Array<{ date: string; count: number }>;
       tasks: Array<{ due_at: string | null; title: string; status: string }>;
     }>(
       await fetchApp(
-        "http://flaremo.test/api/app/calendar?from=2026-09-01&to=2026-09-30",
+        `http://flaremo.test/api/app/calendar?from=${window.from}&to=${window.to}`,
       ),
     );
 
     expect(view.notes.some((note) => note.count >= 1)).toBe(true);
-    expect(
-      view.notes.every(
-        (note) => note.date >= "2026-09-01" && note.date <= "2026-09-30",
-      ),
-    ).toBe(true);
+    expect(view.notes.every((note) => withinWindow(note.date, window))).toBe(
+      true,
+    );
     expect(
       view.tasks.find((task) => task.title === "9 月 12 日要开周会"),
     ).toMatchObject({ due_at: "2026-09-12" });
@@ -124,7 +123,7 @@ describe("FlareMo calendar API", () => {
     // The unchecked task list is counted exactly once for its day. The memo
     // above predates stamping, so this proves the content scan fallback too.
     const todayDate = new Date().toISOString().slice(0, 10);
-    if (todayDate >= "2026-09-01" && todayDate <= "2026-09-30") {
+    if (withinWindow(todayDate, window)) {
       expect(view.note_tasks).toEqual([{ date: todayDate, count: 1 }]);
     }
 
@@ -136,13 +135,13 @@ describe("FlareMo calendar API", () => {
       notes: Array<{ date: string; count: number }>;
     }>(
       await fetchApp(
-        `http://flaremo.test/api/app/calendar?from=2026-09-01&to=2026-09-30&tz=${machineTz}`,
+        `http://flaremo.test/api/app/calendar?from=${window.from}&to=${window.to}&tz=${machineTz}`,
       ),
     );
     const localToday = new Date(Date.now() - machineTz * 60_000)
       .toISOString()
       .slice(0, 10);
-    if (localDateWithinSeptember(localToday)) {
+    if (withinWindow(localToday, window)) {
       const localNote = mzView.notes.find((note) => note.date === localToday);
       expect(localNote?.count).toBeGreaterThan(0);
     }
@@ -167,7 +166,7 @@ describe("FlareMo calendar API", () => {
     expect(weekly).toBeDefined();
     await json(
       await fetchApp(
-        `http://flaremo.test/api/app/tasks/${bareId(weekly!.id)}`,
+        `http://flaremo.test/api/app/tasks/${bareId(weekly?.id)}`,
         {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -196,7 +195,13 @@ describe("FlareMo calendar API", () => {
       }),
     );
 
-    const today = new Date().toISOString().slice(0, 10);
+    // The endpoint's `date` is a *local* calendar date (it is paired with
+    // `tz` below), so it has to be formatted in local time. Deriving it from
+    // `toISOString()` instead picks the UTC date, and between local midnight
+    // and 08:00 in any negative-offset-of-UTC zone such as Asia/Shanghai the
+    // two differ — the memo just written then falls outside the window the
+    // test asks about, and the assertion below fails for several hours a day.
+    const today = new Intl.DateTimeFormat("en-CA").format(new Date());
     const tz = new Date().getTimezoneOffset();
     const res = await fetchApp(
       `http://flaremo.test/api/app/stats/hourly?date=${today}&tz=${tz}`,
@@ -312,6 +317,24 @@ function extractCookieHeader(response: Response) {
   return cookies.join("; ");
 }
 
-function localDateWithinSeptember(key: string) {
-  return key >= "2026-09-01" && key <= "2026-09-30";
+// Scheduled tasks in this suite are pinned to fixed September dates while
+// the notes are stamped with the current time. Anchor the query window on the
+// union of the two, so the test keeps asserting after September instead of
+// expiring on a calendar boundary: it failed from 2026-10-01 onward, and the
+// note_tasks guard below was masking the same calendar assumption there.
+const SEPTEMBER_START = "2026-09-01";
+const SEPTEMBER_END = "2026-09-30";
+
+type DateWindow = { from: string; to: string };
+
+function calendarWindow(now = new Date()): DateWindow {
+  const utcToday = now.toISOString().slice(0, 10);
+  return {
+    from: utcToday < SEPTEMBER_START ? utcToday : SEPTEMBER_START,
+    to: utcToday > SEPTEMBER_END ? utcToday : SEPTEMBER_END,
+  };
+}
+
+function withinWindow(key: string, window: DateWindow): boolean {
+  return key >= window.from && key <= window.to;
 }

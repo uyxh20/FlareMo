@@ -1,6 +1,5 @@
 import { listMemosPersonalAccessTokens } from "@flaremo/domain";
-import { createFlareMoAuth } from "../../../auth";
-import { getFlareMoRuntime } from "../../../context";
+import { getFlareMoAuth, loadAuthFactory } from "../../../context";
 import { CompatValidationError } from "../../../memos-compat/errors";
 import { personalAccessTokenToDto } from "../../../memos-compat/pat";
 import { optionalString, requiredString } from "../shared";
@@ -61,6 +60,7 @@ export async function connectUserAccountMethod(
           "expiresInDays must be an integer between 0 and 365",
         );
       }
+      const { createFlareMoAuth } = await loadAuthFactory();
       const created = await createFlareMoAuth(
         c.env,
         context.db,
@@ -101,7 +101,7 @@ export async function connectUserAccountMethod(
       ).find((item) => item.id === tokenId);
       if (!token)
         throw new CompatValidationError("Personal access token not found");
-      await getFlareMoRuntime(c.env).auth.api.updateApiKey({
+      await (await getFlareMoAuth(c.env)).api.updateApiKey({
         body: {
           configId: "memos",
           keyId: token.id,

@@ -1,12 +1,12 @@
 /**
  * The settings dialog shell: the modal's frame (mobile master/detail and the
- * desktop split view), the queries its header and detail panes read, and the
- * two exported entry points. The nav table lives in `account/settings-nav`,
- * the section bodies in `account/settings-section-content`, and the server
- * writes in `account/use-account-settings-mutations`.
+ * desktop split view) and the two exported entry points. Section state and
+ * query orchestration live in `account/use-account-page-state`, the nav
+ * table in `account/settings-nav`, the section bodies in
+ * `account/settings-section-content`, and the server writes in
+ * `account/use-account-settings-mutations`.
  */
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronLeftIcon,
@@ -14,37 +14,18 @@ import {
   LogOutIcon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import {
-  getAdminBranding,
-  getAdminPluginSettings,
-  getAppInfo,
-  getCloudflareUsage,
-  getCurrentFlareMoUser,
-  getVectorUsage,
-  getVoiceSettings,
-  listAdminUsers,
-  listDataTasks,
-  listPersonalAccessTokens,
-} from "@/api";
-import { authClient } from "@/auth-client";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { useClipboard } from "@/hooks/use-clipboard";
-import { useI18n } from "@/i18n";
-import { queryKeys } from "@/lib/query-keys";
+import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
-import type { AccountPanelProps } from "./account/account-panel";
 import { SettingsRow, SettingsSectionGroup } from "./account/apple-settings-ui";
-import type { SettingsSection } from "./account/settings-nav";
-import { settingsNavGroups } from "./account/settings-nav";
 import {
   roleLabel,
   SettingsSectionContent,
 } from "./account/settings-section-content";
-import { useAccountSettingsMutations } from "./account/use-account-settings-mutations";
+import { useAccountPageState } from "./account/use-account-page-state";
 
 export function AccountSettingsDialog({
   open,
@@ -53,310 +34,26 @@ export function AccountSettingsDialog({
   open: boolean;
   onClose: () => void;
 }) {
-  const { locale, t } = useI18n();
-  const queryClient = useQueryClient();
-  const session = authClient.useSession();
-  const [section, setSection] = useState<SettingsSection>("account");
-  const [mobileView, setMobileView] = useState<"master" | "detail">("master");
-
-  const [username, setUsername] = useState("");
-  const [name, setName] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
-  const [newEmail, setNewEmail] = useState("");
-  const [emailCurrentPassword, setEmailCurrentPassword] = useState("");
-  const [tokenName, setTokenName] = useState("");
-  const [tokenExpiryDays, setTokenExpiryDays] = useState("");
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [accountError, setAccountError] = useState<string | null>(null);
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [avatarError, setAvatarError] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
-  const [emailVerificationPending, setEmailVerificationPending] =
-    useState(false);
-  const [deletePassword, setDeletePassword] = useState("");
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [tokenError, setTokenError] = useState<string | null>(null);
-  // Success surfaces through the dialog's copied label (no toast); failure is
-  // reported into the token form error slot, and the flag persists until the
-  // next token is minted.
   const {
-    copied,
-    copy: copyToken,
-    reset: resetCopied,
-  } = useClipboard({
-    successMessage: null,
-    errorMessage: null,
-    timeout: null,
-  });
-
-  // Reset mobile view to master whenever the dialog opens fresh
-  useEffect(() => {
-    if (open) {
-      setMobileView("master");
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (session.data?.user.username) {
-      setUsername(session.data.user.username);
-    }
-  }, [session.data?.user.username]);
-
-  const tokensQuery = useQuery({
-    queryKey: ["personal-access-tokens"],
-    queryFn: listPersonalAccessTokens,
-    retry: false,
-    enabled: open,
-  });
-
-  const meQuery = useQuery({
-    queryKey: queryKeys.currentUser,
-    queryFn: getCurrentFlareMoUser,
-    retry: false,
-    enabled: open,
-  });
-
-  useEffect(() => {
-    if (meQuery.data?.name) {
-      setName(meQuery.data.name);
-    } else if (session.data?.user.name) {
-      setName(session.data.user.name);
-    }
-  }, [meQuery.data?.name, session.data?.user.name]);
-
-  const {
-    changeEmailMutation,
-    changePasswordMutation,
-    createTokenMutation,
-    deleteAccountMutation,
-    deleteAvatarMutation,
-    deleteTokenMutation,
-    retryExportMutation,
-    revokeTokenMutation,
-    updateProfileMutation,
-    updateUsernameMutation,
-    uploadAvatarMutation,
-
-    handleAvatarDelete,
-    handleAvatarUpload,
-    handleAvatarUrlSubmit,
-    handleCopyToken,
-    handleCreateToken,
-    handleDeleteAccount,
-    handleDeleteToken,
-    handleEmailSubmit,
-    handleNameSubmit,
-    handlePasswordSubmit,
-    handleRevokeToken,
+    accountPanel,
+    activeLabel,
+    cfUsageQuery,
+    dataTasksQuery,
     handleSignOut,
-    handleUsernameSubmit,
-  } = useAccountSettingsMutations({
-    createdToken,
-    currentPassword,
-    deletePassword,
-    emailCurrentPassword,
-    name,
-    newEmail,
-    newPassword,
-    newPasswordConfirmation,
-    session,
-    setAccountError,
-    setAvatarError,
-    copyToken,
-    resetCopied,
-    setCreatedToken,
-    setCurrentPassword,
-    setDeleteError,
-    setDeletePassword,
-    setEmailCurrentPassword,
-    setEmailError,
-    setEmailVerificationPending,
-    setNameError,
-    setNewEmail,
-    setNewPassword,
-    setNewPasswordConfirmation,
-    setPasswordError,
-    setTokenError,
-    setTokenExpiryDays,
-    setTokenName,
-    t,
-    tokenExpiryDays,
-    tokenName,
-    username,
-  });
-
-  const showVoiceSettings = meQuery.data?.can_manage_voice_service === true;
-
-  const appInfoQuery = useQuery({
-    queryKey: ["app-info"],
-    queryFn: getAppInfo,
-    staleTime: 10 * 60 * 1000,
-    retry: false,
-    enabled: open,
-  });
-
-  const vectorUsageQuery = useQuery({
-    queryKey: ["vector-usage"],
-    queryFn: getVectorUsage,
-    retry: false,
-    enabled: open,
-    refetchInterval: 120_000,
-  });
-
-  const cfUsageQuery = useQuery({
-    queryKey: ["cloudflare-usage"],
-    queryFn: getCloudflareUsage,
-    retry: false,
-    enabled: open,
-    // The worker caches analytics for an hour; polling harder is waste.
-    staleTime: 10 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
-  });
-
-  const dataTasksQuery = useQuery({
-    queryKey: ["data-tasks"],
-    queryFn: listDataTasks,
-    retry: false,
-    enabled: open,
-    refetchInterval: (query) => {
-      const tasks = query.state.data?.tasks ?? [];
-      return tasks.some(
-        (task) => task.status === "queued" || task.status === "running",
-      )
-        ? 5_000
-        : false;
-    },
-  });
-
-  const isTeamAdmin =
-    meQuery.data?.role === "owner" || meQuery.data?.role === "admin";
-  const isInstanceOwner = meQuery.data?.is_instance_owner === true;
-
-  useEffect(() => {
-    if (!open || !isTeamAdmin) return undefined;
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.adminBranding,
-      queryFn: getAdminBranding,
-    });
-    void queryClient.prefetchQuery({
-      queryKey: ["admin-plugins"],
-      queryFn: getAdminPluginSettings,
-    });
-    void queryClient.prefetchQuery({
-      queryKey: queryKeys.adminUsers,
-      queryFn: listAdminUsers,
-    });
-    return undefined;
-  }, [isTeamAdmin, open, queryClient]);
-
-  useEffect(() => {
-    if (!open || meQuery.data?.can_manage_voice_service !== true) {
-      return undefined;
-    }
-    void queryClient.prefetchQuery({
-      queryKey: ["voice-settings"],
-      queryFn: getVoiceSettings,
-    });
-    return undefined;
-  }, [meQuery.data?.can_manage_voice_service, open, queryClient]);
-
-  const navGroups = settingsNavGroups({
-    t,
-    showVoiceSettings,
-    isTeamAdmin,
     isInstanceOwner,
-  });
-
-  const allItems = navGroups.flatMap((group) => group.items);
-  const activeSection = allItems.find((item) => item.id === section);
-  const activeLabel = activeSection?.label ?? t("settings.group.account");
-
-  const accountPanel: AccountPanelProps = {
-    currentAvatarUrl:
-      meQuery.data?.avatar_url ?? session.data?.user.image ?? null,
-    currentName:
-      meQuery.data?.name ??
-      session.data?.user.name ??
-      session.data?.user.username ??
-      "",
-    name,
-    setName,
-    onNameSubmit: handleNameSubmit,
-    updateNameIsPending: updateProfileMutation.isPending,
-    nameError,
-    avatarError,
-    avatarIsPending:
-      uploadAvatarMutation.isPending ||
-      deleteAvatarMutation.isPending ||
-      updateProfileMutation.isPending,
-    onAvatarUpload: handleAvatarUpload,
-    onAvatarUrlSubmit: handleAvatarUrlSubmit,
-    onAvatarDelete: handleAvatarDelete,
-    accountError,
-    changeEmailIsPending: changeEmailMutation.isPending,
-    changePasswordIsPending: changePasswordMutation.isPending,
-    copied,
-    createTokenIsPending: createTokenMutation.isPending,
-    createdToken,
-    currentEmail: session.data?.user.email ?? "",
-    currentPassword,
-    currentUsername: session.data?.user.username ?? "",
-    deleteAccountIsPending: deleteAccountMutation.isPending,
-    deleteError,
-    deletePassword,
-    deletingTokenId: deleteTokenMutation.isPending
-      ? deleteTokenMutation.variables
-      : undefined,
-    emailCurrentPassword,
-    emailError,
-    emailProviderDisabled: appInfoQuery.data?.email_provider === "none",
-    emailVerificationPending,
-    isOwner: isInstanceOwner,
-    locale,
-    newEmail,
-    newPassword,
-    newPasswordConfirmation,
-    passwordError,
-    readerExpiry:
-      meQuery.data?.role === "reader"
-        ? (meQuery.data.reader_expires_at ?? null)
-        : null,
-    revokingTokenId: revokeTokenMutation.isPending
-      ? revokeTokenMutation.variables
-      : undefined,
-    setCurrentPassword,
-    setDeletePassword,
-    setEmailCurrentPassword,
-    setNewEmail,
-    setNewPassword,
-    setNewPasswordConfirmation,
-    setTokenExpiryDays,
-    setTokenName,
-    setUsername,
+    isTeamAdmin,
+    meQuery,
+    mobileView,
+    navGroups,
+    retryExportMutation,
+    section,
+    session,
+    setMobileView,
+    setSection,
+    showVoiceSettings,
     t,
-    tokenError,
-    tokenExpiryDays,
-    tokenName,
-    tokensQuery,
-    updateUsernameIsPending: updateUsernameMutation.isPending,
-    username,
-    onCopyToken: async () => {
-      await handleCopyToken();
-    },
-    onCreateToken: handleCreateToken,
-    // The credentials section narrows the promise to a boolean so its dialog
-    // only closes on a successful delete; keep that contract intact here.
-    onDeleteAccount: handleDeleteAccount,
-    onDeleteToken: handleDeleteToken,
-    onEmailSubmit: handleEmailSubmit,
-    onHideCreatedToken: () => setCreatedToken(null),
-    onPasswordSubmit: handlePasswordSubmit,
-    onRevokeToken: handleRevokeToken,
-    onUsernameSubmit: handleUsernameSubmit,
-  };
+    vectorUsageQuery,
+  } = useAccountPageState({ open });
 
   return (
     <Dialog
@@ -651,6 +348,7 @@ export function AccountSettingsDialog({
               variant="ghost"
               size="icon-sm"
               onClick={onClose}
+              aria-label={t("common.close")}
               className="size-7 rounded-md text-muted-foreground hover:text-foreground"
             >
               <XIcon className="size-4" />
@@ -695,14 +393,7 @@ export function AccountPage() {
       open
       onClose={() =>
         void navigate({
-          search: {
-            compose: undefined,
-            q: undefined,
-            space: undefined,
-            tag: undefined,
-            untagged: undefined,
-            view: undefined,
-          },
+          search: { ...TIMELINE_SEARCH },
           to: "/",
         })
       }

@@ -1,7 +1,7 @@
 import type { MemoRow } from "@flaremo/db";
 import { currentRelationToDto } from "@flaremo/memos";
 
-type RelationRow = Parameters<typeof currentRelationToDto>[0];
+export type RelationRow = Parameters<typeof currentRelationToDto>[0];
 
 /**
  * Hydrate memo-relation rows into current Memos relation DTOs.

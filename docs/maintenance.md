@@ -4,12 +4,10 @@
 
 ## 质量门禁
 
-提交和发布前执行：
+提交和发布前按改动选择定向检查：
 
 ```bash
 pnpm format:check
-pnpm verify
-pnpm deploy:dry-run
 ```
 
 `pnpm format:check` 会执行 Biome 格式和 lint 检查，不修改文件。自动修复格式使用：
@@ -25,17 +23,19 @@ pnpm format
 - production build
 - Playwright E2E
 
+`pnpm verify` 是完整门禁，只在维护者明确要求时运行；日常提交和发布默认不运行。涉及 Wrangler、D1、R2、Access 或部署配置的改动，再运行 `pnpm deploy:dry-run`。
+
 `pnpm deploy:dry-run` 会构建前端并让 Wrangler 验证 Worker、Assets、D1、R2 和变量绑定。
 
 ## 生产部署
 
-生产部署是**手动操作**，项目刻意不配置 CI 或自动部署：发布由维护者在本地执行。
+生产部署由维护者在本地手动执行；上游仓库不配置 push 或 CI 自动生产部署。现有自托管 fork/deployment repository 可通过 `deploy-cloudflare.yml` 的受控 push 到 `main` 或 `workflow_dispatch` 执行，不改变上游发布策略。
 
 ```bash
 pnpm run deploy
 ```
 
-`pnpm run deploy` 会先跑部署 preflight，再构建前端、应用尚未执行的远端 D1 migrations，最后通过 `wrangler deploy` 发布 Worker。发布前的门禁仍是 `pnpm verify` 和 `pnpm deploy:dry-run`（见「质量门禁」）。PR 分支不触发任何自动构建或部署。
+`pnpm run deploy` 会先跑部署 preflight，再构建前端、应用尚未执行的远端 D1 migrations，最后通过 `wrangler deploy` 发布 Worker。发布前按改动运行定向检查；需要验证 Cloudflare 打包时再运行 `pnpm deploy:dry-run`。PR 分支不触发任何自动构建或部署。
 
 ## 数据库迁移
 
@@ -77,6 +77,7 @@ curl http://127.0.0.1:8787/__scheduled
 - 超过内联上限时前端自动改用**导出任务**：`POST /api/v1/export/tasks` 创建任务，分页读取 D1 并把数据按类型写成 R2 下的 NDJSON 分块（`exports/<task-id>/data/*.ndjson`），最后生成自包含 `manifest.json`（记录每类数据块、附件清单及逻辑附件 ID）。
 - 任务状态通过 `GET /api/v1/export/tasks/:id` 查询；manifest 经 `GET .../manifest` 下载；附件经 `GET .../attachments/:attachmentId` 流式下载（不暴露裸 R2 key）。
 - 导入走 `POST /api/v1/import/tasks`（请求内执行并记录结果），`data_tasks` 表记录 `queued/running/succeeded/failed` 全生命周期。每日 cron 兜底把 lease 过期的 stale 任务标记为失败，并清理超过 7 天的任务行与对应 R2 导出产物。
+- 绑定 `flaremo-data-export` Queue 时，`POST /api/v1/export/tasks` 创建任务后投递 `{taskId}` 并立即返回 queued，由 queue 消费端执行导出；未绑定的部署仍在请求内执行。两条路径共用同一个幂等 executor（只认领 `queued` 行，重放安全），scheduled maintenance 同时是兜底 reconciler。
 - 成员移除使用独立的 `member_removal_jobs` 表，记录操作人、阶段、尝试次数和错误；管理员重试会投递 `flaremo-member-removal` Queue，scheduled maintenance 作为未绑定 Queue 或旧环境的 fallback。迁移 0016 后应在管理员页检查失败任务并按需重试。
 
 `data_tasks` 和 `member_removal_jobs` 都是业务数据，会包含在你的 D1 备份中；导出产物本身在 R2 的 `exports/` 前缀下，随任务行过期后由 cron 清理。Queue 消息是可重放的 job ID，恢复 D1 后应先确认 Queue 资源和 migration 状态，再允许后台清理运行。

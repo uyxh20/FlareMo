@@ -507,6 +507,19 @@
   display: none;
 }
 
+/* Keep auth controls compact on desktop while giving touch users a reliable
+   target size and preventing mobile browsers from zooming focused inputs. */
+@media (max-width: 767px) and (any-pointer: coarse) {
+  [data-auth-page] [data-slot="input"] {
+    min-height: 2.75rem;
+    font-size: 1rem;
+  }
+
+  [data-auth-page] [data-slot="button"][data-size="default"] {
+    min-height: 2.75rem;
+  }
+}
+
 @layer utilities {
   .no-scrollbar {
     scrollbar-width: none;
@@ -949,4 +962,3 @@
     animation: none;
   }
 }
-

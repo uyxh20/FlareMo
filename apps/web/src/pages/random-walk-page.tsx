@@ -8,7 +8,6 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getRandomWalkMemo, getWalkNextMemo } from "@/api";
 import { MemoSnapshotCard } from "@/components/memo-snapshot-card";
-import { SubpageHeader } from "@/components/subpage-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -20,6 +19,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { type TranslationKey, useI18n } from "@/i18n";
 import { formatMemoTime } from "@/lib/memo";
 import { cn } from "@/lib/utils";
@@ -101,10 +102,28 @@ export function RandomWalkPage() {
   const step = steps[cursor];
 
   return (
-    <div className="min-h-svh bg-background px-4 py-5 sm:py-8">
-      <main className="mx-auto flex w-full max-w-[640px] flex-col gap-4">
-        <SubpageHeader title={t("nav.randomWalk")} />
-
+    <WorkspaceLayout
+      header={({
+        sidebarCollapsed,
+        toggleSidebarCollapsed,
+        mobileSheetOpen,
+        setMobileSheetOpen,
+        explorer,
+      }) => (
+        <WorkspacePageHeader
+          explorer={explorer}
+          icon={
+            <FootprintsIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
+          }
+          mobileSheetOpen={mobileSheetOpen}
+          setMobileSheetOpen={setMobileSheetOpen}
+          sidebarCollapsed={sidebarCollapsed}
+          title={t("nav.randomWalk")}
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
+        />
+      )}
+    >
+      <div className="flex flex-col gap-4 py-2">
         {finished ? (
           <WalkPostcard onRestart={restart} pending={pending} steps={steps} />
         ) : (
@@ -250,8 +269,8 @@ export function RandomWalkPage() {
             )}
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </WorkspaceLayout>
   );
 }
 

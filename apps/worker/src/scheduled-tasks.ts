@@ -8,6 +8,7 @@ import {
   dispatchEmbeddingOutbox,
   dispatchMemosWebhookOutbox,
   expireStaleDataTasks,
+  failDataTask,
   failMemberRemovalJob,
   finalizeAttachmentCleanupForIds,
   finalizeFlaremoMemberRemoval,
@@ -18,16 +19,20 @@ import {
   listAttachmentCleanupCandidates,
   listExpiredTrashedArticles,
   listExpiredTrashedMemos,
+  listQueuedDataExportTasks,
   listQueuedMemberRemovalJobs,
   MEMOS_SSE_RETENTION_MS,
   markArticleAttachmentsDeleting,
   type PlanLimits,
   type PushKeys,
   parseUserPlanLimits,
+  pruneEmptyHourlyCountRows,
   pruneMemosSseEvents,
   purgeArticleRow,
   pushNotificationToUser,
+  recalibrateAllHourlyCounts,
   requeueStaleMemberRemovalJobs,
+  runMemoryLedgerMaintenance,
   SELF_HOST_UNLIMITED,
   type UserPlanLimits,
   updateMemberRemovalJob,
@@ -36,7 +41,9 @@ import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { cleanupFlaremoArtifacts } from "./artifact-cleanup";
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
+import { runDataExportTask } from "./export-task";
 import { hardDeleteMemoWithAttachments } from "./memo-hard-delete";
+import { runMemoryConflictPatrol, runMemoryDreaming } from "./memory-dreaming";
 
 /**
  * Cron / queue maintenance surface, moved verbatim from the former inline
@@ -62,24 +69,24 @@ function parseTrashRetentionDays(value: string | undefined): number {
   return Math.min(parsed, 365);
 }
 
-export async function runScheduledMaintenance(
+type QueuedMaintenanceIds = {
+  removalJobIds: string[];
+  exportTaskIds: string[];
+};
+
+/**
+ * Execute member-removal jobs selected by either the cron reconciler or a
+ * Queue batch. Queue callers must propagate failures so the platform retries;
+ * cron callers continue after recording a failed job and remain the recovery
+ * path for interrupted work.
+ */
+async function runMemberRemovalJobs(
+  db: ReturnType<typeof createDb>,
   env: FlareMoEnv,
-  scheduledTime: number,
-  options: {
-    limits?: PlanLimits;
-    userLimits?: UserPlanLimits | null;
-    resolveUserLimits?: (
-      userId: string,
-    ) => Promise<UserPlanLimits | null> | UserPlanLimits | null;
-    removalJobIds?: string[];
-  } = {},
+  jobs: Awaited<ReturnType<typeof getQueuedMemberRemovalJobsByIds>>,
+  propagateFailures: boolean,
 ): Promise<void> {
-  const db = createDb(env.DB);
-  await requeueStaleMemberRemovalJobs(db, scheduledTime);
-  const removalJobs = options.removalJobIds
-    ? await getQueuedMemberRemovalJobsByIds(db, options.removalJobIds)
-    : await listQueuedMemberRemovalJobs(db);
-  for (const job of removalJobs) {
+  for (const job of jobs) {
     try {
       if (!(await claimMemberRemovalJob(db, job.id))) continue;
       await updateMemberRemovalJob(db, job.id, {
@@ -101,12 +108,117 @@ export async function runScheduledMaintenance(
         "scheduled_member_removal_failed",
         error instanceof Error ? error.message : "Member removal failed",
       ).catch(() => undefined);
-      // Propagate the failure so Queue does not acknowledge the batch. The
-      // platform can then apply its configured retry policy.
-      if (options.removalJobIds) throw error;
+      if (propagateFailures) throw error;
     }
   }
+}
+
+/** Execute export jobs selected by a Queue batch or the cron reconciler. */
+async function runExportTasks(
+  env: FlareMoEnv,
+  db: ReturnType<typeof createDb>,
+  taskIds: string[],
+  propagateFailures: boolean,
+): Promise<void> {
+  for (const taskId of taskIds) {
+    try {
+      await runDataExportTask(env, db, taskId);
+    } catch (error) {
+      await failDataTask(
+        db,
+        taskId,
+        "export_task_failed",
+        error instanceof Error ? error.message : "Export failed",
+      ).catch(() => undefined);
+      if (propagateFailures) throw error;
+    }
+  }
+}
+
+/**
+ * Queue consumer path. It deliberately executes only the jobs named by the
+ * delivered messages. The scheduled handler below remains the bounded
+ * reconciler for stale or missed jobs and owns the full maintenance sweep.
+ */
+export async function runQueuedJobs(
+  env: FlareMoEnv,
+  ids: QueuedMaintenanceIds,
+): Promise<void> {
+  const db = createDb(env.DB);
+  const removalJobs = await getQueuedMemberRemovalJobsByIds(
+    db,
+    ids.removalJobIds,
+  );
+  await runMemberRemovalJobs(db, env, removalJobs, true);
+  await runExportTasks(env, db, ids.exportTaskIds, true);
+}
+
+export async function runScheduledMaintenance(
+  env: FlareMoEnv,
+  scheduledTime: number,
+  options: {
+    limits?: PlanLimits;
+    userLimits?: UserPlanLimits | null;
+    resolveUserLimits?: (
+      userId: string,
+    ) => Promise<UserPlanLimits | null> | UserPlanLimits | null;
+    removalJobIds?: string[];
+    exportTaskIds?: string[];
+  } = {},
+): Promise<void> {
+  const db = createDb(env.DB);
+  await requeueStaleMemberRemovalJobs(db, scheduledTime);
+  const removalJobs = options.removalJobIds
+    ? await getQueuedMemberRemovalJobsByIds(db, options.removalJobIds)
+    : await listQueuedMemberRemovalJobs(db);
+  await runMemberRemovalJobs(
+    db,
+    env,
+    removalJobs,
+    Boolean(options.removalJobIds),
+  );
+  // Queued data-export tasks (DATA_EXPORT_QUEUE messages) run through the
+  // same idempotent executor as the in-request path: only `queued` rows are
+  // claimed, so a redelivered or doubled message is a no-op.
+  const exportTaskIds = options.exportTaskIds
+    ? options.exportTaskIds
+    : (await listQueuedDataExportTasks(db)).map((task) => task.id);
+  await runExportTasks(env, db, exportTaskIds, Boolean(options.exportTaskIds));
   await dispatchMemosWebhookOutbox(db);
+  // Memory-ledger upkeep runs before the embedding outbox so the vector work it
+  // queues is drained by the same pass: stale conjectures retire, and rows whose
+  // validity window or expiry has passed leave the index instead of being ranked
+  // on every recall and filtered out afterwards.
+  await runMemoryLedgerMaintenance(db, new Date(scheduledTime));
+  // Dreaming (§VI.8) runs after the ledger upkeep and *before* the embedding
+  // outbox, so the inferred proposals it isolates — and the vectors it does
+  // not index — are consistently accounted for in the same pass. It is an
+  // LLM pass, deliberately last of the deterministic sweeps.
+  try {
+    const dreaming = await runMemoryDreaming(env, new Date(scheduledTime));
+    if (dreaming.proposals > 0) {
+      console.log(
+        JSON.stringify({ message: "memory dreaming proposals", ...dreaming }),
+      );
+    }
+    const patrol = await runMemoryConflictPatrol(env, new Date(scheduledTime));
+    if (patrol.proposals > 0) {
+      console.log(
+        JSON.stringify({
+          message: "memory conflict patrol proposals",
+          ...patrol,
+        }),
+      );
+    }
+  } catch (error) {
+    // Dreaming must never take the whole maintenance window down.
+    console.error(
+      JSON.stringify({
+        message: "memory dreaming failed",
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
   // SSE replay events have a one-week retention; the bounded chunk keeps the
   // daily sweep from one giant delete.
   const ssePruned = await pruneMemosSseEvents(
@@ -216,6 +328,15 @@ export async function runScheduledMaintenance(
       cursor = listing.truncated ? listing.cursor : undefined;
     } while (cursor);
   }
+  // Rebuild the derived memo activity counter. Every memo write adjusts it
+  // inside the same batch, so this pass exists only to heal drift: a
+  // half-applied import, a counter statement that lost a race, or a row written
+  // by an older release before the table existed. It is the authority the
+  // incremental path is an optimization for, and it runs last so anything the
+  // steps above changed is already reflected in `memos`.
+  await recalibrateAllHourlyCounts(db, new Date().toISOString());
+  await pruneEmptyHourlyCountRows(db);
+
   // Daily review reach-out: file one idempotent inbox row per user when the
   // UTC calendar day has "on this day" history. The source-event unique
   // index absorbs cron retries, so a repeat run for the same date is a no-op.

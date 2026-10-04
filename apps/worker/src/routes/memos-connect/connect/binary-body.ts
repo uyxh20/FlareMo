@@ -1,8 +1,8 @@
 import {
   type BinaryTransport,
-  decodeBinaryRequest,
   detectBinaryTransport,
-} from "../../../memos-protobuf";
+} from "../../../memos-compat/proto-wire";
+import { loadMemosProtobuf } from "../protobuf-loader";
 import { type ConnectContext, record } from "../shared";
 import { connectError, connectErrorFrom } from "../transport";
 import { memoService } from "./service-names";
@@ -11,6 +11,10 @@ import { memoService } from "./service-names";
  * The HTTP media-type gate and the body decoder of the Connect unary endpoint.
  * The caller runs the gate first, then reads the path parameters, then decodes:
  * an unsupported media type must be rejected before any transport attempt.
+ *
+ * The gate stays synchronous and dependency-free so that a 415 — the one
+ * response that must be produced without touching the descriptor runtime — is
+ * answered before anything is loaded.
  */
 export interface ConnectTransportSelection {
   binaryTransport: BinaryTransport | undefined;
@@ -58,14 +62,18 @@ export async function decodeConnectRequestBody(
   const method = isSharedMemoAlias ? "GetMemoByShare" : requestMethod;
 
   try {
-    let body: unknown = binaryTransport
-      ? decodeBinaryRequest(
-          service,
-          method,
-          new Uint8Array(await c.req.raw.arrayBuffer()),
-          binaryTransport,
-        )
-      : await c.req.json();
+    let body: unknown;
+    if (binaryTransport) {
+      const { decodeBinaryRequest } = await loadMemosProtobuf();
+      body = decodeBinaryRequest(
+        service,
+        method,
+        new Uint8Array(await c.req.raw.arrayBuffer()),
+        binaryTransport,
+      );
+    } else {
+      body = await c.req.json();
+    }
     if (isSharedMemoAlias) {
       // JSON alias callers may send either key; binary callers already have
       // the canonical shareId field.

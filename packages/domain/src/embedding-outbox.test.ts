@@ -1,4 +1,3 @@
-import type { UserRow } from "@flaremo/db";
 import {
   applyFlaremoMigrations,
   createDb,

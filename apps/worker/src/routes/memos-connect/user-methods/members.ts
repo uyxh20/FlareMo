@@ -1,7 +1,7 @@
 import type { createDb } from "@flaremo/db";
 import type { PlanLimits } from "@flaremo/domain";
 import { currentUserToDto } from "@flaremo/memos";
-import { getFlareMoRuntime } from "../../../context";
+import { getFlareMoAuth } from "../../../context";
 import { getAuthUserCached } from "../../../identity-cache";
 import { CompatValidationError } from "../../../memos-compat/errors";
 import { registerCompatMember } from "../../../memos-compat/member-service";
@@ -29,7 +29,7 @@ export async function updateBetterAuthUsername(
     headers,
     body: JSON.stringify({ username }),
   });
-  const response = await getFlareMoRuntime(c.env).auth.handler(request);
+  const response = await (await getFlareMoAuth(c.env)).handler(request);
   if (response.ok) return;
   let message = "Better Auth rejected the username update";
   try {

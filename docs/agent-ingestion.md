@@ -79,3 +79,8 @@ curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
 其他渠道沿用同一模式：渠道 webhook Worker 负责验签、白名单、格式转换和重试控制；FlareMo 只接收标准 memo DTO。不要把每个平台的签名协议和密钥塞进 FlareMo 主 Worker。
 
 AI 摘要、正文抓取和标签提取属于可选派生步骤。即使模型失败，也应该允许保存原始文本或链接；AI 返回内容不得绕过 Access，也不得成为 D1 之外的权威数据源。
+
+
+## 记忆账本（长结论走这里，不进 memo 流）
+
+本文档只覆盖 **memo（记录流）** 的写入通道。AI 应长期记住的原子结论——偏好、项目决策、约束、教训——走另一条账本：**Agent Memory**。最佳实践是 CLI + Skills（`flaremo remember` / `flaremo checkpoint`），不要把长期结论灌进 memo 时间线；接入方式、退出码契约与权限模型见 [Agent Memory](./agent-memory.md)。

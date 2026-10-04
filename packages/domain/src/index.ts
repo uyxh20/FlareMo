@@ -14,6 +14,7 @@ export * from "./limits";
 export * from "./member-removal-jobs";
 export * from "./memo-context";
 export * from "./memo-filter";
+export * from "./memo-hourly-counts";
 export * from "./memory";
 export * from "./memos";
 export * from "./memos-social";

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { SHOWCASE_I18N, type ShowcaseContent } from "@/content/showcase-i18n";
-import type { SupportedLocale } from "@/lib/seo";
+import type { ShowcaseContent } from "@/content/showcase-i18n";
 import { DesktopDevice } from "./showcase/desktop-device";
 import {
   createInitialMemos,
@@ -10,12 +9,10 @@ import {
 import { MobileDevice } from "./showcase/mobile-device";
 
 export function InteractiveShowcase({
-  locale = "zh",
+  showcase,
 }: {
-  locale?: SupportedLocale;
+  showcase: ShowcaseContent;
 }) {
-  const showcase: ShowcaseContent = SHOWCASE_I18N[locale] || SHOWCASE_I18N.zh;
-
   const [memos, setMemos] = useState<Memo[]>(() =>
     createInitialMemos(showcase),
   );

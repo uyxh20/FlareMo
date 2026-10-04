@@ -181,6 +181,41 @@ describe("FlareMo memory API", () => {
     );
     expect(listed.memories).toHaveLength(0);
   });
+
+  it("lens returns a preview that never archives and reports archive drift", async () => {
+    // Seed one fact so the projection is non-empty.
+    await json(
+      await fetchApp("http://flaremo.test/api/app/memory", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          content: "接口统一 snake_case",
+          type: "semantic",
+          kind: "preference",
+          scope_type: "global",
+          tier: "normal",
+          importance: 70,
+        }),
+      }),
+    );
+
+    // Reading the lens is a preview: repeated reads never archive.
+    const first = await json<{
+      latest_archive: unknown;
+      preview: { system_prompt_payload: string; character_count: number };
+      matches_archive: boolean | null;
+    }>(
+      await fetchApp("http://flaremo.test/api/app/memory/lens?agent=pi-agent"),
+    );
+    expect(first.latest_archive).toBeNull();
+    expect(first.matches_archive).toBeNull();
+    expect(first.preview.system_prompt_payload).toContain("snake_case");
+
+    const second = await json<unknown>(
+      await fetchApp("http://flaremo.test/api/app/memory/lens?agent=pi-agent"),
+    );
+    expect((second as { latest_archive: unknown }).latest_archive).toBeNull();
+  });
 });
 
 async function json<T = Record<string, unknown>>(response: Response) {

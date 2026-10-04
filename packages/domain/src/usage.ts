@@ -150,6 +150,9 @@ export async function reportVectorUsage(
  * Called fire-and-forget from the semantic search paths so usage tracking
  * never blocks or fails a query. Accepts a bare `{ id }` so outbox workers
  * can attribute usage from a stored user id without re-reading the row.
+ *
+ * One statement, not read-then-write: concurrent searches would otherwise
+ * both see "no row" and one increment would be lost.
  */
 export async function incrementUsageCounter(
   db: FlareMoDb,
@@ -159,31 +162,21 @@ export async function incrementUsageCounter(
 ) {
   const month = currentMonthKey();
   const now = new Date().toISOString();
-  const existing = await db
-    .select({ id: usageCounters.id })
-    .from(usageCounters)
-    .where(
-      and(
-        eq(usageCounters.userId, user.id),
-        eq(usageCounters.month, month),
-        eq(usageCounters.metric, metric),
-      ),
-    )
-    .get();
-
-  if (existing) {
-    await db
-      .update(usageCounters)
-      .set({ count: sql`${usageCounters.count} + ${amount}`, updatedAt: now })
-      .where(eq(usageCounters.id, existing.id));
-  } else {
-    await db.insert(usageCounters).values({
+  await db
+    .insert(usageCounters)
+    .values({
       id: crypto.randomUUID(),
       userId: user.id,
       month,
       metric,
       count: amount,
       updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [usageCounters.userId, usageCounters.month, usageCounters.metric],
+      set: {
+        count: sql`${usageCounters.count} + ${amount}`,
+        updatedAt: now,
+      },
     });
-  }
 }

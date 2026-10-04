@@ -16,13 +16,13 @@ type RenderResult = {
   title: string;
 };
 
-function resolveMeta(pathname: string): {
+async function resolveMeta(pathname: string): Promise<{
   locale: SupportedLocale;
   title: string;
   description: string;
   ogType?: "website" | "article";
   jsonLd?: unknown;
-} {
+}> {
   const locale = getLocaleFromPath(pathname);
   const cleanPath = getPathWithoutLocale(pathname);
 
@@ -54,7 +54,7 @@ function resolveMeta(pathname: string): {
   if (match) {
     const slug = match[1];
     const docLocale = locale === "zh" ? "zh-CN" : "en-US";
-    const doc = getDoc(slug, docLocale);
+    const doc = await getDoc(slug, docLocale);
     if (doc) {
       return {
         locale,
@@ -83,7 +83,7 @@ function resolveMeta(pathname: string): {
  * Used by scripts/build.mjs via Vite's ssrLoadModule.
  */
 export async function renderRoute(pathname: string): Promise<RenderResult> {
-  const meta = resolveMeta(pathname);
+  const meta = await resolveMeta(pathname);
   const locale = meta.locale;
   const title = meta.title;
   const description = meta.description;

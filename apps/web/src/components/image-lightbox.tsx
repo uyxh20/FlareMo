@@ -105,7 +105,7 @@ export function ImageLightbox({
                 size="icon-sm"
                 variant="ghost"
                 aria-label={t("imageViewer.zoomIn")}
-                title={t("imageViewer.zoomOut")}
+                title={t("imageViewer.zoomIn")}
                 disabled={scale >= MAX_SCALE}
                 className="size-8 text-white/90 hover:bg-white/20 hover:text-white"
                 onClick={() => zoomTo(scale + SCALE_STEP)}

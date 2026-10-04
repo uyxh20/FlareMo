@@ -8,6 +8,7 @@ import {
   FolderKanbanIcon,
   FootprintsIcon,
   HashIcon,
+  LayoutGridIcon,
   MicIcon,
   PencilIcon,
   Trash2Icon,
@@ -22,6 +23,7 @@ import {
 } from "react";
 import {
   getCaptureStatus,
+  type MemoSpace,
   type MemoStatsResponse,
   type TagHierarchyNode,
 } from "@/api";
@@ -40,8 +42,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/i18n";
-import { buildMonthLabels, currentStreak } from "@/lib/activity";
+import { currentStreak } from "@/lib/activity";
 import { queryKeys } from "@/lib/query-keys";
+import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
 
 export type ExplorerView = "all" | "archived" | "trashed";
@@ -59,6 +62,10 @@ type FlareMoExplorerProps = {
   hierarchy: TagHierarchyNode[];
   hierarchyPending?: boolean;
   stats: MemoStatsResponse;
+  /** Viewer's IANA zone + space scope: the year view anchors its own stats
+   * query with them (issue #144). */
+  timeZone: string;
+  space?: MemoSpace;
   untagged?: boolean;
   onDeleteTag: (tag: string) => void;
   onRenameTag: (from: string, to: string) => void;
@@ -77,6 +84,8 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
   hierarchy,
   hierarchyPending = false,
   stats,
+  timeZone,
+  space,
   untagged = false,
   onDeleteTag,
   onRenameTag,
@@ -85,7 +94,7 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
   onDaySelect,
   onNavigate,
 }: FlareMoExplorerProps) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const session = authClient.useSession();
   const captureStatus = useQuery({
     queryKey: queryKeys.captureStatus.forUser(session.data?.user.id),
@@ -95,10 +104,6 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
     retry: false,
   });
   const streak = useMemo(() => currentStreak(stats.activity), [stats.activity]);
-  const monthLabels = useMemo(
-    () => buildMonthLabels(stats.activity, locale),
-    [stats.activity, locale],
-  );
 
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
@@ -121,8 +126,9 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
         <MiniCalendarReminders />
         <FlareMoTimeHorizon
           hoveredDate={hoveredDate}
-          monthLabels={monthLabels}
+          space={space}
           stats={stats}
+          timeZone={timeZone}
           streak={streak}
           onDaySelect={onDaySelect}
           onHoverDate={setHoveredDate}
@@ -134,6 +140,21 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
         aria-label={t("sidebar.navigation")}
         className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2.5"
       >
+        <Link
+          activeOptions={{ exact: true }}
+          activeProps={{
+            className: "!bg-accent !text-accent-foreground font-medium",
+          }}
+          className="flex h-9 items-center gap-3 rounded-lg px-2.5 text-muted-foreground motion-safe:transition-[background-color,color,transform] motion-safe:duration-150 hover:bg-muted hover:text-foreground motion-safe:hover:translate-x-0.5"
+          onClick={onNavigate}
+          search={{
+            ...TIMELINE_SEARCH,
+          }}
+          to="/"
+        >
+          <LayoutGridIcon className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{t("nav.allMemos")}</span>
+        </Link>
         <Link
           activeProps={{
             className: "!bg-accent !text-accent-foreground font-medium",
@@ -181,6 +202,19 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
         >
           <BrainIcon className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{t("nav.memory")}</span>
+        </Link>
+        <Link
+          activeProps={{
+            className: "!bg-accent !text-accent-foreground font-medium",
+          }}
+          className="flex h-9 items-center gap-3 rounded-lg px-2.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={onNavigate}
+          to="/team-projects"
+        >
+          <FolderKanbanIcon className="size-4 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">
+            {t("nav.teamProjects")}
+          </span>
         </Link>
         <Link
           activeProps={{

@@ -83,13 +83,15 @@ function assertRegexLinearSafety(pattern: string) {
       continue;
     }
     if (character === "|" && stack.length > 0) {
-      stack[stack.length - 1]!.alternation = true;
+      const frame = stack[stack.length - 1];
+      if (frame) frame.alternation = true;
       index += 1;
       continue;
     }
     if (regexHasQuantifierAt(pattern, index)) {
       if (stack.length > 0) {
-        stack[stack.length - 1]!.hasInnerQuantifier = true;
+        const frame = stack[stack.length - 1];
+        if (frame) frame.hasInnerQuantifier = true;
       }
       index = regexSkipQuantifier(pattern, index);
       continue;

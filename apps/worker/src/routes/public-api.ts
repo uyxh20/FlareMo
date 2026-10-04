@@ -1,4 +1,3 @@
-import { createDb } from "@flaremo/db";
 import {
   getAttachmentById,
   getPublicArticleAttachment,
@@ -7,14 +6,14 @@ import {
 import { attachmentToDto, memoToDto, shareToDto } from "@flaremo/memos";
 import { Hono } from "hono";
 import { attachmentObjectResponse } from "../attachment-http";
-import type { HonoBindings } from "../context";
+import { getFlareMoDb, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 
 export const publicApi = new Hono<HonoBindings>();
 
 publicApi.get("/shares/:token", async (c) => {
   try {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const share = await getPublicShareByToken(db, c.req.param("token"));
     const shareDto = shareToDto(share.share);
     return c.json({
@@ -42,7 +41,7 @@ publicApi.get("/shares/:token", async (c) => {
 
 publicApi.get("/shares/:token/attachments/:id/blob", async (c) => {
   try {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const share = await getPublicShareByToken(db, c.req.param("token"));
     const attachment = await getAttachmentById(
       db,
@@ -73,7 +72,7 @@ publicApi.get("/shares/:token/attachments/:id/blob", async (c) => {
 // check (mirrors the share-token contract; anonymous + cacheable).
 publicApi.get("/articles/:slug/attachments/:id/blob", async (c) => {
   try {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const { attachment } = await getPublicArticleAttachment(
       db,
       c.req.param("slug"),

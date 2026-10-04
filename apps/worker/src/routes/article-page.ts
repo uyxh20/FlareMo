@@ -1,4 +1,4 @@
-import { articles, createDb, users } from "@flaremo/db";
+import { articles, users } from "@flaremo/db";
 import {
   getBranding,
   getPublicArticleBySlug,
@@ -10,7 +10,7 @@ import type { Context, Hono } from "hono";
 import { gfmHeadingId } from "marked-gfm-heading-id";
 import type { BlogPosting, WithContext } from "schema-dts";
 import { SitemapStream, streamToPromise } from "sitemap";
-import type { HonoBindings } from "../context";
+import { getFlareMoDb, type HonoBindings } from "../context";
 import {
   attachmentImageDimensions,
   contentToPlainText,
@@ -438,7 +438,7 @@ const ARTICLE_RESPONSE_INIT = {
 
 export function registerArticlePage(app: Hono<HonoBindings>): void {
   app.get("/article/:slug", async (c) => {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     let data: ArticlePageData;
     try {
       data = await getPublicArticleBySlug(db, c.req.param("slug"));
@@ -474,7 +474,7 @@ export function registerArticlePage(app: Hono<HonoBindings>): void {
   // The enumerable public surface. Share tokens stay out of sitemaps by
   // design — this endpoint only ever lists published article slugs.
   app.get("/sitemap-articles.xml", async (c) => {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const origin = publicOrigin(c.env, c.req.raw);
     const rows = await db
       .select({ slug: articles.slug, updatedAt: articles.updatedAt })
@@ -515,7 +515,7 @@ export function registerArticlePage(app: Hono<HonoBindings>): void {
   // so syndication carries the rendered body (plain code blocks; feeds are
   // re-rendered without the highlighter to stay cheap).
   app.get("/feed.xml", async (c) => {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const origin = publicOrigin(c.env, c.req.raw);
     let product = "FlareMo";
     try {

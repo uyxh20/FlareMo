@@ -20,6 +20,7 @@ export function MemoryList({
   emptyTitle,
   showSource = false,
   review = false,
+  onSelectProject,
 }: {
   memories: Memory[];
   loading: boolean;
@@ -30,6 +31,7 @@ export function MemoryList({
   emptyTitle?: string;
   showSource?: boolean;
   review?: boolean;
+  onSelectProject?: (projectKey: string) => void;
 }) {
   const { t } = useI18n();
 
@@ -76,6 +78,7 @@ export function MemoryList({
           memory={memory}
           showSource={showSource}
           review={review}
+          onSelectProject={onSelectProject}
           onMutated={onMutated}
         />
       ))}

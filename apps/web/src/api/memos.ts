@@ -90,10 +90,27 @@ export async function deleteTag(tag: string) {
 
 // Stats always carry the space: the response's counts.spaces powers the
 // sidebar badges for all three entries from this single request.
-export async function getMemoStats(timeZone: string, space?: MemoSpace) {
+export async function getMemoStats(
+  timeZone: string,
+  space?: MemoSpace,
+  days?: number,
+  until?: string,
+  signal?: AbortSignal,
+) {
   const query = new URLSearchParams({ time_zone: timeZone });
-  if (space) query.set("space", space);
-  return apiRequest<MemoStatsResponse>(`/api/app/stats?${query.toString()}`);
+  if (space && space !== "all") query.set("space", space);
+  // The heatmap's year view needs a full year of buckets. The endpoint used to
+  // hardcode an 84-day window, which left every cell outside it permanently
+  // zero; asking for the span the largest view actually renders is what makes
+  // the year grid meaningful. `counts` and `active_days` do not depend on the
+  // window, so a wider activity array costs the sidebar nothing.
+  if (days !== undefined) query.set("days", String(days));
+  // `until` anchors the window's end: the year view passes the navigated
+  // year's Dec 31 so a historical year reaches its own cells (issue #144).
+  if (until !== undefined) query.set("until", until);
+  return apiRequest<MemoStatsResponse>(`/api/app/stats?${query.toString()}`, {
+    signal,
+  });
 }
 
 /**

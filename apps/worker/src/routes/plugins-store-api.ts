@@ -238,7 +238,7 @@ async function installPackage(
   bytes: Uint8Array,
   source: string,
 ): Promise<{ settings: PluginSettings; installed: InstalledPluginRecord }> {
-  const { manifest, files } = readPluginPackage(bytes);
+  const { manifest, files } = await readPluginPackage(bytes);
   const prefix = pluginAssetPrefix(manifest.id, manifest.version);
   await Promise.all(
     Object.entries(files).map(([relative, data]) =>

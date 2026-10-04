@@ -16,8 +16,6 @@ import {
   importData,
   listDataTasks,
   runImportTask,
-  streamExportData,
-  updateDataTask,
 } from "@flaremo/domain";
 import { parseAttachmentsResourceName } from "@flaremo/memos";
 import { zValidator } from "@hono/zod-validator";
@@ -25,6 +23,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
 import { MAX_INLINE_EXPORT_BYTES } from "../../attachment-http";
 import { getRequestContext, type HonoBindings } from "../../context";
+import { runDataExportTask } from "../../export-task";
 import { jsonError } from "../../http";
 import {
   arrayBufferToBase64,
@@ -208,96 +207,22 @@ export function registerTransferRoutes(app: Hono<HonoBindings>) {
       const { db, user } = await getRequestContext(c);
       const task = await createDataTask(db, user, { kind: "export" });
       taskId = task.id;
-      await updateDataTask(db, task.id, {
-        status: "running",
-        phase: "scanning",
-      });
-
-      const prefix = `exports/${task.id}`;
-      const chunkKeys: Array<{
-        kind: string;
-        key: string;
-        recordCount: number;
-      }> = [];
-      const attachmentRefs: Array<{
-        id: string;
-        filename: string;
-        content_type: string | null;
-        size: number;
-      }> = [];
-
-      await streamExportData(db, user, async (chunk) => {
-        const sequence = chunkKeys.length + 1;
-        const key = `${prefix}/data/${chunk.kind}-${String(sequence).padStart(4, "0")}.ndjson`;
-        const recordCount =
-          chunk.records.length > 0 ? chunk.records.split("\n").length : 0;
-        await c.env.ATTACHMENTS.put(key, chunk.records, {
-          httpMetadata: { contentType: "application/x-ndjson" },
-        });
-        chunkKeys.push({ kind: chunk.kind, key, recordCount });
-        if (chunk.kind === "attachments") {
-          for (const line of chunk.records.split("\n").filter(Boolean)) {
-            const record = JSON.parse(line) as {
-              id: string;
-              filename: string;
-              content_type: string | null;
-              size: number;
-            };
-            attachmentRefs.push({
-              id: record.id,
-              filename: record.filename,
-              content_type: record.content_type,
-              size: record.size,
-            });
-          }
-        }
-        await updateDataTask(db, task.id, {
-          phase: "writing",
-          progressDone: chunkKeys.length,
-          progressTotal: 5,
-        });
-      });
-
-      const manifest = {
-        format_version: 1,
-        exported_at: new Date().toISOString(),
-        counts: {
-          memos: 0,
-          attachments: attachmentRefs.length,
-          relations: 0,
-          shares: 0,
-        },
-        data_chunks: chunkKeys,
-        attachments: attachmentRefs,
-      };
-      // Re-derive counts from chunk record counts for accuracy.
-      for (const chunk of chunkKeys) {
-        if (chunk.kind === "memos") manifest.counts.memos += chunk.recordCount;
-        if (chunk.kind === "relations")
-          manifest.counts.relations += chunk.recordCount;
-        if (chunk.kind === "shares")
-          manifest.counts.shares += chunk.recordCount;
+      // A large export fans out to many R2 writes — beyond the request
+      // subrequest budget for big libraries. When the queue is bound the
+      // consumer runs the shared idempotent executor; queue-less minimal
+      // deployments run the same executor inline.
+      if (c.env.DATA_EXPORT_QUEUE) {
+        await c.env.DATA_EXPORT_QUEUE.send({ taskId: task.id });
+        return c.json({ task: dataTaskToDto(task) }, 202);
       }
-      const manifestKey = `${prefix}/manifest.json`;
-      await c.env.ATTACHMENTS.put(manifestKey, JSON.stringify(manifest), {
-        httpMetadata: { contentType: "application/json" },
-      });
-
-      const done = await updateDataTask(db, task.id, {
-        status: "succeeded",
-        phase: "completed",
-        manifestKey,
-        progressDone: chunkKeys.length,
-        progressTotal: chunkKeys.length,
-        completedAt: new Date().toISOString(),
-      });
+      const done = await runDataExportTask(c.env, db, task.id);
       if (!done) {
         return c.json(
           { error: "export task was not found after finalization" },
           500,
         );
       }
-      return c.json({ task: dataTaskToDto(done!) }, 202);
+      return c.json({ task: dataTaskToDto(done) }, 202);
     } catch (error) {
       if (taskId) {
         const context = await getRequestContext(c).catch(() => undefined);

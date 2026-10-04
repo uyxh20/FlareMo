@@ -14,10 +14,15 @@ test("keeps setup one-time, logs in, and manages a PAT from the account UI", asy
   await page.goto("/setup");
   await expect(page).toHaveURL(/\/login$/);
 
-  const email = page.getByRole("textbox", { name: /^邮箱$|^Email$/i });
-  const password = page.getByRole("textbox", {
-    name: /^密码$|^Password$/i,
+  // Dual-mode sign-in: this field takes an email or a username, so its
+  // accessible name is the longer label, not the bare "邮箱".
+  const email = page.getByRole("textbox", {
+    name: /邮箱或用户名|Email or username/i,
   });
+  // `getByLabel`, not `getByRole("textbox")`: the password field renders
+  // `<input type="password">`, which has no implicit ARIA role, so a role
+  // query can never match it.
+  const password = page.getByLabel(/^密码$|^Password$/i);
   await email.fill(E2E_EMAIL);
   await password.fill(TEST_PASSWORD);
   await page.getByRole("button", { name: /^登录$|^Sign in$/i }).click();
@@ -36,38 +41,48 @@ test("keeps setup one-time, logs in, and manages a PAT from the account UI", asy
     page.getByRole("heading", { name: /^设置$|^Settings$/i }),
   ).toBeVisible();
 
-  // The settings modal groups panes behind a sidebar; access tokens live on
-  // their own pane.
-  await page.getByRole("button", { name: /访问令牌|Access tokens/i }).click();
-  await expect(
-    page.getByText(/个人访问令牌|Personal access tokens/i).first(),
-  ).toBeVisible();
-
   const tokenName = `UI E2E client ${Date.now()}`;
-  // The create-token form lives in a dialog opened from the card header.
-  // The settings modal itself is also a dialog, so scope to the topmost one.
-  await page
+  // The create-token form lives in a dialog opened from the tokens card
+  // header. Personal access tokens have no pane of their own since the
+  // settings consolidation merged them into the default "Account & Security"
+  // pane, which is what /account opens on (the old "访问令牌" nav button and
+  // its `settings.nav.tokens` key were left behind by that refactor).
+  //
+  // The settings panel is mounted once per responsive branch (mobile and
+  // desktop), so every trigger and dialog inside it exists twice: the mobile
+  // copy comes first in DOM order and is the invisible one at this viewport.
+  // Filtering on visibility is therefore mandatory, and the reveal dialog
+  // below is matched with CSS rather than `getByRole` because Radix marks the
+  // ancestor dialog `aria-hidden` while a nested dialog is open, which removes
+  // its subtree from the accessibility tree that role queries search.
+  const createTokenButton = page
     .getByRole("button", { name: /创建令牌|Create token/i })
-    .first()
-    .click();
+    .locator("visible=true")
+    .first();
+  await createTokenButton.scrollIntoViewIfNeeded();
+  await createTokenButton.click();
   await page
     .getByRole("textbox", { name: /令牌名称|Token name/i })
     .fill(tokenName);
   await page.getByPlaceholder(/永不过期|Never/i).fill("30");
   await page
-    .getByRole("dialog")
+    .locator('[role="dialog"]:visible')
     .last()
     .getByRole("button", { name: /创建令牌|Create token/i })
     .click();
 
-  await expect(page.locator("code")).toBeVisible();
+  const revealDialog = page.locator('[role="dialog"]:visible').last();
+  await expect(revealDialog.locator("code")).toBeVisible();
   await expect(
-    page.getByText(/请立即安全保存这个令牌|save this token/i),
+    revealDialog.getByText(/请立即安全保存这个令牌|save this token/i),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: /^关闭并隐藏$|^Hide token$/i })
+  await revealDialog
+    .locator("button", { hasText: /关闭并隐藏|Hide token/ })
     .click();
-  await expect(page.locator("code")).toHaveCount(0);
+  await expect(
+    page.locator("code:visible"),
+    "the one-time token must disappear once the reveal dialog is dismissed",
+  ).toHaveCount(0);
 
   const revokeButton = page.getByRole("button", {
     name: /^撤销$|^Revoke$/i,
@@ -79,14 +94,21 @@ test("keeps setup one-time, logs in, and manages a PAT from the account UI", asy
     .getByRole("alertdialog")
     .getByRole("button", { name: /^撤销$|^Revoke$/i })
     .click();
-  await expect(page.getByText(/^已撤销$|^Revoked$/i)).toBeVisible();
-  await expect(page.getByText(tokenName, { exact: true })).toBeVisible();
+  // Same double mount: the badge and the row render once per responsive
+  // branch, and the invisible copy comes first in DOM order.
+  await expect(
+    page.getByText(/^已撤销$|^Revoked$/i).locator("visible=true"),
+  ).not.toHaveCount(0);
+  await expect(
+    page.getByText(tokenName, { exact: true }).locator("visible=true"),
+  ).toHaveCount(1);
 });
 
 test("adds a member through the admin dialog and shows the activation link", async ({
   page,
 }) => {
   const memberName = `E2E Member ${Date.now()}`;
+  const email = `e2e.member.${Date.now()}@example.test`;
   await page.goto("/account");
   await page.getByRole("button", { name: /团队管理|Team/ }).click();
   await expect(
@@ -103,9 +125,7 @@ test("adds a member through the admin dialog and shows the activation link", asy
   await dialog
     .getByRole("textbox", { name: /显示名称|Display name/i })
     .fill(memberName);
-  await dialog
-    .getByRole("textbox", { name: /^邮箱$|^Email$/i })
-    .fill(`e2e.member.${Date.now()}@example.test`);
+  await dialog.getByRole("textbox", { name: /^邮箱$|^Email$/i }).fill(email);
   await dialog.getByRole("button", { name: /添加成员|Add member/i }).click();
 
   // Success shows the one-time activation link inside the dialog.
@@ -117,5 +137,42 @@ test("adds a member through the admin dialog and shows the activation link", asy
     .click();
   // Only the settings modal itself remains open.
   await expect(page.getByRole("dialog")).toHaveCount(1);
-  await expect(page.getByText(memberName)).toBeVisible();
+
+  // Read the header's count badge: it is the unambiguous "how many members
+  // exist" reading, and the duplicate attempt below must leave it unchanged.
+  // (The row's own text also appears in the workspace sidebar, so a bare
+  // getByText(name) is ambiguous.)
+  const memberCount = page
+    .getByRole("heading", { name: /团队成员|Team members/i })
+    .locator("xpath=following-sibling::span[1]");
+  await expect(memberCount).toHaveText(/^\d+$/);
+  const memberCountAfterCreate = await memberCount.textContent();
+
+  // Re-adding the same address must name the real cause instead of failing
+  // with a generic server error, and the member list must not grow a second
+  // row for it.
+  await page
+    .getByRole("button", { name: /添加成员|Add member/i })
+    .first()
+    .click();
+  const duplicateDialog = page.getByRole("dialog").last();
+  await duplicateDialog
+    .getByRole("textbox", { name: /显示名称|Display name/i })
+    .fill(`${memberName} again`);
+  await duplicateDialog
+    .getByRole("textbox", { name: /^邮箱$|^Email$/i })
+    .fill(email);
+  await duplicateDialog
+    .getByRole("button", { name: /添加成员|Add member/i })
+    .click();
+  await expect(
+    duplicateDialog.getByText(/已被使用|already in use/i),
+  ).toBeVisible();
+  await duplicateDialog
+    .locator('[data-slot="dialog-footer"]')
+    .getByRole("button", { name: /^取消$|^Cancel$/i })
+    .click();
+  // The rejected address added nothing: the roster is exactly as it was, so no
+  // orphaned second row was created behind the error message.
+  await expect(memberCount).toHaveText(memberCountAfterCreate ?? "");
 });

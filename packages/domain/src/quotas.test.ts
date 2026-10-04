@@ -1,11 +1,18 @@
 import type { UserRow } from "@flaremo/db";
-import { applyFlaremoMigrations, attachments, createDb } from "@flaremo/db";
+import {
+  applyFlaremoMigrations,
+  attachments,
+  createDb,
+  memos,
+} from "@flaremo/db";
+import { eq } from "drizzle-orm";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { QuotaExceededError } from "./errors";
 import { SELF_HOST_UNLIMITED, type UserPlanLimits } from "./limits";
 import { createMemory } from "./memory";
-import { createMemo } from "./memos";
+import { createMemo, updateMemo } from "./memos";
+import { hardDeleteMemo } from "./memos-lifecycle";
 import {
   assertAttachmentStorageQuota,
   assertMemberQuota,
@@ -13,6 +20,7 @@ import {
   assertMemoryCountQuota,
   assertMonthlyQuota,
   countFlaremoUsers,
+  countUserMemos,
   estimateTokenCount,
   getAttachmentStorageBytes,
   readMonthlyUsageTotal,
@@ -43,28 +51,31 @@ async function insertAttachment(
   });
 }
 
+// File-scoped so every describe in this file shares one fresh database per
+// test. Hooks nested inside a describe only apply to that describe, and the
+// counter describe below needs the same fixture.
+beforeEach(async () => {
+  mf = new Miniflare({
+    script: "export default { fetch() { return new Response('ok') } }",
+    modules: true,
+    compatibilityDate: "2026-07-10",
+    compatibilityFlags: ["nodejs_compat"],
+    d1Databases: { DB: "flaremo-quotas-test" },
+  });
+  const database = await mf.getD1Database("DB");
+  db = createDb(database);
+  await applyFlaremoMigrations(database);
+  owner = await ensureSingleUser(db, {
+    email: "owner@example.com",
+    name: "Owner",
+  });
+});
+
+afterEach(async () => {
+  await mf.dispose();
+});
+
 describe("plan quota checks", () => {
-  beforeEach(async () => {
-    mf = new Miniflare({
-      script: "export default { fetch() { return new Response('ok') } }",
-      modules: true,
-      compatibilityDate: "2026-07-10",
-      compatibilityFlags: ["nodejs_compat"],
-      d1Databases: { DB: "flaremo-quotas-test" },
-    });
-    const database = await mf.getD1Database("DB");
-    db = createDb(database);
-    await applyFlaremoMigrations(database);
-    owner = await ensureSingleUser(db, {
-      email: "owner@example.com",
-      name: "Owner",
-    });
-  });
-
-  afterEach(async () => {
-    await mf.dispose();
-  });
-
   it("estimates tokens from input characters", () => {
     expect(estimateTokenCount([])).toBe(0);
     expect(estimateTokenCount(["abcd"])).toBe(1);
@@ -292,5 +303,77 @@ describe("plan quota checks", () => {
     expect(report.usage.aiEmbeddingTokensPerMonth).toBe(20);
     expect(report.usage.semanticSearchQueriesPerMonth).toBe(2);
     expect(report.usage.maxMembersPerDeployment).toBe(2);
+  });
+});
+
+/**
+ * `countUserMemos` answers from the maintained hourly counter rather than a
+ * `count(*)` over `memos`, so these pin the two to the same number. The
+ * lifecycle transitions are the interesting cases: each one moves a memo into
+ * or out of the quota'd set (normal + archived) and must move the count by
+ * exactly one, in the right direction.
+ */
+describe("countUserMemos matches a live scan", () => {
+  async function liveScan(userId: string) {
+    const rows = await db
+      .select({ status: memos.status })
+      .from(memos)
+      .where(eq(memos.userId, userId));
+    return rows.filter(
+      (row) => row.status === "normal" || row.status === "archived",
+    ).length;
+  }
+
+  it("tracks the quota'd set across every lifecycle transition", async () => {
+    const expectAgreement = async () => {
+      expect(await countUserMemos(db, owner.id)).toBe(await liveScan(owner.id));
+    };
+
+    expect(await countUserMemos(db, owner.id)).toBe(0);
+
+    const a = await createMemo(db, owner, {
+      content: "counted",
+      visibility: "private",
+      source: "web",
+    });
+    const b = await createMemo(db, owner, {
+      content: "also counted",
+      visibility: "private",
+      source: "web",
+    });
+    await expectAgreement();
+    expect(await countUserMemos(db, owner.id)).toBe(2);
+
+    // Archived still counts against the quota; trashed does not.
+    await updateMemo(db, owner, a.id, { status: "archived" });
+    await expectAgreement();
+    expect(await countUserMemos(db, owner.id)).toBe(2);
+
+    await updateMemo(db, owner, b.id, { status: "trashed" });
+    await expectAgreement();
+    expect(await countUserMemos(db, owner.id)).toBe(1);
+
+    // Restoring from the recycle bin brings it back.
+    await updateMemo(db, owner, b.id, { status: "normal" });
+    await expectAgreement();
+    expect(await countUserMemos(db, owner.id)).toBe(2);
+
+    // A hard delete removes it for good.
+    await hardDeleteMemo(db, owner, a.id);
+    await expectAgreement();
+    expect(await countUserMemos(db, owner.id)).toBe(1);
+  });
+
+  it("does not count another user's memos", async () => {
+    const member = await createFlaremoMember(db, {
+      email: "counter-member@example.com",
+      name: "Counter Member",
+    });
+    await createMemo(db, owner, {
+      content: "owner only",
+      visibility: "private",
+      source: "web",
+    });
+    expect(await countUserMemos(db, member.id)).toBe(0);
   });
 });

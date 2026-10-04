@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useMemo } from "react";
 import { toast } from "sonner";
 import type { Memo, MemoVisibility, Share } from "@/api";
 import { createTask, getMemoContext, getRelatedMemos, listShares } from "@/api";
@@ -80,23 +80,40 @@ export function useMemoCardActions({
     onError: (error) =>
       toast.error(errorMessage(error, t("toast.taskCreateFailed"))),
   });
-  const taskInteraction: MemoTaskInteraction | undefined =
-    !canManage || isTrashed
-      ? undefined
-      : {
-          onToggleTask: (lineIndex: number) => {
-            const next = toggleMemoTaskLine(memo.content, lineIndex);
-            if (next) {
-              void onUpdate(id, {
-                content: next,
-                visibility: memo.visibility,
-              });
-            }
+  // `mutate` is stable across renders; the hook result object is not, so the
+  // memoized interaction closes over the function, not the mutation state.
+  const convertTask = convertTaskMutation.mutate;
+  // Memoized because LazyMemoContent compares these callbacks by identity:
+  // rebuilding them every render makes every expanded card re-run the whole
+  // markdown pipeline on any parent state change.
+  const taskInteraction: MemoTaskInteraction | undefined = useMemo(
+    () =>
+      !canManage || isTrashed
+        ? undefined
+        : {
+            onToggleTask: (lineIndex: number) => {
+              const next = toggleMemoTaskLine(memo.content, lineIndex);
+              if (next) {
+                void onUpdate(id, {
+                  content: next,
+                  visibility: memo.visibility,
+                });
+              }
+            },
+            onConvertTask: (_lineIndex: number, text: string) => {
+              convertTask(text);
+            },
           },
-          onConvertTask: (_lineIndex: number, text: string) => {
-            convertTaskMutation.mutate(text);
-          },
-        };
+    [
+      canManage,
+      isTrashed,
+      memo.content,
+      memo.visibility,
+      id,
+      onUpdate,
+      convertTask,
+    ],
+  );
 
   // Visibility is a property of the record, changed in place from the ⋯ menu.
   // Going public provisions the read-only link; stepping back down revokes it,

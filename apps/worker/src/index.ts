@@ -14,11 +14,11 @@ import {
 } from "@flaremo/domain";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { getTrustedOrigins } from "./auth";
+import { getTrustedOrigins } from "./auth-env";
 import {
   assertTrustedCookieMutation,
   getFlareMoAuthHandler,
-  getFlareMoRuntime,
+  getFlareMoDb,
   getRequestContext,
   type HonoBindings,
 } from "./context";
@@ -30,20 +30,16 @@ import { betterAuthRateLimitBucket, rateLimitGuard } from "./rate-limit";
 
 // Cron/queue maintenance surface moved to its own module; re-exported so the
 // original import path (./index) keeps serving it verbatim.
-export { runScheduledMaintenance } from "./scheduled-tasks";
+export { runQueuedJobs, runScheduledMaintenance } from "./scheduled-tasks";
 
+import { mountLazyRoute, mountLazySsrPages } from "./lazy-routes";
 import { accountApi } from "./routes/account-api";
 import { adminApi } from "./routes/admin-api";
 import { appApi } from "./routes/app-api";
-import { registerArticlePage } from "./routes/article-page";
-import { articlesApi } from "./routes/articles-api";
 import { authApi } from "./routes/auth-api";
 import { brandingApi } from "./routes/branding-api";
-import { captureApi } from "./routes/capture-api";
 import { emailSettingsApi } from "./routes/email-settings-api";
-import { mcpApi, mcpStreamableApi } from "./routes/mcp";
 import { memoryApi } from "./routes/memory-api";
-import { memoryMcpApi } from "./routes/memory-mcp";
 import { memosApi } from "./routes/memos-api";
 import { memosConnectApi } from "./routes/memos-connect";
 import { isLegacyWireRequest, memosCurrentApi } from "./routes/memos-current";
@@ -55,10 +51,8 @@ import { pluginsApi } from "./routes/plugins-api";
 import { pluginsStoreApi } from "./routes/plugins-store-api";
 import { projectsApi } from "./routes/projects-api";
 import { publicApi } from "./routes/public-api";
-import { registerSharePage } from "./routes/share-page";
 import { tasksApi } from "./routes/tasks-api";
-import { voiceSettingsApi } from "./routes/voice-settings-api";
-import { runScheduledMaintenance } from "./scheduled-tasks";
+import { runQueuedJobs, runScheduledMaintenance } from "./scheduled-tasks";
 import { isKnownFrontendPath } from "./spa-routes";
 
 /**
@@ -218,7 +212,7 @@ export function createFlareMoApp(
   app.get("/api/app/auth-providers", async (c) => {
     // Direct resolve (no TTL cache): the login page must reflect an owner's
     // fresh provider config on the next reload.
-    const { db } = getFlareMoRuntime(c.env);
+    const db = getFlareMoDb(c.env);
     const oauth = await resolveOauthIntegration(c.env, db);
     return c.json(
       { google: Boolean(oauth.google), github: Boolean(oauth.github) },
@@ -228,8 +222,16 @@ export function createFlareMoApp(
   });
   app.route("/api/app/branding", brandingApi);
   app.route("/api/app/plugins", pluginsApi);
-  app.route("/api/app/voice-settings", voiceSettingsApi);
-  app.route("/api/app/capture", captureApi);
+  // Voice settings + capture (ASR) are the heavy low-traffic tree: lazily
+  // imported so the isolate only pays the ASR module graph when voice is used.
+  mountLazyRoute(app, "/api/app/capture", async () => {
+    const { captureApi } = await import("./routes/capture-api");
+    return captureApi;
+  });
+  mountLazyRoute(app, "/api/app/voice-settings", async () => {
+    const { voiceSettingsApi } = await import("./routes/voice-settings-api");
+    return voiceSettingsApi;
+  });
   app.route("/api/app/account", accountApi);
   // Registered before adminApi so these owner settings routes win; paths
   // adminApi owns (/plugins GET/PUT) still fall through to it.
@@ -239,17 +241,39 @@ export function createFlareMoApp(
   app.route("/api/app/admin", adminApi);
   app.route("/api/app/memory", memoryApi);
   app.route("/api/app/projects", projectsApi);
-  app.route("/api/app/articles", articlesApi);
+  // The articles API is a low-traffic tree with real sub-paths (`/:id`,
+  // `/:id/publish`, …), so the wildcard registration is required. Lazy mounting
+  // keeps the route module itself out of the isolate startup graph; the sub-app
+  // shape is the `app.route()` contract (paths relative to the mount prefix),
+  // which is what mountLazyRoute re-bases against.
+  mountLazyRoute(app, "/api/app/articles", async () => {
+    const { articlesApi } = await import("./routes/articles-api");
+    return articlesApi;
+  });
   app.route("/api/app/tasks", tasksApi);
   app.route("/api/app", appApi);
   app.route("/api/public", publicApi);
-  registerSharePage(app);
-  registerArticlePage(app);
+  // SSR public pages (share/article + sitemap/feed): the largest lazy win —
+  // marked/shiki-core/sitemap/feed only parse when one of the five public page
+  // paths is actually requested.
+  //
+  // Route lazy-mounting cannot reach everything, though, and it is worth being
+  // precise about why. The `@flaremo/domain` barrel is statically imported by
+  // this file for half a dozen unrelated symbols, and a value `export *` keeps
+  // its whole subtree alive no matter which routes are lazy. So `cel-js` stays
+  // on the startup graph by way of `memo-filter/environment`. `transliteration`
+  // used to be pinned the same way, through `articles.ts`; that one is gone,
+  // but only because `articles.ts` now defers the `slugify` import to call time
+  // rather than because the route moved. Verified by walking the bundler's
+  // static-import edges, not by reading a sourcemap — a module's code staying
+  // in the uploaded file says nothing about whether it runs at startup.
+  // Issue #138.
+  mountLazySsrPages(app);
   app.get("/favicon.ico", async (c) => {
     // Only browsers without a <link rel="icon"> hit this; redirect to the
     // custom favicon when one is configured, else to the bundled asset.
     try {
-      const branding = await getBranding(createDb(c.env.DB));
+      const branding = await getBranding(getFlareMoDb(c.env));
       if (branding.favicon) {
         return c.redirect(
           `/api/app/branding/favicon?v=${encodeURIComponent(branding.favicon.updated_at)}`,
@@ -262,14 +286,44 @@ export function createFlareMoApp(
     return c.redirect("/brand/flaremo-mark-light-300.png", 302);
   });
   app.route("/file", memosFileApi);
-  app.route("/mcp", mcpStreamableApi);
-  app.route("/memory/mcp", memoryMcpApi);
+  // MCP surfaces + memory MCP: low-traffic tooling endpoints; the route trees
+  // (and their module graphs) load on first MCP request instead of startup.
+  mountLazyRoute(app, "/mcp", async () => {
+    const { mcpStreamableApi } = await import("./routes/mcp");
+    return mcpStreamableApi;
+  });
+  mountLazyRoute(app, "/memory/mcp", async () => {
+    const { memoryMcpApi } = await import("./routes/memory-mcp");
+    return memoryMcpApi;
+  });
   app.route("/", memosConnectApi);
   app.route("/", memosSseApi);
   app.route("/api/v1", memosSocialApi);
   app.route("/api/v1", memosCurrentApi);
   app.route("/api/v1", memosApi);
-  app.route("/api/v1", mcpApi);
+  // The legacy JSON-RPC MCP is mcpApi.post("/mcp") mounted under /api/v1 in
+  // the static layout (public path /api/v1/mcp). Proxying the whole /api/v1
+  // prefix would shadow the later-registered /api/v1/openapi.json (Hono
+  // matches registration order for wildcard mounts), so the proxy targets
+  // exactly the one path the module serves. The path is re-based to /mcp —
+  // the sub-app's own route — and the execution context is passed through
+  // only when present (direct handler calls in tests omit it).
+  app.post("/api/v1/mcp", (c) => {
+    const url = new URL(c.req.url);
+    url.pathname = "/mcp";
+    const request = new Request(url, c.req.raw);
+    return import("./routes/mcp")
+      .then(({ mcpApi }) => {
+        let ctx: unknown;
+        try {
+          ctx = c.executionCtx;
+        } catch {
+          ctx = undefined;
+        }
+        return mcpApi.fetch(request, c.env, ctx as never);
+      })
+      .catch((error) => jsonError(c, error));
+  });
 
   app.get("/openapi.json", (c) =>
     c.json(
@@ -362,6 +416,27 @@ function logBackgroundTaskFailure(task: string, error: unknown) {
 }
 
 /**
+ * The limits half of runScheduledMaintenance's options, resolved once per
+ * scheduled lifecycle event. Queue jobs do not run the maintenance passes
+ * that consume these limits.
+ */
+async function maintenanceOptions(
+  env: FlareMoEnv,
+  resolvedOptions: ResolvedFlareMoOptions,
+  hasCustomUserPlanLimits: boolean,
+) {
+  return {
+    limits: await resolvedOptions.resolvePlanLimits(env),
+    userLimits: hasCustomUserPlanLimits
+      ? null
+      : parseUserPlanLimits(env.FLAREMO_USER_LIMITS_JSON),
+    resolveUserLimits: hasCustomUserPlanLimits
+      ? (userId: string) => resolvedOptions.resolveUserPlanLimits(env, userId)
+      : undefined,
+  };
+}
+
+/**
  * Build the complete Worker lifecycle for an installation of FlareMo.
  *
  * `createFlareMoApp` intentionally only assembles HTTP routes so tests and
@@ -388,7 +463,7 @@ export function createFlareMoWorker(
       // per-request query tax. The daily cron sweeps whatever reads missed.
       const method = request.method.toUpperCase();
       if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
-        const { db } = getFlareMoRuntime(env);
+        const db = getFlareMoDb(env);
         // `ExecutionContext` is part of the Worker handler contract. Keeping
         // this post-response work on `waitUntil` avoids changing the route-only
         // test semantics for direct handler calls without a Worker runtime.
@@ -410,41 +485,37 @@ export function createFlareMoWorker(
       return response;
     },
     async scheduled(controller, env) {
-      await runScheduledMaintenance(env, controller.scheduledTime, {
-        limits: await resolvedOptions.resolvePlanLimits(env),
-        userLimits: hasCustomUserPlanLimits
-          ? null
-          : parseUserPlanLimits(env.FLAREMO_USER_LIMITS_JSON),
-        resolveUserLimits: hasCustomUserPlanLimits
-          ? (userId) => resolvedOptions.resolveUserPlanLimits(env, userId)
-          : undefined,
-      });
+      await runScheduledMaintenance(
+        env,
+        controller.scheduledTime,
+        await maintenanceOptions(env, resolvedOptions, hasCustomUserPlanLimits),
+      );
     },
     async queue(batch, env) {
-      // The queue shares the same idempotent executor as scheduled maintenance
-      // so retries cannot diverge from the daily recovery path.
-      await runScheduledMaintenance(env, Date.now(), {
-        limits: await resolvedOptions.resolvePlanLimits(env),
-        userLimits: hasCustomUserPlanLimits
-          ? null
-          : parseUserPlanLimits(env.FLAREMO_USER_LIMITS_JSON),
-        resolveUserLimits: hasCustomUserPlanLimits
-          ? (userId) => resolvedOptions.resolveUserPlanLimits(env, userId)
-          : undefined,
-        // A malformed body can never become valid on retry — drop it here so
-        // the batch ack removes the poison message instead of looping.
-        removalJobIds: batch.messages.flatMap((message) => {
-          const jobId = (message.body as { jobId?: unknown }).jobId;
-          if (typeof jobId !== "string" || !jobId) {
-            console.warn(
-              JSON.stringify({
-                message: "Discarded malformed member-removal queue message",
-              }),
-            );
-            return [];
-          }
-          return [jobId];
-        }),
+      // Two message shapes share the consumer: {jobId} (member removal) and
+      // {taskId} (data export). Both run through the same idempotent
+      // executor as scheduled maintenance so retries cannot diverge from the
+      // daily recovery path. The queue path intentionally runs only these
+      // message-selected jobs; the scheduled handler owns the full sweep.
+      // A malformed body can never become valid on retry — drop it here so
+      // the batch ack removes the poison message instead of looping.
+      const removalJobIds: string[] = [];
+      const exportTaskIds: string[] = [];
+      for (const message of batch.messages) {
+        const body = message.body as { jobId?: unknown; taskId?: unknown };
+        if (typeof body?.jobId === "string" && body.jobId) {
+          removalJobIds.push(body.jobId);
+        } else if (typeof body?.taskId === "string" && body.taskId) {
+          exportTaskIds.push(body.taskId);
+        } else {
+          console.warn(
+            JSON.stringify({ message: "Discarded malformed queue message" }),
+          );
+        }
+      }
+      await runQueuedJobs(env, {
+        removalJobIds,
+        exportTaskIds,
       });
       for (const message of batch.messages) message.ack();
     },

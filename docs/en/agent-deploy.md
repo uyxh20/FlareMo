@@ -14,7 +14,7 @@ This runbook is for Codex, Claude Code, Cursor Agent, and other command-capable 
 
 ## Do Not
 
-- Do not add new CI workflows or deployment automation. `ci.yml` is the only check workflow (format / lint / typecheck / unit tests); `flaremo-update.yml` only prepares upstream update pull requests in user deployment repositories. GitHub Actions must never be the production deployer.
+- Do not add new CI workflows or deployment automation. The existing `.github/workflows/deploy-cloudflare.yml` is a controlled exception for self-hosted fork/deployment repositories: it runs on push to `main` and `workflow_dispatch`, and does not run in the upstream `realchendahuang/FlareMo` repository. `ci.yml` is the check workflow (format / lint / typecheck / unit tests); `flaremo-update.yml` only prepares upstream update pull requests in user deployment repositories. Do not turn the upstream or a regular repository into a push/CI production deployer.
 - Do not deploy before `pnpm verify`.
 - Do not commit `Temp/`, `node_modules/`, `dist/`, `.wrangler/`, `.dev.vars`, `backups/`, `test-results/`, or `playwright-report/`.
 - Do not add a second authentication system, shared password, or standalone bearer-token table outside Better Auth. Machine access uses the revocable `memos_pat_` PAT boundary.

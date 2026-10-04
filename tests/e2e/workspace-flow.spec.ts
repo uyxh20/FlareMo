@@ -1,5 +1,10 @@
 import type { MemoDto } from "@flaremo/contracts";
 import { expect, test } from "@playwright/test";
+import {
+  clearTimelineSearch,
+  mobileSearchInput,
+  openSemanticSearch,
+} from "./workspace-helpers";
 
 function note(id: string, overrides: Partial<MemoDto> = {}): MemoDto {
   return {
@@ -118,7 +123,12 @@ test("waits for composition to finish and cancels obsolete search requests", asy
     await route.fulfill({ json: { memos: [note(q ?? "initial")] } });
   });
   await page.goto("/");
-  const search = page.getByRole("textbox", { name: /search|搜索/i });
+  // The debounced inline input only exists below the `md` breakpoint; on
+  // desktop the same query goes through the spotlight dialog instead. This
+  // test is about the debounce and IME guards, which live on the inline input,
+  // so narrow the viewport to reach it.
+  await page.setViewportSize({ width: 480, height: 900 });
+  const search = mobileSearchInput(page);
   await search.dispatchEvent("compositionstart");
   await search.fill("输入中的文字");
   await page.waitForTimeout(400);
@@ -192,19 +202,28 @@ test("uses only semantic requests after choosing semantic search and preserves i
   await expect(
     page.getByText("Workspace note timeline", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /semantic search|语义搜索/i }).click();
+  // The semantic toggle lives inside the spotlight dialog now.
+  const dialog = await openSemanticSearch(page);
   await expect(
     page.getByText("Workspace note timeline", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("textbox", { name: /search|搜索/i }).fill("阅读的想法");
+  await dialog.getByPlaceholder(/找一找|Find:/i).fill("阅读的想法");
+  await dialog.getByPlaceholder(/找一找|Find:/i).press("Enter");
   await expect(
     page.getByRole("link", { name: /reading-notes.txt/i }),
   ).toBeVisible();
   expect(semanticQueries).toHaveLength(1);
-  expect(
-    ordinaryQueries.every((url) => !new URL(url).searchParams.has("q")),
-  ).toBe(true);
-  await page.getByRole("button", { name: /clear search|清除搜索/i }).click();
+  // The timeline itself must stop keyword-searching once semantic mode is on.
+  // The spotlight dialog runs its own preview probe against the same endpoint
+  // (page_size=6, the dialog's own cap) while the query is typed, which is
+  // intended — only the timeline's request (PAGE_SIZE 30) has to be free of
+  // the text.
+  const timelineQueriesWithText = ordinaryQueries.filter((url) => {
+    const params = new URL(url).searchParams;
+    return params.get("page_size") === "30" && params.has("q");
+  });
+  expect(timelineQueriesWithText).toEqual([]);
+  await clearTimelineSearch(page);
   await expect(
     page.getByText("Workspace note timeline", { exact: true }),
   ).toBeVisible();

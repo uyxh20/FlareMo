@@ -25,7 +25,7 @@ export function isActiveTeamMember(user: UserRow | null): user is UserRow {
 
 /** The viewer's team role, or null for a viewer outside the team. */
 export function teamRoleOf(user: TeamViewer | null): TeamRole | null {
-  if (!user || user.status !== "active") return null;
+  if (user?.status !== "active") return null;
   return user.teamRole ?? null;
 }
 
@@ -70,7 +70,7 @@ export function isInstanceOwner(user: UserRow | null): boolean {
  * trashed rows so they can manage them.
  */
 export function memoReadScope(user: TeamViewer | null): SQL {
-  if (!user || user.status !== "active") {
+  if (user?.status !== "active") {
     return user
       ? sql`0 = 1`
       : (and(eq(memos.visibility, "public"), eq(memos.status, "normal")) ??
@@ -118,7 +118,7 @@ export function spaceScope(
   space: MemoSpace | undefined,
 ): SQL | null {
   if (!space || space === "all") return null;
-  if (!user || user.status !== "active") return sql`0 = 1`;
+  if (user?.status !== "active") return sql`0 = 1`;
   if (space === "personal") return isNull(memos.teamId);
   const orgId = user.teamOrganizationId ?? null;
   if (!orgId) return sql`0 = 1`;
@@ -143,7 +143,7 @@ export function scopedReadScope(
 }
 
 export function canReadMemo(user: TeamViewer | null, memo: MemoRow): boolean {
-  if (!user || user.status !== "active") {
+  if (user?.status !== "active") {
     return !user && memo.visibility === "public" && memo.status === "normal";
   }
   if (memo.userId === user.id) return true;
@@ -166,7 +166,7 @@ export function canReadMemo(user: TeamViewer | null, memo: MemoRow): boolean {
  * canGovernMemo, the owner additionally hard-deletes via canDeleteMemo.
  */
 export function canEditMemo(user: TeamViewer | null, memo: MemoRow): boolean {
-  if (!user || user.status !== "active") return false;
+  if (user?.status !== "active") return false;
   return memo.userId === user.id;
 }
 
@@ -176,7 +176,7 @@ export function canEditMemo(user: TeamViewer | null, memo: MemoRow): boolean {
  * memo's own team.
  */
 export function canGovernMemo(user: TeamViewer | null, memo: MemoRow): boolean {
-  if (!user || user.status !== "active") return false;
+  if (user?.status !== "active") return false;
   if (memo.userId === user.id) return true;
   return (
     isTeamAdmin(user) &&
@@ -195,7 +195,7 @@ export function canGovernMemo(user: TeamViewer | null, memo: MemoRow): boolean {
  * B's memos, matching the read boundary.
  */
 export function canDeleteMemo(user: TeamViewer | null, memo: MemoRow): boolean {
-  if (!user || user.status !== "active") return false;
+  if (user?.status !== "active") return false;
   if (memo.userId === user.id) return true;
   return (
     isTeamOwner(user) &&

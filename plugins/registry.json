@@ -1,7 +1,7 @@
 {
   "specVersion": 1,
   "name": "FlareMo 官方目录",
-  "updatedAt": "2026-09-20T03:47:25.871Z",
+  "updatedAt": "2026-10-04T03:59:07.410Z",
   "plugins": [
     {
       "id": "flaremo-cards",
@@ -181,8 +181,8 @@
       },
       "artifact": {
         "url": "flaremo-cards/flaremo-cards-1.2.0.zip",
-        "sha256": "c11e9dc61cf4abcc7bbf26e4b5bdc11fc7f4d09e80219141e4dd2a23c77f3ba2",
-        "size": 198734
+        "sha256": "5e12564bba723309b9de0ff8a5e7220f87b151b5f1ef9f19672ca77278288ecb",
+        "size": 198528
       }
     },
     {
@@ -251,8 +251,8 @@
       },
       "artifact": {
         "url": "sandbox-demo/sandbox-demo-1.0.0.zip",
-        "sha256": "11dfdcd313d5aecc58ad2cdf615ca9ddae418f64784e275f0000754e7612c2a5",
-        "size": 111446
+        "sha256": "ef25546240e1d5cb16031e6502f85239803d3bd83f7d7f602c07456fe6ef5287",
+        "size": 111601
       }
     },
     {
@@ -304,8 +304,8 @@
       },
       "artifact": {
         "url": "kosx-pack/kosx-pack-1.0.0.zip",
-        "sha256": "9f77ee6fe446da844c9bb5fd3cf5e830645eedb5581aef775d32ccfc19dc23e9",
-        "size": 100072
+        "sha256": "7ce582173fb409eed2500687a4bf912cab3968e540ea5cd66b4f0ca744f772b3",
+        "size": 100050
       }
     }
   ]

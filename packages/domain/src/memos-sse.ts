@@ -2,7 +2,6 @@ import {
   type FlareMoDb,
   type MemosSseEventRow,
   memosSseEvents,
-  type UserRow,
 } from "@flaremo/db";
 import { and, asc, gt, inArray, lt, sql } from "drizzle-orm";
 import { isActiveTeamMember, type TeamViewer } from "./team-permissions";

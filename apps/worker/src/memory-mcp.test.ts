@@ -62,7 +62,7 @@ describe("memory MCP endpoint", () => {
     );
   }
 
-  it("serves initialize and tools/list with the six memory tools", async () => {
+  it("serves initialize and tools/list with the memory ledger tools", async () => {
     const init = await mcpPost({
       jsonrpc: "2.0",
       id: 1,
@@ -84,6 +84,7 @@ describe("memory MCP endpoint", () => {
       "memory_bootstrap",
       "memory_recall",
       "memory_remember",
+      "memory_compile",
       "memory_checkpoint",
       "memory_link",
       "memory_forget",

@@ -14,7 +14,7 @@ import {
   createFlaremoMemberWithLink,
   type PlanLimits,
 } from "@flaremo/domain";
-import { createFlareMoAuth } from "../auth";
+import { loadAuthFactory } from "../context";
 import type { FlareMoEnv } from "../env";
 
 export type CompatMemberRegistrationInput = {
@@ -33,6 +33,7 @@ export async function registerCompatMember(
   // Pre-check before the Better Auth identity exists so a spent member
   // quota cannot orphan an auth user.
   await assertMemberQuota(input.db, input.limits);
+  const { createFlareMoAuth } = await loadAuthFactory();
   const auth = createFlareMoAuth(input.env, input.db, {
     allowBootstrapSignUp: true,
   });

@@ -77,8 +77,7 @@ async function run() {
 
   try {
     gate = await startCaptureAccessGate({
-      notice:
-        "这是 Mac mini 本地验收环境。保存内容只写入本机，不会进入正式 FlareMo。",
+      notice: "这是本地验收环境。保存内容只写入本机，不会进入正式 FlareMo。",
       port: options.gatePort,
       upstreamPort: options.appPort,
     });

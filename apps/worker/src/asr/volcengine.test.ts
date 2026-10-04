@@ -125,7 +125,7 @@ describe("Volcano Engine (Doubao) streaming", () => {
   it("goes ready on the first server response and emits definite sentences", async () => {
     const context = setup();
     const { socket, sentence, abort, error } = context;
-    const connection = await ready(context);
+    const _connection = await ready(context);
     expect(error).not.toHaveBeenCalled();
     const handshake = new Uint8Array(socket.sent[0] as ArrayBuffer);
     expect((handshake[1] ?? 0) >> 4).toBe(0b0001); // full client request
@@ -207,7 +207,7 @@ describe("Volcano Engine (Doubao) streaming", () => {
   it("ignores the silence code 1013 instead of failing the session", async () => {
     const context = setup();
     const { socket, sentence, error } = context;
-    const connection = await ready(context);
+    const _connection = await ready(context);
     socket.binaryEvent(
       serverResponseFrame({ code: 1013, message: "no valid speech" }),
     );

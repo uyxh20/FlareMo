@@ -37,6 +37,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.8
         version: 0.31.10
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.4.0)
@@ -269,9 +272,6 @@ importers:
       tw-animate-css:
         specifier: ^1.4.0
         version: 1.4.0
-      unified:
-        specifier: ^11.0.5
-        version: 11.0.5
     devDependencies:
       '@types/node':
         specifier: ^24
@@ -294,6 +294,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       vite:
         specifier: ^8
         version: 8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.1)
@@ -345,12 +348,6 @@ importers:
       marked-gfm-heading-id:
         specifier: ^4.1.4
         version: 4.1.4(marked@17.0.6)
-      marked-highlight:
-        specifier: ^2.2.4
-        version: 2.2.4(marked@17.0.6)
-      schema-dts:
-        specifier: ^2.0.0
-        version: 2.0.0(typescript@5.9.3)
       shiki:
         specifier: ^4.4.3
         version: 4.4.3
@@ -370,6 +367,9 @@ importers:
       '@connectrpc/connect-web':
         specifier: 2.1.1
         version: 2.1.1(@bufbuild/protobuf@2.12.0)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.12.0))
+      schema-dts:
+        specifier: ^2.0.0
+        version: 2.0.0(typescript@5.9.3)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -3528,11 +3528,6 @@ packages:
     resolution: {integrity: sha512-CspnvVfHSkb/znqdPS4jUR8HtCjq3M/DnrsJCrfLBLvdrgbemmoINKpeWKQYkBiXAoBGejw0cV7xzqrPdup3WA==}
     peerDependencies:
       marked: '>=13 <19'
-
-  marked-highlight@2.2.4:
-    resolution: {integrity: sha512-PZxisNMJDduSjc0q6uvjsnqqHCXc9s0eyzxDO9sB1eNGJnd/H1/Fu+z6g/liC1dfJdFW4SftMwMlLvsBhUPrqQ==}
-    peerDependencies:
-      marked: '>=4 <19'
 
   marked@17.0.6:
     resolution: {integrity: sha512-gB0gkNafnonOw0obSTEGZTT86IuhILt2Wfx0mWH/1Au83kybTayroZ/V6nS25mN7u8ASy+5fMhgB3XPNrOZdmA==}
@@ -7246,10 +7241,6 @@ snapshots:
   marked-gfm-heading-id@4.1.4(marked@17.0.6):
     dependencies:
       github-slugger: 2.0.0
-      marked: 17.0.6
-
-  marked-highlight@2.2.4(marked@17.0.6):
-    dependencies:
       marked: 17.0.6
 
   marked@17.0.6: {}

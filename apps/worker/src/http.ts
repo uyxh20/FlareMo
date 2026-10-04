@@ -2,6 +2,7 @@ import { DomainError } from "@flaremo/domain";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { HonoBindings } from "./context";
+import { controlledErrorStatus } from "./memos-compat/errors";
 
 export function jsonError(c: Context<HonoBindings>, error: unknown) {
   if (error instanceof DomainError) {
@@ -9,6 +10,22 @@ export function jsonError(c: Context<HonoBindings>, error: unknown) {
       { error: { message: error.message } },
       toContentfulStatus(error.status),
     );
+  }
+
+  // Framework errors that carry their own 4xx — Better Auth's APIError is the
+  // main source — are client mistakes with a caller-facing message, and
+  // flattening them into "Internal server error" hid real causes like a
+  // duplicate email. Only 4xx and only a non-empty message qualify; anything
+  // else keeps the generic body so driver and internal detail cannot leak.
+  const controlledStatus = controlledErrorStatus(error);
+  if (controlledStatus !== null) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) {
+      return c.json(
+        { error: { message } },
+        toContentfulStatus(controlledStatus),
+      );
+    }
   }
 
   console.error(

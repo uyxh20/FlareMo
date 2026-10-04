@@ -15,7 +15,7 @@ import {
 import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
 import { z } from "zod";
-import { getFlareMoRuntime, type HonoBindings } from "../../context";
+import { getFlareMoAuth, type HonoBindings } from "../../context";
 import { jsonError } from "../../http";
 import {
   readerExpiresAt,
@@ -64,7 +64,7 @@ export function registerReaderSeatsRoutes(app: Hono<HonoBindings>) {
           }
         }
 
-        const { auth } = getFlareMoRuntime(c.env);
+        const auth = await getFlareMoAuth(c.env);
         const existingAuthUser = await auth.findAuthUserByEmail(email);
         const memberRow = existingAuthUser
           ? await getFlaremoUserByAuthUserId(context.db, existingAuthUser.id)
@@ -265,7 +265,7 @@ export function registerReaderSeatsRoutes(app: Hono<HonoBindings>) {
         throw new NotFoundError("Active member not found");
       }
       const membership = await teamMembershipInfo(context.db, id);
-      if (!membership || membership.role !== "reader") {
+      if (membership?.role !== "reader") {
         throw new NotFoundError("Reader seat not found");
       }
       await revokeTeamReader(context.db, authUserId);

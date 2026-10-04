@@ -22,6 +22,7 @@ const manifestPath = path.join(outDir, ".vite", "manifest.json");
 
 const SUPPORTED_LOCALES = ["en", "zh", "ja", "fr", "es", "ko", "ru", "ar"];
 
+/** Keep in sync with the ZH_DOCS/EN_DOCS metadata in docs-source.generated.ts. */
 const DOC_SLUGS = [
   "agent-deploy",
   "agent-ingestion",
@@ -29,6 +30,7 @@ const DOC_SLUGS = [
   "architecture-notes",
   "deploy",
   "design-system",
+  "github-action-deploy",
   "maintenance",
   "memos-compatibility",
   "memos-ecosystem",

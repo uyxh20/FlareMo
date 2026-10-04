@@ -1,7 +1,7 @@
 import {
   type ListMemosQuery,
   type MemoSpace,
-  type MemoStatsQuery,
+  type MemoStatsQueryInput,
   type MemoStatsResponse,
   parseMemoSearchQuery,
 } from "@flaremo/contracts";
@@ -10,6 +10,12 @@ import { attachments, memos, memoTags } from "@flaremo/db";
 import { and, asc, desc, eq, gt, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "./errors";
 import { compileMemoFilter } from "./memo-filter";
+import {
+  hourRangeForLocalWindow,
+  localDateOfUtcHour,
+  readHourlyCountsInRange,
+  readHourlyCountTotals,
+} from "./memo-hourly-counts";
 import { DEFAULT_MEMO_FILTER_SCAN_LIMIT } from "./memos-helpers";
 import {
   buildActivity,
@@ -62,7 +68,9 @@ export async function listMemosForViewer(
   options: MemoFilterOptions = {},
 ): Promise<MemoListResult> {
   const search = parseMemoSearchQuery(query.q);
-  const celFilter = compileMemoFilter(query.filter);
+  // Awaited: compiling a CEL expression now resolves the parser on demand,
+  // so a query without `filter` never loads it at all.
+  const celFilter = await compileMemoFilter(query.filter);
   const cursor = query.page_token
     ? decodePageToken(query.page_token, query.order_by)
     : undefined;
@@ -294,6 +302,19 @@ export async function listMemoTotalsByUser(db: FlareMoDb) {
   return totals;
 }
 
+/**
+ * The activity window the heatmap used before `days` became a parameter, and
+ * the default for any caller that does not ask for a specific span.
+ */
+export const DEFAULT_ACTIVITY_DAYS = 84;
+
+/**
+ * Longest window the endpoint will serve: one year, the span the heatmap's year
+ * view renders. Bounding it keeps a single request from scanning the counter
+ * table end to end.
+ */
+export const MAX_ACTIVITY_DAYS = 366;
+
 export type MemoStatsOptions = {
   /**
    * Space partition for the workspace sidebar. Absent keeps the historical
@@ -304,20 +325,129 @@ export type MemoStatsOptions = {
   space?: MemoSpace;
 };
 
+/** Tag counts for one author's normal + archived memos, name-ascending. */
+async function readOwnCorpusTagCounts(db: FlareMoDb, userId: string) {
+  return db
+    .select({
+      name: memoTags.tag,
+      count: sql<number>`COUNT(*)`.mapWith(Number),
+    })
+    .from(memoTags)
+    .innerJoin(memos, eq(memoTags.memoId, memos.id))
+    .where(
+      and(
+        eq(memoTags.userId, userId),
+        inArray(memos.status, ["normal", "archived"]),
+      ),
+    )
+    .groupBy(memoTags.tag)
+    .orderBy(asc(memoTags.tag));
+}
+
+/**
+ * Stats for the viewer's own corpus, answered from `memo_hourly_counts`.
+ *
+ * This is the path the web workspace and the Memos-compatible clients take, and
+ * the one that used to cost ~20k rows_read per request: three full scans of
+ * `memos` plus a fourth for `active_days`, on a 4.7k-memo instance. Every number
+ * here is now derived from counter rows, so the cost tracks the hours the user
+ * actually wrote at rather than their total memo count.
+ *
+ * `counts` and `active_days` are exact: the counters are per status and per UTC
+ * hour, and summing them yields the same totals the live `SUM(CASE WHEN …)`
+ * produced. `activity` re-buckets UTC hours into the caller's time zone — see
+ * {@link localDateOfUtcHour} for the one boundary case that is approximate.
+ *
+ * `tags` still reads `memo_tags` live. That is the one number here without a
+ * counter: per-tag all-time counts are a different shape from a date-bucketed
+ * one, and a second maintenance path (create, edit, rename, delete, import) is
+ * not worth the drift surface for the smaller share of the cost.
+ */
+async function getOwnCorpusMemoStats(
+  db: FlareMoDb,
+  user: TeamViewer,
+  input: {
+    formatLocalDate: (date: Date) => string;
+    anchorKey: string;
+    days: number;
+  },
+): Promise<MemoStatsResponse> {
+  const { formatLocalDate, anchorKey, days } = input;
+  const wantedDates = new Set(
+    buildActivity(anchorKey, new Map(), days).map((day) => day.date),
+  );
+  const { fromHour, toHour } = hourRangeForLocalWindow(anchorKey, days);
+  const [totals, hourRows, tagRows] = await Promise.all([
+    readHourlyCountTotals(db, user.id),
+    readHourlyCountsInRange(db, user.id, fromHour, toHour),
+    readOwnCorpusTagCounts(db, user.id),
+  ]);
+  const localCounts = new Map<string, number>();
+  for (const row of hourRows) {
+    const key = localDateOfUtcHour(row.utcHour, formatLocalDate);
+    if (!wantedDates.has(key)) continue;
+    localCounts.set(
+      key,
+      (localCounts.get(key) ?? 0) + row.normal + row.archived,
+    );
+  }
+  return {
+    counts: {
+      normal: totals.normal,
+      archived: totals.archived,
+      trashed: totals.trashed,
+      total: totals.normal + totals.archived,
+    },
+    active_days: totals.activeDays,
+    tags: tagRows,
+    activity: buildActivity(anchorKey, localCounts, days),
+  };
+}
+
 export async function getMemoStats(
   db: FlareMoDb,
   user: TeamViewer,
-  query: MemoStatsQuery,
+  query: MemoStatsQueryInput,
   options: MemoStatsOptions = {},
 ): Promise<MemoStatsResponse> {
-  const dateKeyFormatter = createDateKeyFormatter(query.time_zone);
-  const todayKey = dateKeyFormatter(new Date());
-  const recentCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const dateKeyFormatter = createDateKeyFormatter(query.time_zone ?? "UTC");
+  // The activity window ends on the client-supplied anchor when present (the
+  // year view requests the navigated year's Dec 31 so historical years render
+  // their own cells, issue #144); otherwise today. `counts` and `active_days`
+  // are all-time and deliberately unaffected by the anchor.
+  const anchorKey = query.until ?? dateKeyFormatter(new Date());
+  // Clamped again here because the schema is not the only caller. The
+  // `Number.isFinite` guard matters: a NaN would survive Math.min/Math.max
+  // (both propagate it) and then blow up inside `toISOString()` on an Invalid
+  // Date, turning a bad argument into a 500 instead of a wrong-but-served
+  // window.
+  const requestedDays = query.days ?? DEFAULT_ACTIVITY_DAYS;
+  const days = Number.isFinite(requestedDays)
+    ? Math.min(MAX_ACTIVITY_DAYS, Math.max(1, Math.trunc(requestedDays)))
+    : DEFAULT_ACTIVITY_DAYS;
 
-  const corpus = options.space
-    ? scopedReadScope(user, options.space)
-    : eq(memos.userId, user.id);
+  // The counter only describes the viewer's own memos. A space-partitioned
+  // query widens the corpus to team and public memos authored by other people,
+  // which no per-author counter can reproduce, so those keep the live queries.
+  if (!options.space) {
+    return getOwnCorpusMemoStats(db, user, {
+      formatLocalDate: dateKeyFormatter,
+      anchorKey,
+      days,
+    });
+  }
+
+  const corpus = scopedReadScope(user, options.space);
   const normalOrArchived = inArray(memos.status, ["normal", "archived"]);
+  // A local-day window can start up to 15 hours before its first UTC day, so
+  // the raw-row cutoff is padded to match `hourRangeForLocalWindow` (+1 day
+  // covers that pad). Anchored at the window's end day, not at now, so a
+  // historical anchor reaches back into its own year.
+  const anchorUtcStart = new Date(`${anchorKey}T00:00:00Z`).getTime();
+  const recentCutoff = new Date(
+    (Number.isNaN(anchorUtcStart) ? Date.now() : anchorUtcStart) -
+      (days + 1) * 24 * 60 * 60 * 1000,
+  );
 
   const [countRow, tagRows, activeDayRows, recentRows, spaceCountRows] =
     await Promise.all([
@@ -350,14 +480,7 @@ export async function getMemoStats(
         })
         .from(memoTags)
         .innerJoin(memos, eq(memoTags.memoId, memos.id))
-        .where(
-          options.space
-            ? and(corpus, normalOrArchived)
-            : and(
-                eq(memoTags.userId, user.id),
-                inArray(memos.status, ["normal", "archived"]),
-              ),
-        )
+        .where(and(corpus, normalOrArchived))
         .groupBy(memoTags.tag)
         .orderBy(asc(memoTags.tag)),
       db
@@ -376,26 +499,21 @@ export async function getMemoStats(
           ),
         ),
       // Sidebar badges for the two spaces, computed under the same read
-      // boundary as the mixed timeline. Only requested with a space.
-      options.space
-        ? Promise.all([
-            db
-              .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
-              .from(memos)
-              .where(
-                and(
-                  scopedReadScope(user, "personal"),
-                  eq(memos.status, "normal"),
-                ),
-              ),
-            db
-              .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
-              .from(memos)
-              .where(
-                and(scopedReadScope(user, "team"), eq(memos.status, "normal")),
-              ),
-          ])
-        : undefined,
+      // boundary as the mixed timeline.
+      Promise.all([
+        db
+          .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+          .from(memos)
+          .where(
+            and(scopedReadScope(user, "personal"), eq(memos.status, "normal")),
+          ),
+        db
+          .select({ count: sql<number>`COUNT(*)`.mapWith(Number) })
+          .from(memos)
+          .where(
+            and(scopedReadScope(user, "team"), eq(memos.status, "normal")),
+          ),
+      ]),
     ]);
 
   const activityCounts = new Map<string, number>();
@@ -406,25 +524,21 @@ export async function getMemoStats(
     activityCounts.set(key, (activityCounts.get(key) ?? 0) + 1);
   }
 
-  const [personalCountRows, teamCountRows] = spaceCountRows ?? [[], []];
+  const [personalCountRows, teamCountRows] = spaceCountRows;
   return {
     counts: {
       normal: countRow?.normal ?? 0,
       archived: countRow?.archived ?? 0,
       trashed: countRow?.trashed ?? 0,
       total: countRow?.total ?? 0,
-      ...(options.space
-        ? {
-            spaces: {
-              personal: personalCountRows[0]?.count ?? 0,
-              team: teamCountRows[0]?.count ?? 0,
-            },
-          }
-        : {}),
+      spaces: {
+        personal: personalCountRows[0]?.count ?? 0,
+        team: teamCountRows[0]?.count ?? 0,
+      },
     },
     active_days: activeDayRows.length,
     tags: tagRows,
-    activity: buildActivity(todayKey, activityCounts),
+    activity: buildActivity(anchorKey, activityCounts, days),
   };
 }
 
@@ -464,6 +578,30 @@ export async function getMemoByIdForViewer(
   }
 
   return row;
+}
+
+/**
+ * Batched sibling of {@link getMemoByIdForViewer}: resolve many memo ids under
+ * the same read scope in one query. Callers that previously looped the
+ * single-id helper can now hydrate relations and related memos from a map; a
+ * missing key means exactly what the single-id helper's NotFoundError meant.
+ */
+export async function getMemosByIdsForViewer(
+  db: FlareMoDb,
+  user: TeamViewer | null,
+  ids: string[],
+  options: { includeDeleted?: boolean } = {},
+): Promise<Map<string, MemoRow>> {
+  if (ids.length === 0) return new Map();
+  const filters = [inArray(memos.id, ids), memoReadScope(user)];
+  if (!options.includeDeleted) {
+    filters.push(inArray(memos.status, ["normal", "archived", "trashed"]));
+  }
+  const rows = await db
+    .select()
+    .from(memos)
+    .where(and(...filters.filter(Boolean)));
+  return new Map(rows.map((row) => [row.id, row] as const));
 }
 
 export async function getMemoByClientId(

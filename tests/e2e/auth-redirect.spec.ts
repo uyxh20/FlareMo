@@ -27,10 +27,16 @@ test("returns a deep-linked visitor to their destination after sign-in", async (
   await page.goto("/account");
   await expect(page).toHaveURL(/\/login\?redirect=%2Faccount$/);
 
-  await page.getByRole("textbox", { name: /^邮箱$|^Email$/i }).fill(E2E_EMAIL);
+  // The sign-in field accepts either an email or a username, so its accessible
+  // name is "邮箱或用户名" / "Email or username" — not the bare "邮箱" this
+  // spec still matched after dual-mode login landed (4d314c8).
   await page
-    .getByRole("textbox", { name: /^密码$|^Password$/i })
-    .fill(TEST_PASSWORD);
+    .getByRole("textbox", { name: /邮箱或用户名|Email or username/i })
+    .fill(E2E_EMAIL);
+  // `getByLabel`, not `getByRole("textbox")`: the password field renders
+  // `<input type="password">`, which has no implicit ARIA role, so a role
+  // query can never match it.
+  await page.getByLabel(/^密码$|^Password$/i).fill(TEST_PASSWORD);
   await page.getByRole("button", { name: /^登录$|^Sign in$/i }).click();
 
   await expect(page).toHaveURL(/\/account$/);

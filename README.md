@@ -45,7 +45,7 @@ FlareMo answers a simpler question: **Can you get a 24/7 online, resilient, glob
 
 - **Truly Serverless**: Both code and static assets run on Cloudflare Workers edge nodes near you with millisecond latency.
 - **Enterprise-grade durability out of the box**: Cloudflare D1 handles notes and metadata; Cloudflare R2 stores media attachments with multi-region replication.
-- **AI-Native Second Brain**: Built-in MCP endpoints and Agent Memory hub allow AI agents (Claude, Cursor, Codex, ChatGPT) to read and update your long-term preferences and memory scopes.
+- **AI-Native Second Brain**: Agent Memory hub ships a CLI and a cross-agent skill so AI agents (Claude, Cursor, Codex, ChatGPT, ZCode) can read and update your long-term preferences and memory scopes; MCP endpoints are also available.
 - **Quiet for one, powerful for many**: Default is an encrypted, private single-user sanctuary. Enable team mode, and it instantly transforms into a collaborative workspace with roles and three-tier visibility.
 - **Minimal, not simplistic**: The interface stays quiet and every control earns its place — nothing decorative shouting for attention, nothing useful missing.
 
@@ -60,10 +60,10 @@ FlareMo answers a simpler question: **Can you get a 24/7 online, resilient, glob
 - **Thought activation**: Built-in **Daily Review** (on this day), **Random Walk** (wandering through tag and backlink graphs with postcard summaries), and related note recommendations.
 - **Revision history**: Full version diffs and one-click historical restore.
 
-### 2. AI Long-term Memory & Native MCP
-- **Agent Memory**: Through `/memory/mcp`, AI agents can record and update cross-session long-term memory (preferences, project decisions, constraints, lessons).
+### 2. AI Long-term Memory (CLI + Skills)
+- **Agent Memory**: Ships `flaremo` CLI and the `flaremo-memory` skill — agents record and update cross-session long-term memory (preferences, project decisions, constraints, lessons) through a shared REST base.
 - **Human in the loop**: Review, verify, lock, or correct AI-recorded memories at `/memory`.
-- **Open ecosystem**: Standard `/mcp` (Streamable HTTP MCP) endpoint to query and append notes programmatically.
+- **Open ecosystem**: CLI + Skills are the recommended path; `/memory/mcp` (Streamable HTTP MCP) and `/mcp` endpoints are available for existing MCP clients.
 
 ### 3. Projects & Tasks
 - **Group work under projects**: Organize notes and to-dos into projects, with a kanban board (drag between status columns), priorities, manual sort order, and due dates.
@@ -76,6 +76,7 @@ FlareMo answers a simpler question: **Can you get a 24/7 online, resilient, glob
 
 ### 5. Team Collaboration & 3-Tier Visibility
 - **Role governance**: `owner`, `admin`, and `member` roles. Admins invite members via one-time activation links (members choose their own passwords; admins never handle plaintext credentials).
+- **Team project workbench**: `/team-projects` collects every team project into one view — owner, status, current progress, next step, and follow-up date — and opens a detail page to maintain the summary, log progress and meeting outcomes, and upload reference files. A project is an ordinary team memo recognized by a `kosx-pm` metadata block in its body, so notes that are not projects stay untouched in the timeline.
 - **3-tier visibility**:
   - 🔒 **Private**: Only author can view.
   - 👥 **Team**: Shared read-only with active team members.
@@ -99,12 +100,12 @@ FlareMo answers a simpler question: **Can you get a 24/7 online, resilient, glob
 
 ---
 
-### 9. 插件系统：卡片即插件
-- **五张内置卡片**：素白、日签、票根、明信片，以及自绘 canvas 的邮戳演示卡。
-- **商店与管理**：账户设置里浏览目录、一键安装（sha256 校验）、启用/停用、排序、设默认、隐藏；官方目录在 [flaremo.app/plugins](https://flaremo.app/plugins/registry.json)。
-- **可上传**：管理员可上传本地插件包——只存在于自己实例，永不外传。
-- **可创作**：`pnpm plugin:new` 生成脚手架、`pnpm plugin:check` 用与实例安装**完全相同**的规则校验、`pnpm plugins:build` 出包；document 卡是纯 JSON 排版，sandbox 卡写自己的 HTML/CSS/JS。详见 [插件文档](./docs/plugins.md)。
-- **默认安全**：卡片跑在不透明源沙箱里，**无任何网络访问**；社区/品牌插件默认关闭，管理员显式启用才可见。
+### 9. Plugin System: Cards as Plugins
+- **Five built-in cards**: Plain, Daily, Ticket, Postcard, plus a canvas-drawn Postmark demo.
+- **Store and curation**: browse directories, one-click install (SHA-256 verified), enable/disable, reorder, set the default, hide — all in account settings. The official directory lives at [flaremo.app/plugins](https://flaremo.app/plugins/registry.json).
+- **Upload your own**: admins can install a local package — it exists only on that instance and is never sent anywhere.
+- **Authoring tools**: `pnpm plugin:new` scaffolds, `pnpm plugin:check` validates with the **exact rules instances enforce on install**, `pnpm plugins:build` packages. Document cards are pure JSON layouts; sandbox cards run your own HTML/CSS/JS. See the [plugin guide](./docs/en/plugins.md).
+- **Safe by default**: cards run in an opaque-origin sandbox with **no network access**; community and brand packs stay off until an admin enables them.
 
 ## 📊 How Generous Is Cloudflare's Free Tier?
 
@@ -140,12 +141,12 @@ Clones the repository into your GitHub account and provisions D1, R2, Queues, an
 
 ### Method 2: GitHub Action (self-hosted fork)
 
-On your fork, **Deploy to Cloudflare** runs on push to `main` and on a manual Actions run: provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/github-action-deploy.md](./docs/github-action-deploy.md) or the [English guide](./docs/en/github-action-deploy.md).
+On your fork, **Deploy to Cloudflare** runs on push to `main` and on a manual Actions run: provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
 
 ### Method 3: Deploy with an AI Agent (Recommended)
 
-Give the repository to an agent capable of executing terminal commands (e.g. Claude Code, Cursor Agent, Codex) along with [docs/agent-deploy.md](./docs/agent-deploy.md):
-> "Please deploy FlareMo to my Cloudflare account following docs/agent-deploy.md."
+Give the repository to an agent capable of executing terminal commands (e.g. Claude Code, Cursor Agent, Codex) along with [docs/en/agent-deploy.md](./docs/en/agent-deploy.md):
+> "Please deploy FlareMo to my Cloudflare account following docs/en/agent-deploy.md."
 
 ---
 
@@ -179,7 +180,7 @@ pnpm deploy
 (The full `pnpm verify` gate runs only when the maintainer explicitly asks for it.)
 Visit your production domain at `/setup` and enter the `FLAREMO_BOOTSTRAP_SECRET` to initialize your Owner account.
 
-Detailed guides: [Deployment Guide](./docs/deploy.md) · [GitHub Action deploy](./docs/github-action-deploy.md) · [Update Guide](./docs/update.md).
+Detailed guides: [Deployment Guide](./docs/en/deploy.md) · [GitHub Action deploy](./docs/en/github-action-deploy.md) · [Update Guide](./docs/en/update.md).
 
 ---
 
@@ -203,8 +204,7 @@ flowchart LR
 - **Storage**: Cloudflare R2
 - **Auth**: Better Auth (HttpOnly cookie session + revocable `memos_pat_`)
 - **AI & Search**: Workers AI, Vectorize, SQLite FTS5
-- **Plugins**: slot-based extension platform ([standard](./docs/plugin-platform-standard.md), [guide](./docs/plugins.md)); packages live in R2, sandboxed cards run without network access
-- **Plugins**: slot-based extension platform ([standard](./docs/plugin-platform-standard.md), [guide](./docs/plugins.md)); packages live in R2, sandboxed cards run without network access
+- **Plugins**: slot-based extension platform ([standard](./docs/plugin-platform-standard.md), [guide](./docs/en/plugins.md)); packages live in R2, sandboxed cards run without network access
 
 ---
 

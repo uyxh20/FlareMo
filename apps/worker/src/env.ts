@@ -27,6 +27,10 @@ export type FlareMoEnv = Env & {
   // https://api.minimaxi.com; https://api.minimax.io switches international).
   FLAREMO_ASR_MINIMAX_API_KEY?: string;
   FLAREMO_ASR_MINIMAX_BASE_URL?: string;
+  // Optional offload queues: bound deployments hand durable jobs to the
+  // consumer (member removal: {jobId}; export tasks: {taskId}) which runs the
+  // same idempotent executor as the daily cron. Unbound deployments run the
+  // executors inline and rely on the cron reconciler alone.
   MEMBER_REMOVAL_QUEUE?: Queue<{ jobId: string }>;
   DATA_EXPORT_QUEUE?: Queue<{ taskId: string }>;
   BETTER_AUTH_SECRET?: string;
@@ -95,6 +99,13 @@ export type FlareMoEnv = Env & {
   // hard-deleted (with their R2 attachments) by the daily sweep. Unset = 30;
   // 0 disables the purge entirely.
   FLAREMO_TRASH_RETENTION_DAYS?: string;
+  // Memory dreaming (see docs/memory-ledger-design.md §VI.8). The daily
+  // extraction runs on the Workers AI binding; "off" disables it. The model
+  // is optional (default @cf/meta/llama-3.1-8b-instruct) and the daily
+  // proposal quota defaults to 5 notes.
+  FLAREMO_MEMORY_DREAMING?: string;
+  FLAREMO_MEMORY_DREAMING_MODEL?: string;
+  FLAREMO_MEMORY_PROPOSAL_DAILY_LIMIT?: string;
   // Optional Cloudflare account analytics for the owner usage panel (see
   // src/cf-analytics.ts). Written by `pnpm setup:usage`; token needs only the
   // "Account Analytics: Read" permission. Queries are filtered down to this

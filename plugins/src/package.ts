@@ -1,6 +1,18 @@
-import { unzipSync, type Zippable, zipSync } from "fflate";
+import type { Zippable } from "fflate";
 import { checkPluginFiles } from "./check";
 import { PLUGIN_PACKAGE_LIMITS, type PluginManifest } from "./spec";
+
+/**
+ * The zip codec is loaded on first use.
+ *
+ * `fflate`'s browser bundle is ~89 KiB and this module is re-exported through
+ * the plugins barrel, which the worker imports on its request path — so the
+ * codec sat in every isolate's startup parse for a feature that only runs when
+ * an operator installs a plugin (or when the build scripts package one). Making
+ * the two entry points async is the whole cost: neither is on a hot path, and
+ * `import()` resolves from the module registry after the first call.
+ */
+const loadZip = () => import("fflate");
 
 /**
  * Plugin package = the zip distributed by the store and produced by
@@ -65,7 +77,9 @@ function assertSafePath(name: string): string | null {
  * extracted (prefix-stripped) files plus any structural problems, so the CLI
  * can report everything in one pass.
  */
-export function extractPluginPackage(bytes: Uint8Array): ExtractedPackage {
+export async function extractPluginPackage(
+  bytes: Uint8Array,
+): Promise<ExtractedPackage> {
   const problems: string[] = [];
   if (bytes.byteLength === 0) {
     return { files: {}, rootFolder: null, problems: ["package is empty"] };
@@ -83,6 +97,7 @@ export function extractPluginPackage(bytes: Uint8Array): ExtractedPackage {
   let totalBytes = 0;
   let fileCount = 0;
   try {
+    const { unzipSync } = await loadZip();
     raw = unzipSync(bytes, {
       filter: (file) => {
         fileCount += 1;
@@ -153,8 +168,10 @@ export function extractPluginPackage(bytes: Uint8Array): ExtractedPackage {
  * used by the instance on upload/install so a package that fails the author's
  * `pnpm plugin:check` can never be installed.
  */
-export function readPluginPackage(bytes: Uint8Array): PluginPackage {
-  const extracted = extractPluginPackage(bytes);
+export async function readPluginPackage(
+  bytes: Uint8Array,
+): Promise<PluginPackage> {
+  const extracted = await extractPluginPackage(bytes);
   if (extracted.problems.length > 0) {
     throw new Error(extracted.problems.join("; "));
   }
@@ -184,11 +201,14 @@ export function readPluginPackage(bytes: Uint8Array): PluginPackage {
 /** ZIP's minimum representable date; anything earlier gets clamped anyway. */
 const ZIP_EPOCH = new Date("1980-01-01T00:00:00Z");
 
-export function zipPluginFiles(files: Record<string, Uint8Array>): Uint8Array {
+export async function zipPluginFiles(
+  files: Record<string, Uint8Array>,
+): Promise<Uint8Array> {
   const entries: Zippable = {};
   for (const [name, data] of Object.entries(files)) {
     entries[name] = [data, { mtime: ZIP_EPOCH }];
   }
+  const { zipSync } = await loadZip();
   return zipSync(entries, { level: 6 });
 }
 

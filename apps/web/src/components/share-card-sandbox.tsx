@@ -240,7 +240,7 @@ export const ShareCardSandboxHost = forwardRef<ShareCardSandboxHandle, Props>(
           message?: string;
           height?: number;
         } | null;
-        if (!message || message.__flaremo !== 1) return;
+        if (message?.__flaremo !== 1) return;
         if (message.type === "ready" && !readyRef.current) {
           readyRef.current = true;
           window.clearTimeout(timeout);

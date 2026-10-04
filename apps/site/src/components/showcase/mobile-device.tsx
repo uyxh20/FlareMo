@@ -79,7 +79,7 @@ export function MobileDevice({
             <button
               type="button"
               onClick={onOpenDrawer}
-              className="p-1 -ml-1 text-ink hover:text-signal hover:bg-wash transition-colors cursor-pointer rounded-lg focus:outline-none flex items-center"
+              className="p-1 -ml-1 text-ink hover:text-signal hover:bg-wash transition-colors cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/50 focus-visible:ring-offset-1 flex items-center"
               aria-label="导航菜单"
             >
               <Menu className="size-4" />

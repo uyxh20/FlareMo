@@ -13,10 +13,19 @@ export function extractTags(content: string) {
   return [...tags];
 }
 
+/**
+ * Absolute timestamp for a memo. The year is only spelled out when it differs
+ * from the current one: imported backfills routinely span many years (issue
+ * #143), and two memos from the same month/day in different years used to be
+ * indistinguishable in the timeline. Future-dated rows (clock skew, dirty
+ * imports) take the same branch, so a future year is never shown year-less.
+ */
 export function formatMemoTime(value: string, locale?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+  const sameYear = date.getFullYear() === new Date().getFullYear();
   return new Intl.DateTimeFormat(locale, {
+    ...(sameYear ? {} : { year: "numeric" }),
     month: "short",
     day: "numeric",
     hour: "2-digit",

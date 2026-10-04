@@ -181,6 +181,7 @@ export async function streamableCreateMemoComment(
         ? { commentId: optionalString(input, "commentId", "comment_id") }
         : {}),
     },
+    { userLimits: context.userLimits },
   );
   return currentMemoToDto(created, context.user, { parent: parentName });
 }

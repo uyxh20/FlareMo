@@ -1,8 +1,7 @@
-import { createDb } from "@flaremo/db";
 import { getAttachmentById, getPublicShareByToken } from "@flaremo/domain";
 import { type Context, Hono } from "hono";
 import { attachmentObjectResponse } from "../attachment-http";
-import { getRequestContext, type HonoBindings } from "../context";
+import { getFlareMoDb, getRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 
 /**
@@ -22,7 +21,7 @@ memosFileApi.get("/attachments/:attachment/:filename", async (c) => {
     const shareToken = c.req.query("share_token");
 
     if (shareToken) {
-      const db = createDb(c.env.DB);
+      const db = getFlareMoDb(c.env);
       const share = await getPublicShareByToken(db, shareToken);
       const attachment = await getAttachmentById(
         db,

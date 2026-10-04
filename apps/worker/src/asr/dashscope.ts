@@ -3,6 +3,7 @@ import {
   type AsrConnection,
   AsrProviderError,
   type AsrSentence,
+  asrHttpFailure,
   type StreamingAsrProvider,
   sendAsrAudio,
 } from "./types";
@@ -28,15 +29,12 @@ const eventSchema = z.object({
     .optional(),
 });
 
+// Dashscope bills exhausted balances as 402 Payment Required; other
+// providers leave the default mapping (402 falls through to configuration).
 function httpFailure(status?: number) {
-  if (status === 401 || status === 403)
-    return new AsrProviderError("authentication", false);
-  if (status === 402) return new AsrProviderError("quota", false);
-  if (status === 429) return new AsrProviderError("capacity", true);
-  if (status && status >= 400 && status < 500)
-    return new AsrProviderError("configuration", false);
-  return new AsrProviderError("network", true);
+  return asrHttpFailure(status, 402);
 }
+
 export function normalizeDashscopeSentence(
   message: unknown,
   sessionId: string,

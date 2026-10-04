@@ -3,6 +3,7 @@ import {
   type AsrConnection,
   AsrProviderError,
   type AsrSentence,
+  asrHttpFailure,
   type StreamingAsrProvider,
   sendAsrAudio,
 } from "./types";
@@ -13,7 +14,7 @@ import {
 // the client's serialization/compression choice, and Workers has no
 // synchronous gzip for the 100 ms audio frames.
 const WS_URL = "https://openspeech.bytedance.com/api/v3/sauc/bigmodel_async";
-const RESOURCE_ID = "volc.bigasr.sauc.duration";
+const _RESOURCE_ID = "volc.bigasr.sauc.duration";
 
 const MESSAGE_FULL_CLIENT_REQUEST = 0b0001;
 const MESSAGE_AUDIO_ONLY_REQUEST = 0b0010;
@@ -64,12 +65,7 @@ function lastPacketFrame() {
 }
 
 function httpFailure(status?: number) {
-  if (status === 401 || status === 403)
-    return new AsrProviderError("authentication", false);
-  if (status === 429) return new AsrProviderError("capacity", true);
-  if (status && status >= 400 && status < 500)
-    return new AsrProviderError("configuration", false);
-  return new AsrProviderError("network", true);
+  return asrHttpFailure(status);
 }
 
 function statusFailure(code: number): AsrProviderError | null {

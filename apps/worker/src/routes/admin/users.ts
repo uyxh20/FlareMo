@@ -2,21 +2,17 @@ import {
   assertMemberQuota,
   createFlaremoMemberWithLink,
   deriveUniqueUsername,
-  getAuthUserById,
-  getAuthUserIdByFlaremoUserId,
-  listFlaremoUsers,
+  listFlaremoUsersWithMemberships,
 } from "@flaremo/domain";
 import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
-import { createFlareMoAuth } from "../../auth";
-import type { getBrowserRequestContext, HonoBindings } from "../../context";
-import { jsonError } from "../../http";
 import {
-  createUserSchema,
-  readerExpiresAt,
-  teamAdminContext,
-  teamMembershipInfo,
-} from "./context";
+  type getBrowserRequestContext,
+  type HonoBindings,
+  loadAuthFactory,
+} from "../../context";
+import { jsonError } from "../../http";
+import { createUserSchema, readerExpiresAt, teamAdminContext } from "./context";
 
 /**
  * Create a Better Auth identity, the domain user, the link, and the default
@@ -40,6 +36,7 @@ export async function createMemberAccount(
   // Check before Better Auth creates an identity so quota failures cannot
   // leave an orphaned login account.
   await assertMemberQuota(context.db, context.limits);
+  const { createFlareMoAuth } = await loadAuthFactory();
   const auth = createFlareMoAuth(c.env, context.db, {
     allowBootstrapSignUp: true,
   });
@@ -69,30 +66,19 @@ export function registerUsersRoutes(app: Hono<HonoBindings>) {
   app.get("/users", async (c) => {
     try {
       const { db } = await teamAdminContext(c);
-      const members = await listFlaremoUsers(db);
-      const rows = await Promise.all(
-        members.map(async (member) => {
-          const authUserId = await getAuthUserIdByFlaremoUserId(db, member.id);
-          const authUser = authUserId
-            ? await getAuthUserById(db, authUserId)
-            : null;
-          const membership = authUserId
-            ? await teamMembershipInfo(db, member.id)
-            : null;
-          return {
-            id: member.id,
-            email: authUser?.email ?? member.email,
-            name: member.name,
-            username: authUser?.username ?? member.id.replace(/^users\//, ""),
-            role: membership?.role ?? null,
-            reader_expires_at: membership
-              ? readerExpiresAt(membership.expiresAt)
-              : null,
-            status: member.status,
-            created_at: member.createdAt,
-          };
-        }),
-      );
+      const members = await listFlaremoUsersWithMemberships(db);
+      const rows = members.map(({ user: member, authUser, membership }) => ({
+        id: member.id,
+        email: authUser?.email ?? member.email,
+        name: member.name,
+        username: authUser?.username ?? member.id.replace(/^users\//, ""),
+        role: membership?.role ?? null,
+        reader_expires_at: membership
+          ? readerExpiresAt(membership.expiresAt)
+          : null,
+        status: member.status,
+        created_at: member.createdAt,
+      }));
       return c.json({ users: rows });
     } catch (error) {
       return jsonError(c, error);
@@ -114,7 +100,7 @@ export function registerUsersRoutes(app: Hono<HonoBindings>) {
       return c.json(
         {
           id: member.id,
-          email: input.email,
+          email: member.email,
           name: member.name,
           username,
           role: "member" as const,

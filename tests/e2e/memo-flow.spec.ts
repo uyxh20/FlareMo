@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { E2E_BASE_URL } from "./auth-fixture";
+import { searchTimeline, startWithCleanClientState } from "./workspace-helpers";
 
 const E2E_COOKIE_MUTATION_OPTIONS = {
   headers: { origin: E2E_BASE_URL },
@@ -26,8 +27,10 @@ test("creates a memo and filters it by tag", async ({ page }) => {
   await expect(page.getByText(content)).toBeVisible();
   await expect(page.getByText(`#${tag}`, { exact: true })).toBeVisible();
 
-  await page.getByRole("textbox", { name: /search|搜索/i }).fill(tag);
-  await expect(page.getByText(content)).toBeVisible();
+  await searchTimeline(page, tag);
+  // The card body and the highlighted search excerpt both contain the text, so
+  // match the body paragraph specifically.
+  await expect(page.getByText(content, { exact: true }).first()).toBeVisible();
 });
 
 test("restores an unfinished new-memo draft after a reload", async ({
@@ -94,8 +97,7 @@ test("searches timeline and archived notes by default and supports archive synta
   await page.goto("/");
   await page.getByRole("button", { name: /note scope|笔记范围/i }).click();
   await page.getByRole("menuitem", { name: /archive|归档/i }).click();
-  const search = page.getByRole("textbox", { name: /search|搜索/i });
-  await search.fill(`search marker ${marker}`);
+  await searchTimeline(page, `search marker ${marker}`);
   await expect(
     page.locator("article").filter({ hasText: timeline }),
   ).toBeVisible();
@@ -106,7 +108,7 @@ test("searches timeline and archived notes by default and supports archive synta
     "search marker",
   );
 
-  await search.fill(`Archived search marker ${marker} in:archive`);
+  await searchTimeline(page, `Archived search marker ${marker} in:archive`);
   await expect(
     page.locator("article").filter({ hasText: archived }),
   ).toBeVisible();
@@ -149,7 +151,7 @@ test("keeps filters in the URL and opens a Markdown memo detail", async ({
   expect(response.ok()).toBe(true);
 
   await page.goto("/");
-  await page.getByRole("textbox", { name: /search|搜索/i }).fill(marker);
+  await searchTimeline(page, marker);
   await expect(page).toHaveURL(new RegExp(`q=${marker}`));
   const card = page.locator("article").filter({ hasText: marker });
   await expect(card.locator("strong")).toHaveText(marker);
@@ -218,7 +220,7 @@ test("loads memo attachments without per-memo request waterfalls", async ({
 
 test("keeps a composer draft when saving fails", async ({ page }) => {
   const content = `Resilient draft #draft${Date.now()}`;
-  await page.route("**/api/app/memos", async (route) => {
+  await page.route("**/api/app/memos*", async (route) => {
     if (route.request().method() === "POST") {
       await route.fulfill({
         status: 503,
@@ -245,6 +247,11 @@ test("shows the new card optimistically before the create request answers", asyn
   page,
 }) => {
   const content = `Optimistic landing #opt${Date.now()}`;
+  // Clear drafts and the remembered send target from earlier tests: a leftover
+  // draft replaces what this test types (Send stays disabled, no card is
+  // created), and a remembered preference can file the memo into a corpus the
+  // default timeline does not show.
+  await startWithCleanClientState(page);
   // Hold the create response open: the card must already be on screen from
   // the optimistic prepend, not only after the server round-trip (this is
   // the memo-cache slot fix's behavior contract).
@@ -252,7 +259,7 @@ test("shows the new card optimistically before the create request answers", asyn
   const createAnswered = new Promise<void>((resolve) => {
     releaseCreate = resolve;
   });
-  await page.route("**/api/app/memos", async (route) => {
+  await page.route("**/api/app/memos*", async (route) => {
     if (route.request().method() === "POST") {
       await createAnswered;
       await route.fulfill({
@@ -281,7 +288,27 @@ test("shows the new card optimistically before the create request answers", asyn
 
   await page.goto("/");
   const composer = page.getByRole("textbox", { name: /new note|新笔记/i });
+  // Wait for the composer to mount before typing: the draft restore is async,
+  // and filling while it is still settling races the restore write-back.
+  await expect(composer).toBeVisible();
+
+  // Wait for the first timeline page to load before submitting. The optimistic
+  // insert prepends into the existing `["memos"]` cache and deliberately skips
+  // keys that have no data yet (`memo-cache.ts`, `|| !data`), so it never
+  // fabricates a timeline that has not arrived. Submitting first produces no
+  // optimistic card at all — and because this mock holds the POST open, the
+  // card then cannot appear by any other route. That needs a slow first paint,
+  // which is why it failed only in a full suite run and never in isolation.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => document.querySelectorAll("main article").length),
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
+
   await composer.fill(content);
+  await expect(composer).toHaveText(content);
   await page.getByRole("button", { name: /^(save|保存|send|发送)$/i }).click();
 
   // The optimistic insert lands without waiting for the network.
@@ -329,15 +356,34 @@ test("edits and shares a memo", async ({ page }) => {
   ).toHaveCount(0);
 
   const updatedCard = page.locator("article").filter({ hasText: updated });
-  // Visibility now lives in a ⋯ submenu: going public provisions the link,
-  // which then shows on the card and can be copied from the same menu.
+  // Visibility is a single menu entry that opens the visibility dialog (it is
+  // no longer a submenu), and choosing 全网公开 there provisions the share rule.
+  // The resulting share URL is surfaced inside that dialog, not on the card.
   await updatedCard.getByRole("button", { name: /actions|操作/i }).click();
-  await page.getByRole("menuitem", { name: /visibility|可见性/i }).click();
-  await page.getByRole("menuitem", { name: /全网公开|Public web/i }).click();
-  await expect(updatedCard.getByText(/\/share\//)).toBeVisible();
-  await updatedCard.getByRole("button", { name: /actions|操作/i }).click();
+  await page
+    .getByRole("menuitem", { name: /可见性与分享|Visibility & Sharing/i })
+    .click();
+  const visibilityDialog = page.locator('[role="dialog"]:visible').last();
+  await visibilityDialog
+    .getByRole("button", { name: /全网公开|Public web/i })
+    .click();
+  // The card flips to public; the share URL is rendered inside the dialog as a
+  // read-only input's value, so reopen it and assert on that value.
   await expect(
-    page.getByRole("menuitem", { name: /copy link|复制链接/i }),
+    updatedCard.getByRole("button", { name: /Public web|全网公开/i }),
+  ).toBeVisible();
+  await updatedCard.getByRole("button", { name: /actions|操作/i }).click();
+  await page
+    .getByRole("menuitem", { name: /可见性与分享|Visibility & Sharing/i })
+    .click();
+  const publicDialog = page.locator('[role="dialog"]:visible').last();
+  await expect(publicDialog.locator("input[readonly]")).toHaveValue(
+    /\/share\//,
+  );
+  // Copying the link is an action inside this dialog now, not a card-menu
+  // entry; assert it is offered and labelled.
+  await expect(
+    publicDialog.getByRole("button", { name: /copy link|复制链接/i }),
   ).toBeEnabled();
   await page.keyboard.press("Escape");
 });
@@ -458,19 +504,20 @@ test("shows the installed version and safe update fallback", async ({
 
   await page.goto("/");
 
-  // Up-to-date state names itself; the version pin lives next to the bell.
-  const updateButton = page.getByRole("button", {
-    name: /up to date|已是最新|update/i,
-  });
-  await expect(updateButton).toBeVisible();
-  await expect(updateButton).toContainText(version);
-  await updateButton.click();
+  // The update check lives in the sidebar's user menu now; the dialog reports
+  // the installed version and, when no newer release exists, offers no upgrade
+  // action — only the release-notes link.
+  await page
+    .getByRole("button", { name: /FlareMo E2E Owner|E2E Owner/i })
+    .first()
+    .click();
+  await page
+    .getByRole("menuitem", { name: /check for updates|检查更新/i })
+    .click();
 
-  const dialog = page.getByRole("dialog");
+  const dialog = page.locator('[role="dialog"]:visible').last();
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText(version);
-  // No update is available, so the dialog carries no upgrade action: only the
-  // release-notes link (self-hosted fallback opens the guide instead).
   await expect(
     dialog.getByRole("link", { name: /update guide|升级指南/i }),
   ).toHaveCount(0);
@@ -557,25 +604,16 @@ test("creates, follows, reads, and removes memo relations", async ({
   expect(await contextResponse.json()).toMatchObject({ relations: [] });
 });
 
-test("keeps activity labels and the focused composer fully visible", async ({
+test("keeps the focused composer clear of the sticky header", async ({
   page,
 }) => {
   await page.goto("/");
 
-  const monthLabels = page.locator(
-    '[data-testid="activity-heatmap"] + div span',
-  );
-  const visibleLabels = monthLabels.filter({ hasText: /\S/ });
-  await expect(visibleLabels.first()).toBeVisible();
-  for (const label of await visibleLabels.all()) {
-    const style = await label.evaluate((element) => ({
-      overflow: getComputedStyle(element).overflow,
-      textOverflow: getComputedStyle(element).textOverflow,
-    }));
-    expect(style.overflow).toBe("visible");
-    expect(style.textOverflow).not.toBe("ellipsis");
-  }
-
+  // The activity visualisation is a Year/Month/Week/Day dial now; the textual
+  // month labels it used to render are gone (the year view is a dot-cluster
+  // grid), so there is no label-overflow contract left to assert here. What
+  // still matters is that focusing the composer never slides it under the
+  // sticky header.
   const composer = page.getByRole("textbox", { name: /new note|新笔记/i });
   const composerForm = page.locator("form").filter({ has: composer });
   await page.waitForTimeout(250);

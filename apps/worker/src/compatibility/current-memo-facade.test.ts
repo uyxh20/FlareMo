@@ -348,4 +348,18 @@ describe("Current wire memo and attachment facade", () => {
     );
     expect(cookieOnly.status).toBe(401);
   });
+
+  it("answers malformed JSON bodies with the 400 envelope, not 500", async () => {
+    const response = await fetchCurrent("http://flaremo.test/api/v1/memos", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{not valid json",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: 3,
+      message: "Request body must be valid JSON",
+      details: [],
+    });
+  });
 });

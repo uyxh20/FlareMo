@@ -1,7 +1,7 @@
 {
   "name": "@flaremo/worker",
   "license": "AGPL-3.0-only",
-  "version": "0.20.1",
+  "version": "0.22.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -29,8 +29,6 @@
     "hono": "^4.13.5",
     "marked": "^17.0.6",
     "marked-gfm-heading-id": "^4.1.4",
-    "marked-highlight": "^2.2.4",
-    "schema-dts": "^2.0.0",
     "shiki": "^4.4.3",
     "sitemap": "^9.0.1",
     "zod": "^4.1.12"
@@ -39,6 +37,7 @@
     "@cloudflare/workers-types": "5.20260708.1",
     "@connectrpc/connect": "2.1.1",
     "@connectrpc/connect-web": "2.1.1",
+    "schema-dts": "^2.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
     "wrangler": "^4.114.0"

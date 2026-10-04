@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { GlobeIcon, PinIcon, SparklesIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { createMemory, type Memory, updateMemory } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -10,9 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n";
 import { stripResourceName } from "@/lib/utils";
@@ -29,43 +28,54 @@ export function MemoryFormDialog({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
-  const [content, setContent] = useState(memory?.content ?? "");
-  const [type, setType] = useState<Memory["type"]>(memory?.type ?? "semantic");
-  const [kind, setKind] = useState<Memory["kind"]>(memory?.kind ?? "fact");
-  const [scopeType, setScopeType] = useState<Memory["scope_type"]>(
-    memory?.scope_type ?? "global",
-  );
-  const [scopeKey, setScopeKey] = useState(memory?.scope_key ?? "");
-  const [importance, setImportance] = useState(memory?.importance ?? 50);
-  const [lock, setLock] = useState(false);
+  const [content, setContent] = useState("");
+  const [isCore, setIsCore] = useState(true);
+  const [scopeType, setScopeType] = useState<"global" | "project">("global");
+  const [scopeKey, setScopeKey] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setContent(memory?.content ?? "");
+      setIsCore(
+        memory
+          ? memory.tier === "core" || memory.verification === "locked"
+          : true,
+      );
+      setScopeType(memory?.scope_type === "project" ? "project" : "global");
+      setScopeKey(memory?.scope_key ?? "");
+    }
+  }, [open, memory]);
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      memory
-        ? updateMemory(stripResourceName(memory.id, "memories"), {
-            content,
-            type,
-            kind,
-            scope_type: scopeType,
-            scope_key: scopeKey.trim() || undefined,
-            importance,
-          })
-        : createMemory({
-            content,
-            type,
-            kind,
-            scope_type: scopeType,
-            scope_key: scopeKey.trim() || undefined,
-            tier: "normal",
-            importance,
-            lock,
-          }),
+    mutationFn: () => {
+      const trimmedContent = content.trim();
+      const trimmedScopeKey = scopeKey.trim();
+      const scope =
+        scopeType === "project" && trimmedScopeKey ? "project" : "global";
+
+      if (memory) {
+        return updateMemory(stripResourceName(memory.id, "memories"), {
+          content: trimmedContent,
+          tier: isCore ? "core" : "normal",
+          importance: isCore ? 80 : 50,
+          scope_type: scope,
+          scope_key: scope === "project" ? trimmedScopeKey : undefined,
+        });
+      }
+
+      return createMemory({
+        content: trimmedContent,
+        tier: isCore ? "core" : "normal",
+        importance: isCore ? 80 : 50,
+        lock: isCore,
+        type: "semantic",
+        kind: isCore ? "constraint" : "preference",
+        scope_type: scope,
+        scope_key: scope === "project" ? trimmedScopeKey : undefined,
+      });
+    },
     onSuccess: () => {
       toast.success(t("common.save"));
-      if (!memory) {
-        setContent("");
-        setScopeKey("");
-      }
       onOpenChange(false);
       onSaved();
     },
@@ -86,92 +96,97 @@ export function MemoryFormDialog({
             {memory ? t("memory.editMemory") : t("memory.newMemory")}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <Field label={t("memory.content")}>
-            <Textarea
-              rows={4}
-              value={content}
-              placeholder={t("memory.contentPlaceholder")}
-              onChange={(event) => setContent(event.target.value)}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("memory.type")}>
-              <Select
-                value={type}
-                onChange={(event) =>
-                  setType(event.target.value as Memory["type"])
-                }
+
+        <div className="flex flex-col gap-4 py-1">
+          <Textarea
+            rows={4}
+            value={content}
+            placeholder={t("memory.contentPlaceholder")}
+            onChange={(event) => setContent(event.target.value)}
+            className="text-sm resize-none focus-visible:ring-1"
+          />
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("memory.tier")}
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCore(true)}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 px-3 text-xs transition-colors ${
+                  isCore
+                    ? "border-brand-500/80 bg-brand-500/10 text-brand-600 dark:text-brand-400 font-medium"
+                    : "border-border/70 hover:bg-muted/50 text-muted-foreground"
+                }`}
               >
-                <option value="semantic">{t("memory.type.semantic")}</option>
-                <option value="episodic">{t("memory.type.episodic")}</option>
-                <option value="procedural">
-                  {t("memory.type.procedural")}
-                </option>
-              </Select>
-            </Field>
-            <Field label={t("memory.kind")}>
-              <Select
-                value={kind}
-                onChange={(event) =>
-                  setKind(event.target.value as Memory["kind"])
-                }
+                <PinIcon className="size-3.5 shrink-0" />
+                <span>{t("memory.filterCore")}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsCore(false)}
+                className={`flex items-center justify-center gap-1.5 rounded-xl border py-2 px-3 text-xs transition-colors ${
+                  !isCore
+                    ? "border-brand-500/80 bg-brand-500/10 text-brand-600 dark:text-brand-400 font-medium"
+                    : "border-border/70 hover:bg-muted/50 text-muted-foreground"
+                }`}
               >
-                {KINDS.map((value) => (
-                  <option key={value} value={value}>
-                    {t(`memory.kind.${value}`)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t("memory.scope")}>
-              <Select
-                value={scopeType}
-                onChange={(event) =>
-                  setScopeType(event.target.value as Memory["scope_type"])
-                }
-              >
-                <option value="global">{t("memory.scope.global")}</option>
-                <option value="workspace">{t("memory.scope.workspace")}</option>
-                <option value="project">{t("memory.scope.project")}</option>
-                <option value="agent">{t("memory.scope.agent")}</option>
-              </Select>
-            </Field>
-            <Field label={t("memory.importance")}>
-              <input
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                max={100}
-                min={0}
-                type="number"
-                value={importance}
-                onChange={(event) =>
-                  setImportance(Number.parseInt(event.target.value, 10) || 0)
-                }
-              />
-            </Field>
+                <SparklesIcon className="size-3.5 shrink-0" />
+                <span>{t("memory.kind.preference")}</span>
+              </button>
+            </div>
           </div>
-          {scopeType !== "global" && (
-            <Field label={t("memory.scopeKey")}>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              {t("memory.scope")}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setScopeType("global")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors ${
+                  scopeType === "global"
+                    ? "border-border bg-muted text-foreground"
+                    : "border-transparent text-muted-foreground hover:bg-muted/50"
+                }`}
+              >
+                <GlobeIcon className="size-3" />
+                <span>{t("memory.scope.global")}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScopeType("project")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium border transition-colors ${
+                  scopeType === "project"
+                    ? "border-border bg-muted text-foreground"
+                    : "border-transparent text-muted-foreground hover:bg-muted/50"
+                }`}
+              >
+                <span>{t("memory.scope.project")}</span>
+              </button>
+            </div>
+
+            {scopeType === "project" && (
               <Input
                 value={scopeKey}
-                placeholder="github:owner/repo"
+                placeholder={t("memory.scopeKey")}
                 onChange={(event) => setScopeKey(event.target.value)}
+                className="h-8 text-xs mt-1"
               />
-            </Field>
-          )}
-          {!memory && (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                checked={lock}
-                type="checkbox"
-                onChange={(event) => setLock(event.target.checked)}
-              />
-              {t("memory.lock")}
-            </label>
-          )}
+            )}
+          </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
           <Button
+            size="sm"
             disabled={!content.trim() || saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
           >
@@ -182,15 +197,3 @@ export function MemoryFormDialog({
     </Dialog>
   );
 }
-
-const KINDS: Memory["kind"][] = [
-  "preference",
-  "fact",
-  "decision",
-  "constraint",
-  "entity",
-  "event",
-  "outcome",
-  "lesson",
-  "procedure",
-];

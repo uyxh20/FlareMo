@@ -4,6 +4,7 @@ import {
   E2E_INITIAL_PASSWORD,
   E2E_USERNAME,
 } from "./auth-fixture";
+import { searchTimeline } from "./workspace-helpers";
 
 // Real browser microphone/AudioWorklet + real memo API. Only ASR transport is simulated.
 test.use({
@@ -20,6 +21,14 @@ type CaptureBrowserOptions = {
   disableIndexedDb?: boolean;
   disableWorklet?: boolean;
   trackWakeLock?: boolean;
+  /**
+   * Start from an empty draft store. Capture drafts persist in IndexedDB under
+   * the shared browser profile, so a draft left behind by an earlier test in
+   * the same run makes /capture open on its "unsaved capture found" recovery
+   * screen — where the record button does not exist. Opt in for tests that
+   * need the composer, and leave it off for the ones that exercise recovery.
+   */
+  clearDrafts?: boolean;
 };
 
 async function trackMicrophones(
@@ -112,6 +121,33 @@ async function enableCapture(
   options: CaptureBrowserOptions = {},
 ) {
   await trackMicrophones(page, options);
+  if (options.clearDrafts) {
+    // Same approach as startWithEmptyDrafts: only touch an existing database
+    // (opening a missing one would create it empty and break the app's own
+    // open), and clear stores instead of deleting the DB (a delete is blocked
+    // while the app holds a connection and can land mid-test).
+    await page.addInitScript(async () => {
+      const dbName = "flaremo-local-memo-capture";
+      const existing = await indexedDB.databases();
+      if (!existing.some((entry) => entry.name === dbName)) return;
+      const request = indexedDB.open(dbName);
+      request.onsuccess = () => {
+        const db = request.result;
+        const stores = ["drafts", "submission-queue"].filter((name) =>
+          db.objectStoreNames.contains(name),
+        );
+        if (stores.length === 0) {
+          db.close();
+          return;
+        }
+        const tx = db.transaction(stores, "readwrite");
+        for (const name of stores) tx.objectStore(name).clear();
+        tx.oncomplete = () => db.close();
+        tx.onerror = tx.onabort = () => db.close();
+      };
+      request.onerror = request.onblocked = () => undefined;
+    });
+  }
   await page.route("**/api/app/capture/status", (route) =>
     route.fulfill({
       json: { available: true, streaming: true, provider: "dashscope" },
@@ -159,7 +195,7 @@ test("captures PCM and saves a searchable, tagged, exportable timeline memo", as
   page,
 }, testInfo) => {
   const unique = `capture-e2e-${Date.now()}`;
-  const frameCount = await enableCapture(page, unique);
+  const frameCount = await enableCapture(page, unique, { clearDrafts: true });
   await page.goto("/capture");
   await expect(
     page.getByRole("button", { name: /开始录音|Start recording/ }),
@@ -194,9 +230,7 @@ test("captures PCM and saves a searchable, tagged, exportable timeline memo", as
   const card = page.locator("article").filter({ hasText: unique });
   await expect(card).toBeVisible();
   await expect(card.getByText("#voice", { exact: true })).toBeVisible();
-  await page
-    .getByRole("textbox", { name: /search|搜索/i })
-    .fill("edited final sentence");
+  await searchTimeline(page, "edited final sentence");
   await expect(card).toBeVisible();
 
   const response = await page.request.get(
@@ -549,7 +583,14 @@ test("confirms navigation, releases the microphone and preserves captured text",
   await page.getByRole("button", { name: /开始录音|Start recording/ }).click();
   await expect(page.getByRole("log")).toContainText(transcript);
 
-  await page.getByRole("link", { name: /返回|Back/ }).click();
+  // Leaving is intercepted by the session's navigation blocker whichever way
+  // the user goes. The standalone page's own Back link is gone — /capture now
+  // renders inside the shared workspace shell — so leave through the sidebar's
+  // "All memos" link, which is the router navigation that link used to be.
+  const leaveCapture = () =>
+    page.getByRole("link", { name: /全部记录|All memos/i }).click();
+
+  await leaveCapture();
   const dialog = page.getByRole("alertdialog");
   await expect(dialog).toBeVisible();
   expect(await microphoneStates(page)).toEqual(["live"]);
@@ -559,7 +600,7 @@ test("confirms navigation, releases the microphone and preserves captured text",
   await expect(page).toHaveURL(/\/capture$/);
   expect(await microphoneStates(page)).toEqual(["live"]);
 
-  await page.getByRole("link", { name: /返回|Back/ }).click();
+  await leaveCapture();
   await dialog
     .getByRole("button", { name: /停止并离开|Stop and leave/ })
     .click();

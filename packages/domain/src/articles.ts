@@ -8,7 +8,6 @@ import type {
 import type { ArticleRow, FlareMoDb, UserRow } from "@flaremo/db";
 import { articles, attachments, users } from "@flaremo/db";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
-import { slugify } from "transliteration";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
 import { createResourceId, createToken, parseResourceName } from "./ids";
 
@@ -50,11 +49,26 @@ export function articleToSummaryDto(row: ArticleRow): ArticleSummaryDto {
 
 const SLUG_MAX_LENGTH = 80;
 
-function baseSlugFromTitle(title: string): string {
-  const base = slugify(title)
+/**
+ * Loaded on first use rather than at module scope.
+ *
+ * `transliteration` carries the CJK transliteration tables — ~186 KiB of source —
+ * and this file is reachable from the `@flaremo/domain` barrel, which the
+ * Worker entry imports for half a dozen unrelated symbols. Because the barrel
+ * re-exports runtime values, every consumer of it pulls this module in, so a
+ * top-level import put the tables in every isolate's startup parse path
+ * (issue #138) for a function that only runs when someone publishes an article.
+ *
+ * Breaking the barrel instead is the larger fix and the better one long term,
+ * but it reaches every route module; deferring the leaf is contained and
+ * verifiable. esbuild compiles `import()` to a lazy `__esm` block, so the
+ * module genuinely does not execute until this function is called.
+ */
+async function baseSlugFromTitle(title: string): Promise<string> {
+  const { slugify } = await import("transliteration");
+  return slugify(title)
     .slice(0, SLUG_MAX_LENGTH)
     .replace(/^-+|-+$/g, "");
-  return base;
 }
 
 function randomSlugSuffix() {
@@ -95,7 +109,7 @@ export async function resolveArticleSlug(
     }
     return requested;
   }
-  const base = baseSlugFromTitle(title);
+  const base = await baseSlugFromTitle(title);
   if (!base) return ownSlug ?? `article-${randomSlugSuffix()}`;
   if (!(await slugExists(db, base, ownSlug))) return base;
   for (let attempt = 0; attempt < 5; attempt += 1) {

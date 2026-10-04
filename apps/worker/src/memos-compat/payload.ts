@@ -8,6 +8,8 @@
  * normalized shape, so a property created through any compat surface reads
  * back through all of them.
  */
+import { isRecord } from "./errors";
+
 export type CompatMemoPayloadInput = {
   payload?: unknown;
   tags?: unknown;
@@ -44,8 +46,4 @@ export function compatMemoPayload(
 
 function record(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -45,12 +45,20 @@ test("the owner can customize the product name and it reaches the login page", a
   ).toBeVisible();
   await ownerContext.close();
 
-  // A fresh anonymous context resolves the custom branding.
-  const anonymousContext = await browser.newContext();
+  // A fresh anonymous context resolves the custom branding. `storageState`
+  // must be cleared explicitly: this spec runs in a project whose `use` block
+  // sets the owner's state, and Playwright applies project options to every
+  // context the test creates — so a bare newContext() was silently signed in
+  // and landed on the workspace instead of the login page. Match the brand by
+  // text rather than `getByRole("complementary")`: an <aside> nested inside
+  // <main> is not exposed as a complementary landmark.
+  const anonymousContext = await browser.newContext({
+    storageState: undefined,
+  });
   const anonymousPage = await anonymousContext.newPage();
   await anonymousPage.goto(`${E2E_BASE_URL}/login`);
   await expect(
-    anonymousPage.getByRole("complementary").getByText(CUSTOM_PRODUCT_NAME),
+    anonymousPage.getByText(CUSTOM_PRODUCT_NAME).first(),
   ).toBeVisible();
   await anonymousContext.close();
 
@@ -102,7 +110,12 @@ test("the owner picks an accent preset and it applies across sessions", async ({
   );
 
   // Persisted server-side: a fresh anonymous context resolves the preset too.
-  const anonymousContext = await browser.newContext();
+  // `storageState` must be cleared explicitly — the project's `use` block sets
+  // the owner's state and Playwright applies it to every context the test
+  // creates.
+  const anonymousContext = await browser.newContext({
+    storageState: undefined,
+  });
   const anonymousPage = await anonymousContext.newPage();
   await anonymousPage.goto(`${E2E_BASE_URL}/login`);
   await expect(anonymousPage.locator("html")).toHaveAttribute(
@@ -165,7 +178,11 @@ test("the owner derives a theme from a custom hex seed", async ({
     })
     .toBeDefined();
   await ownerPage.waitForTimeout(900);
-  const anonymousContext = await browser.newContext();
+  // Anonymous again: the project's `use` block would otherwise sign this
+  // context in, so clear the inherited state explicitly.
+  const anonymousContext = await browser.newContext({
+    storageState: undefined,
+  });
   const anonymousPage = await anonymousContext.newPage();
   await anonymousPage.goto(`${E2E_BASE_URL}/login`);
   await expect(anonymousPage.locator("html")).toHaveAttribute(
@@ -181,7 +198,10 @@ test("the owner derives a theme from a custom hex seed", async ({
   });
   const resetPage = await resetContext.newPage();
   await resetPage.goto(`${E2E_BASE_URL}/account`);
-  await resetPage.getByRole("tab", { name: /品牌外观|Branding/ }).click();
+  // `button`, matching every other Branding navigation in this file: the
+  // settings sidebar entry has never been a tab, so this lone `tab` query
+  // could never resolve and the reset step always timed out.
+  await resetPage.getByRole("button", { name: /品牌外观|Branding/ }).click();
   await resetPage.getByRole("button", { name: /火焰|Flame/ }).click();
   await expect(resetPage.locator("html")).not.toHaveAttribute(
     "data-accent",

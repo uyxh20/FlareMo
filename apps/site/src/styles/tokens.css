@@ -382,13 +382,20 @@
   }
 }
 
+/* A global reduced-motion 兜底必须压过组件自带的 duration/transition 声明，
+   `!important` 是这里唯一能保证生效的手段；去掉它会让偏好减少动效的用户重新
+   看到动画。 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion reset */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion reset */
     animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion reset */
     transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: global reduced-motion reset */
     scroll-behavior: auto !important;
   }
 }

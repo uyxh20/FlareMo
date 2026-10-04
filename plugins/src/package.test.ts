@@ -47,12 +47,12 @@ const validDocument = {
 };
 
 describe("readPluginPackage", () => {
-  it("reads a well-formed package and strips the folder prefix", () => {
+  it("reads a well-formed package and strips the folder prefix", async () => {
     const bytes = zip({
       "demo-pack/plugin.json": JSON.stringify(manifest()),
       "demo-pack/cards/demo.json": JSON.stringify(validDocument),
     });
-    const pkg = readPluginPackage(bytes);
+    const pkg = await readPluginPackage(bytes);
     expect(pkg.manifest.id).toBe("demo-pack");
     expect(Object.keys(pkg.files).sort()).toEqual([
       "cards/demo.json",
@@ -60,49 +60,53 @@ describe("readPluginPackage", () => {
     ]);
   });
 
-  it("rejects a package whose folder does not match the manifest id", () => {
+  it("rejects a package whose folder does not match the manifest id", async () => {
     const bytes = zip({
       "other-pack/plugin.json": JSON.stringify(manifest()),
       "other-pack/cards/demo.json": "{}",
     });
-    expect(() => readPluginPackage(bytes)).toThrow(/must match/);
+    await expect(readPluginPackage(bytes)).rejects.toThrow(/must match/);
   });
 
-  it("rejects path traversal", () => {
+  it("rejects path traversal", async () => {
     const bytes = zip({
       "demo-pack/plugin.json": JSON.stringify(manifest()),
       "demo-pack/../evil.txt": "nope",
     });
-    expect(() => readPluginPackage(bytes)).toThrow(/unsafe path|inside/);
+    await expect(readPluginPackage(bytes)).rejects.toThrow(
+      /unsafe path|inside/,
+    );
   });
 
-  it("rejects files outside the top-level folder", () => {
+  it("rejects files outside the top-level folder", async () => {
     const bytes = zip({
       "demo-pack/plugin.json": JSON.stringify(manifest()),
       "demo-pack/cards/demo.json": "{}",
       "stray.txt": "hello",
     });
-    expect(() => readPluginPackage(bytes)).toThrow(/inside/);
+    await expect(readPluginPackage(bytes)).rejects.toThrow(/inside/);
   });
 
-  it("rejects a manifest that references a missing file", () => {
+  it("rejects a manifest that references a missing file", async () => {
     const bytes = zip({
       "demo-pack/plugin.json": JSON.stringify(manifest()),
     });
-    expect(() => readPluginPackage(bytes)).toThrow(/missing file/);
+    await expect(readPluginPackage(bytes)).rejects.toThrow(/missing file/);
   });
 
-  it("rejects invalid manifests", () => {
+  it("rejects invalid manifests", async () => {
     const bytes = zip({
       "demo-pack/plugin.json": JSON.stringify(manifest({ specVersion: 2 })),
       "demo-pack/cards/demo.json": "{}",
     });
-    expect(() => readPluginPackage(bytes)).toThrow(/specVersion/);
+    await expect(readPluginPackage(bytes)).rejects.toThrow(/specVersion/);
   });
 
-  it("rejects non-zip input and empty archives", () => {
-    expect(() => readPluginPackage(encoder.encode("not a zip"))).toThrow();
-    expect(() => readPluginPackage(new Uint8Array(0))).toThrow(/empty/);
+  it("rejects non-zip input and empty archives", async () => {
+    await expect(
+      readPluginPackage(encoder.encode("not a zip")),
+    ).rejects.toThrow();
+    await expect(readPluginPackage(new Uint8Array(0))).rejects.toThrow(/empty/);
   });
 });
 
@@ -122,20 +126,20 @@ describe("zipPluginFiles", () => {
         JSON.stringify(validDocument),
       ),
     };
-    const first = zipPluginFiles(files);
+    const first = await zipPluginFiles(files);
     await new Promise((resolve) => setTimeout(resolve, 1100));
-    const second = zipPluginFiles(files);
+    const second = await zipPluginFiles(files);
     expect(await sha256Hex(first)).toBe(await sha256Hex(second));
   });
 
-  it("round-trips through readPluginPackage", () => {
-    const zipped = zipPluginFiles({
+  it("round-trips through readPluginPackage", async () => {
+    const zipped = await zipPluginFiles({
       "demo-pack/plugin.json": encoder.encode(JSON.stringify(manifest())),
       "demo-pack/cards/demo.json": encoder.encode(
         JSON.stringify(validDocument),
       ),
     });
-    const pkg = readPluginPackage(zipped);
+    const pkg = await readPluginPackage(zipped);
     expect(pkg.manifest.id).toBe("demo-pack");
   });
 });

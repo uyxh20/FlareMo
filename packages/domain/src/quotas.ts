@@ -1,14 +1,10 @@
 import type { FlareMoDb } from "@flaremo/db";
-import {
-  attachments,
-  memoryItems,
-  memos,
-  usageCounters,
-  users,
-} from "@flaremo/db";
+import { attachments, memoryItems, usageCounters, users } from "@flaremo/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { QuotaExceededError } from "./errors";
 import type { PlanLimits, PlanLimitValue, UserPlanLimits } from "./limits";
+import { readHourlyCountTotals } from "./memo-hourly-counts";
+import { sinkDormantObservedMemories } from "./memory/maintenance";
 import type { UsageMetric } from "./usage";
 import { currentMonthKey } from "./usage";
 
@@ -170,22 +166,27 @@ export async function assertAttachmentStorageQuota(
 /**
  * Stock memo count for one user: normal + archived count against the quota;
  * trash and hard-deleted rows do not.
+ *
+ * Served from `memo_hourly_counts` rather than a `count(*)` over `memos`. That
+ * matters because this is on the create path: every memo write ran a full scan
+ * of the author's own memos first, so a quota-enabled deployment paid O(memos)
+ * per write on top of the write itself. The counter answers the identical
+ * question — it holds one row per author and UTC hour, split by current status,
+ * so summing normal + archived is the same number the scan produced.
+ *
+ * This is the same trust model the module already uses for every other quota
+ * dimension: the monthly search and embedding budgets are read from
+ * `usage_counters`, a maintained counter with the same drift characteristics.
+ * Drift is bounded by the nightly recalibration, and the caller
+ * ({@link assertMemoCountQuota}) documents itself as an advisory pre-check that
+ * concurrent writers can already overshoot by one.
  */
 export async function countUserMemos(
   db: FlareMoDb,
   userId: string,
 ): Promise<number> {
-  const row = await db
-    .select({ total: sql<number>`count(*)` })
-    .from(memos)
-    .where(
-      and(
-        eq(memos.userId, userId),
-        inArray(memos.status, ["normal", "archived"]),
-      ),
-    )
-    .get();
-  return row?.total ?? 0;
+  const totals = await readHourlyCountTotals(db, userId);
+  return totals.normal + totals.archived;
 }
 
 /** Stock memory count for one user: active + archived. */
@@ -242,9 +243,16 @@ export async function assertMemoryCountQuota(
   const limit = userLimits?.maxMemoryItemsPerUser ?? null;
   if (limit === null) return;
   const used = await countUserMemories(db, userId);
-  if (used + additionalCount > limit) {
+  if (used + additionalCount <= limit) return;
+
+  // Over the cap, the ledger first sinks its own AI assets (§VI.12): dormant
+  // observations archive before a write is refused — a quota rejection after
+  // cleanup is explicit, never a silent drop.
+  await sinkDormantObservedMemories(db, new Date(), 100);
+  const afterSink = await countUserMemories(db, userId);
+  if (afterSink + additionalCount > limit) {
     throw new QuotaExceededError(
-      `Memory count quota exceeded (${limit} memories per user)`,
+      `Memory count quota exceeded (${limit} memories per user); dormant AI observations were archived first and more space is needed`,
     );
   }
 }

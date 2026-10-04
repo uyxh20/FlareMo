@@ -81,12 +81,12 @@ export function DesktopDevice({
             </div>
 
             <div className="flex items-center gap-1 text-mist">
-              <Bell className="size-3.5 hover:text-ink cursor-pointer" />
+              <Bell aria-hidden="true" className="size-3.5 text-mist" />
               <span className="inline-flex items-center gap-0.5 rounded-full bg-soft-surface px-1.5 py-0.5 text-[9px] font-mono border border-line/60">
                 <RefreshCw className="size-2 text-signal" />
                 v0.20
               </span>
-              <Settings className="size-3.5 hover:text-ink cursor-pointer" />
+              <Settings aria-hidden="true" className="size-3.5 text-mist" />
             </div>
           </div>
 
@@ -105,7 +105,7 @@ export function DesktopDevice({
         </aside>
 
         {/* 右侧主工作区 (时间线 + 发送器) */}
-        <main className="p-4 sm:p-5 space-y-4 max-h-[620px] overflow-y-auto thin-scrollbar">
+        <div className="p-4 sm:p-5 space-y-4 max-h-[620px] overflow-y-auto thin-scrollbar">
           {/* 顶部标题栏与搜索条 */}
           <div className="flex items-center justify-between gap-3 pb-1 border-b border-line/60">
             <div className="flex items-center gap-1.5 text-sm font-bold text-ink">
@@ -143,7 +143,7 @@ export function DesktopDevice({
             lastSyncedId={lastSyncedId}
             recordPrefix={showcase.ui.recordPrefix}
           />
-        </main>
+        </div>
       </div>
     </div>
   );

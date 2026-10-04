@@ -14,7 +14,6 @@ import {
   listArticles,
   restoreArticle,
 } from "@/api";
-import { SubpageHeader } from "@/components/subpage-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +26,8 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { useI18n } from "@/i18n";
 import { stripResourceName } from "@/lib/utils";
 
@@ -94,9 +95,16 @@ export function ArticlesPage() {
   const articles = articlesQuery.data?.articles ?? [];
 
   return (
-    <div className="min-h-svh bg-background px-4 py-6 sm:py-10">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-        <SubpageHeader
+    <WorkspaceLayout
+      maxWidthClass="max-w-4xl"
+      header={({
+        sidebarCollapsed,
+        toggleSidebarCollapsed,
+        mobileSheetOpen,
+        setMobileSheetOpen,
+        explorer,
+      }) => (
+        <WorkspacePageHeader
           actions={
             <Button
               disabled={createMutation.isPending}
@@ -112,8 +120,20 @@ export function ArticlesPage() {
               {t("article.newAction")}
             </Button>
           }
+          explorer={explorer}
+          icon={
+            <FileTextIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
+          }
+          maxWidthClass="max-w-4xl"
+          mobileSheetOpen={mobileSheetOpen}
+          setMobileSheetOpen={setMobileSheetOpen}
+          sidebarCollapsed={sidebarCollapsed}
           title={t("nav.articles")}
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
         />
+      )}
+    >
+      <div className="flex flex-col gap-5 py-2">
         {articlesQuery.isLoading && (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-20 w-full" />
@@ -230,6 +250,6 @@ export function ArticlesPage() {
           </div>
         )}
       </div>
-    </div>
+    </WorkspaceLayout>
   );
 }

@@ -16,12 +16,13 @@ export const springPop = {
   damping: 18,
 };
 
-/* ============ SSR 安全入场：首帧渲染最终状态，hydration 后再补动画 ============ */
+/* ============ SSR 安全入场：hydration 不改变首帧可见状态 ============ */
 
 /**
- * hydration 前渲染普通元素（SSR/首帧内容完整可见，不伤 SEO/LCP）；
- * 挂载后换回 motion 元素，从 hidden 态动画到 final。换装只发生一帧内，
- * 视觉上先看见成稿、随后补一次轻入场，而不是长时间的空白。
+ * hydration 前渲染普通元素（SSR/首帧内容完整可见，不伤 SEO/LCP）。挂载后
+ * 换成 motion 元素时禁止重新应用 hidden 初始态，避免 Hero 已经可见却在
+ * hydration 后短暂变透明。进入视口的元素仍保留 motion transition，首帧
+ * 以最终状态为准也让隐藏标签页恢复时直接显示可用内容。
  */
 export function useHydrated() {
   const [hydrated, setHydrated] = useState(false);
@@ -33,7 +34,15 @@ export function useHydrated() {
 
 /** 系统「减弱动态」偏好（SSR 安全）；为真时所有动效组件直接渲染静态内容 */
 export function useReducedMotionPreference() {
-  const [reduced, setReduced] = useState(false);
+  const [reduced, setReduced] = useState(() => {
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    ) {
+      return false;
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  });
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => setReduced(mq.matches);
@@ -52,12 +61,10 @@ export function Reveal({
   children,
   className,
   delay = 0,
-  y = 18,
 }: {
   children: ReactNode;
   className?: string;
   delay?: number;
-  y?: number;
 }) {
   const hydrated = useHydrated();
   const reduced = useReducedMotionPreference();
@@ -65,7 +72,7 @@ export function Reveal({
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y }}
+      initial={false}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={entranceViewport}
       transition={{ duration: 0.5, ease: easeOutQuint, delay }}
@@ -92,7 +99,7 @@ export function RevealGroup({
   return (
     <motion.div
       className={className}
-      initial="hidden"
+      initial={false}
       whileInView="visible"
       viewport={entranceViewport}
       variants={{
@@ -119,6 +126,7 @@ export function RevealItem({
   return (
     <motion.div
       className={className}
+      initial={false}
       variants={{
         hidden: { opacity: 0, y },
         visible: {
@@ -147,7 +155,7 @@ export function PopIn({
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0, y: 16, scale: 0.92 }}
+      initial={false}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={springPop}
     >
@@ -182,7 +190,14 @@ export function AnimatedNumber({
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    if (reduced) return;
+    if (
+      reduced ||
+      (typeof document !== "undefined" &&
+        document.visibilityState !== "visible")
+    ) {
+      setDisplay(value);
+      return;
+    }
     const controls = animate(0, value, {
       duration: 1.2,
       delay: 0.15,

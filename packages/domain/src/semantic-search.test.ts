@@ -1,4 +1,3 @@
-import type { UserRow } from "@flaremo/db";
 import { applyFlaremoMigrations, createDb, memos } from "@flaremo/db";
 import { eq } from "drizzle-orm";
 import { Miniflare } from "miniflare";
@@ -15,7 +14,6 @@ import { createMemo } from "./memos";
 import { semanticSearchMemos } from "./semantic-search";
 import type { TeamViewer } from "./team-permissions";
 import { createTeamMember, ensureTeamOwner } from "./test-support";
-import { createFlaremoMember } from "./users";
 
 let mf: Miniflare;
 let db: ReturnType<typeof createDb>;

@@ -13,10 +13,10 @@ import {
 } from "@flaremo/domain";
 import type { Context } from "hono";
 import {
-  createFlareMoAuth,
+  type FlareMoAuth,
   getTrustedOrigins,
   MEMOS_PAT_CONFIG_ID,
-} from "./auth";
+} from "./auth-env";
 import type { FlareMoEnv } from "./env";
 import { memoFilterScanLimit } from "./filter-scan-limit";
 import { resolveOauthIntegrationCached } from "./integrations/config";
@@ -57,18 +57,59 @@ async function resolveUserLimits(
   return resolve(c.env, userId);
 }
 
-// Better Auth assembles a complete instance per call (config resolution,
-// table maps, drizzle adapter). Its inputs — the env bindings and the D1
-// wrapper built from them — are stable for the life of an isolate, so keep
-// one pair per env object. Callers needing non-default options (bootstrap
-// sign-up) still build their own instance.
-const runtimeCache = new WeakMap<
-  FlareMoEnv,
-  {
-    db: ReturnType<typeof createDb>;
-    auth: ReturnType<typeof createFlareMoAuth>;
+// The D1 handle is cheap — `createDb` only wraps the binding — and most request
+// paths need nothing else, so it stays synchronous and eager. Keeping `db`
+// separate from the auth instance is what allows the auth side to be lazy
+// without forcing every `db`-only caller to await anything.
+const dbCache = new WeakMap<FlareMoEnv, ReturnType<typeof createDb>>();
+
+export function getFlareMoDb(env: FlareMoEnv) {
+  let db = dbCache.get(env);
+  if (!db) {
+    db = createDb(env.DB);
+    dbCache.set(env, db);
   }
->();
+  return db;
+}
+
+/**
+ * Better Auth's factory module, imported on first use and memoized.
+ *
+ * `auth.ts` is the heaviest module in the worker's startup graph: the auth
+ * runtime plus its plugins, kysely, jose and the noble crypto curves come to
+ * roughly 1.8 MiB of source. A single static value import of it anywhere on the
+ * request path — including a file that only wanted an origin list — pins all of
+ * that in every isolate's startup parse (issue #138).
+ *
+ * `import()` is a cached module load, so only the first caller pays; the
+ * resolved module is shared by everyone after that.
+ */
+let authFactory: Promise<typeof import("./auth")> | undefined;
+
+export function loadAuthFactory() {
+  authFactory ??= import("./auth");
+  return authFactory;
+}
+
+// Better Auth assembles a complete instance per construction (config
+// resolution, table maps, drizzle adapter). Its inputs — the env bindings and
+// the D1 wrapper built from them — are stable for the life of an isolate, so
+// one instance is kept per env object. The *promise* is cached rather than the
+// resolved value so concurrent requests share a single construction instead of
+// racing to build several. Callers needing non-default options (bootstrap
+// sign-up, social providers) still build their own instance.
+const authCache = new WeakMap<FlareMoEnv, Promise<FlareMoAuth>>();
+
+export function getFlareMoAuth(env: FlareMoEnv): Promise<FlareMoAuth> {
+  let pending = authCache.get(env);
+  if (!pending) {
+    pending = loadAuthFactory().then(({ createFlareMoAuth }) =>
+      createFlareMoAuth(env, getFlareMoDb(env)),
+    );
+    authCache.set(env, pending);
+  }
+  return pending;
+}
 
 /**
  * Auth identity fields the /me surface needs. Sourced from the Better Auth
@@ -100,16 +141,6 @@ function browserAuthUserSummary(user: unknown): AuthUserSummary | undefined {
   };
 }
 
-export function getFlareMoRuntime(env: FlareMoEnv) {
-  let runtime = runtimeCache.get(env);
-  if (!runtime) {
-    const db = createDb(env.DB);
-    runtime = { db, auth: createFlareMoAuth(env, db) };
-    runtimeCache.set(env, runtime);
-  }
-  return runtime;
-}
-
 // The auth handler route rebuilds the Better Auth instance when the owner
 // changes social-provider settings (or an env-provided provider appears in a
 // fresh isolate). Cache the built instance per env; keying by the resolved
@@ -117,7 +148,7 @@ export function getFlareMoRuntime(env: FlareMoEnv) {
 // default runtime auth.
 const oauthAuthCache = new WeakMap<
   FlareMoEnv,
-  { key: string; auth: ReturnType<typeof createFlareMoAuth> }
+  { key: string; auth: FlareMoAuth }
 >();
 
 /**
@@ -127,10 +158,10 @@ const oauthAuthCache = new WeakMap<
  * rebuild itself only happens when the resolved config actually changes.
  */
 export async function getFlareMoAuthHandler(env: FlareMoEnv) {
-  const runtime = getFlareMoRuntime(env);
-  const oauth = await resolveOauthIntegrationCached(env, runtime.db);
+  const db = getFlareMoDb(env);
+  const oauth = await resolveOauthIntegrationCached(env, db);
   if (!oauth.google && !oauth.github) {
-    return runtime.auth;
+    return getFlareMoAuth(env);
   }
   const key =
     oauth.revision ??
@@ -139,7 +170,7 @@ export async function getFlareMoAuthHandler(env: FlareMoEnv) {
   if (cached && cached.key === key) return cached.auth;
   let registrationOpen = true;
   try {
-    registrationOpen = await getUserRegistrationAllowed(runtime.db);
+    registrationOpen = await getUserRegistrationAllowed(db);
   } catch (error) {
     // Fail open: the registration toggle read must never break sign-in.
     // Leave a trace — a silently broken D1 binding would otherwise
@@ -149,7 +180,8 @@ export async function getFlareMoAuthHandler(env: FlareMoEnv) {
       error,
     );
   }
-  const auth = createFlareMoAuth(env, runtime.db, {
+  const { createFlareMoAuth } = await loadAuthFactory();
+  const auth = createFlareMoAuth(env, db, {
     socialProviders: {
       google: oauth.google ?? undefined,
       github: oauth.github ?? undefined,
@@ -161,7 +193,7 @@ export async function getFlareMoAuthHandler(env: FlareMoEnv) {
 }
 
 export async function getRequestContext(c: Context<HonoBindings>) {
-  const { db, auth } = getFlareMoRuntime(c.env);
+  const db = getFlareMoDb(c.env);
   const token = getBearerToken(c.req.raw.headers);
 
   if (token) {
@@ -207,6 +239,11 @@ export async function getRequestContext(c: Context<HonoBindings>) {
         userLimits: await resolveUserLimits(c, session.user.id),
       };
     }
+    // Only `memos_pat_` credentials reach Better Auth, so the auth instance is
+    // resolved here rather than at the top of the function: a browser session
+    // or a native access token never needs it, and loading it eagerly would
+    // defeat the lazy factory for the majority of requests.
+    const auth = await getFlareMoAuth(c.env);
     const verification = await auth.api.verifyApiKey({
       body: {
         configId: MEMOS_PAT_CONFIG_ID,
@@ -258,7 +295,7 @@ export async function getOptionalRequestContext(c: Context<HonoBindings>) {
       !c.req.raw.headers.has("cookie")
     ) {
       return {
-        db: getFlareMoRuntime(c.env).db,
+        db: getFlareMoDb(c.env),
         user: null,
         authUserId: null,
         credential: "anonymous" as const,
@@ -280,7 +317,8 @@ export async function getBrowserRequestContext(c: Context<HonoBindings>) {
     throw new UnauthorizedError();
   }
 
-  const { db, auth } = getFlareMoRuntime(c.env);
+  const db = getFlareMoDb(c.env);
+  const auth = await getFlareMoAuth(c.env);
   const session = await auth.api.getSession({
     headers: c.req.raw.headers,
   });

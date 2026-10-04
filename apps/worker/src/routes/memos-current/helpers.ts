@@ -1,4 +1,4 @@
-import { createDb, type UserRow } from "@flaremo/db";
+import type { createDb, UserRow } from "@flaremo/db";
 import {
   ConflictError,
   ForbiddenError,
@@ -14,20 +14,20 @@ import {
 } from "@flaremo/domain";
 import { currentMemoToDto, currentUserToDto } from "@flaremo/memos";
 import type { z } from "zod";
-import { createFlareMoAuth } from "../../auth";
 import {
-  getFlareMoRuntime,
+  getFlareMoAuth,
+  getFlareMoDb,
   type getOptionalRequestContext,
   type getRequestContext,
+  loadAuthFactory,
 } from "../../context";
 import { getAuthUserCached } from "../../identity-cache";
 import { base64ToUint8Array } from "../../memos-compat/base64";
 import { splitBearerToken } from "../../memos-compat/credential";
-import { CompatValidationError } from "../../memos-compat/errors";
+import { CompatValidationError, isRecord } from "../../memos-compat/errors";
 import { resolveMemoCreator } from "../../memos-compat/memo-creator";
 import { memoRelationsToDtos } from "../../memos-compat/memo-relations";
 import {
-  compatMemoRelationType,
   compatMemoVisibility,
   parseMemosOrderBy,
   parseMemosPageSize,
@@ -96,7 +96,7 @@ export async function currentUserForContext(context: {
 export async function createAuthContext(
   c: Parameters<typeof getRequestContext>[0],
 ) {
-  return getFlareMoRuntime(c.env);
+  return { db: getFlareMoDb(c.env), auth: await getFlareMoAuth(c.env) };
 }
 export function assertSessionCredential(
   context: Awaited<ReturnType<typeof getRequestContext>>,
@@ -120,7 +120,7 @@ export function assertOwnerUser(
 export async function assertRegistrationOpen(
   c: Parameters<typeof getRequestContext>[0],
 ) {
-  const db = createDb(c.env.DB);
+  const db = getFlareMoDb(c.env);
   const status = await getAuthBootstrapStatus(db);
   if (status.state !== "complete") {
     throw new ConflictError("Registration is not available yet");
@@ -167,40 +167,54 @@ export function parseCurrentFilter(filter: string | undefined) {
   return filter?.trim() ? { expression: filter.trim() } : {};
 }
 
+/**
+ * Read the request body for a `schema.parse(...)` call. `c.req.json()`
+ * rejects with a bare SyntaxError on malformed JSON, which the error
+ * envelope maps to 500; a bad body is a client error, so it is wrapped in
+ * the canonical 400 validation error instead.
+ */
+export async function readCurrentJsonObject(
+  c: Parameters<typeof getRequestContext>[0],
+) {
+  try {
+    return await c.req.json();
+  } catch {
+    throw new CompatValidationError("Request body must be valid JSON");
+  }
+}
+
+/**
+ * Flatten the optional single-nested-resource envelope Memos clients send
+ * (`{ memo: {…} }`, `{ memoShare: {…} }`, `{ attachment: {…} }`): the nested
+ * object's fields merge over the top-level body, matching the previous
+ * per-key copies that differed only in the envelope key.
+ */
+function unwrapNestedBody<T extends Record<string, unknown>>(
+  body: T,
+  key: keyof T,
+): T {
+  const nested = isRecord(body[key]) ? body[key] : undefined;
+  return { ...body, ...(nested ?? {}) } as T;
+}
+
 export function unwrapMemoBody(body: z.infer<typeof currentMemoBodySchema>) {
-  const nested = isRecord(body.memo) ? body.memo : undefined;
-  return {
-    ...body,
-    ...(nested ?? {}),
-  };
+  return unwrapNestedBody(body, "memo");
 }
 
 export function unwrapShareBody(body: z.infer<typeof currentShareBodySchema>) {
-  const nested = isRecord(body.memoShare) ? body.memoShare : undefined;
-  return {
-    ...body,
-    ...(nested ?? {}),
-  };
+  return unwrapNestedBody(body, "memoShare");
 }
 
 export function unwrapAttachmentBody(
   body: z.infer<typeof currentAttachmentBodySchema>,
 ) {
-  const nested = isRecord(body.attachment) ? body.attachment : undefined;
-  return {
-    ...body,
-    ...(nested ?? {}),
-  };
+  return unwrapNestedBody(body, "attachment");
 }
 
 export function unwrapAttachmentPatchBody(
   body: z.infer<typeof currentAttachmentPatchBodySchema>,
 ) {
-  const nested = isRecord(body.attachment) ? body.attachment : undefined;
-  return {
-    ...body,
-    ...(nested ?? {}),
-  };
+  return unwrapNestedBody(body, "attachment");
 }
 
 export function currentUpdateInput(
@@ -353,6 +367,7 @@ export async function signOutCookieSession(
     method: "POST",
     headers,
   });
+  const { createFlareMoAuth } = await loadAuthFactory();
   return await createFlareMoAuth(c.env, db).handler(request);
 }
 
@@ -374,6 +389,4 @@ export function isLegacyWireRequest(c: {
   );
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+export { isRecord };

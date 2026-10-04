@@ -44,30 +44,36 @@ for (const mobile of [false, true]) {
     });
     await page.goto("/account");
     await expect.poll(() => permissionRequests).toBeGreaterThan(0);
-    await expect(
-      page.getByText(/Voice recognition settings|语音识别设置/, {
-        exact: true,
-      }),
-    ).toHaveCount(0);
+    // The settings panel mounts once per responsive branch (mobile and
+    // desktop), so every string inside it appears twice in the DOM. Scope all
+    // visibility assertions to the rendered branch; `visible=true` is what
+    // keeps strict mode satisfied.
+    const voiceTitle = page
+      .getByText(/Voice recognition settings|语音识别设置/, { exact: true })
+      .locator("visible=true");
+    await expect(voiceTitle).toHaveCount(0);
     expect(settingsRequests).toBe(0);
     release();
     // Voice settings moved to their own settings pane; the pane entry only
     // appears once the viewer permission resolves.
     await page.getByRole("button", { name: /语音服务|Voice service/i }).click();
-    await expect(
-      page.getByText(/Voice recognition settings|语音识别设置/, {
-        exact: true,
-      }),
-    ).toBeVisible();
-    await expect(page.locator("#voice-secretKey")).toHaveAttribute(
-      "type",
-      "password",
-    );
-    await expect(page.locator("#voice-secretKey")).toHaveValue("");
-    expect(settingsRequests).toBeGreaterThan(0);
+    await expect(voiceTitle).toBeVisible();
+    // Credentials sit behind the "配置服务凭据" dialog; opening it proves the
+    // fields are reachable and rendered as password inputs.
     await page
-      .getByText(/Voice recognition settings|语音识别设置/, { exact: true })
-      .scrollIntoViewIfNeeded();
+      .getByRole("button", { name: /凭据已配置|Credentials configured/i })
+      .locator("visible=true")
+      .first()
+      .click();
+    const credentialDialog = page.locator('[role="dialog"]:visible').last();
+    const voiceSecret = credentialDialog.locator("#voice-secretKey");
+    await expect(voiceSecret).toHaveAttribute("type", "password");
+    await expect(voiceSecret).toHaveValue("");
+    await credentialDialog
+      .getByRole("button", { name: /取消|Cancel/i })
+      .click();
+    expect(settingsRequests).toBeGreaterThan(0);
+    await voiceTitle.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: testInfo.outputPath("voice-settings.png"),
       fullPage: true,
@@ -114,9 +120,9 @@ for (const role of ["member", "unavailable"]) {
     await page.goto("/account");
     await expect.poll(() => permissionRequests).toBeGreaterThan(0);
     await expect(
-      page.getByText(/Voice recognition settings|语音识别设置/, {
-        exact: true,
-      }),
+      page
+        .getByText(/Voice recognition settings|语音识别设置/, { exact: true })
+        .locator("visible=true"),
     ).toHaveCount(0);
     expect(settingsRequests).toBe(0);
     await page.unrouteAll({ behavior: "ignoreErrors" });
@@ -128,20 +134,46 @@ test("owner saves encrypted credentials through the UI and disables capture", as
 }) => {
   await page.goto("/account");
   await page.getByRole("button", { name: /语音服务|Voice service/i }).click();
-  await expect(page.locator("#voice-secretKey")).toBeVisible();
-  await page.locator("#voice-appId").fill("1234567890");
-  await page.locator("#voice-secretId").fill("e2e-not-a-real-secret-id");
-  await page.locator("#voice-secretKey").fill("e2e-not-a-real-secret-key");
+  // The enable switch sits on the pane itself, so flip it before the
+  // credential dialog opens — while that dialog is up, Radix marks the pane
+  // aria-hidden and role queries can no longer reach it.
+  //
+  // The Switch renders an unnamed `role="switch"` next to its label text
+  // rather than a labelled control, so a `getByRole("switch", { name })` query
+  // can never match; locate the row by its visible label and take the switch
+  // inside it. `:visible` picks the rendered responsive branch.
   await page
-    .getByRole("switch", { name: /Enable voice capture|启用语音记录/ })
+    .locator("div")
+    .filter({ hasText: /^Enable voice capture|^启用语音记录/ })
+    .locator('[role="switch"]:visible')
+    .first()
     .click();
+  // The credential fields live behind the "凭据已配置" dialog now; the pane
+  // itself only shows the status rows.
   await page
-    .getByRole("button", { name: /Save settings|保存配置/, exact: true })
+    .getByRole("button", { name: /凭据已配置|Credentials configured/i })
+    .locator("visible=true")
+    .first()
     .click();
-  await expect(page.getByRole("status")).toContainText(
-    /Settings saved|配置已保存/,
-  );
-  await expect(page.locator("#voice-secretKey")).toHaveValue("");
+  const dialog = page.locator('[role="dialog"]:visible').last();
+  // One id per responsive branch; `:visible` picks the rendered one.
+  const secretKey = dialog.locator("#voice-secretKey");
+  await expect(secretKey).toBeVisible();
+  await dialog.locator("#voice-appId").fill("1234567890");
+  await dialog.locator("#voice-secretId").fill("e2e-not-a-real-secret-id");
+  await secretKey.fill("e2e-not-a-real-secret-key");
+  await dialog
+    .getByRole("button", { name: /^Save$|^保存$/, exact: true })
+    .click();
+  // Sonner renders toasts as an `aria-live="polite"` list, not `role="status"`,
+  // so match the toast text itself.
+  await expect(
+    page
+      .getByText(/Settings saved|配置已保存/)
+      .locator("visible=true")
+      .first(),
+  ).toBeVisible();
+  await expect(secretKey).toHaveValue("");
   const metadata = await page.request.get("/api/app/voice-settings");
   expect(await metadata.text()).not.toContain("e2e-not-a-real");
   const status = await page.request.get("/api/app/capture/status");
@@ -152,11 +184,16 @@ test("owner saves encrypted credentials through the UI and disables capture", as
     streaming: true,
     provider: "tencent",
   });
+  // The destructive row is labelled "Clear voice configuration"; only the
+  // confirm action inside the AlertDialog uses the "delete credentials"
+  // wording.
   await page
     .getByRole("button", {
-      name: /Delete credentials and disable|删除凭据并停用/,
+      name: /Clear voice configuration|清除语音配置/,
       exact: true,
     })
+    .locator("visible=true")
+    .first()
     .click();
   await page
     .getByRole("alertdialog")
@@ -165,9 +202,12 @@ test("owner saves encrypted credentials through the UI and disables capture", as
       exact: true,
     })
     .click();
-  await expect(page.getByRole("status")).toContainText(
-    /Credentials deleted|凭据已删除/,
-  );
+  await expect(
+    page
+      .getByText(/Credentials deleted|凭据已删除/)
+      .locator("visible=true")
+      .first(),
+  ).toBeVisible();
   const disabled = await page.request.get("/api/app/capture/status");
   expect(await disabled.json()).toMatchObject({
     available: false,

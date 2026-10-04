@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListTodoIcon, PlusIcon } from "lucide-react";
+import { FolderKanbanIcon, ListTodoIcon, PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { listProjects, listTasks } from "@/api";
-import { SubpageHeader } from "@/components/subpage-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
+import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { useI18n } from "@/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { Board } from "./projects/board";
@@ -73,9 +74,16 @@ export function ProjectsPage() {
   }, [selected, projectById, projectsQuery.data]);
 
   return (
-    <div className="min-h-svh bg-background px-4 py-5 sm:py-8">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-        <SubpageHeader
+    <WorkspaceLayout
+      maxWidthClass="max-w-5xl"
+      header={({
+        sidebarCollapsed,
+        toggleSidebarCollapsed,
+        mobileSheetOpen,
+        setMobileSheetOpen,
+        explorer,
+      }) => (
+        <WorkspacePageHeader
           actions={
             <>
               <Button
@@ -92,9 +100,20 @@ export function ProjectsPage() {
               </Button>
             </>
           }
+          explorer={explorer}
+          icon={
+            <FolderKanbanIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
+          }
+          maxWidthClass="max-w-5xl"
+          mobileSheetOpen={mobileSheetOpen}
+          setMobileSheetOpen={setMobileSheetOpen}
+          sidebarCollapsed={sidebarCollapsed}
           title={t("projects.title")}
+          toggleSidebarCollapsed={toggleSidebarCollapsed}
         />
-
+      )}
+    >
+      <div className="flex flex-col gap-4 py-2">
         <div className="flex flex-col gap-4 lg:flex-row">
           <aside className="flex w-full shrink-0 flex-col gap-1 lg:w-64">
             <button
@@ -190,7 +209,7 @@ export function ProjectsPage() {
           onOpenChange={setCreatingTask}
           onSaved={invalidate}
         />
-      </main>
-    </div>
+      </div>
+    </WorkspaceLayout>
   );
 }

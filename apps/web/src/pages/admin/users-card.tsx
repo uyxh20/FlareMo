@@ -9,7 +9,7 @@ import {
 } from "@/api";
 import { useClipboard } from "@/hooks/use-clipboard";
 import { useI18n } from "@/i18n";
-import { errorMessage } from "@/lib/error";
+import { errorMessage, isEmailInUseError } from "@/lib/error";
 import { queryKeys } from "@/lib/query-keys";
 import { readerExpiryBase, useAdminUserMutations } from "./use-admin-users";
 import { UsersDialogs } from "./users-card/users-dialogs";
@@ -81,7 +81,11 @@ export function AdminPanel() {
       resetCopied();
       setCreateOpen(false);
     } catch (error) {
-      setCreateError(errorMessage(error, t("admin.userCreateFailed")));
+      setCreateError(
+        isEmailInUseError(error)
+          ? t("common.emailInUse")
+          : errorMessage(error, t("admin.userCreateFailed")),
+      );
     }
   };
 

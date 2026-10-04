@@ -1,11 +1,11 @@
-import type { UserRow } from "@flaremo/db";
-import { createDb } from "@flaremo/db";
+import type { createDb, UserRow } from "@flaremo/db";
 import { SELF_HOST_UNLIMITED } from "@flaremo/domain";
 import type { Context } from "hono";
-import type {
-  getOptionalRequestContext,
-  getRequestContext,
-  HonoBindings,
+import {
+  getFlareMoDb,
+  type getOptionalRequestContext,
+  type getRequestContext,
+  type HonoBindings,
 } from "../../context";
 import { memoFilterScanLimit } from "../../filter-scan-limit";
 import { getAuthUserCached, getFlaremoUserCached } from "../../identity-cache";
@@ -104,7 +104,7 @@ export function optionalTimestamp(value: unknown, field: string) {
 export async function getPublicInstanceContext(
   c: ConnectContext,
 ): Promise<ConnectRequestContext> {
-  const db = createDb(c.env.DB);
+  const db = getFlareMoDb(c.env);
   const user =
     (await getFlaremoUserCached(db, "users/owner")) ??
     publicOwnerFallback(c.env.FLAREMO_SINGLE_USER_NAME);

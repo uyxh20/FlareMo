@@ -81,21 +81,19 @@ export function ShowcaseComposer({
             type="button"
             onClick={() => onValueChange((prev) => `${prev} #`)}
             className={TOOL_BUTTON_CLASS[variant]}
+            aria-label="插入标签 / Insert tag"
             title={isMobile ? undefined : "插入标签"}
           >
             <Hash className={TOOL_ICON_CLASS[variant]} />
           </button>
-          <button
-            type="button"
-            className={TOOL_BUTTON_CLASS[variant]}
-            title={isMobile ? undefined : "上传附件"}
-          >
+          <span aria-hidden="true" className="text-fog opacity-60">
             <ImageIcon className={TOOL_ICON_CLASS[variant]} />
-          </button>
+          </span>
           <button
             type="button"
             onClick={() => onValueChange((prev) => `${prev}\n• `)}
             className={TOOL_BUTTON_CLASS[variant]}
+            aria-label="插入列表 / Insert list"
             title={isMobile ? undefined : "列表项目"}
           >
             <List className={TOOL_ICON_CLASS[variant]} />

@@ -9,13 +9,16 @@ import {
 } from "@flaremo/domain";
 import type { Hono } from "hono";
 import { cleanupFlaremoArtifacts } from "../../artifact-cleanup";
-import { createFlareMoAuth } from "../../auth";
-import { getRequestContext, type HonoBindings } from "../../context";
+import {
+  getRequestContext,
+  type HonoBindings,
+  loadAuthFactory,
+} from "../../context";
 import { getFlaremoUserCached } from "../../identity-cache";
+import { currentJsonError } from "../../memos-compat/current-errors";
 import { registerCompatMember } from "../../memos-compat/member-service";
 import { personalAccessTokenToDto } from "../../memos-compat/pat";
 import { memosCompatUserDto } from "../../memos-compat/user-dto";
-import { currentJsonError } from "./errors";
 import {
   assertCurrentUserPath,
   assertOwnerUser,
@@ -24,6 +27,7 @@ import {
   isLegacyWireRequest,
   normalizeUserName,
   noStoreResponse,
+  readCurrentJsonObject,
 } from "./helpers";
 import { currentPatBodySchema, currentSignupSchema } from "./schemas";
 
@@ -51,7 +55,7 @@ export function registerUserRoutes(app: Hono<HonoBindings>) {
     try {
       const context = await getRequestContext(c);
       assertOwnerUser(context);
-      const body = currentSignupSchema.parse(await c.req.json());
+      const body = currentSignupSchema.parse(await readCurrentJsonObject(c));
       const username = body.username.trim();
       const email = `${username}@flaremo.local`;
       const { authUserId, user } = await registerCompatMember({
@@ -102,7 +106,8 @@ export function registerUserRoutes(app: Hono<HonoBindings>) {
       const context = await getRequestContext(c);
       assertSessionCredential(context);
       assertCurrentUserPath(c.req.param("user"), context.user.id);
-      const body = currentPatBodySchema.parse(await c.req.json());
+      const body = currentPatBodySchema.parse(await readCurrentJsonObject(c));
+      const { createFlareMoAuth } = await loadAuthFactory();
       const auth = createFlareMoAuth(c.env, context.db);
       const created = await auth.api.createApiKey({
         body: {
@@ -141,6 +146,7 @@ export function registerUserRoutes(app: Hono<HonoBindings>) {
         keyId: tokenId,
       });
       if (!existing) throw new NotFoundError("Personal access token not found");
+      const { createFlareMoAuth } = await loadAuthFactory();
       await createFlareMoAuth(c.env, context.db).api.updateApiKey({
         body: {
           configId: "memos",

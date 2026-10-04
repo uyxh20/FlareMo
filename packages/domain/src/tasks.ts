@@ -12,6 +12,10 @@ import { NotFoundError, ValidationError } from "./errors";
 import { createResourceId, parseResourceName } from "./ids";
 import { requireProject } from "./projects";
 
+// D1 caps bound parameters per statement at 100. Leave room for the cutoff
+// predicate that is repeated on delete after the initial candidate read.
+const HARD_DELETE_BATCH_SIZE = 96;
+
 /**
  * The actor behind a task mutation. Browser sessions are the owner; PATs
  * (agents and scripts) are agents. Both are first-class writers on tasks, so
@@ -516,14 +520,31 @@ export async function hardDeleteExpiredTasks(
   db: FlareMoDb,
   cutoff: string,
 ): Promise<number> {
-  const expired = await db
-    .select({ id: tasks.id })
-    .from(tasks)
-    .where(lt(tasks.deletedAt, cutoff));
-  for (const { id } of expired) {
-    await db.delete(tasks).where(eq(tasks.id, id));
+  let deleted = 0;
+  while (true) {
+    const expired = await db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(lt(tasks.deletedAt, cutoff))
+      .limit(HARD_DELETE_BATCH_SIZE)
+      .all();
+    if (expired.length === 0) break;
+
+    const removed = await db
+      .delete(tasks)
+      .where(
+        and(
+          lt(tasks.deletedAt, cutoff),
+          inArray(
+            tasks.id,
+            expired.map((row) => row.id),
+          ),
+        ),
+      )
+      .returning({ id: tasks.id });
+    deleted += removed.length;
   }
-  return expired.length;
+  return deleted;
 }
 
 // ---------------------------------------------------------------------------

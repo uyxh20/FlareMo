@@ -1,6 +1,7 @@
 import {
   bootstrapInputSchema,
   checkpointInputSchema,
+  compileInputSchema,
   FLAREMO_API_VERSION,
   forgetInputSchema,
   linkInputSchema,
@@ -11,6 +12,7 @@ import {
   assertMonthlyQuota,
   bootstrapMemory,
   checkpointMemory,
+  compileCoreMemory,
   createMemory,
   DomainError,
   estimateTokenCount,
@@ -94,18 +96,43 @@ const memoryTools: Array<{
     name: "memory_recall",
     description:
       "Search long-term memory for relevant facts, decisions, preferences, or " +
-      "lessons. Results are scoped to global plus the requested project/workspace " +
-      "and the calling agent; cross-project recall is not allowed. Use when the " +
-      "task involves historical decisions, user preferences, project constraints, " +
-      "or past failures.",
+      "lessons, using deterministic fact-key hits, full-text search, semantic " +
+      "similarity, and one-hop relation expansion fused by rank. Results are " +
+      "scoped to global plus the requested project/workspace and the calling " +
+      "agent; cross-project recall is not allowed. Each result carries the paths " +
+      "that matched it. Use when the task involves historical decisions, user " +
+      "preferences, project constraints, or past failures.",
     inputSchema: {
       type: "object",
-      required: ["query", "agent"],
+      required: ["query"],
       properties: {
         query: { type: "string", description: "Natural-language query." },
-        agent: { type: "string" },
+        agent: {
+          type: "string",
+          description: "The calling agent, e.g. codex.",
+        },
         project_key: { type: "string" },
         workspace_key: { type: "string" },
+        from_scope: {
+          type: "string",
+          description:
+            "Read across projects by exact scope key. Omit for normal scoped recall.",
+        },
+        fact_key: {
+          type: "string",
+          description: "Exact fact key; a hit short-circuits to the top.",
+        },
+        as_of: {
+          type: "string",
+          description:
+            "ISO instant; answers with the facts that were valid then (time travel).",
+        },
+        include_inferred: {
+          type: "boolean",
+          description:
+            "Include unconfirmed conjectures. Off by default; only use when the user asks for proposals.",
+        },
+        include_superseded: { type: "boolean" },
         types: {
           type: "array",
           items: {
@@ -130,7 +157,7 @@ const memoryTools: Array<{
             ],
           },
         },
-        limit: { type: "integer", minimum: 1, maximum: 20 },
+        limit: { type: "integer", minimum: 1, maximum: 50 },
       },
       additionalProperties: false,
     },
@@ -186,6 +213,101 @@ const memoryTools: Array<{
         source_agent: { type: "string" },
         source_session: { type: "string" },
         source_ref: { type: "string" },
+        fact_key: {
+          type: "string",
+          description:
+            "Deterministic key for the one fact this memory states, e.g. 'db.primary_engine'. " +
+            "Writing the same key again supersedes the previous version when both are agent " +
+            "memories; if the existing version is user-owned (confirmed/locked), the write is " +
+            "downgraded to a proposal for the user to decide.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string", maxLength: 64 },
+          description:
+            "Free-form topic labels for navigation only. They never trigger supersession.",
+        },
+        idempotency_key: {
+          type: "string",
+          description:
+            "Opaque retry key. Reusing it returns the first result instead of creating a duplicate.",
+        },
+        valid_from: {
+          type: "string",
+          description:
+            "ISO instant this fact becomes true. Defaults to now; a future value schedules it.",
+        },
+        observed_at: {
+          type: "string",
+          description:
+            "ISO instant the agent observed this, if different from now.",
+        },
+        evidence: {
+          type: "array",
+          description:
+            "Where this conclusion came from, so the user can audit it.",
+          items: {
+            type: "object",
+            required: ["source_id"],
+            properties: {
+              source_type: {
+                type: "string",
+                enum: [
+                  "memo",
+                  "session",
+                  "github",
+                  "url",
+                  "document",
+                  "manual",
+                  "other",
+                ],
+                default: "session",
+              },
+              source_id: { type: "string" },
+              source_revision: { type: "string" },
+              relation_type: {
+                type: "string",
+                enum: [
+                  "derived_from",
+                  "evidence_for",
+                  "contradicts",
+                  "references",
+                ],
+                default: "derived_from",
+              },
+              observed_at: { type: "string" },
+              excerpt: { type: "string" },
+            },
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "memory_compile",
+    description:
+      "Build the memory projection for a context: the exact Markdown an agent " +
+      "should carry into a session, already packed within a character budget. " +
+      "Iron rules (pinned) are always included; unconfirmed conjectures never " +
+      "are. Prefer this over calling memory_bootstrap and re-formatting it " +
+      "yourself, so every agent receives the same bytes.",
+    inputSchema: {
+      type: "object",
+      required: ["agent"],
+      properties: {
+        agent: {
+          type: "string",
+          description: "The calling agent, e.g. codex.",
+        },
+        project_key: { type: "string" },
+        workspace_key: { type: "string" },
+        max_chars: { type: "integer", minimum: 500, maximum: 30000 },
+        exclude_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Memories to leave out of this projection, by id.",
+        },
       },
       additionalProperties: false,
     },
@@ -457,9 +579,14 @@ async function callMemoryTool(
           agent: input.agent,
           projectKey: input.project_key,
           workspaceKey: input.workspace_key,
+          fromScope: input.from_scope,
+          factKey: input.fact_key,
+          asOf: input.as_of,
           types: input.types,
           kinds: input.kinds,
           limit: input.limit,
+          includeInferred: input.include_inferred,
+          includeSuperseded: input.include_superseded,
         },
         // Memory vectors are indexed under per-user namespaces; recall must
         // query the caller's own namespace or it sees nothing.
@@ -476,6 +603,15 @@ async function callMemoryTool(
         { userLimits: context.userLimits, userId: user.id },
       );
       return result;
+    }
+    case "memory_compile": {
+      const input = compileInputSchema.parse(args);
+      // An agent compile is an actual injection: it is archived so the lens
+      // can show "上次实际注入" from the record (§VI.7).
+      return compileCoreMemory(db, user, input, {
+        persist: true,
+        agent: input.agent,
+      });
     }
     case "memory_checkpoint": {
       const input = checkpointInputSchema.parse(args);

@@ -39,237 +39,172 @@
 
 ## 💡 为什么选择 FlareMo
 
-Flomo 和 Memos 证明了「快速捕捉 + 流式时间线」这种无压力记录体验的巨大价值。但自部署传统的笔记系统通常意味着：你需要一台按月付费的 VPS、安装并配置 Docker / Postgres、编写定时备份脚本，还要时刻提防硬盘损坏或机房故障导致的数据损失。
+Flomo 和 Memos 证明了「快速捕捉 + 流式时间线」这种无压力记录体验的巨大价值。但自部署传统的笔记系统通常意味着：你需要一台按月付费的 VPS、安装并配置 Docker / Postgres、编写定时备份脚本，还要时刻提防硬盘损坏或硬件故障导致的数据损失。
 
-FlareMo 探索了一条完全不同的道路：**仅凭一个免费的 Cloudflare 账号，不买服务器、不装数据库、不写备份脚本，就能拥有一个 24 小时高可用、数据多副本持久化、全球就近加速、还能被各类 AI 与自动化工具调用的现代化知识库。**
+FlareMo 回答了一个更简单的问题：**仅凭一个免费的 Cloudflare 账号、零服务器维护，你能拥有一个 7×24 小时在线、有韧性、全球加速的知识库吗？**
 
-- **真正的 Serverless**：代码与静态前端直接部署在 Cloudflare Workers 全球边缘网络，毫秒级响应。
-- **开箱即用的企业级存储**：以 Cloudflare D1 作为元数据与笔记事实源，Cloudflare R2 存储媒体附件，自带跨地域持久化冗余。
-- **AI 原生设计**：内置 MCP 协议与 Agent Memory 长期记忆中枢，让 AI 真正成为你的第二大脑。
-- **一人安静，多人协同**：默认是私密的单人速记空间；开启团队模式后，即刻变身为具备精细角色与可见性隔离的团队工作台。
-- **简约不简单**：界面安静、能力完整——没有抢眼的装饰，也没有缺失的功能。
+- **真正的 Serverless**：代码与静态前端直接部署在离你最近的 Cloudflare Workers 边缘节点，毫秒级响应。
+- **开箱即用的企业级持久化**：Cloudflare D1 承载笔记与元数据，Cloudflare R2 存储媒体附件，自带多地域副本。
+- **AI 原生第二大脑**：Agent Memory 记忆中枢自带 CLI 与跨 Agent Skill，AI Agent（Claude、Cursor、Codex、ChatGPT、ZCode）可以读取并更新你的长期偏好与记忆范围；同时保留 MCP 端点。
+- **一人安静，多人强大**：默认是私密加密的单人 sanctuary；开启团队模式后，即刻变身为具备角色与三级可见性的协作工作台。
+- **简约不简单**：界面安静，每个控件都各有其位——没有抢眼装饰，也没有缺失的功能。
 
 ---
 
 ## ✨ 核心特性
 
 ### 1. 极速速记与沉浸式回顾
-- **即开即写**：卡片式流式时间线，支持多标签归类、Markdown/GFM 渲染、图片与音频媒体预览。
-- **智能搜索**：D1 FTS5 全文快速检索，支持过滤条件（`has:attachment`、`is:pinned`、`before:YYYY-MM-DD`、`after:YYYY-MM-DD`、`in:timeline|archive|trash`）。
-- **向量语义「找一找」**：集成 Cloudflare Workers AI embedding + Vectorize 派生索引，理解上下文意图；自动鉴权并在索引未就绪时平滑降级为关键词搜索。
-- **灵感激活**：内置**每日回顾**（那年今日时光机）、**随机漫步**（标签与双向链接穿梭游走 + 明信片总结）和 memo 详情页相关笔记推荐。
-- **版本回溯**：完整的修改历史与版本对比，随时还原任一历史快照。
+- **毫秒级捕捉**：卡片式时间线，支持标签、Markdown/GFM，以及图片与音频附件预览。
+- **极速搜索**：SQLite FTS5 全文索引，支持查询操作符（`has:attachment`、`is:pinned`、`before:YYYY-MM-DD`、`after:YYYY-MM-DD`、`in:timeline|archive|trash`）。
+- **语义「找一找」（向量搜索）**：Workers AI embedding 搭配 Vectorize 派生向量索引，按上下文语义召回；结果会对照 D1 二次校验权限，并无缝降级到 FTS5。
+- **灵感激活**：内置**每日回顾**（那年今日）、**随机漫步**（在标签与反向链接图中游走，附明信片式总结）和相关笔记推荐。
+- **版本回溯**：完整的版本差异对比，一键还原历史版本。
 
-### 2. AI 长期记忆与 MCP 原生集成
-- **Agent Memory**：通过 `/memory/mcp` 端点，AI Agent（Claude Desktop、Cursor、Codex、OpenAI 等）可以直接读写跨会话的长期记忆（偏好、决策、约束、教训）。
-- **人机协同**：用户可在 `/memory` 界面集中查看、确认、锁定或纠正 AI 沉淀的记忆，确保知识沉淀准确可控。
-- **生态互联**：提供标准 `/mcp` 端点（Streamable HTTP MCP），支持快速查询笔记与灵感沉淀。
+### 2. AI 长期记忆（CLI + Skills）
+- **Agent Memory**：自带 `flaremo` CLI 与 `flaremo-memory` Skill——AI Agent 通过同一 REST 基底记录并更新跨会话的长期记忆（偏好、项目决策、约束、教训）。
+- **人机协同**：在 `/memory` 界面审阅、确认、锁定或纠正 AI 沉淀的记忆。
+- **开放生态**：推荐路径是 CLI + Skills；同时提供 `/memory/mcp`（Streamable HTTP MCP）与 `/mcp` 端点，兼容既有 MCP 客户端。
 
 ### 3. 项目与任务
-- **按项目归拢工作**：把相关记录与待办收进项目统一管理，看板视图支持跨状态列拖拽，配优先级、手动排序与截止日。
+- **按项目归拢工作**：把笔记与待办收进项目统一管理，看板支持跨状态列拖拽，配优先级、手动排序与截止日。
 - **个人私有、可撤销删除**：任务为单人私有资源；删除先进回收站，可随时还原，到期后自动清理。
 
-### 4. 日历
-- **任务即日程的事实源**：`/calendar` 月历中，过去的格子铺当日记录、未来的格子排到期任务——支持拖拽改期、快速添加带日期任务与 agenda 列表浏览。
-- **逾期提醒**：逾期任务产生站内通知，并可选开启浏览器 Web Push。
+### 4. 任务管理与提醒
+- **任务住在项目里**：`/projects` 看板（跨状态列拖拽）、优先级、手动排序与截止日，让项目页成为排期工作的唯一归宿。
+- **时间维度一目了然**：explorer 首页将迷你月历与逾期/今日提醒并排呈现，到期事项不会藏在看板后面。
+- **逾期提醒**：逾期任务触发站内通知，并可选开启浏览器 Web Push。
 
-### 5. 团队协作与三级权限体系
-- **角色清晰**：提供 `owner` / `admin` / `member` 三种角色体系。管理员签发一次性激活链接，成员自主设置密码，保障隐私合规。
+### 5. 团队协作与三级可见性
+- **角色治理**：`owner`、`admin`、`member` 三种角色。管理员通过一次性激活链接邀请成员（成员自主设置密码；管理员经手不到任何明文凭据）。
+- **团队项目工作台**：`/team-projects` 把团队项目集中到一个视图——负责人、状态、当前进展、下一步与跟进日期——并可进入详情维护概况、记录进展与会议结论、上传查看资料。项目本身就是普通团队 memo，靠正文里的 `kosx-pm` 元数据块识别，不是项目的笔记在时间线上不受影响。
 - **三档可见性**：
   - 🔒 **私密**：仅作者本人可见。
-  - 👥 **团队可见**：团队有效成员只读共享。
-  - 🌐 **全网公开**：匿名只读分享（带有时效控制与状态校验）。
-- **安全移除与物理清理**：成员被移出空间时，自动触发可重试的私有数据深度清理，团队与公开沉淀妥善保留。
-- **读者席位**：可发放带有效期的只读席位（客座读者、课程学员、客户交付）。到期自动失效（凭证解析时 fail-closed，无需定时任务）；可在成员页管理，也可用个人访问令牌调用幂等接口 `PUT /api/app/admin/team/reader` 按邮箱开通（见 `docs/team-mode.md`）。
+  - 👥 **团队可见**：对有效团队成员只读共享。
+  - 🌐 **全网公开**：通过限时分享链接匿名只读访问。
+- **安全移除**：移除成员会触发可靠的后台清理，清除其私有数据，同时保留团队与公开笔记。
+- **读者席位**：可发放带有效期的只读席位（客座读者、课程学员、客户交付）。席位到期自动失效（凭证解析时 fail-closed，无需定时任务）；可在成员页管理，也可用个人访问令牌（PAT）调用 `PUT /api/app/admin/team/reader` 按邮箱开通（见 `docs/team-mode.md`）。
 
-### 6. 离线可用与多端适配（PWA）
-- **可安装 PWA**：支持一键安装到桌面和手机主屏幕，原生 App 级流畅体验。
-- **离线可靠写入**：断网状态下草稿本地暂存，离线提交（含图片/附件）进入待同步队列，恢复网络后自动按序安全提交。
-- **实时语音速记**：登录后访问 `/capture` 页面，支持前台实时流式 ASR 语音听写转文本，随想随录。
+### 6. 离线优先与 PWA 体验
+- **可安装 PWA**：一键安装到 macOS、Windows、iOS 或 Android 主屏幕，原生 App 级体验。
+- **可靠的离线同步**：草稿即刻本地保存。离线提交与上传进入待同步队列，恢复网络后自动重放。
+- **实时语音捕捉**：访问 `/capture` 即可获得实时流式语音转文字（ASR）。
 
-### 7. 坚固的应用层认证
-- **Better Auth 驱动**：浏览器使用安全 `HttpOnly`、`SameSite=Lax` Cookie Session；脚本、MCP 和第三方客户端使用账户签发的可撤销 `memos_pat_` Personal Access Token。
-- **严密防御**：状态变更请求（POST/PATCH/DELETE）强制精确校验 Origin 白名单；支持 Cloudflare Access 作为可选外层防护。
+### 7. 坚固的 Better Auth 应用安全
+- **Better Auth 驱动**：浏览器使用 HttpOnly、`SameSite=Lax` Cookie 会话；脚本、CLI 与 MCP 使用可撤销的 `memos_pat_` 个人访问令牌。
+- **严格的 Origin 防护**：状态变更请求强制精确校验 Origin 白名单。Cloudflare Access 仍可作为可选的外层防线。
 
-### 8. Memos 兼容与无痛迁移
-- **兼容 Memos API**：提供 `/api/v1/*` 核心端点（camelCase 与 legacy snake_case 支持）与 OpenAPI 契约规范。
-- **适配主流客户端**：兼容 Moe Memos 等主流第三方客户端及周边自动化工具。
-- **双向无损导入导出**：支持 Memos 标准格式数据包一键导入（带冲突处理策略）与全量归档导出。
+### 8. Memos 兼容与无缝迁移
+- **Memos `/api/v1` 兼容**：提供核心 Memos API 端点（默认 camelCase，经请求头可切换 legacy snake_case）与 OpenAPI 契约。
+- **第三方客户端开箱即用**：直接兼容 Moe Memos 等移动端客户端。
+- **双向导入导出**：从 Memos / flomo 一键导入（带冲突处理策略），并支持全量原始数据导出包。
 
 ---
 
 ### 9. 插件系统：卡片即插件
 - **五张内置卡片**：素白、日签、票根、明信片，以及自绘 canvas 的邮戳演示卡。
-- **商店与管理**：账户设置里浏览目录、一键安装（sha256 校验）、启用/停用、排序、设默认、隐藏；官方目录在 [flaremo.app/plugins](https://flaremo.app/plugins/registry.json)。
-- **可上传**：管理员可上传本地插件包——只存在于自己实例，永不外传。
-- **可创作**：`pnpm plugin:new` 生成脚手架、`pnpm plugin:check` 用与实例安装**完全相同**的规则校验、`pnpm plugins:build` 出包；document 卡是纯 JSON 排版，sandbox 卡写自己的 HTML/CSS/JS。详见 [插件文档](./docs/plugins.md)。
-- **默认安全**：卡片跑在不透明源沙箱里，**无任何网络访问**；社区/品牌插件默认关闭，管理员显式启用才可见。
+- **商店与管理**：浏览目录、一键安装（SHA-256 校验）、启用/停用、排序、设默认、隐藏——全部在账户设置里完成。官方目录见 [flaremo.app/plugins](https://flaremo.app/plugins/registry.json)。
+- **可上传**：管理员可安装本地插件包——它只存在于该实例上，永不外传。
+- **可创作**：`pnpm plugin:new` 生成脚手架，`pnpm plugin:check` 用与实例安装时**完全相同的规则**校验，`pnpm plugins:build` 出包。document 卡是纯 JSON 排版，sandbox 卡写你自己的 HTML/CSS/JS。详见[插件指南](./docs/plugins.md)。
+- **默认安全**：卡片跑在不透明源沙箱里，**无任何网络访问**；社区与品牌插件包默认关闭，管理员显式启用才可用。
 
-## 📊 免费额度到底够用多少？
+## 📊 Cloudflare 免费额度到底有多慷慨？
 
-很多人对 Cloudflare 免费计划的容量缺乏概念，实际上对于个人或小团队知识库场景，免费配额几乎是**永久溢出**的：
+很多人以为「免费」等于「严重缩水」。对以文字为主的个人知识库来说，Cloudflare 的免费配额几乎取之不尽：
 
-| 资源组件 | 免费配额 | 对应知识库容量 | 实际使用评估 |
+| 资源 | 免费配额 | 对应容量 | 实际使用寿命 |
 | :--- | :--- | :--- | :--- |
-| **Cloudflare D1** | **5 GB 数据库** | 约 **250 万条** 纯文本笔记 | 即使每天坚持记录 100 条，也能连续记录 **68 年** |
-| **Cloudflare R2** | **10 GB 对象存储** | 约 **5,000–10,000 张** 高清压缩图片 / **80 小时** 语音 | **0 出口流量费用**，公开分享大量图片也无需担忧账单 |
-| **Cloudflare Workers** | 免费边缘请求额度 | 全球 300+ 边缘节点就近响应 | 首字节毫秒级响应，告别服务器延迟与卡顿 |
-
-> 换言之，在绝大多数使用周期内，你都不需要为服务器、存储或流量支付一分钱。
+| **Cloudflare D1** | **5 GB 数据库** | 约 **250 万条** 纯文本笔记 | 每天写 100 条也要 **68 年** 才能写满 |
+| **Cloudflare R2** | **10 GB 存储** | 约 **5,000–10,000 张** 照片 / **80 小时** 语音 | **0 出口流量费用**；公开分享不会触发带宽账单 |
+| **Cloudflare Workers** | 慷慨的免费请求额度 | 全球 300+ 边缘节点 | 全球毫秒级响应，没有冷启动 |
 
 ---
 
-## 🥊 架构对比：Cloudflare 原生 vs 家用 NAS vs 传统 VPS
+## 🥊 对比：Cloudflare 原生 vs 家用 NAS vs 传统 VPS
 
-| 评估维度 | Cloudflare 原生架构 (FlareMo) | 家用 NAS / 软路由自建 | 传统 VPS 云主机 |
+| 维度 | Cloudflare 原生（FlareMo） | 家用 NAS / 小主机 | 传统 VPS |
 | :--- | :--- | :--- | :--- |
-| **数据安全性** | **企业级多副本持久化**，无单点硬件故障风险 | 硬盘损坏、断电、漏水可能导致全量数据损失 | 依赖自行配置的备份策略与快照 |
-| **日常维护成本** | **零维护**：无需打补丁、无系统升级、无 Docker 运维 | 需维护系统、Docker、监控硬盘 SMART、维护网络 | 需定期升级操作系统内核、数据库、配置看门狗 |
-| **外网访问速度** | **全球边缘 CDN 加速**，就近节点直接命中 | 需自行配置内网穿透（frp/Tailscale），受家庭上行带宽限制 | 取决于单个机房地理位置，跨地域访问延迟高 |
-| **网络与证书** | **自带免费 HTTPS 与自定义域名绑定**，自动续签 | 需自行申请泛域名证书、配置 DDNS 与反向代理 | 需配置 Nginx/Caddy 及 Let's Encrypt 证书轮换 |
-| **资金支出** | **0 元**（利用长期免费额度） | 硬件购置成本高昂（数千元），且有电费开销 | 按月/年持续支付服务器与带宽续费账单 |
+| **数据持久性** | **企业级多地域副本**，零硬件故障风险 | 单盘损坏或断电即可导致全量数据损失 | 依赖手动快照与备份例程 |
+| **维护成本** | **零**：无系统补丁、无 Docker compose、无数据库维护 | 系统更新、Docker 维护、SMART 磁盘告警、路由器配置 | 内核升级、安全补丁、看门狗守护进程 |
+| **访问延迟** | **全球边缘 CDN**，任意位置均低于 100ms | 需自建 DDNS / frp / Tailscale 隧道，受家庭上行带宽制约 | 依赖单一云地域，跨境延迟高 |
+| **SSL 与域名** | **自动 HTTPS** 与自定义域名绑定 | 手动签发证书、配置反向代理 | Nginx / Caddy 配置与 Let's Encrypt 续期维护 |
+| **资金成本** | 免费额度内 **0 元/月** | 硬件前期投入高 + 持续电费 | 持续支付按月/按年的服务器与带宽账单 |
 
 ---
 
 ## 🚀 5 分钟极速部署
 
-FlareMo 刻意保持轻巧。部署流程完全透明，支持一键部署、AI Agent 代劳，亦可手动通过 CLI 执行。
-
 ### 方式一：一键部署到 Cloudflare
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realchendahuang/FlareMo)
 
-按钮流程会把仓库克隆到你的 GitHub 账号，并自动创建 D1 / R2 / Queue / Vectorize 资源。首次部署后按 [docs/deploy.md](./docs/deploy.md#一键部署社区支持) 设置 `FLAREMO_PUBLIC_URL` 与密钥。若首次尝试报 "Github API Limit Exceeded"，等待几分钟重试即可。
+按钮流程会把仓库克隆到你的 GitHub 账号，并自动创建 D1、R2、Queues 与 Vectorize 资源。首次部署后，请按 [docs/deploy.md](./docs/deploy.md#一键部署社区支持) 设置 `FLAREMO_PUBLIC_URL` 与密钥。若首次尝试报 "Github API Limit Exceeded"，等待几分钟重试即可。
 
-### 方式二：让 AI Agent 替你部署（推荐）
+### 方式二：GitHub Action（自托管 fork）
 
-仓库内附带专为 AI 编写的部署指引：[docs/agent-deploy.md](./docs/agent-deploy.md)。
+自己的 fork 在 push 到 `main` 或手动运行 **Deploy to Cloudflare** 时发布 Worker（`cloudflare/wrangler-action`）：创建 Cloudflare 资源、发布 Worker、同步认证密钥。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [docs/github-action-deploy.md](./docs/github-action-deploy.md)。
 
-只需将本项目仓库路径提供给能够执行终端命令的 AI Agent（如 Claude Code、Cursor Agent、Codex），对它说：
-> “请按照 docs/agent-deploy.md 的指引帮我部署 FlareMo 到我的 Cloudflare 账号。”
+### 方式三：让 AI Agent 替你部署（推荐）
 
-Agent 将自动完成创建 D1/R2 资源、写入配置、运行数据库迁移与发布全部流程。
-
----
-
-### 方式三：GitHub Action 部署
-
-自己的 fork 在 push 到 `main` 或手动运行 `Deploy to Cloudflare` 时发布 Worker（`cloudflare/wrangler-action`），并同步认证密钥。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [GitHub Action 部署教程](./docs/github-action-deploy.md)。
+把仓库交给一个能执行终端命令的 AI Agent（如 Claude Code、Cursor Agent、Codex），并附上 [docs/agent-deploy.md](./docs/agent-deploy.md)：
+> "请按照 docs/agent-deploy.md 的指引，帮我把 FlareMo 部署到我的 Cloudflare 账号。"
 
 ---
 
 ### 方式四：手动 3 步部署
 
-#### 1. 创建 Cloudflare 存储资源
+#### 1. 创建 Cloudflare 资源
 ```bash
-# 登录 Cloudflare 账号
 pnpm exec wrangler whoami
-
-# 创建 D1 数据库与 R2 存储桶
 pnpm exec wrangler d1 create flaremo
 pnpm exec wrangler r2 bucket create flaremo-attachments
 ```
 
-也可以改用一条命令 `pnpm provision:remote`：自动创建缺失的 D1 / R2 / Queue / Vectorize 资源并把 D1 的 `database_id` 写入 `wrangler.jsonc`，幂等，已存在的资源会跳过。
+也可以改用 `pnpm provision:remote`：自动创建缺失的 D1 / R2 / Queue / Vectorize 资源，并把 D1 的 `database_id` 写入 `wrangler.jsonc`。它是幂等的——已存在的资源会跳过。
 
-#### 2. 初始化配置文件与安全密钥
-复制配置模板：
+#### 2. 配置设置与密钥
 ```bash
 cp wrangler.jsonc.example wrangler.jsonc
 ```
-在 `wrangler.jsonc` 中填入第一步终端输出的 `database_id`，并将 `FLAREMO_PUBLIC_URL` 设置为你的生产访问域名（如 `https://notes.yourdomain.com`）。
-
-生成并安全写入必要密钥：
+填入生成的 `database_id`，并将 `FLAREMO_PUBLIC_URL` 设置为你的生产域名。然后写入密钥：
 ```bash
 pnpm exec wrangler secret put BETTER_AUTH_SECRET --config ./wrangler.jsonc
 pnpm exec wrangler secret put FLAREMO_BOOTSTRAP_SECRET --config ./wrangler.jsonc
 ```
 
-#### 3. 部署上线
+#### 3. 部署
 ```bash
-# 验证构建与打包
 pnpm deploy:dry-run
-
-# 执行远端数据库迁移并部署 Worker
 pnpm deploy
 ```
 
-部署完成后，在浏览器打开你的生产域名并访问 `/setup` 页面，输入你在部署时填写的 `FLAREMO_BOOTSTRAP_SECRET`，即可一键初始化拥有最高权限的 Owner 账号！
+（完整 `pnpm verify` 门禁只在维护者明确要求时运行。）
+访问你的生产域名下的 `/setup`，输入 `FLAREMO_BOOTSTRAP_SECRET` 即可初始化 Owner 账号。
 
-> 完整部署细节与常见问题排查请参见 [部署文档](./docs/deploy.md)。用 GitHub Action 手动发布请参见 [GitHub Action 部署教程](./docs/github-action-deploy.md)。后续版本升级请参见 [版本更新手册](./docs/update.md)。
+详细指南：[部署指南](./docs/deploy.md) · [GitHub Action 部署](./docs/github-action-deploy.md) · [更新指南](./docs/update.md)。
 
 ---
 
 ## 🧱 架构与技术栈
 
-### 系统拓扑
 ```mermaid
 flowchart LR
-  Browser["FlareMo Web 前端 (React 19 / PWA)"] --> Worker["Cloudflare Worker 边缘核心"]
-  Clients["Memos 客户端 / 自动化脚本 / MCP"] --> Worker
+  Browser["FlareMo Web UI (React 19 / PWA)"] --> Worker["Cloudflare Worker"]
+  Clients["Memos Clients / Scripts / MCP"] --> Worker
 
   Worker --> Auth["Better Auth (Session / PAT)"]
-  Worker --> D1["Cloudflare D1 (笔记 / 关系 / 权限事实源)"]
-  Access["Cloudflare Access (可选外层防线)"] -.-> Worker
-  Worker --> R2["Cloudflare R2 (附件 / 媒体 / 导出包)"]
-  Worker --> Assets["Workers Static Assets (单 Worker 静态托管)"]
+  Worker --> D1["Cloudflare D1 (Memos / Relations / Settings)"]
+  Access["Cloudflare Access (Optional Outer Perimeter)"] -.-> Worker
+  Worker --> R2["Cloudflare R2 (Attachments & Exports)"]
+  Worker --> Assets["Workers Static Assets"]
 ```
 
-### 技术栈选型
-- **边缘运行时**：Cloudflare Workers (V8 Isolate)
-- **Web 前端**：React 19, Vite, TanStack Router (Code-based), Tailwind CSS 4, Radix UI
-- **数据层**：Cloudflare D1 (SQLite at the edge), Drizzle ORM
-- **存储层**：Cloudflare R2 (S3 兼容对象存储)
-- **鉴权体系**：Better Auth 原生方案（HttpOnly Cookie + 可撤销 `memos_pat_`）
-- **AI 与搜索**：Cloudflare Workers AI, Vectorize 向量检索, SQLite FTS5 全文搜索
+- **运行时**：Cloudflare Workers
+- **前端**：React 19, Vite, TanStack Router, Tailwind CSS 4, Radix UI
+- **数据库**：Cloudflare D1, Drizzle ORM
+- **存储**：Cloudflare R2
+- **认证**：Better Auth（HttpOnly Cookie 会话 + 可撤销 `memos_pat_`）
+- **AI 与搜索**：Workers AI, Vectorize, SQLite FTS5
 - **插件**：槽位式扩展平台（[规范](./docs/plugin-platform-standard.md)、[指南](./docs/plugins.md)）；插件包存于 R2，沙箱卡片无网络访问
-
----
-
-## 🤝 Memos 生态与兼容说明
-
-FlareMo 的初心是构建 **AI Native 的新一代个人与团队知识中枢**。我们以 Memos 优秀的领域设计与 API 契约为生态底座，但**不以 100% 盲目复刻上游为目标**：
-
-- **深度复用**：完整兼容 `/api/v1` 核心端点、OpenAPI 契约以及数据导入导出，使现有的 Memos 移动端 App（如 iOS / Android 客户端）及快捷指令可以直接连接使用。
-- **原生演进**：Agent Memory 长期记忆体系、向量语义「找一找」、三档团队权限模型、流式语音转录均为 FlareMo 原生能力，不受上游架构束缚。
-
-API 兼容细节见 [兼容矩阵](./docs/memos-compatibility.md)，第三方工具实测记录见 [生态实测矩阵](./docs/memos-ecosystem.md)。
-
----
-
-## 🛠️ 本地开发与工程验证
-
-```bash
-# 安装依赖
-pnpm install
-
-# 初始化本地 D1 数据库
-pnpm migrate:local
-
-# 开发（推荐）：前端 HMR + Worker 热重载，浏览器开 http://localhost:5573
-pnpm dev:hot
-
-# 或者：无热重载，Worker 直接托管构建产物 http://localhost:8787
-pnpm dev
-```
-
-`pnpm dev:hot` 让前端跑在 Vite dev server 上（改动即时热更新、页面状态不丢），同时把 API、SSR 分享页、R2 附件等 Worker 拥有的路径代理过去——浏览器始终只对着一个源，登录 cookie 与同源校验照常工作。`pnpm dev` 每次启动先构建一次前端，改一行样式也要等构建出来。
-
-dev:hot 下还内置了 [React Grab](https://github.com/aidenybai/react-grab)：悬停任意界面元素即可复制它的组件名、源码行列与 CSS 选择器，粘贴给 AI agent 比用文字描述位置精确得多。它只在 Vite dev server 下加载，生产构建不含这段代码。
-
-### 质量门禁与测试规范
-
-```bash
-# 代码风格与静态检查
-pnpm format:check
-pnpm check
-
-# 单元测试与契约测试
-pnpm test
-
-# 全量门禁（13 步，含 E2E）：仅在维护者明确要求时运行
-# pnpm verify
-```
 
 ---
 
@@ -287,6 +222,5 @@ pnpm test
 
 ## 📄 开源许可证
 
-本项目基于 [GNU AGPL-3.0](./LICENSE) 协议开源。
-- 允许自托管部署、修改和学习使用。若基于本项目以网络服务（SaaS）形式对外提供修改版本，须按 AGPL-3.0 条款向用户开源修改后的全部源代码。
-- Copyright (c) 2026 realchendahuang.
+本项目基于 [GNU AGPL-3.0](./LICENSE) 协议开源。允许自托管部署、修改与学习使用；若以网络服务（SaaS）形式对外提供修改版本，须按 AGPL-3.0 条款开源修改后的源代码。
+Copyright (c) 2026 realchendahuang.

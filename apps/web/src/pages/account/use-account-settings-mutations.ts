@@ -13,8 +13,9 @@ import {
   uploadAvatar,
 } from "@/api";
 import { authClient } from "@/auth-client";
+import { useSignOut } from "@/hooks/use-sign-out";
 import type { TranslationKey, TranslationParams } from "@/i18n";
-import { errorMessage } from "@/lib/error";
+import { errorMessage, isEmailInUseError } from "@/lib/error";
 import { queryKeys } from "@/lib/query-keys";
 import { MIN_PASSWORD_LENGTH } from "./account-panel-presets";
 
@@ -291,7 +292,11 @@ export function useAccountSettingsMutations({
       setNewEmail("");
       setEmailCurrentPassword("");
     } catch (error) {
-      setEmailError(errorMessage(error, t("auth.emailUpdateFailed")));
+      setEmailError(
+        isEmailInUseError(error)
+          ? t("common.emailInUse")
+          : errorMessage(error, t("auth.emailUpdateFailed")),
+      );
     }
   };
 
@@ -360,15 +365,7 @@ export function useAccountSettingsMutations({
       });
   };
 
-  const handleSignOut = async () => {
-    try {
-      await authClient.signOut();
-    } catch {
-      // Ignore offline sign out failure
-    }
-    queryClient.clear();
-    await navigate({ replace: true, to: "/login" });
-  };
+  const handleSignOut = useSignOut();
 
   return {
     changeEmailMutation,

@@ -65,16 +65,7 @@ export default defineConfig({
               name: "vendor-markdown",
               test: /node_modules[\\/](react-markdown|remark-|rehype-|unified|micromark|mdast-|hast-|unist-|vfile|bail|trough|devlop|ccount|escape-string-regexp|property-information|space-separated-tokens|comma-separated-tokens|trim-lines|character-entities|decode-named-html-entity|markdown-table|zwitch|longest-streak|html-url-attributes|web-namespaces)/,
             },
-            // Lucide icon set: large, shared, changes rarely.
-            {
-              name: "vendor-lucide",
-              test: /node_modules[\\/]lucide-react[\\/]/,
-            },
-            // Base UI primitives + TanStack router/query: big app-shell libs.
-            {
-              name: "vendor-base-ui",
-              test: /node_modules[\\/]@base-ui[\\/]/,
-            },
+            // TanStack router/query: big app-shell libs.
             {
               name: "vendor-tanstack",
               test: /node_modules[\\/]@tanstack[\\/]/,

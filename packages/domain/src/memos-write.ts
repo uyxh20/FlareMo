@@ -6,6 +6,11 @@ import { insertEmbeddingTask } from "./embedding-outbox";
 import { ConflictError, ForbiddenError } from "./errors";
 import { createResourceId } from "./ids";
 import {
+  adjustmentForMemoTransition,
+  adjustmentForNewMemo,
+  hourlyCountStatements,
+} from "./memo-hourly-counts";
+import {
   assertMemoContentSize,
   hasUncheckedTaskList,
   normalizeMemoClientId,
@@ -106,6 +111,17 @@ export async function createMemo(
     operation: "index",
     createdAt: now,
   });
+  // The activity counter moves in the same batch as the memo it describes, so
+  // a stats read either sees both or neither. It is derived state: if this
+  // statement were ever to fail the memo write fails with it, which is the
+  // trade we want — a missing memo must never be counted, and a counted memo
+  // that does not exist would be worse. The daily recalibration is the
+  // backstop for the reverse case, a counter that fails to move.
+  const counterStatements = hourlyCountStatements(
+    db,
+    adjustmentForNewMemo(row),
+    now,
+  );
   try {
     if (tags.length > 0) {
       await db.batch([
@@ -121,6 +137,7 @@ export async function createMemo(
         eventStatement,
         webhookEventStatement,
         embeddingTaskStatement,
+        ...counterStatements,
         ...notificationStatements,
       ]);
     } else {
@@ -129,6 +146,7 @@ export async function createMemo(
         eventStatement,
         webhookEventStatement,
         embeddingTaskStatement,
+        ...counterStatements,
         ...notificationStatements,
       ]);
     }
@@ -199,8 +217,17 @@ export async function updateMemo(
   if (input.payload !== undefined && nextClientId) {
     nextPayload.client_id = nextClientId;
   }
+  // Tags are domain truth re-derived from the new content on every edit, so
+  // an edit that adds/removes `#tags` updates them. But when the caller sends
+  // an explicit payload (import overwrite, revision restore, API clients
+  // managing tags outside the content), its tags win — content-derived tags
+  // would drop tags the content itself does not spell out.
   const tags = metadataChanged
-    ? normalizeMemoTags(nextPayload.tags ?? extractTags(nextContent))
+    ? normalizeMemoTags(
+        input.payload !== undefined
+          ? (nextPayload.tags ?? extractTags(nextContent))
+          : extractTags(nextContent),
+      )
     : [];
   if (metadataChanged) {
     nextPayload.tags = tags;
@@ -349,6 +376,14 @@ export async function updateMemo(
     eventStatement,
     webhookEventStatement,
     ...(embeddingTaskStatement ? [embeddingTaskStatement] : []),
+    // Empty unless the write actually moved a memo between status buckets,
+    // authors, or UTC hours — a plain content edit produces no counter
+    // statement at all, so the common case pays nothing and cannot drift.
+    ...hourlyCountStatements(
+      db,
+      adjustmentForMemoTransition(existing, nextMemo),
+      now,
+    ),
     ...notificationStatements,
   ];
   const runBatch = async (statements: unknown[]) => {

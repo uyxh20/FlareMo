@@ -1,6 +1,6 @@
 import type { FlareMoDb, ReactionRow, UserRow } from "@flaremo/db";
 import { memos, reactions } from "@flaremo/db";
-import { and, asc, count, eq, gt, inArray, lt, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, or } from "drizzle-orm";
 import { ForbiddenError, NotFoundError, ValidationError } from "./errors";
 import { parseResourceName } from "./ids";
 import { getMemoById, getMemoByIdForViewer } from "./memos";

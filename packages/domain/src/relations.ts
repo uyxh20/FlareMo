@@ -48,6 +48,66 @@ export async function listMemoRelationsForViewer(
   return filterReadableRelations(db, user, normalizedMemoId, rows);
 }
 
+/**
+ * Batched sibling of {@link listMemoRelationsForViewer} for comment/list
+ * hydration: one relation query and one readability probe for a whole page
+ * instead of two round trips per memo. Each requested memo receives exactly
+ * the rows the single-id helper would have returned for it — including rows
+ * shared between two requested memos, which appear in both buckets.
+ */
+export async function listMemoRelationsForMemosForViewer(
+  db: FlareMoDb,
+  user: UserRow | null,
+  memoIds: string[],
+): Promise<Map<string, Array<typeof memoRelations.$inferSelect>>> {
+  const requested = [
+    ...new Set(memoIds.map((id) => parseResourceName(id, "memos"))),
+  ];
+  const grouped = new Map<string, Array<typeof memoRelations.$inferSelect>>(
+    requested.map((id) => [id, []]),
+  );
+  if (requested.length === 0) return grouped;
+
+  const requestedIds = new Set(requested);
+  const rows = await db
+    .select()
+    .from(memoRelations)
+    .where(
+      or(
+        inArray(memoRelations.memoId, requested),
+        inArray(memoRelations.relatedMemoId, requested),
+      ),
+    )
+    .orderBy(asc(memoRelations.createdAt), asc(memoRelations.memoId));
+  if (rows.length === 0) return grouped;
+
+  // Every id that can appear on the far side of a relation for a requested
+  // memo; one probe answers readability for all of them.
+  const farIds = new Set<string>();
+  for (const row of rows) {
+    if (requestedIds.has(row.memoId)) farIds.add(row.relatedMemoId);
+    if (requestedIds.has(row.relatedMemoId)) farIds.add(row.memoId);
+  }
+  const readableIds = new Set<string>();
+  if (farIds.size > 0) {
+    const readable = await db
+      .select({ id: memos.id })
+      .from(memos)
+      .where(and(memoReadScope(user), inArray(memos.id, [...farIds])));
+    for (const row of readable) readableIds.add(row.id);
+  }
+
+  for (const row of rows) {
+    if (requestedIds.has(row.memoId) && readableIds.has(row.relatedMemoId)) {
+      grouped.get(row.memoId)?.push(row);
+    }
+    if (requestedIds.has(row.relatedMemoId) && readableIds.has(row.memoId)) {
+      grouped.get(row.relatedMemoId)?.push(row);
+    }
+  }
+  return grouped;
+}
+
 export async function replaceMemoRelations(
   db: FlareMoDb,
   user: UserRow,

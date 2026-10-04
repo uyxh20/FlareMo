@@ -26,7 +26,7 @@ export function DocsIndexPage() {
   const groups = useMemo(() => getDocNavGroups(locale), [locale]);
 
   return (
-    <main className="container-x py-12 md:py-16 space-y-10">
+    <div className="container-x py-12 md:py-16 space-y-10">
       <Reveal>
         <header className="space-y-3">
           <Badge variant="flame">FlareMo Knowledge Base</Badge>
@@ -73,6 +73,6 @@ export function DocsIndexPage() {
           );
         })}
       </div>
-    </main>
+    </div>
   );
 }

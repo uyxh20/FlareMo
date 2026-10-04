@@ -133,6 +133,62 @@ describe("FlareMo app memos API", () => {
     ).toBe(2);
   });
 
+  it("serves the activity window the client asks for", async () => {
+    // The year view of the heatmap needs 366 buckets; the endpoint used to
+    // hardcode 84, which left every cell outside that window a structural zero.
+    const year = await json<MemoStatsResponse>(
+      await fetchApp(
+        "http://flaremo.test/api/app/stats?time_zone=UTC&days=366",
+      ),
+    );
+    expect(year.activity).toHaveLength(366);
+    expect(year.activity.at(-1)?.date).toBe(
+      new Date().toISOString().slice(0, 10),
+    );
+
+    const month = await json<MemoStatsResponse>(
+      await fetchApp("http://flaremo.test/api/app/stats?time_zone=UTC&days=30"),
+    );
+    expect(month.activity).toHaveLength(30);
+  });
+
+  it("rejects an out-of-range activity window", async () => {
+    const response = await fetchApp(
+      "http://flaremo.test/api/app/stats?time_zone=UTC&days=100000",
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("treats space=all as the viewer's own corpus, like the list and tags do", async () => {
+    // Regression guard for the sidebar reading three different corpora: the
+    // memo list and the tag hierarchy both normalize "all" away, and stats used
+    // to pass it through to `scopedReadScope`, which widens the corpus to every
+    // memo the viewer can read. In a single-owner deployment that is invisible,
+    // so this pins the contract rather than a number that happens to match.
+    await createMemo("own note");
+
+    const withoutSpace = await json<MemoStatsResponse>(
+      await fetchApp("http://flaremo.test/api/app/stats?time_zone=UTC"),
+    );
+    const withAll = await json<MemoStatsResponse>(
+      await fetchApp(
+        "http://flaremo.test/api/app/stats?time_zone=UTC&space=all",
+      ),
+    );
+    expect(withAll.counts).toEqual(withoutSpace.counts);
+    expect(withAll.activity).toEqual(withoutSpace.activity);
+
+    // An explicit space partition still takes the space-scoped path, which is
+    // the one that reports the per-space badges.
+    const personal = await json<MemoStatsResponse>(
+      await fetchApp(
+        "http://flaremo.test/api/app/stats?time_zone=UTC&space=personal",
+      ),
+    );
+    expect(personal.counts.spaces).toEqual({ personal: 1, team: 0 });
+    expect(withoutSpace.counts.spaces).toBeUndefined();
+  });
+
   it("uploads, binds, downloads, and deletes attachments through R2 and D1", async () => {
     const memo = await createMemo("with file");
 

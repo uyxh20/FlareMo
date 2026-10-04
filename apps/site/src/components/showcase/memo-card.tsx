@@ -38,7 +38,7 @@ const TIME_CLASS: Record<ShowcaseDevice, string> = {
 };
 
 const MENU_ICON_CLASS: Record<ShowcaseDevice, string> = {
-  desktop: "size-3.5 text-fog hover:text-ink cursor-pointer",
+  desktop: "size-3.5 text-fog",
   mobile: "size-3 text-fog",
 };
 
@@ -106,10 +106,16 @@ export function MemoCard({
           <span className={TIME_CLASS[variant]}>{memo.timeLabel}</span>
         </div>
         {isMobile ? (
-          <MoreHorizontal className={MENU_ICON_CLASS.mobile} />
+          <MoreHorizontal
+            aria-hidden="true"
+            className={MENU_ICON_CLASS.mobile}
+          />
         ) : (
           <div className="flex items-center gap-2">
-            <MoreHorizontal className={MENU_ICON_CLASS.desktop} />
+            <MoreHorizontal
+              aria-hidden="true"
+              className={MENU_ICON_CLASS.desktop}
+            />
           </div>
         )}
       </div>

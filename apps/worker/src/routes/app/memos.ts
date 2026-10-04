@@ -92,9 +92,16 @@ export function registerMemoListRoutes(app: Hono<HonoBindings>) {
   app.get("/stats", zValidator("query", memoStatsQuerySchema), async (c) => {
     try {
       const { db, user } = await getRequestContext(c);
+      const { space, ...query } = c.req.valid("query");
       return c.json(
-        await getMemoStats(db, user, c.req.valid("query"), {
-          space: c.req.valid("query").space,
+        await getMemoStats(db, user, query, {
+          // `all` is the workspace's "no space filter" selection, and the memo
+          // list and the tag hierarchy both already normalize it away. Leaving
+          // it set here made this one endpoint widen the corpus to every memo
+          // the viewer could read, so the sidebar's stats, tags, and list each
+          // described a different set — and it bypassed the per-author activity
+          // counter, which only covers the viewer's own memos.
+          space: space === "all" ? undefined : space,
         }),
       );
     } catch (error) {

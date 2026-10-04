@@ -4,10 +4,9 @@ import {
   Loader2Icon,
   SearchIcon,
 } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import type { Attachment, Memo, MemoVisibility, Share } from "@/api";
 import { MemoVisibilityDialog } from "@/components/memo-visibility-dialog";
-import { ShareImageDialog } from "@/components/share-image-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -32,6 +31,17 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/i18n";
 import { getMemoResourceId } from "@/lib/memo";
 import { MemoCard } from "./memo-card";
+
+// The share-image dialog pulls in html-to-image and the plugin card registry;
+// keep it out of the entry chunk — it only downloads on first open.
+const ShareImageDialog = lazy(() =>
+  import("@/components/share-image-dialog").then((module) => ({
+    default: module.ShareImageDialog,
+  })),
+);
+
+/** Shared empty list so attachment-less memos keep a stable prop reference. */
+const EMPTY_ATTACHMENTS: Attachment[] = [];
 
 type MemoListProps = {
   hasError: boolean;
@@ -258,7 +268,7 @@ export const MemoList = memo(function MemoList({
       >
         {memos.map((memo, index) => (
           <MemoCard
-            attachments={attachmentsByMemo.get(memo.name) ?? []}
+            attachments={attachmentsByMemo.get(memo.name) ?? EMPTY_ATTACHMENTS}
             canManage={memo.can_manage === true}
             canGovern={memo.can_govern === true}
             index={index}
@@ -341,13 +351,15 @@ export const MemoList = memo(function MemoList({
         </AlertDialog>
       )}
       {shareImageMemo && (
-        <ShareImageDialog
-          memo={shareImageMemo}
-          open={Boolean(shareImageMemo)}
-          onOpenChange={(open) => {
-            if (!open) setShareImageMemo(null);
-          }}
-        />
+        <Suspense fallback={null}>
+          <ShareImageDialog
+            memo={shareImageMemo}
+            open={Boolean(shareImageMemo)}
+            onOpenChange={(open) => {
+              if (!open) setShareImageMemo(null);
+            }}
+          />
+        </Suspense>
       )}
       {visibilityMemo && (
         <MemoVisibilityDialog

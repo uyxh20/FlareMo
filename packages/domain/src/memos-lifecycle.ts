@@ -2,6 +2,10 @@ import type { FlareMoDb, MemoRow } from "@flaremo/db";
 import { attachments, memos } from "@flaremo/db";
 import { and, eq, lt } from "drizzle-orm";
 import { insertEmbeddingTask } from "./embedding-outbox";
+import {
+  adjustmentForMemoTransition,
+  hourlyCountStatements,
+} from "./memo-hourly-counts";
 import { getMemoById } from "./memos-read";
 import { insertMemosSseEvent } from "./memos-sse";
 import { insertMemosWebhookEvent } from "./memos-webhooks";
@@ -75,6 +79,19 @@ export async function hardDeleteMemo(
     eventStatement,
     webhookEventStatement,
     embeddingTaskStatement,
+    // Debit the activity counter in the same batch: a memo that is gone must
+    // stop being counted, and `existing` is the only record of which UTC hour
+    // and status bucket it occupied. The "deleted" state is terminal and has
+    // no counter column, so this debits without crediting a new bucket.
+    ...hourlyCountStatements(
+      db,
+      adjustmentForMemoTransition(existing, {
+        userId: existing.userId,
+        createdAt: existing.createdAt,
+        status: "deleted",
+      }),
+      now,
+    ),
     db
       .delete(memos)
       .where(and(eq(memos.id, id), eq(memos.userId, existing.userId))),

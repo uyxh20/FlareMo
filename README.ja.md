@@ -22,16 +22,16 @@
   <a href="https://workers.cloudflare.com/"><img src="https://img.shields.io/badge/Runtime-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers"></a>
   <a href="https://github.com/usememos/memos"><img src="https://img.shields.io/badge/Ecosystem-Memos%20Compatible-0284C7" alt="Memos Compatible"></a>
   <a href="https://www.better-auth.com/"><img src="https://img.shields.io/badge/Auth-Better%20Auth-10B981" alt="Better Auth"></a>
-  <a href="https://flaremo.app"><img src="https://img.shields.io/badge/ウェブサイト-flaremo.app-EA580C" alt="Website"></a>
+  <a href="https://flaremo.app"><img src="https://img.shields.io/badge/Website-flaremo.app-EA580C" alt="Website"></a>
 </p>
 
 <div align="center">
 
-| ☀️ デスクトップ · ライト | 🌙 デスクトップ · ダーク | 📱 モバイル · レスポンシブ |
+| ☀️ デスクトップ · ライトテーマ | 🌙 デスクトップ · ダークテーマ | 📱 モバイル · レスポンシブ |
 | :---: | :---: | :---: |
 | <img src="./docs/assets/flaremo-desktop-light.png" width="360" alt="FlareMo デスクトップ ライト画面" /> | <img src="./docs/assets/flaremo-desktop-dark.png" width="360" alt="FlareMo デスクトップ ダーク画面" /> | <img src="./docs/assets/flaremo-mobile.png" width="168" alt="FlareMo モバイル画面" /> |
 
-<sub>実際の稼働画面：ライト・ダークテーマのシームレスな切り替えと、フル機能のモバイルレスポンシブ表示に対応。表示されている機能はすべてバックエンド実装済みです。</sub>
+<sub>実際の稼働画面：ライト・ダークテーマのシームレスな切り替えと、フル機能のモバイルレスポンシブ表示。表示されている機能はすべて、実際に動作するバックエンド機能に接続されています。</sub>
 
 </div>
 
@@ -39,81 +39,83 @@
 
 ## 💡 FlareMoを選ぶ理由
 
-FlomoやMemosなどのツールは、摩擦のないメモ作成とタイムライン表示がもたらす価値を証明しました。しかし、従来のノートシステムをセルフホストするには、月額料金のかかるVPSを契約し、DockerやPostgreSQLを構成し、定期的なバックアップスクリプトを保守し、ハードウェア故障のリスクに怯える必要がありました。
+FlomoやMemosといったツールは、摩擦の少ないメモ記録と邪魔の入らないタイムラインが持つ大きな価値を証明しました。しかし、従来型のノート環境をセルフホストするには、VPSを契約し、DockerとPostgreSQLを構成し、自動バックアップをスクリプトで組み、ディスクやハードウェアの故障に怯え続けることが普通でした。
 
-FlareMoは別の答えを提示します：**無料のCloudflareアカウント1つだけで、サーバー代ゼロ、DB保守ゼロ、バックアップ設定不要で、24時間常時利用でき、データをマルチリージョンで保護しながら、世界中から低遅延でアクセス可能なナレッジベースを持てるか？**
+FlareMoが立ち向かう問いはもっとシンプルです：**無料のCloudflareアカウント1つだけで、サーバー保守ゼロで、24時間365日オンラインで耐障害性が高く、世界中から高速にアクセスできるナレッジベースを持てるのか？**
 
-答えは「Yes」です。
-
-- **真のサーバーレス**：コードとフロントエンドはCloudflare Workersの世界300以上のエッジノードで稼働し、ミリ秒単位で応答。
-- **エンタープライズ級の耐久性**：メモとメタデータはCloudflare D1に保存され、メディア添付ファイルはマルチリージョン冗長化されたCloudflare R2に保管。
-- **AIネイティブ設計**：標準MCP（Model Context Protocol）と「Agent Memory」長期記憶ハブを内蔵し、ClaudeやCursor、CodexなどのAIが第2の脳として機能。
-- **個人の静けさとチームの協調**：個人使用時は安全なプライベート空間、チームモードを有効化すればロール管理と3段階の公開範囲を備えたコラボレーションスペースに早変わり。
-- **シンプル、でも削らない**: 界面は静かに保ち、操作はすべて存在する理由がある。装飾も欠落もない。
+- **真のサーバーレス**：コードも静的アセットも、ユーザーの近くにあるCloudflare Workersのエッジノード上でミリ秒応答。
+- **最初からエンタープライズ級の耐久性**：ノートとメタデータはCloudflare D1が担当し、メディア添付ファイルはマルチリージョンレプリケーション付きのCloudflare R2に保存。
+- **AIネイティブな第2の脳**：Agent MemoryハブにCLIとクロスエージェントSkillを同梱。AIエージェント（Claude、Cursor、Codex、ChatGPT、ZCode）が長期的な好みや記憶スコープを読み取り・更新できます。MCPエンドポイントも利用可能です。
+- **一人には静かに、大勢には強力に**：デフォルトは暗号化された一人用のプライベートな空間。チームモードを有効にすると、ロールと3段階の公開範囲を備えた共同作業スペースに即座に変わります。
+- **シンプル、でも粗削りではない**：インターフェースは静かに保たれ、すべての操作に存在する理由がある — 見せびらかす装飾はなく、役に立つものの欠落もありません。
 
 ---
 
 ## ✨ 主な機能
 
 ### 1. 瞬時のメモ作成とインスピレーションの振り返り
-- **開いてすぐ書ける**：カード型ストリームタイムライン、マルチタグ分類、Markdown/GFMレンダリング、画像・音声プレビュー。
-- **高速全文検索**：SQLite FTS5による高速検索（`has:attachment`、`is:pinned`、`before:YYYY-MM-DD`、`after:YYYY-MM-DD`、`in:timeline|archive|trash` などのフィルタ対応）。
-- **ベクトルセマンティック検索**：Workers AI埋め込みとVectorizeインデックスを統合した「探す」機能。権限を再検証し、未設定時はFTS5へ自動フォールバック。
-- **振り返り機能**：**デイリーレビュー**（過去の今日の記録）、**ランダムウォーク**（タグやリンクグラフの探索＋要約カード）、詳細ページでの関連メモ推薦。
-- **履歴管理**：変更差分の確認とワンクリックでの過去リビジョン復元。
+- **ミリ秒でキャプチャ**：カード型タイムライン、タグ、Markdown/GFM、画像・音声添付のプレビューに対応。
+- **高速検索**：SQLite FTS5による全文インデックスとクエリ演算子（`has:attachment`、`is:pinned`、`before:YYYY-MM-DD`、`after:YYYY-MM-DD`、`in:timeline|archive|trash`）。
+- **セマンティックな「探す」（ベクトル検索）**：Workers AIの埋め込みとVectorizeの派生ベクトルインデックスを組み合わせ、文脈に応じた呼び出しを実現。D1で権限を再検証し、必要時はFTS5へシームレスにフォールバック。
+- **思考を呼び起こす**：内蔵の**デイリーレビュー**（この日の記録）、**ランダムウォーク**（タグやバックリンクのグラフをポストカード風の要約とともに散策）、関連ノートのおすすめ。
+- **改訂履歴**：全バージョンの差分表示とワンクリックでの過去バージョン復元。
 
-### 2. AI長期記憶とMCPネイティブ連携
-- **Agent Memory**：`/memory/mcp` エンドポイント経由で、AIエージェントがセッションを跨いだ長期記憶（好み、決定事項、制約、教訓）を直接読み書き可能。
-- **人間中心の監査**：`/memory` 画面でAIが蓄積した記憶を確認・確定・ロック・修正でき、知識の正確性を担保。
-- **標準MCP**：Streamable HTTP MCPエンドポイント（`/mcp`）により、メモの検索や追加をプログラミング可能。
+### 2. AI長期記憶（CLI + Skills）
+- **Agent Memory**：`flaremo` CLIと`flaremo-memory` Skillを同梱。AIエージェントが共通のREST基盤を通じてセッションを跨いだ長期記憶（好み、プロジェクトの決定事項、制約、教訓）を記録・更新できます。
+- **人間が最終確認**：`/memory` 画面でAIが記録した記憶を確認・検証・ロック・修正できます。
+- **オープンなエコシステム**：推奨パスはCLI + Skills。既存のMCPクライアント向けに `/memory/mcp`（Streamable HTTP MCP）と `/mcp` エンドポイントも提供。
 
 ### 3. プロジェクトとタスク
-- **プロジェクトで作業をまとめる**：関連するメモとTODOをプロジェクトに整理。ステータス列をドラッグで移動できるカンバン、優先度、手動並べ替え、締め切り日に対応。
-- **個人専用・取り消せる削除**：タスクはオーナー個人のリソース。削除はゴミ箱経由で、復元も期間経過後の自動消去も可能です。
+- **プロジェクトで作業をまとめる**：ノートとTODOをプロジェクトに整理。ステータス列間をドラッグできるカンバンボード、優先度、手動並べ替え、期日に対応。
+- **個人専用設計・取り消せる削除**：タスクは単一のオーナーに帰属。削除するとゴミ箱に移動し、復元するか自動消去されるまで保持されます。
 
-### 4. カレンダー
-- **タスクが予定の一次情報源**：`/calendar` の月間ビューでは、過去のマスにその日の記録、未来のマスに締め切りのあるタスクが並びます。ドラッグで予定変更、日付付きタスクのクイック追加、agenda リストに対応。
-- **期限超過リマインダー**：期限を過ぎたタスクはアプリ内通知で知らせ、ブラウザの Web Push も任意で有効化できます。
+### 4. タスク管理とリマインダー
+- **タスクはプロジェクトに住む**：`/projects` ボード（ステータス列間のドラッグ）、優先度、手動並べ替え、期日により、プロジェクトページが作業スケジュールの一元的な住処になります。
+- **時間の全体像をひと目で把握**：explorerホーム画面はミニ月カレンダーと期限超過・今日のリマインダーを並べて表示。期日がボードの裏に隠れることはありません。
+- **期限超過リマインダー**：期限を過ぎたタスクはアプリ内通知で知らせ、任意でブラウザのWeb Pushにも対応。
 
-### 5. チームコラボレーションと3段階のアクセス制御
-- **ロール管理**：`owner`、`admin`、`member` の3つのロール。管理者がワンタイムアクティベーションリンクを発行し、メンバー自身がパスワードを設定。
+### 5. チームコラボレーションと3段階の公開範囲
+- **ロールガバナンス**：`owner`、`admin`、`member` の3ロール。管理者はワンタイムアクティベーションリンクでメンバーを招待します（パスワードはメンバー自身が設定し、管理者が平文の認証情報に触れることはありません）。
+- **チームプロジェクト作業台**：`/team-projects` はチームプロジェクトを一覧にまとめます — 担当者、ステータス、現在の進捗、次のステップ、フォロアップ日 — 詳細画面から概要の整備、進捗や会議結論の記録、参考資料のアップロードができます。プロジェクトは本文の `kosx-pm` メタデータブロックで識別される通常のチームメモであり、プロジェクトでないノートはタイムライン上でそのまま扱われます。
 - **3段階の公開範囲**：
   - 🔒 **プライベート**：作成者本人のみ閲覧可能。
-  - 👥 **チーム**：チームのアクティブメンバーのみ閲覧可能。
-  - 🌐 **公開**：期限付きURLによる安全な匿名閲覧。
-- **安全な脱退処理**：メンバー削除時、プライベートデータのみを確実に物理削除し、チームや公開メモは保持。
-- **リーダーシート**: 期限付きの閲覧専用席を発行できます（ゲスト読者、講座受講者、クライアント納品など）。有効期限が切れると自動的に失効します（認証解決時にフェイルクローズ、cron 不要）。メンバー画面から管理するか、個人アクセストークンで冪等エンドポイント `PUT /api/app/admin/team/reader` を呼び出してメールアドレスから開通できます（`docs/team-mode.md` 参照）。
+  - 👥 **チーム**：アクティブなチームメンバーに読み取り専用で共有。
+  - 🌐 **公開**：期限付き共有リンク経由で匿名の読み取り専用アクセス。
+- **安全なメンバー削除**：メンバーを削除すると、信頼性の高いバックグラウンドクリーンアップが走り、プライベートデータのみを消去してチームと公開のノートは保持します。
+- **リーダーシート**：期限付きの読み取り専用シートを発行できます — ゲスト読者、講座の受講者、クライアントへの納品など。シートは有効期限が切れると自動的に失効します（認証解決時にフェイルクローズ、cron不要）。メンバー画面から管理するか、Personal Access Token で `PUT /api/app/admin/team/reader` を呼び出してメールアドレスから開通できます（`docs/team-mode.md` 参照）。
 
 ### 6. オフラインファースト＆PWA体験
-- **インストール可能なPWA**：デスクトップやスマートフォンのホーム画面に追加し、ネイティブアプリ同様の操作感。
-- **信頼性の高いオフライン同期**：ネットワーク切断時も下書きを即座にローカル保存。再接続時に未同期キューを自動順次送信。
-- **リアルタイム音声メモ**：`/capture` ページからマイクによるリアルタイムストリーミング音声文字起こし（ASR）に対応。
+- **インストール可能なPWA**：macOS、Windows、iOS、Androidのホーム画面に追加でき、ネイティブアプリのような操作感。
+- **信頼性の高いオフライン同期**：下書きは即座にローカル保存。オフライン中の送信やアップロードはキューに積まれ、接続回復時に自動で再生されます。
+- **ライブ音声キャプチャ**：`/capture` にアクセスすると、リアルタイムのストリーミング音声文字起こし（ASR）が利用できます。
 
-### 7. 堅牢なBetter Auth認証
-- **Better Auth採用**：ブラウザは安全な `HttpOnly` / `SameSite=Lax` クッキーセッション、スクリプトやMCPクライアントには失効可能な Personal Access Token (`memos_pat_`) を使用。
-- **厳格なOrigin保護**：状態変更リクエスト（POST/PATCH/DELETE）に対するOrigin検証を徹底。Cloudflare Accessを任意の外層防御として併用可能。
+### 7. Secure Better Authによるアプリケーションセキュリティ
+- **Better Auth基盤**：ブラウザは `HttpOnly`・`SameSite=Lax` のクッキーセッション。スクリプト、CLI、MCP向けには失効可能な `memos_pat_` Personal Access Token を提供。
+- **厳格なOrigin保護**：状態を変更するリクエストには厳密なOriginのホワイトリストを強制。Cloudflare Accessも任意の外層防御として併用できます。
 
-### 8. Memos互換とスムーズな移行
-- **Memos API互換**：`/api/v1/*` コアエンドポイントとOpenAPI仕様をサポート。
-- **既存クライアント対応**：Moe Memosなどのサードパーティ製アプリから直接接続可能。
-- **双方向インポート・エクスポート**：Memos / flomo形式のデータパッケージを一発でインポート（重複解決設定付き）および完全エクスポート。
+### 8. Memos互換とシームレスな移行
+- **Memos `/api/v1` 互換**：Memosの主要APIエンドポイント（デフォルトはcamelCase、ヘッダーでレガシーのsnake_case）とOpenAPIスキーマを提供。
+- **サードパーティアプリ対応**：Moe Memosなどのモバイルクライアントから直接接続できます。
+- **双方向のインポート＆エクスポート**：Memos / flomoからワンクリックでインポート（競合戦略付き）。生データ一式の完全エクスポートにも対応。
 
 ---
 
 ### 9. プラグインシステム：カードはプラグイン
-- **標準カード 5 種**：素白、日签、票根、ポストカード、そして canvas で描く消印デモ。
-- **ストアと管理**：設定画面からディレクトリを閲覧、ワンクリック導入（SHA-256 検証）、有効化・無効化、並べ替え、デフォルト指定、非表示。公式ディレクトリは [flaremo.app/plugins](https://flaremo.app/plugins/registry.json)。
-- **自作パッケージの導入**：管理者はローカルパッケージをインストール可能。そのインスタンスだけに存在し、外部へ送信されません。
-- **制作ツール**：`pnpm plugin:new` で雛形生成、`pnpm plugin:check` は**インストール時と同一のルール**で検証、`pnpm plugins:build` でパッケージ化。document カードは純粋な JSON レイアウト、sandbox カードは自作の HTML/CSS/JS。詳しくは [プラグインガイド](./docs/plugins.md)。
-- **デフォルトで安全**：カードは不透明オリジンのサンドボックスで動作し、**ネットワークアクセスは一切ありません**。コミュニティ／ブランドパックは管理者が有効化するまでオフです。
+- **5種の内蔵カード**：プレーン、デイリー、チケット、ポストカード、さらにcanvasで描く消印（ポストマーク）デモ。
+- **ストアとキュレーション**：ディレクトリの閲覧、ワンクリックインストール（SHA-256検証済み）、有効化・無効化、並べ替え、デフォルト設定、非表示 — すべてアカウント設定から操作できます。公式ディレクトリは [flaremo.app/plugins](https://flaremo.app/plugins/registry.json)。
+- **自作カードの導入**：管理者はローカルパッケージをインストール可能 — そのインスタンス上にのみ存在し、外部へ送信されることはありません。
+- **制作ツール**：`pnpm plugin:new` で雛形生成、`pnpm plugin:check` は**インストール時にインスタンスが適用するのと同一のルール**で検証、`pnpm plugins:build` でパッケージ化。ドキュメントカードは純粋なJSONレイアウト、サンドボックスカードは自作のHTML/CSS/JSを動かせます。詳しくは[プラグインガイド](./docs/en/plugins.md)。
+- **デフォルトで安全**：カードは不透明オリジンのサンドボックス上で動作し、**ネットワークアクセスは一切ありません**。コミュニティやブランドパックは管理者が有効化するまでオフのままです。
 
-## 📊 無料枠でどこまで使えるか？
+## 📊 Cloudflareの無料枠はどれだけ寛容か？
 
-| リソース | 無料利用枠 | 想定容量 | 実際の使用期間目安 |
+「無料」＝「大きく制限されている」と考えがちですが、テキスト中心の個人ナレッジベースにとって、Cloudflareの無料枠は事実上枯渇しないレベルです：
+
+| リソース | 無料枠 | 想定容量 | 実用上の寿命 |
 | :--- | :--- | :--- | :--- |
-| **Cloudflare D1** | **5 GB データベース** | 約 **250万件** のテキストメモ | 毎日100件記録しても **68年間** 利用可能 |
-| **Cloudflare R2** | **10 GB オブジェクトストレージ** | 約 **5,000〜10,000枚** の画像 / **80時間** の音声 | **下り転送無料（$0 Egress）** で安心 |
-| **Cloudflare Workers** | 充実した無料リクエスト枠 | 世界300以上のエッジノード | コールドスタートなし、超低遅延で即時応答 |
+| **Cloudflare D1** | **5 GBデータベース** | 約 **250万件** のテキストメモ | 毎日100件書いても **68年** かかる容量 |
+| **Cloudflare R2** | **10 GBストレージ** | 写真 約 **5,000〜10,000枚** / 音声 **80時間** | **Egress料金 $0**。公開共有でも帯域請求は発生しない |
+| **Cloudflare Workers** | 寛容な無料リクエスト枠 | 世界300以上のエッジロケーション | コールドブートなしで世界中ミリ秒応答 |
 
 ---
 
@@ -121,51 +123,98 @@ FlareMoは別の答えを提示します：**無料のCloudflareアカウント1
 
 | 項目 | Cloudflareネイティブ (FlareMo) | 自宅NAS / ミニPC | 従来型VPS |
 | :--- | :--- | :--- | :--- |
-| **データの安全性** | **エンタープライズ級マルチリージョン永続化** | ドライブ故障・停電・水害で全データ消失のリスク | 手動設定のバックアップやスナップショット依存 |
-| **日常の保守** | **完全不要**：OS更新なし、Docker管理なし | 定期的なOSアップデート、SMART監視が必要 | カーネル更新、セキュリティパッチ、監視設定が必要 |
-| **アクセス速度** | **グローバルエッジCDN** で世界中から高速アクセス | 自宅の上り回線帯域に依存、トンネル設定が必要 | 単一データセンターに依存し、海外からの遅延大 |
-| **SSLとドメイン** | **自動HTTPS＆カスタムドメイン設定**、自動更新 | ドメイン証明書の定期取得やDDNS設定が必要 | Webサーバー（Nginx等）設定とLet's Encrypt保守 |
-| **費用コスト** | **完全無料（0円）** | 高額な初期ハードウェア代＋日々の電気代 | 毎月・毎年のサーバー利用料が継続発生 |
+| **データの耐久性** | **エンタープライズ級マルチリージョンレプリケーション**、ハードウェア故障リスクゼロ | ドライブ故障や停電で全データ消失の恐れ | 手動のスナップショット・バックアップ運用に依存 |
+| **保守** | **ゼロ**：OSパッチなし、Docker composeなし、DB保守なし | OSアップデート、Docker管理、SMART監視、ルーター設定 | カーネル更新、セキュリティパッチ、監視デーモン |
+| **アクセス遅延** | **グローバルエッジCDN**、どこからでも100ms未満 | DDNS / frp / Tailscaleトンネルが必要で、自宅上り回線に律速 | 単一クラウドリージョンに依存、越境遅延が大きい |
+| **SSLとドメイン** | **HTTPS自動化**とカスタムドメイン紐付け | 証明書の手動発行、リバースプロキシ設定 | Nginx / Caddy設定とLet's Encrypt更新の保守 |
+| **費用** | 無料枠で **$0 / 月** | 高額な初期ハードウェア投資＋継続的な電気代 | サーバー・帯域の月額／年額料金が継続 |
 
 ---
 
 ## 🚀 5分でできるクイックデプロイ
 
-### 方法1：AIエージェントによる自動デプロイ（推奨）
+### 方法1：Cloudflareへワンクリックデプロイ
 
-Claude Code、Cursor Agent、Codex等のコマンド実行可能なエージェントに [docs/agent-deploy.md](./docs/agent-deploy.md) を渡してください：
-> 「docs/agent-deploy.md に従って、FlareMo を私の Cloudflare アカウントにデプロイしてください。」
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realchendahuang/FlareMo)
+
+リポジトリをGitHubアカウントにクローンし、D1・R2・Queues・Vectorizeを自動でプロビジョニングします。初回デプロイ後、`FLAREMO_PUBLIC_URL` とシークレットを設定してください（[docs/en/deploy.md](./docs/en/deploy.md#one-click-deploy-community-supported) 参照）。初回試行で「Github API Limit Exceeded」と表示された場合は、数分待ってから再試行してください。
+
+### 方法2：GitHub Action（フォークでのセルフホスト）
+
+フォーク上でActionsの **Deploy to Cloudflare** を実行すると、リソースのプロビジョニング、Workerの公開、認証シークレットの同期が行われます。pushでは公開されません。詳しくは [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md) を参照してください。
+
+### 方法3：AIエージェントによるデプロイ（推奨）
+
+ターミナルコマンドを実行できるエージェント（Claude Code、Cursor Agent、Codexなど）に、[docs/en/agent-deploy.md](./docs/en/agent-deploy.md) とともにリポジトリを渡してください：
+> 「docs/en/agent-deploy.md に従って、FlareMo を私の Cloudflare アカウントにデプロイしてください。」
 
 ---
 
-### 方法2：CLIによる手動デプロイ（3ステップ）
+### 方法4：手動3ステップデプロイ
 
-#### 1. リソース作成
+#### 1. Cloudflareリソースの作成
 ```bash
 pnpm exec wrangler whoami
 pnpm exec wrangler d1 create flaremo
 pnpm exec wrangler r2 bucket create flaremo-attachments
 ```
 
-#### 2. 設定とシークレットの登録
+または `pnpm provision:remote` を実行する方法もあります：不足しているD1 / R2 / Queue / Vectorizeリソースを作成し、D1の `database_id` を `wrangler.jsonc` に書き込みます。冪等に動作し、既存リソースはスキップされます。
+
+#### 2. 設定とシークレットの構成
 ```bash
 cp wrangler.jsonc.example wrangler.jsonc
-# wrangler.jsonc に database_id と FLAREMO_PUBLIC_URL を記入
+```
+生成された `database_id` を記入し、`FLAREMO_PUBLIC_URL` を本番ドメインに設定します。その後、シークレットを設定します：
+```bash
 pnpm exec wrangler secret put BETTER_AUTH_SECRET --config ./wrangler.jsonc
 pnpm exec wrangler secret put FLAREMO_BOOTSTRAP_SECRET --config ./wrangler.jsonc
 ```
 
-#### 3. デプロイの実行
+#### 3. デプロイ
 ```bash
 pnpm deploy:dry-run
 pnpm deploy
 ```
-（フルの `pnpm verify` ゲートは、メンテナーが明示的に要求した場合のみ実行します。）
-デプロイ完了後、ブラウザで `/setup` にアクセスし、`FLAREMO_BOOTSTRAP_SECRET` を入力して管理者アカウントを初期化します。
+
+（フルの `pnpm verify` ゲートは、メンテナーが明示的に求めた場合のみ実行されます。）
+本番ドメインの `/setup` にアクセスし、`FLAREMO_BOOTSTRAP_SECRET` を入力してOwnerアカウントを初期化します。
+
+詳細ガイド：[デプロイガイド](./docs/en/deploy.md) · [GitHub Actionデプロイ](./docs/en/github-action-deploy.md) · [アップデートガイド](./docs/en/update.md)。
+
+---
+
+## 🧱 アーキテクチャと技術スタック
+
+```mermaid
+flowchart LR
+  Browser["FlareMo Web UI (React 19 / PWA)"] --> Worker["Cloudflare Worker"]
+  Clients["Memos Clients / Scripts / MCP"] --> Worker
+
+  Worker --> Auth["Better Auth (Session / PAT)"]
+  Worker --> D1["Cloudflare D1 (Memos / Relations / Settings)"]
+  Access["Cloudflare Access (Optional Outer Perimeter)"] -.-> Worker
+  Worker --> R2["Cloudflare R2 (Attachments & Exports)"]
+  Worker --> Assets["Workers Static Assets"]
+```
+
+- **ランタイム**：Cloudflare Workers
+- **フロントエンド**：React 19、Vite、TanStack Router、Tailwind CSS 4、Radix UI
+- **データベース**：Cloudflare D1、Drizzle ORM
+- **ストレージ**：Cloudflare R2
+- **認証**：Better Auth（HttpOnlyクッキーセッション + 失効可能な `memos_pat_`）
+- **AIと検索**：Workers AI、Vectorize、SQLite FTS5
+- **プラグイン**：スロットベースの拡張プラットフォーム（[標準仕様](./docs/plugin-platform-standard.md)、[ガイド](./docs/en/plugins.md)）。パッケージはR2に置かれ、サンドボックス化されたカードはネットワークアクセスなしで動作します
+
+---
+
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=realchendahuang/FlareMo&type=Date)](https://star-history.com/#realchendahuang/FlareMo&Date)
 
 ---
 
 ## 📄 ライセンス
 
-本プロジェクトは [GNU AGPL-3.0](./LICENSE) ライセンスで公開されています。
+[GNU AGPL-3.0](./LICENSE) ライセンスでオープンソースとして公開されています。
 Copyright (c) 2026 realchendahuang.

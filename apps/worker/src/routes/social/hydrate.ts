@@ -1,9 +1,10 @@
-import type { MemoRow, ReactionRow, UserRow } from "@flaremo/db";
+import type { MemoRow, memoRelations, ReactionRow, UserRow } from "@flaremo/db";
 import {
-  getMemoByIdForViewer,
+  getMemosByIdsForViewer,
   listAttachmentsForMemosForViewer,
   listMemoAttachmentsForViewer,
   listMemoReactions,
+  listMemoRelationsForMemosForViewer,
   listMemoRelationsForViewer,
   listReactionsForMemosForViewer,
 } from "@flaremo/domain";
@@ -15,6 +16,36 @@ import {
 import type { getOptionalRequestContext } from "../../context";
 import { getFlaremoUserCached } from "../../identity-cache";
 import { type MemoReactionPage, resolveMemoCreatorRow } from "./parsing";
+
+type HydrationContext = Awaited<ReturnType<typeof getOptionalRequestContext>>;
+
+/**
+ * Turn relation rows into DTOs with two queries total: one batched memo read
+ * for every endpoint across the whole page, then a local join. A relation
+ * whose memo or target is not readable is dropped, which is what the previous
+ * per-relation `getMemoByIdForViewer` + catch did.
+ */
+async function relationDtos(
+  context: HydrationContext,
+  relations: Array<typeof memoRelations.$inferSelect>,
+) {
+  if (relations.length === 0) return [];
+  const memoIds = [
+    ...new Set(relations.flatMap((row) => [row.memoId, row.relatedMemoId])),
+  ];
+  const relatedMemos = await getMemosByIdsForViewer(
+    context.db,
+    context.user,
+    memoIds,
+    { includeDeleted: true },
+  );
+  return relations.flatMap((relation) => {
+    const memo = relatedMemos.get(relation.memoId);
+    const relatedMemo = relatedMemos.get(relation.relatedMemoId);
+    if (!memo || !relatedMemo) return [];
+    return [currentRelationToDto(relation, memo, relatedMemo)];
+  });
+}
 
 export async function memoToCurrentDto(
   context: Awaited<ReturnType<typeof getOptionalRequestContext>>,
@@ -34,26 +65,7 @@ export async function memoToCurrentDto(
     listMemoRelationsForViewer(context.db, context.user, memo.id),
     reactionPagePromise,
   ]);
-  const relations = await Promise.all(
-    relationRows.map(async (relation) => {
-      try {
-        const [relationMemo, relatedMemo] = await Promise.all([
-          getMemoByIdForViewer(context.db, context.user, relation.memoId, {
-            includeDeleted: true,
-          }),
-          getMemoByIdForViewer(
-            context.db,
-            context.user,
-            relation.relatedMemoId,
-            { includeDeleted: true },
-          ),
-        ]);
-        return currentRelationToDto(relation, relationMemo, relatedMemo);
-      } catch {
-        return null;
-      }
-    }),
-  );
+  const relations = await relationDtos(context, relationRows);
   const creator =
     context.user?.id === memo.userId
       ? context.user
@@ -62,9 +74,7 @@ export async function memoToCurrentDto(
   return {
     ...currentMemoToDto(memo, creator, {
       attachments,
-      relations: relations.filter(
-        (value): value is NonNullable<typeof value> => value !== null,
-      ),
+      relations,
     }),
     reactions: reactionPage.reactions.map((reaction) =>
       reactionToDto(reaction),
@@ -94,9 +104,9 @@ function groupByContentMemo<T>(
 
 /**
  * Hydrate a page of comment rows without the per-comment round trips:
- * attachments and reactions are resolved with one batched query each;
- * relations stay per-memo because most comments carry none, and creators are
- * cached across the page. Mirrors memoToCurrentDto's DTO shape exactly.
+ * attachments, reactions and relations are each resolved with one batched
+ * query, and related memos with one more; creators are cached across the page.
+ * Mirrors memoToCurrentDto's DTO shape exactly.
  */
 export async function hydrateSocialMemos(
   context: Awaited<ReturnType<typeof getOptionalRequestContext>>,
@@ -104,9 +114,10 @@ export async function hydrateSocialMemos(
   parentName?: string,
 ) {
   const ids = memoRows.map((memo) => memo.id);
-  const [attachmentsByMemo, reactionRows] = await Promise.all([
+  const [attachmentsByMemo, reactionRows, relationsByMemo] = await Promise.all([
     listAttachmentsForMemosForViewer(context.db, context.user, ids),
     listReactionsForMemosForViewer(context.db, context.user, ids),
+    listMemoRelationsForMemosForViewer(context.db, context.user, ids),
   ]);
   const attachments = groupByContentMemo(
     attachmentsByMemo,
@@ -116,43 +127,29 @@ export async function hydrateSocialMemos(
     reactionRows,
     (reaction) => reaction.contentId,
   );
+  const relationMemoIds = [
+    ...new Set(
+      [...relationsByMemo.values()]
+        .flat()
+        .flatMap((relation) => [relation.memoId, relation.relatedMemoId]),
+    ),
+  ];
+  const relatedMemos = await getMemosByIdsForViewer(
+    context.db,
+    context.user,
+    relationMemoIds,
+    { includeDeleted: true },
+  );
   const creators = new Map<string, UserRow | null>();
   return Promise.all(
     memoRows.map(async (memo) => {
-      const relationRows = await listMemoRelationsForViewer(
-        context.db,
-        context.user,
-        memo.id,
-      );
-      const relations = (
-        await Promise.all(
-          relationRows.map(async (relation) => {
-            try {
-              const [relationMemo, relatedMemo] = await Promise.all([
-                getMemoByIdForViewer(
-                  context.db,
-                  context.user,
-                  relation.memoId,
-                  {
-                    includeDeleted: true,
-                  },
-                ),
-                getMemoByIdForViewer(
-                  context.db,
-                  context.user,
-                  relation.relatedMemoId,
-                  { includeDeleted: true },
-                ),
-              ]);
-              return currentRelationToDto(relation, relationMemo, relatedMemo);
-            } catch {
-              return null;
-            }
-          }),
-        )
-      ).filter(
-        (relation): relation is NonNullable<typeof relation> =>
-          relation !== null,
+      const relations = (relationsByMemo.get(memo.id) ?? []).flatMap(
+        (relation) => {
+          const relationMemo = relatedMemos.get(relation.memoId);
+          const relatedMemo = relatedMemos.get(relation.relatedMemoId);
+          if (!relationMemo || !relatedMemo) return [];
+          return [currentRelationToDto(relation, relationMemo, relatedMemo)];
+        },
       );
       const creator = await resolveMemoCreatorRow(context, creators, memo);
       return {

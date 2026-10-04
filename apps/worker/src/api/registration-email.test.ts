@@ -8,12 +8,15 @@ let mf: Miniflare;
 let env: Env;
 let sessionCookie: string;
 
-const { extractCookieHeader, bootstrapAndSignIn } = createAppTestHarness(
-  () => ({
-    env,
-    sessionCookie,
-  }),
-);
+const {
+  extractCookieHeader,
+  bootstrapAndSignIn,
+  fetchApp,
+  createActivatedMember,
+} = createAppTestHarness(() => ({
+  env,
+  sessionCookie,
+}));
 
 describe("FlareMo registration and email API", () => {
   beforeEach(async () => {
@@ -448,7 +451,9 @@ describe("FlareMo registration and email API", () => {
     );
     expect(newEmailSignIn.status).toBe(200);
 
-    // An in-use target address is rejected before any mail is sent.
+    // An in-use target address is rejected before any mail is sent. The
+    // conflict is a 409, not the 400 a generic validation failure would use:
+    // the address belongs to another account, which is a state conflict.
     const takenRequest = await emailApp.fetch(
       new Request("http://flaremo.test/api/app/account/email", {
         method: "POST",
@@ -464,7 +469,10 @@ describe("FlareMo registration and email API", () => {
       }),
       appEnv,
     );
-    expect(takenRequest.status).toBe(400);
+    expect(takenRequest.status).toBe(409);
+    expect(await takenRequest.json()).toEqual({
+      error: { message: "That email is already in use." },
+    });
     expect(sent).toHaveLength(5);
   });
 
@@ -683,5 +691,41 @@ describe("FlareMo registration and email API", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("rejects an in-use address without an email provider configured", async () => {
+    // The default test env has no provider, so this exercises the immediate
+    // change branch. That branch used to skip the occupancy check entirely and
+    // reach Better Auth's write, which failed on the auth email's unique index
+    // and surfaced as a 500 "Internal server error".
+    const member = await createActivatedMember(
+      "no-provider@example.com",
+      "No Provider",
+    );
+    const taken = await createActivatedMember(
+      "occupied@example.com",
+      "Occupied",
+    );
+    void taken;
+
+    const response = await fetchApp(
+      "http://flaremo.test/api/app/account/email",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "http://flaremo.test",
+          cookie: member.cookie,
+        },
+        body: JSON.stringify({
+          current_password: TEST_PASSWORD,
+          new_email: "occupied@example.com",
+        }),
+      },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { message: "That email is already in use." },
+    });
   });
 });

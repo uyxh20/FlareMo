@@ -211,6 +211,34 @@
       "when": 1789749182976,
       "tag": "0029_faithful_mandrill",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1789800000000,
+      "tag": "0030_memory_ledger_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1789886400000,
+      "tag": "0031_memory_ledger_followup",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1790469825392,
+      "tag": "0032_omniscient_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1790479307026,
+      "tag": "0033_large_multiple_man",
+      "breakpoints": true
     }
   ]
 }

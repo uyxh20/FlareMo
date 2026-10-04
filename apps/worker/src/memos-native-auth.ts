@@ -11,7 +11,7 @@ import {
   type TeamViewer,
 } from "@flaremo/domain";
 import { and, eq, gt } from "drizzle-orm";
-import { getBetterAuthSecret } from "./auth";
+import { getBetterAuthSecret } from "./auth-env";
 import type { FlareMoEnv } from "./env";
 import { getAuthUserCached } from "./identity-cache";
 

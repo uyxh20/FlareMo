@@ -15,23 +15,27 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
  * mid-render). Language loads are deduplicated per language.
  */
 
-const THEME_IMPORTS = [
-  import("shiki/themes/github-light.mjs"),
-  import("shiki/themes/github-dark.mjs"),
-] as const;
+// Dynamic imports stay inside factories so importing this module (which the
+// worker entry does for every request) does not fetch ~12 shiki grammars.
+// The promises are only created when the article page actually highlights.
+const loadThemes = () =>
+  [
+    import("shiki/themes/github-light.mjs"),
+    import("shiki/themes/github-dark.mjs"),
+  ] as const;
 
-const LANG_IMPORTS: Record<string, Promise<unknown>> = {
-  typescript: import("shiki/langs/typescript.mjs"),
-  tsx: import("shiki/langs/tsx.mjs"),
-  javascript: import("shiki/langs/javascript.mjs"),
-  jsx: import("shiki/langs/jsx.mjs"),
-  python: import("shiki/langs/python.mjs"),
-  json: import("shiki/langs/json.mjs"),
-  bash: import("shiki/langs/bash.mjs"),
-  html: import("shiki/langs/html.mjs"),
-  css: import("shiki/langs/css.mjs"),
-  rust: import("shiki/langs/rust.mjs"),
-  go: import("shiki/langs/go.mjs"),
+const LANG_IMPORTS: Record<string, () => Promise<unknown>> = {
+  typescript: () => import("shiki/langs/typescript.mjs"),
+  tsx: () => import("shiki/langs/tsx.mjs"),
+  javascript: () => import("shiki/langs/javascript.mjs"),
+  jsx: () => import("shiki/langs/jsx.mjs"),
+  python: () => import("shiki/langs/python.mjs"),
+  json: () => import("shiki/langs/json.mjs"),
+  bash: () => import("shiki/langs/bash.mjs"),
+  html: () => import("shiki/langs/html.mjs"),
+  css: () => import("shiki/langs/css.mjs"),
+  rust: () => import("shiki/langs/rust.mjs"),
+  go: () => import("shiki/langs/go.mjs"),
 };
 
 const PLAIN_LANGS = new Set(["text", "plain", "txt", ""]);
@@ -53,7 +57,7 @@ let ready: HighlighterCore | null = null;
 
 function getHighlighter(): Promise<HighlighterCore> {
   highlighterPromise ??= createHighlighterCore({
-    themes: THEME_IMPORTS as never,
+    themes: loadThemes() as never,
     langs: [],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
@@ -66,8 +70,10 @@ async function ensureLanguage(
 ): Promise<void> {
   let load = languageLoads.get(lang);
   if (!load) {
+    const langImport = LANG_IMPORTS[lang];
+    if (!langImport) return;
     load = instance
-      .loadLanguage(LANG_IMPORTS[lang] as never)
+      .loadLanguage(langImport() as never)
       .then(() => {
         if (ready === null) ready = instance;
       })

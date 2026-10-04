@@ -90,7 +90,7 @@ export type RichComposerEditorProps = {
   /** Emitted whenever the editor view undergoes a transaction/selection update. */
   onTransaction?: (editor: Editor) => void;
   /** Emitted when Backspace is pressed at the start of the document (pos 1). */
-  onBackspaceAtStart?: () => boolean | void;
+  onBackspaceAtStart?: () => boolean | undefined;
 };
 
 /**

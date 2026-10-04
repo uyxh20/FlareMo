@@ -5,9 +5,9 @@ import type { getOptionalRequestContext, HonoBindings } from "../../context";
 import { getFlaremoUserCached } from "../../identity-cache";
 import {
   ForbiddenCurrentError,
-  isRecord,
   ValidationCurrentError,
-} from "./errors";
+} from "../../memos-compat/current-errors";
+import { isRecord } from "../../memos-compat/errors";
 
 export type MemoVisibility = "private" | "protected" | "public";
 

@@ -41,104 +41,132 @@
 
 Les outils comme Flomo ou Memos ont démontré la puissance d'une capture d'idées fluide et d'un fil chronologique sans distraction. Cependant, auto-héberger un système traditionnel implique souvent de payer un VPS chaque mois, de configurer Docker et PostgreSQL, d'écrire des scripts de sauvegarde et de redouter la panne d'un disque dur.
 
-FlareMo propose une autre approche : **Peut-on obtenir une base de connaissances en ligne 24h/24, résiliente, accélérée mondialement et sans maintenance de serveur, simplement avec un compte gratuit Cloudflare ?**
+FlareMo répond à une question plus simple : **Peut-on obtenir une base de connaissances en ligne 24h/24, résiliente, accélérée mondialement et sans maintenance de serveur, simplement avec un compte gratuit Cloudflare ?**
 
-La réponse est oui :
-
-- **Véritablement Serverless** : Le code et les fichiers statiques s'exécutent sur les 300+ nœuds edge Cloudflare les plus proches de vous avec une latence en millisecondes.
-- **Stockage de classe entreprise inclus** : Cloudflare D1 gère les notes et métadonnées, tandis que Cloudflare R2 stocke les pièces jointes avec réplication multi-régions.
-- **Conçu pour l'IA (AI-Native)** : Protocole MCP natif et hub « Agent Memory », permettant à vos agents IA (Claude, Cursor, Codex, ChatGPT) d'écrire et lire votre mémoire à long terme.
-- **Intimité individuelle et collaboration d'équipe** : Espace personnel confidentiel par défaut, transformable instantanément en espace partagé avec rôles et 3 niveaux de visibilité.
-- **Minimal, pas simplifié** : une interface silencieuse, des fonctions complètes — rien qui crie, rien qui manque.
+- **Véritablement Serverless** : Le code et les fichiers statiques s'exécutent sur les nœuds edge Cloudflare les plus proches de vous, avec une latence en millisecondes.
+- **Durabilité de classe entreprise dès l'installation** : Cloudflare D1 gère les notes et les métadonnées ; Cloudflare R2 stocke les pièces jointes avec réplication multi-régions.
+- **Second cerveau pensé pour l'IA** : le hub « Agent Memory » embarque un CLI et un skill multi-agents permettant à vos agents IA (Claude, Cursor, Codex, ChatGPT, ZCode) de lire et mettre à jour vos préférences et votre mémoire à long terme ; des endpoints MCP restent également disponibles.
+- **Discret pour un seul, puissant pour une équipe** : Par défaut, un sanctuaire personnel chiffré et privé. Activez le mode équipe, et il se transforme instantanément en espace de travail collaboratif avec rôles et visibilité à trois niveaux.
+- **Minimal, pas simplifié** : L'interface reste silencieuse et chaque commande mérite sa place — rien de décoratif qui crie, rien d'utile qui manque.
 
 ---
 
 ## ✨ Fonctionnalités clés
 
 ### 1. Capture instantanée & Revue stimulante
-- **Prise de note immédiate** : Flux chronologique sous forme de cartes, multi-étiquettes, rendu Markdown/GFM, prévisualisation d'images et audio.
-- **Recherche plein texte ultra-rapide** : Indexation SQLite FTS5 (`has:attachment`, `is:pinned`, `before:YYYY-MM-DD`, `after:YYYY-MM-DD`, etc.).
-- **Recherche sémantique vectorielle** : Intégration de Workers AI embeddings et d'index Vectorize pour retrouver des idées par sens naturel.
-- **Activation de la pensée** : **Revue quotidienne** (ce jour-là dans l'histoire), **Balade aléatoire** (exploration des graphes de liens) et suggestions de notes connexes.
-- **Historique des versions** : Comparaison visuelle des modifications et restauration instantanée.
+- **Prise de note immédiate** : Flux chronologique sous forme de cartes, multi-étiquettes, Markdown/GFM, prévisualisation des pièces jointes image et audio.
+- **Recherche plein texte ultra-rapide** : Indexation SQLite FTS5 avec opérateurs de requête (`has:attachment`, `is:pinned`, `before:YYYY-MM-DD`, `after:YYYY-MM-DD`, `in:timeline|archive|trash`).
+- **Recherche sémantique vectorielle** : Embeddings Workers AI couplés aux index vectoriels dérivés de Vectorize pour un rappel contextuel ; re-vérification des permissions contre D1 et repli transparent sur FTS5.
+- **Activation de la pensée** : **Revue quotidienne** (ce jour-là dans l'histoire), **Balade aléatoire** (dérive dans les graphes d'étiquettes et de liens retour, avec résumés en carte postale) et suggestions de notes connexes.
+- **Historique des versions** : Diff complet des versions et restauration historique en un clic.
 
-### 2. Mémoire IA à long terme & Intégration MCP
-- **Agent Memory** : Via le point de terminaison `/memory/mcp`, vos assistants IA enregistrent et mettent à jour le contexte de vos projets (préférences, contraintes, leçons).
-- **Contrôle humain** : Consultez, confirmez, verrouillez ou corrigez les souvenirs IA sur la page `/memory`.
-- **Écosystème ouvert** : Endpoint Streamable HTTP MCP (`/mcp`) pour manipuler vos notes par programmation.
+### 2. Mémoire IA à long terme (CLI + Skills)
+- **Agent Memory** : Livré avec le CLI `flaremo` et le skill `flaremo-memory` — vos agents IA enregistrent et mettent à jour une mémoire à long terme transversale aux sessions (préférences, décisions de projet, contraintes, leçons) sur une base REST commune.
+- **Contrôle humain** : Consultez, vérifiez, verrouillez ou corrigez les souvenirs enregistrés par l'IA sur la page `/memory`.
+- **Écosystème ouvert** : La voie recommandée est CLI + Skills ; les endpoints `/memory/mcp` (Streamable HTTP MCP) et `/mcp` restent disponibles pour les clients MCP existants.
 
 ### 3. Projets et tâches
-- **Rassemblez le travail par projet** : Notes et tâches liées regroupées dans des projets, avec tableau kanban (glisser entre les colonnes de statut), priorités, tri manuel et échéances.
-- **Privé par conception, suppression réversible** : Les tâches appartiennent à un seul propriétaire ; la suppression passe par une corbeille, avec restauration possible ou purge automatique.
+- **Rassemblez le travail par projet** : Notes et tâches organisées en projets, avec tableau kanban (glisser entre les colonnes de statut), priorités, tri manuel et échéances.
+- **Privé par conception, suppression réversible** : Les tâches appartiennent à un seul propriétaire ; la suppression les déplace vers une corbeille jusqu'à restauration ou purge automatique.
 
-### 4. Calendrier
-- **Les tâches, source de vérité du planning** : La vue mensuelle `/calendar` remplit les jours passés de vos notes et les jours à venir de vos échéances — glisser-déposer pour replanifier, ajout rapide de tâches datées et liste agenda.
-- **Rappels des retards** : Les tâches en retard déclenchent des notifications intégrées, avec Web Push navigateur en option.
+### 4. Gestion des tâches et rappels
+- **Les tâches vivent dans les projets** : Le tableau `/projects` (glisser entre les colonnes de statut), les priorités, le tri manuel et les échéances font des pages projet l'endroit unique où planifier le travail.
+- **Le temps en un coup d'œil** : La vue d'accueil de l'explorateur associe un mini-calendrier mensuel aux rappels des tâches en retard et du jour, pour qu'aucune échéance ne se cache derrière le tableau.
+- **Rappels des retards** : Les tâches en retard déclenchent des notifications dans l'application, avec Web Push navigateur en option.
 
-### 5. Collaboration d'équipe & Permissions à 3 niveaux
-- **Gouvernance claire** : Rôles `owner`, `admin`, `member`. Liens d'activation sécurisés sans transit de mots de passe en clair par les administrateurs.
-- **3 niveaux de visibilité** :
+### 5. Collaboration d'équipe & Visibilité à 3 niveaux
+- **Gouvernance par rôles** : Rôles `owner`, `admin` et `member`. Les administrateurs invitent les membres via des liens d'activation à usage unique (les membres choisissent leur propre mot de passe ; les administrateurs ne manipulent jamais d'identifiants en clair).
+- **Atelier de projets d'équipe** : `/team-projects` regroupe tous les projets de l'équipe dans une seule vue — responsable, statut, avancement actuel, prochaine étape et date de suivi — et ouvre une page de détail pour tenir la synthèse, consigner les avancées et les décisions de réunion, et téléverser les fichiers de référence. Un projet est un mémo d'équipe ordinaire reconnu par un bloc de métadonnées `kosx-pm` dans son corps : les notes qui ne sont pas des projets restent intactes dans la timeline.
+- **Visibilité à 3 niveaux** :
   - 🔒 **Privé** : Visible uniquement par l'auteur.
-  - 👥 **Équipe** : Lecture partagée avec les membres actifs.
-  - 🌐 **Public** : Partage public révocable avec contrôle d'expiration.
-- **Départ sécurisé** : Suppression physique et vérifiée des notes privées lors du retrait d'un membre.
-- **Sièges lecteurs** : Attribuez un siège en lecture seule à durée limitée — lecteurs invités, cohortes de cours, livraisons client. Expiration automatique (fail-closed à la résolution du jeton, sans cron). Gérez-les depuis la page membres, ou provisionnez par e-mail via `PUT /api/app/admin/team/reader` avec un jeton d'accès personnel (voir `docs/team-mode.md`).
+  - 👥 **Équipe** : Lecture partagée avec les membres actifs de l'équipe.
+  - 🌐 **Public** : Lecture anonyme via des liens de partage à durée limitée.
+- **Départ sécurisé** : Le retrait d'un membre déclenche un nettoyage fiable en arrière-plan qui purge les données privées tout en préservant les notes d'équipe et publiques.
+- **Sièges lecteurs** : Attribuez un siège en lecture seule à durée limitée — lecteurs invités, cohortes de cours, livraisons client. Les sièges expirent automatiquement à leur échéance (fail-closed à la résolution des identifiants, sans cron). Gérez-les depuis la page membres, ou provisionnez-les par e-mail via `PUT /api/app/admin/team/reader` avec un jeton d'accès personnel (voir `docs/team-mode.md`).
 
 ### 6. Mode hors-ligne & Expérience PWA
-- **PWA installable** : Installez FlareMo sur bureau ou smartphone pour une sensation d'application native.
-- **Synchronisation hors-ligne garantie** : Brouillons enregistrés localement ; les soumissions hors-ligne sont rejouées dans l'ordre dès le retour du réseau.
+- **PWA installable** : Installez FlareMo sur l'écran d'accueil de macOS, Windows, iOS ou Android, avec une sensation d'application native.
+- **Synchronisation hors-ligne fiable** : Les brouillons s'enregistrent localement instantanément. Les soumissions et envois hors-ligne sont mis en file d'attente et rejoués automatiquement dès le retour de la connexion.
 - **Dictée vocale en direct** : Page `/capture` avec transcription vocale continue en temps réel (ASR).
 
-### 7. Sécurité Better Auth moderne
-- **Session sécurisée** : Cookies `HttpOnly`, `SameSite=Lax` pour navigateur ; jetons d'accès personnels révocables (`memos_pat_`) pour scripts et MCP.
-- **Protection stricte de l'Origin** : Validation systématique sur les requêtes modifiant l'état.
+### 7. Sécurité applicative Better Auth
+- **Propulsé par Better Auth** : Sessions par cookies `HttpOnly` et `SameSite=Lax` pour le navigateur ; jetons d'accès personnels révocables (`memos_pat_`) pour les scripts, le CLI et MCP.
+- **Protection stricte de l'Origin** : Les requêtes modifiant l'état imposent une liste blanche d'origines exactes. Cloudflare Access reste disponible comme périmètre défensif externe optionnel.
 
-### 8. Écosystème et compatibilité Memos
-- **API Memos compatible** : Endpoints `/api/v1/*` compatibles et spécification OpenAPI.
-- **Clients tiers compatibles** : Fonctionne directement avec des applications comme Moe Memos.
-- **Import / Export sans perte** : Importez vos archives Memos et flomo en un clic.
+### 8. Compatibilité Memos & Migration sans friction
+- **Compatibilité `/api/v1` de Memos** : Fournit les principaux endpoints de l'API Memos (camelCase par défaut, snake_case historique via en-tête) et le schéma OpenAPI.
+- **Prêt pour les applications tierces** : Fonctionne directement avec des clients mobiles comme Moe Memos.
+- **Import / Export bidirectionnel** : Import en un clic depuis Memos / flomo avec stratégies de gestion des conflits et paquets d'export brut complets.
 
 ---
 
 ### 9. Système d'extensions : les cartes sont des extensions
 - **Cinq cartes incluses** : Blanc, Citation du jour, Ticket, Carte postale, plus un Cachet dessiné au canvas.
-- **Boutique et gestion** : dans les réglages — parcourir les répertoires, installation en un clic (vérification SHA-256), activation/désactivation, ordre, carte par défaut, masquage. Le répertoire officiel : [flaremo.app/plugins](https://flaremo.app/plugins/registry.json).
-- **Importez les vôtres** : un administrateur peut installer un paquet local — il n'existe que sur cette instance et n'est jamais transmis.
-- **Outils d'auteur** : `pnpm plugin:new` génère un squelette, `pnpm plugin:check` valide avec **exactement les règles appliquées à l'installation**, `pnpm plugins:build` empaquette. Les cartes document sont de pures mises en page JSON ; les cartes sandbox exécutent votre HTML/CSS/JS. Voir le [guide des extensions](./docs/plugins.md).
+- **Boutique et gestion** : dans les réglages du compte — parcourir les répertoires, installation en un clic (vérification SHA-256), activation/désactivation, réordonnancement, carte par défaut, masquage. Le répertoire officiel : [flaremo.app/plugins](https://flaremo.app/plugins/registry.json).
+- **Importez les vôtres** : un administrateur peut installer un paquet local — il n'existe que sur cette instance et n'est jamais transmis ailleurs.
+- **Outils d'auteur** : `pnpm plugin:new` génère un squelette, `pnpm plugin:check` valide avec **exactement les règles appliquées à l'installation**, `pnpm plugins:build` empaquette. Les cartes document sont de pures mises en page JSON ; les cartes sandbox exécutent votre HTML/CSS/JS. Voir le [guide des extensions](./docs/en/plugins.md).
 - **Sûr par défaut** : les cartes s'exécutent dans un bac à sable à origine opaque, **sans aucun accès réseau** ; les paquets communautaires et de marque restent désactivés jusqu'à validation par un administrateur.
 
-## 📊 La générosité du niveau gratuit Cloudflare
+## 📊 Jusqu'où va la générosité du niveau gratuit Cloudflare ?
+
+Beaucoup pensent que « gratuit » rime avec « sévèrement limité ». Pour une base de connaissances personnelle à dominante textuelle, le quota gratuit de Cloudflare est quasiment inépuisable :
 
 | Ressource | Quota gratuit Cloudflare | Équivalent en volume | Durée d'utilisation estimée |
 | :--- | :--- | :--- | :--- |
-| **Cloudflare D1** | **5 Go de base de données** | Env. **2,5 millions** de notes | À raison de 100 notes par jour : **68 ans** |
-| **Cloudflare R2** | **10 Go de stockage objet** | Env. **5 000 à 10 000 photos** / **80 h** d'audio | **0 $ de frais de bande passante sortante** |
-| **Cloudflare Workers** | Millions de requêtes gratuites | Réseau mondial de 300+ datacenters | Temps de réponse en quelques millisecondes |
+| **Cloudflare D1** | **5 Go de base de données** | Env. **2,5 millions** de notes | À raison de 100 notes par jour : **68 ans** pour remplir |
+| **Cloudflare R2** | **10 Go de stockage** | Env. **5 000 à 10 000 photos** / **80 h** de voix | **0 $ de frais de bande passante sortante** ; le partage public ne déclenche aucune facture |
+| **Cloudflare Workers** | Limites de requêtes gratuites généreuses | 300+ points de présence edge mondiaux | Latence en millisecondes partout, sans démarrage à froid |
+
+---
+
+## 🥊 Comparatif : Cloudflare natif vs NAS domestique vs VPS traditionnel
+
+| Dimension | Cloudflare natif (FlareMo) | NAS domestique / Mini PC | VPS traditionnel |
+| :--- | :--- | :--- | :--- |
+| **Durabilité des données** | **Réplication multi-régions de classe entreprise**, aucun risque de panne matérielle | Une panne de disque ou de courant peut entraîner une perte totale | Dépendant de routines manuelles de snapshot et de sauvegarde |
+| **Maintenance** | **Zéro** : pas de mises à jour d'OS, pas de Docker compose, pas de maintenance de base | Mises à jour d'OS, entretien Docker, alertes SMART, configuration du routeur | Mises à niveau du noyau, correctifs de sécurité, démons de surveillance |
+| **Latence d'accès** | **CDN edge mondial**, réponse en moins de 100 ms partout | Nécessite DDNS / frp / tunnels Tailscale, limité par la montée en débit domestique | Dépendant d'une seule région cloud ; latence transfrontalière élevée |
+| **SSL & domaines** | **HTTPS automatisé** et liaison de domaines personnalisés | Émission manuelle de certificats, configuration de reverse proxy | Configuration Nginx / Caddy et renouvellement Let's Encrypt à maintenir |
+| **Coût financier** | **0 $ / mois** au niveau gratuit | Investissement matériel initial élevé + électricité en continu | Factures mensuelles / annuelles de serveur et de bande passante |
 
 ---
 
 ## 🚀 Déploiement rapide en 5 minutes
 
-### Méthode 1 : Déploiement par Agent IA (Recommandé)
+### Méthode 1 : Déploiement en un clic vers Cloudflare
 
-Confiez ce dépôt à un agent autonome (Claude Code, Cursor Agent, Codex) avec le fichier [docs/agent-deploy.md](./docs/agent-deploy.md) :
-> « Veuillez déployer FlareMo sur mon compte Cloudflare en suivant docs/agent-deploy.md. »
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/realchendahuang/FlareMo)
+
+Clone le dépôt dans votre compte GitHub et provisionne automatiquement D1, R2, Queues et Vectorize. Après le déploiement initial, définissez `FLAREMO_PUBLIC_URL` et les secrets (voir [docs/en/deploy.md](./docs/en/deploy.md#one-click-deploy-community-supported)). Si la première tentative signale « Github API Limit Exceeded », attendez quelques minutes puis réessayez.
+
+### Méthode 2 : GitHub Action (fork auto-hébergé)
+
+Sur votre fork, lancez **Deploy to Cloudflare** depuis les Actions pour provisionner les ressources, publier le Worker et synchroniser les secrets d'authentification. Les pushes ne publient rien. Voir [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
+
+### Méthode 3 : Déploiement par Agent IA (Recommandé)
+
+Confiez ce dépôt à un agent capable d'exécuter des commandes dans un terminal (Claude Code, Cursor Agent, Codex…) avec le fichier [docs/en/agent-deploy.md](./docs/en/agent-deploy.md) :
+> « Veuillez déployer FlareMo sur mon compte Cloudflare en suivant docs/en/agent-deploy.md. »
 
 ---
 
-### Méthode 2 : Déploiement manuel en 3 étapes
+### Méthode 4 : Déploiement manuel en 3 étapes
 
-#### 1. Créer les ressources
+#### 1. Créer les ressources Cloudflare
 ```bash
 pnpm exec wrangler whoami
 pnpm exec wrangler d1 create flaremo
 pnpm exec wrangler r2 bucket create flaremo-attachments
 ```
 
-#### 2. Configurer et enregistrer les secrets
+Ou lancez plutôt `pnpm provision:remote` : il crée les ressources D1 / R2 / Queue / Vectorize manquantes et écrit le `database_id` D1 dans `wrangler.jsonc` à votre place. L'opération est idempotente — les ressources existantes sont ignorées.
+
+#### 2. Configurer les réglages et les secrets
 ```bash
 cp wrangler.jsonc.example wrangler.jsonc
-# Remplir database_id et FLAREMO_PUBLIC_URL dans wrangler.jsonc
+```
+Renseignez le `database_id` généré et définissez `FLAREMO_PUBLIC_URL` sur votre domaine de production. Puis configurez les secrets :
+```bash
 pnpm exec wrangler secret put BETTER_AUTH_SECRET --config ./wrangler.jsonc
 pnpm exec wrangler secret put FLAREMO_BOOTSTRAP_SECRET --config ./wrangler.jsonc
 ```
@@ -148,12 +176,45 @@ pnpm exec wrangler secret put FLAREMO_BOOTSTRAP_SECRET --config ./wrangler.jsonc
 pnpm deploy:dry-run
 pnpm deploy
 ```
+
 (La barrière complète `pnpm verify` ne s'exécute que lorsque le mainteneur le demande explicitement.)
-Rendez-vous sur `/setup` sur votre domaine pour initialiser votre compte Propriétaire avec votre secret bootstrap.
+Rendez-vous sur `/setup` de votre domaine de production et saisissez le `FLAREMO_BOOTSTRAP_SECRET` pour initialiser votre compte Propriétaire.
+
+Guides détaillés : [Guide de déploiement](./docs/en/deploy.md) · [Déploiement GitHub Action](./docs/en/github-action-deploy.md) · [Guide de mise à jour](./docs/en/update.md).
+
+---
+
+## 🧱 Architecture & Stack technique
+
+```mermaid
+flowchart LR
+  Browser["FlareMo Web UI (React 19 / PWA)"] --> Worker["Cloudflare Worker"]
+  Clients["Memos Clients / Scripts / MCP"] --> Worker
+
+  Worker --> Auth["Better Auth (Session / PAT)"]
+  Worker --> D1["Cloudflare D1 (Memos / Relations / Settings)"]
+  Access["Cloudflare Access (Optional Outer Perimeter)"] -.-> Worker
+  Worker --> R2["Cloudflare R2 (Attachments & Exports)"]
+  Worker --> Assets["Workers Static Assets"]
+```
+
+- **Runtime** : Cloudflare Workers
+- **Frontend** : React 19, Vite, TanStack Router, Tailwind CSS 4, Radix UI
+- **Base de données** : Cloudflare D1, Drizzle ORM
+- **Stockage** : Cloudflare R2
+- **Authentification** : Better Auth (session cookie HttpOnly + `memos_pat_` révocable)
+- **IA & recherche** : Workers AI, Vectorize, SQLite FTS5
+- **Extensions** : plateforme d'extension à slots ([standard](./docs/plugin-platform-standard.md), [guide](./docs/en/plugins.md)) ; les paquets résident dans R2, les cartes sandbox s'exécutent sans accès réseau
+
+---
+
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=realchendahuang/FlareMo&type=Date)](https://star-history.com/#realchendahuang/FlareMo&Date)
 
 ---
 
 ## 📄 Licence
 
-Projet publié sous licence libre [GNU AGPL-3.0](./LICENSE).
+Projet open source sous licence [GNU AGPL-3.0](./LICENSE).
 Copyright (c) 2026 realchendahuang.

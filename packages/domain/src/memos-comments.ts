@@ -1,8 +1,17 @@
 import type { FlareMoDb, MemoPayload, MemoRow, UserRow } from "@flaremo/db";
 import { memoRelations, memos, memoTags } from "@flaremo/db";
 import { and, asc, count, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
-import { ConflictError, ForbiddenError, ValidationError } from "./errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "./errors";
 import { createResourceId, parseResourceName } from "./ids";
+import {
+  adjustmentForNewMemo,
+  hourlyCountStatements,
+} from "./memo-hourly-counts";
 import {
   assertMemoContentSize,
   getMemoById,
@@ -18,7 +27,7 @@ import {
 import { insertMemosSseEvent } from "./memos-sse";
 import { findMentionedUsers, insertMemoNotification } from "./memos-user";
 import { insertMemosWebhookEvent } from "./memos-webhooks";
-import { assertMemoCountQuota } from "./quotas";
+import { assertMemoCountQuota, type QuotaScope } from "./quotas";
 import { extractTags, normalizeMemoTags } from "./tags";
 import { isActiveTeamMember, memoReadScope } from "./team-permissions";
 
@@ -59,6 +68,7 @@ export function createMemoComment(
   user: UserRow,
   parentMemoId: string,
   input: CreateMemoCommentInput,
+  scope?: QuotaScope,
 ): Promise<MemoRow>;
 export function createMemoComment(
   db: FlareMoDb,
@@ -72,6 +82,7 @@ export async function createMemoComment(
     | string
     | (CreateMemoCommentInput & { parentMemoName: string }),
   input?: CreateMemoCommentInput,
+  scope?: QuotaScope,
 ): Promise<MemoRow | { memo: MemoRow; parentName: string }> {
   const routeInput =
     typeof parentMemoOrInput === "string" ? undefined : parentMemoOrInput;
@@ -89,11 +100,17 @@ export async function createMemoComment(
   }
   // Comments are memos: they pass the same three gates as createMemo —
   // active membership, content ceiling, and the per-user memo count quota.
+  //
+  // The quota gate needs the caller's resolved limits. It used to be called
+  // with a literal `undefined` here, which `assertMemoCountQuota` reads as
+  // "no limit configured" and returns immediately — so the third gate was
+  // never actually applied to comments, and the note above described an intent
+  // the code did not implement. Callers now pass the scope through.
   if (!isActiveTeamMember(user)) {
     throw new ForbiddenError("Removed members cannot create memos.");
   }
   assertMemoContentSize(content);
-  await assertMemoCountQuota(db, undefined, user.id);
+  await assertMemoCountQuota(db, scope?.userLimits, user.id);
   const payload = normalizeMemoPayload(
     effectiveInput.comment?.payload ?? effectiveInput.payload,
   );
@@ -203,6 +220,18 @@ export async function createMemoComment(
     }
   }
 
+  // A comment is a memo row, so it moves the same activity counter the
+  // timeline counts it in. Without this the counter under-reports every
+  // comment until the nightly recalibration, and a comment that is then
+  // trashed or hard-deleted debits a unit it was never credited — the
+  // `max(0, …)` floor absorbs the debit and silently eats a real memo's
+  // count instead. Same-batch, same reasoning as `createMemo`.
+  const counterStatements = hourlyCountStatements(
+    db,
+    adjustmentForNewMemo(row),
+    now,
+  );
+
   try {
     if (tags.length > 0) {
       await db.batch([
@@ -218,6 +247,7 @@ export async function createMemoComment(
         db.insert(memoRelations).values(relation),
         eventStatement,
         webhookEventStatement,
+        ...counterStatements,
         ...notificationStatements,
       ]);
     } else {
@@ -226,6 +256,7 @@ export async function createMemoComment(
         db.insert(memoRelations).values(relation),
         eventStatement,
         webhookEventStatement,
+        ...counterStatements,
         ...notificationStatements,
       ]);
     }
@@ -267,6 +298,59 @@ export async function getMemoParent(
     });
   }
   return relation?.relatedMemoId;
+}
+
+/**
+ * Batched sibling of {@link getMemoParent} for comment pages: one probe that
+ * the requested memos are readable, one relation read, one probe for the
+ * parents. The single-id helper's error behavior is preserved — a requested
+ * memo or a parent that is not readable throws instead of being silently
+ * dropped — but the failure is raised once for the page rather than once per
+ * comment.
+ */
+export async function getMemoParentsForViewer(
+  db: FlareMoDb,
+  user: UserRow,
+  memoIds: string[],
+): Promise<Map<string, string>> {
+  const requested = [
+    ...new Set(memoIds.map((id) => parseResourceName(id, "memos"))),
+  ];
+  if (requested.length === 0) return new Map();
+
+  const readable = await db
+    .select({ id: memos.id })
+    .from(memos)
+    .where(and(inArray(memos.id, requested), memoReadScope(user)));
+  if (readable.length !== requested.length) {
+    throw new NotFoundError("Memo not found");
+  }
+
+  const rows = await db
+    .select({
+      memoId: memoRelations.memoId,
+      relatedMemoId: memoRelations.relatedMemoId,
+    })
+    .from(memoRelations)
+    .where(
+      and(
+        inArray(memoRelations.memoId, requested),
+        eq(memoRelations.type, "comment"),
+      ),
+    );
+  if (rows.length === 0) return new Map();
+
+  const parentIds = [...new Set(rows.map((row) => row.relatedMemoId))];
+  const readableParents = await db
+    .select({ id: memos.id })
+    .from(memos)
+    .where(and(inArray(memos.id, parentIds), memoReadScope(user)));
+  const readableParentIds = new Set(readableParents.map((row) => row.id));
+  if (readableParentIds.size !== parentIds.length) {
+    throw new NotFoundError("Memo not found");
+  }
+
+  return new Map(rows.map((row) => [row.memoId, row.relatedMemoId] as const));
 }
 
 export function listMemoComments(

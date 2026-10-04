@@ -69,11 +69,13 @@ export function SpotlightSearch({
 
   // Synchronize draft with query when opened
   useEffect(() => {
-    if (open) {
-      setDraft(query);
-      setSelectedIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+    if (!open) return;
+    setDraft(query);
+    setSelectedIndex(0);
+    // Focus lands after the dialog's open animation; the timer is cleared on
+    // close/unmount so it can never steal focus back to a hidden input.
+    const timer = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
   }, [open, query]);
 
   const trimmedDraft = draft.trim();

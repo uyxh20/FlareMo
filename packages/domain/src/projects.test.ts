@@ -354,6 +354,70 @@ describe("projects and tasks domain services", () => {
     expect(await db.select().from(tasks)).toHaveLength(0);
   });
 
+  it("drains TTL rows in bounded batches while preserving project cascades", async () => {
+    const stale = "2026-01-01T00:00:00.000Z";
+    const cutoff = "2026-02-01T00:00:00.000Z";
+    const projectRows = Array.from({ length: 101 }, (_, index) => ({
+      id: `projects/expired-${index}`,
+      userId: user.id,
+      name: `Expired ${index}`,
+      description: null,
+      status: "active" as const,
+      deletedAt: stale,
+      createdAt: stale,
+      updatedAt: stale,
+    }));
+    const taskRows = [
+      ...projectRows.map((project, index) => ({
+        id: `tasks/project-${index}`,
+        userId: user.id,
+        projectId: project.id,
+        sourceMemoId: null,
+        title: `Project task ${index}`,
+        notes: null,
+        status: "todo" as const,
+        priority: "none" as const,
+        dueAt: null,
+        sortOrder: 0,
+        completedAt: null,
+        deletedAt: stale,
+        createdAt: stale,
+        updatedAt: stale,
+      })),
+      ...Array.from({ length: 101 }, (_, index) => ({
+        id: `tasks/standalone-${index}`,
+        userId: user.id,
+        projectId: null,
+        sourceMemoId: null,
+        title: `Standalone task ${index}`,
+        notes: null,
+        status: "todo" as const,
+        priority: "none" as const,
+        dueAt: null,
+        sortOrder: 0,
+        completedAt: null,
+        deletedAt: stale,
+        createdAt: stale,
+        updatedAt: stale,
+      })),
+    ];
+
+    // Keep test fixtures under D1's 100-binding statement limit too.
+    for (let index = 0; index < projectRows.length; index += 10) {
+      await db.insert(projects).values(projectRows.slice(index, index + 10));
+    }
+    for (let index = 0; index < taskRows.length; index += 7) {
+      await db.insert(tasks).values(taskRows.slice(index, index + 7));
+    }
+
+    expect(await hardDeleteExpiredProjects(db, cutoff)).toBe(101);
+    // The first sweep removed 101 project tasks by FK cascade; this sweep
+    // should report only the 101 independent tasks it physically deleted.
+    expect(await hardDeleteExpiredTasks(db, cutoff)).toBe(101);
+    expect(await db.select().from(projects)).toHaveLength(0);
+    expect(await db.select().from(tasks)).toHaveLength(0);
+  });
+
   // ---------------------------------------------------------------------------
   // Cross-user isolation
   // ---------------------------------------------------------------------------

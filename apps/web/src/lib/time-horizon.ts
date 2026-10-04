@@ -17,6 +17,15 @@ export type HourlyActivity = {
   count: number;
 };
 
+/**
+ * Trailing span, in local days, of the `activity` array the stats endpoint
+ * returns. Sized to the widest view in the time horizon — the year grid — so no
+ * cell renders a structural zero. The endpoint's own default is 84 days, which
+ * is what a client that does not care (the share-image card, which only reads
+ * `active_days`) still gets.
+ */
+export const ACTIVITY_WINDOW_DAYS = 366;
+
 export type DayQuadrants = [number, number, number, number];
 
 /**

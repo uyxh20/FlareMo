@@ -4,15 +4,27 @@
  * The upstream request/response messages are encoded and decoded through the
  * generated @bufbuild/protobuf runtime in memos-generated/ (see
  * memos-protobuf.ts). Only the transports that the generated runtime does not
- * cover remain hand-written here: the Connect/gRPC/gRPC-Web unary framing,
- * the base64 helpers used by the framed transports, the google.rpc.Status
- * body writer used for Connect binary errors, and the trailer-only frame for
- * gRPC-Web application errors. The wire format produced and accepted here is
- * part of the Memos client contract — one byte changed here is a
- * compatibility regression, so treat edits as wire-format changes.
+ * cover remain hand-written here: the media-type gate that selects a binary
+ * transport, the Connect/gRPC/gRPC-Web unary framing, the base64 helpers used
+ * by the framed transports, the google.rpc.Status body writer used for Connect
+ * binary errors, and the trailer-only frame for gRPC-Web application errors.
+ * The wire format produced and accepted here is part of the Memos client
+ * contract — one byte changed here is a compatibility regression, so treat
+ * edits as wire-format changes.
+ *
+ * This module deliberately has no imports at all. The request handlers reach
+ * it statically, so anything it pulled in would be pinned into the isolate
+ * startup graph; the generated descriptor runtime instead stays behind the
+ * dynamic import in routes/memos-connect/protobuf-loader.ts.
  */
 
 export type ProtoMessage = Record<string, unknown>;
+
+export type BinaryTransport =
+  | "connect-proto"
+  | "grpc-proto"
+  | "grpc-web-proto"
+  | "grpc-web-text-proto";
 
 export class ProtoCodecError extends Error {
   constructor(message: string) {
@@ -132,6 +144,56 @@ export function encodeGoogleRpcStatus(code: number, message: string) {
     );
   }
   return concatBytes(...chunks);
+}
+
+export function detectBinaryTransport(
+  contentType: string,
+): BinaryTransport | undefined {
+  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType === "application/proto") return "connect-proto";
+  // Native gRPC commonly uses application/grpc while gRPC-Web uses the
+  // explicit +proto subtype. Memos uses protobuf as its wire codec, so both
+  // media-type forms select the same unary protobuf framing.
+  if (
+    mediaType === "application/grpc" ||
+    mediaType === "application/grpc+proto"
+  ) {
+    return "grpc-proto";
+  }
+  if (
+    mediaType === "application/grpc-web" ||
+    mediaType === "application/grpc-web+proto"
+  ) {
+    return "grpc-web-proto";
+  }
+  if (
+    mediaType === "application/grpc-web-text" ||
+    mediaType === "application/grpc-web-text+proto"
+  ) {
+    return "grpc-web-text-proto";
+  }
+  return undefined;
+}
+
+export function encodeBinaryError(
+  message: string,
+  transport: BinaryTransport,
+  code = 3,
+) {
+  // google.rpc.Status: code=1, message=2. The HTTP status and transport
+  // headers remain authoritative for Connect/gRPC clients, but the body must
+  // carry the same status code instead of always pretending every failure is
+  // INVALID_ARGUMENT.
+  const status = encodeGoogleRpcStatus(code, message);
+  if (transport === "connect-proto") return status;
+  // gRPC-Web application errors are carried in a trailers-only frame. A
+  // protobuf google.rpc.Status data frame would be interpreted as a normal
+  // response message by generated browser clients.
+  const framed =
+    transport === "grpc-web-proto" || transport === "grpc-web-text-proto"
+      ? encodeGrpcWebTrailerFrame(code, message)
+      : encodeGrpcUnaryFrame(status);
+  return transport === "grpc-web-text-proto" ? encodeBase64(framed) : framed;
 }
 
 function encodeVarint(value: number) {

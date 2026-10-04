@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { parse as parseJsonc } from "jsonc-parser";
 import {
   assertDerivedIndexesComplete,
   buildOrderedDataRestore,
@@ -153,11 +154,16 @@ step("list remote D1 migrations", () =>
   ]),
 );
 step("verify R2 bucket exists", () => {
+  // Read the expected name from the deployment's own config: the template
+  // default (`flaremo-attachments`) is only a suggestion, and a hardcoded
+  // check failed every deployment that named its bucket anything else —
+  // including this repo's own, which is `flaremo`.
+  const bucket = attachmentBucketName();
   const result = run("pnpm", ["exec", "wrangler", "r2", "bucket", "list"], {
     capture: true,
   });
-  if (!result.stdout.includes("flaremo-attachments")) {
-    throw new Error("R2 bucket flaremo-attachments was not found.");
+  if (!result.stdout.includes(bucket)) {
+    throw new Error(`R2 bucket ${bucket} was not found.`);
   }
   process.stdout.write(result.stdout);
 });
@@ -192,6 +198,33 @@ writeFileSync(
 );
 
 console.log(`Backup drill report: ${report}`);
+
+/**
+ * The R2 bucket this deployment actually binds, from `wrangler.jsonc`.
+ * `wrangler.jsonc` is gitignored and per-deployment, so a missing or
+ * unparsable file is reported rather than silently skipping the check.
+ */
+function attachmentBucketName() {
+  const errors = [];
+  const config = parseJsonc(
+    readFileSync(resolve("wrangler.jsonc"), "utf8"),
+    errors,
+    { allowTrailingComma: true },
+  );
+  if (errors.length || !config || typeof config !== "object") {
+    throw new Error("Could not parse wrangler.jsonc for the R2 binding.");
+  }
+  const entry = config.r2_buckets?.find?.(
+    (candidate) => candidate?.binding === "ATTACHMENTS",
+  );
+  const name = entry?.bucket_name;
+  if (typeof name !== "string" || !name) {
+    throw new Error(
+      "wrangler.jsonc is missing the ATTACHMENTS bucket binding.",
+    );
+  }
+  return name;
+}
 
 function queryLocalCounts(persistTo) {
   const persistArgs = persistTo ? ["--persist-to", persistTo] : [];

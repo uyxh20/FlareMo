@@ -2,6 +2,7 @@
 // 4. Day Horizon View (Classic 12-Hour Astronomical Timepiece - Bold & Intuitive)
 // ============================================================================
 import { useEffect, useMemo, useState } from "react";
+import { useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { buildHourCountMap } from "@/lib/time-horizon";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ export function DayHorizonPureView({
   onJumpToTimeline: (day: string) => void;
   onHoverTip: (tip: string | null) => void;
 }) {
+  const { t } = useI18n();
   const hourCountMap = useMemo(
     () => buildHourCountMap(hourlyData),
     [hourlyData],
@@ -124,22 +126,23 @@ export function DayHorizonPureView({
     const snippetSuffix = firstSnippet ? ` · “${firstSnippet}”` : "";
 
     if (totalCount > 0) {
+      const notes = (count: number) => t("explorer.notesCount", { count });
       if (countAm > 0 && countPm > 0) {
         onHoverTip(
-          `${selectedDay} ${hourLabelAm} (${countAm}条) · ${hourLabelPm} (${countPm}条)${snippetSuffix}`,
+          `${selectedDay} ${hourLabelAm} (${notes(countAm)}) · ${hourLabelPm} (${notes(countPm)})${snippetSuffix}`,
         );
       } else if (countAm > 0) {
         onHoverTip(
-          `${selectedDay} ${hourLabelAm} · ${countAm} 条笔记${snippetSuffix}`,
+          `${selectedDay} ${hourLabelAm} · ${notes(countAm)}${snippetSuffix}`,
         );
       } else {
         onHoverTip(
-          `${selectedDay} ${hourLabelPm} · ${countPm} 条笔记${snippetSuffix}`,
+          `${selectedDay} ${hourLabelPm} · ${notes(countPm)}${snippetSuffix}`,
         );
       }
     } else {
       onHoverTip(
-        `${selectedDay} ${pos === 0 ? "12:00 / 00:00" : `${pos}:00`} · 无记录`,
+        `${selectedDay} ${pos === 0 ? "12:00 / 00:00" : `${pos}:00`} · ${t("explorer.noRecords")}`,
       );
     }
   };
@@ -179,7 +182,7 @@ export function DayHorizonPureView({
         type="button"
         className="relative flex items-center justify-center p-1 cursor-pointer transition-transform duration-200 hover:scale-[1.02]"
         onClick={() => onJumpToTimeline(selectedDay)}
-        aria-label="在时间线查看该日"
+        aria-label={t("explorer.viewDayInTimeline")}
       >
         <svg
           viewBox="0 0 210 210"
@@ -189,7 +192,7 @@ export function DayHorizonPureView({
           )}
           aria-hidden="true"
         >
-          <title>经典天文时计</title>
+          <title>{t("explorer.classicClock")}</title>
 
           {/* ── 1. Inner Concentric Guide Ring (高对比度同心导轨) ───────── */}
           <circle

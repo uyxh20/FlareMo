@@ -8,7 +8,10 @@ import {
 } from "@flaremo/domain";
 import type { Hono } from "hono";
 import { getRequestContext, type HonoBindings } from "../../context";
-import { currentJsonError, ValidationCurrentError } from "./errors";
+import {
+  currentJsonError,
+  ValidationCurrentError,
+} from "../../memos-compat/current-errors";
 import {
   currentShortcutResourceName,
   currentUserResourceName,

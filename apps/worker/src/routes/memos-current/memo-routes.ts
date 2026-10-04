@@ -25,6 +25,7 @@ import {
   type HonoBindings,
 } from "../../context";
 import { hardDeleteMemoWithAttachments } from "../../memo-hard-delete";
+import { currentJsonError } from "../../memos-compat/current-errors";
 import { CompatValidationError } from "../../memos-compat/errors";
 import { resolveMemoCreator } from "../../memos-compat/memo-creator";
 import {
@@ -33,7 +34,6 @@ import {
 } from "../../memos-compat/parsing";
 import { compatMemoPayload } from "../../memos-compat/payload";
 import { normalizeMemoName } from "../../memos-compat/resource-names";
-import { currentJsonError } from "./errors";
 import {
   createAuthContext,
   currentListQuery,
@@ -43,6 +43,7 @@ import {
   isLegacyWireRequest,
   isRecord,
   parseUpdateMask,
+  readCurrentJsonObject,
   unwrapMemoBody,
   unwrapShareBody,
 } from "./helpers";
@@ -96,7 +97,7 @@ export function registerMemoRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       const body = unwrapMemoBody(
-        currentMemoBodySchema.parse(await c.req.json()),
+        currentMemoBodySchema.parse(await readCurrentJsonObject(c)),
       );
       if (body.memoId) {
         throw new CompatValidationError(
@@ -143,7 +144,7 @@ export function registerMemoRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       const body = unwrapMemoBody(
-        currentMemoBodySchema.parse(await c.req.json()),
+        currentMemoBodySchema.parse(await readCurrentJsonObject(c)),
       );
       const updateMask = parseUpdateMask(
         c.req.query("updateMask") ?? body.updateMask,
@@ -202,7 +203,7 @@ export function registerMemoRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       const body = unwrapMemoBody(
-        currentMemoBodySchema.parse(await c.req.json()),
+        currentMemoBodySchema.parse(await readCurrentJsonObject(c)),
       );
       const names = (body.attachments ?? []).flatMap((attachment) =>
         typeof attachment.name === "string" ? [attachment.name] : [],
@@ -237,7 +238,9 @@ export function registerMemoRoutes(app: Hono<HonoBindings>) {
   app.patch("/memos/:memo/relations", async (c, next) => {
     if (isLegacyWireRequest(c)) return next();
     try {
-      const body = currentRelationBodySchema.parse(await c.req.json());
+      const body = currentRelationBodySchema.parse(
+        await readCurrentJsonObject(c),
+      );
       const memoName = normalizeMemoName(c.req.param("memo"));
       const relationInput = body.relations.flatMap((relation) => {
         const relatedName =
@@ -283,7 +286,7 @@ export function registerMemoRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       const body = unwrapShareBody(
-        currentShareBodySchema.parse(await c.req.json()),
+        currentShareBodySchema.parse(await readCurrentJsonObject(c)),
       );
       const context = await getRequestContext(c);
       const share = await createMemoShare(

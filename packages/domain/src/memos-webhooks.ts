@@ -8,7 +8,17 @@ import {
   reactions,
   type UserRow,
 } from "@flaremo/db";
-import { and, asc, eq, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 
 export const MEMOS_WEBHOOK_ACTIVITY_TYPES = [
   "memos.memo.created",
@@ -136,25 +146,24 @@ export async function pruneMemosWebhookOutbox(db: FlareMoDb, before: Date) {
     )
     .limit(100);
   if (events.length === 0) return;
-  for (const event of events) {
-    const unfinished = await db
-      .select({ id: memosWebhookDeliveries.id })
-      .from(memosWebhookDeliveries)
-      .where(
-        and(
-          eq(memosWebhookDeliveries.eventId, event.id),
-          or(
-            eq(memosWebhookDeliveries.status, "pending"),
-            eq(memosWebhookDeliveries.status, "sending"),
-          ),
-        ),
-      )
-      .limit(1);
-    if (unfinished.length > 0) continue;
-    await db
-      .delete(memosWebhookEvents)
-      .where(eq(memosWebhookEvents.id, event.id));
-  }
+  const eventIds = events.map((event) => event.id);
+  // One lookup for every event that still owns a live delivery, instead of a
+  // LIMIT 1 probe per event. Only events absent from this set are prunable.
+  const unfinished = await db
+    .select({ eventId: memosWebhookDeliveries.eventId })
+    .from(memosWebhookDeliveries)
+    .where(
+      and(
+        inArray(memosWebhookDeliveries.eventId, eventIds),
+        inArray(memosWebhookDeliveries.status, ["pending", "sending"]),
+      ),
+    );
+  const blocked = new Set(unfinished.map((row) => row.eventId));
+  const prunableIds = eventIds.filter((id) => !blocked.has(id));
+  if (prunableIds.length === 0) return;
+  await db
+    .delete(memosWebhookEvents)
+    .where(inArray(memosWebhookEvents.id, prunableIds));
 }
 
 async function expandPendingEvents(db: FlareMoDb, nowIso: string) {
@@ -165,21 +174,29 @@ async function expandPendingEvents(db: FlareMoDb, nowIso: string) {
     .orderBy(asc(memosWebhookEvents.id))
     .limit(MAX_EVENTS_PER_SWEEP);
 
-  for (const event of events) {
-    const webhooks = await db
-      .select()
-      .from(memosWebhooks)
-      .where(
-        and(
-          eq(memosWebhooks.userId, event.receiverId),
-          // A webhook created after an event must not receive historical
-          // events. A deleted webhook naturally loses its delivery row.
-          lte(memosWebhooks.createdAt, event.createdAt),
-        ),
-      );
+  // Webhooks used to be looked up once per event; the sweep is bounded so a
+  // single inArray fetch over the distinct receivers covers every event, and
+  // the per-event createdAt boundary is applied while filtering in memory.
+  const receiverIds = [...new Set(events.map((event) => event.receiverId))];
+  const receiverWebhooks =
+    receiverIds.length > 0
+      ? await db
+          .select()
+          .from(memosWebhooks)
+          .where(inArray(memosWebhooks.userId, receiverIds))
+      : [];
 
-    for (const webhook of webhooks) {
-      await db
+  for (const event of events) {
+    // A webhook created after an event must not receive historical events. A
+    // deleted webhook naturally loses its delivery row.
+    const webhooks = receiverWebhooks.filter(
+      (webhook) =>
+        webhook.userId === event.receiverId &&
+        webhook.createdAt <= event.createdAt,
+    );
+
+    const statements: unknown[] = webhooks.map((webhook) =>
+      db
         .insert(memosWebhookDeliveries)
         .values({
           eventId: event.id,
@@ -198,18 +215,20 @@ async function expandPendingEvents(db: FlareMoDb, nowIso: string) {
             memosWebhookDeliveries.eventId,
             memosWebhookDeliveries.webhookId,
           ],
-        });
-    }
-
-    await db
-      .update(memosWebhookEvents)
-      .set({ expandedAt: nowIso })
-      .where(
-        and(
-          eq(memosWebhookEvents.id, event.id),
-          isNull(memosWebhookEvents.expandedAt),
+        }),
+    );
+    statements.push(
+      db
+        .update(memosWebhookEvents)
+        .set({ expandedAt: nowIso })
+        .where(
+          and(
+            eq(memosWebhookEvents.id, event.id),
+            isNull(memosWebhookEvents.expandedAt),
+          ),
         ),
-      );
+    );
+    await db.batch(statements as unknown as Parameters<FlareMoDb["batch"]>[0]);
   }
 }
 

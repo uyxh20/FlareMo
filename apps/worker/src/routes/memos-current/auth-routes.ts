@@ -13,6 +13,7 @@ import {
   type HonoBindings,
 } from "../../context";
 import { resolveEmailSendConfig } from "../../email";
+import { currentJsonError } from "../../memos-compat/current-errors";
 import { registerCompatMember } from "../../memos-compat/member-service";
 import {
   authenticateMemosAccessToken,
@@ -22,7 +23,6 @@ import {
   rotateMemosRefreshToken,
 } from "../../memos-native-auth";
 import { rateLimitGuard } from "../../rate-limit";
-import { currentJsonError } from "./errors";
 import {
   appendMemosRefreshClearCookie,
   assertRegistrationOpen,
@@ -33,6 +33,7 @@ import {
   nativeRefreshResponse,
   noStoreResponse,
   parseBearerToken,
+  readCurrentJsonObject,
   signOutCookieSession,
 } from "./helpers";
 import { currentSigninSchema, currentSignupSchema } from "./schemas";
@@ -59,7 +60,7 @@ export function registerAuthRoutes(app: Hono<HonoBindings>) {
       // Memos-compatible client chooses to use the bearer token afterward.
       assertTrustedCookieMutation(c);
       const credentials = currentSigninSchema.parse(
-        await c.req.json(),
+        await readCurrentJsonObject(c),
       ).passwordCredentials;
       const dbContext = await createAuthContext(c);
       const result = await dbContext.auth.api.signInUsername({
@@ -113,7 +114,7 @@ export function registerAuthRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       assertTrustedCookieMutation(c);
-      const input = currentSignupSchema.parse(await c.req.json());
+      const input = currentSignupSchema.parse(await readCurrentJsonObject(c));
       await assertRegistrationOpen(c);
       const dbContext = await createAuthContext(c);
       // With a transactional-email provider configured, registration requires

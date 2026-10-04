@@ -91,7 +91,7 @@ export function MobileDrawer({
                   flaremo-user
                 </span>
               </div>
-              <Settings className="size-3.5 hover:text-ink cursor-pointer" />
+              <Settings aria-hidden="true" className="size-3.5 text-mist" />
             </div>
           </motion.aside>
         </>

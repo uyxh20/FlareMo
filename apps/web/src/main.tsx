@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrandingProvider } from "@/branding";
 import { ThemeProvider } from "@/components/theme-provider.tsx";
-import { I18nProvider } from "@/i18n.tsx";
+import { getInitialLocale, I18nProvider, loadLocaleMessages } from "@/i18n.tsx";
 import { ensurePwaServiceWorkerRegistration } from "./pwa.ts";
 
 import "./index.css";
@@ -41,16 +41,22 @@ if (!root) {
 
 void ensurePwaServiceWorkerRegistration();
 
-createRoot(root).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrandingProvider>
-        <I18nProvider>
-          <ThemeProvider>
-            <App />
-          </ThemeProvider>
-        </I18nProvider>
-      </BrandingProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// Fetch the initial locale's catalog before first paint: en-US resolves
+// synchronously, and for the other seven this one chunk is the difference
+// between a correct first frame and an English flash. `loadLocaleMessages`
+// never rejects — a failed pack still renders, with per-key English fallback.
+void loadLocaleMessages(getInitialLocale()).then(() => {
+  createRoot(root).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrandingProvider>
+          <I18nProvider>
+            <ThemeProvider>
+              <App />
+            </ThemeProvider>
+          </I18nProvider>
+        </BrandingProvider>
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+});

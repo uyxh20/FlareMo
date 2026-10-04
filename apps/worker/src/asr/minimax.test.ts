@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  buildMinimaxForm,
   createMinimaxProvider,
   MINIMAX_MAX_AUDIO_DURATION_MS,
   mapMinimaxSegments,
@@ -21,7 +20,7 @@ function wavBytes() {
   return bytes.buffer;
 }
 
-function jsonResponse(payload: unknown, status = 200) {
+function _jsonResponse(payload: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,

@@ -6,7 +6,7 @@ import {
   getRequestContext,
   type HonoBindings,
 } from "../../context";
-import { currentJsonError } from "./errors";
+import { currentJsonError } from "../../memos-compat/current-errors";
 import { hydrateSocialMemos, memoToCurrentDto } from "./hydrate";
 import {
   type MemoCommentPage,
@@ -74,6 +74,7 @@ export function registerCommentRoutes(app: Hono<HonoBindings>) {
           payload: memoPayload(comment),
           ...(commentId ? { commentId } : {}),
         },
+        { userLimits: context.userLimits },
       );
       return c.json(await memoToCurrentDto(context, created, memoName));
     } catch (error) {

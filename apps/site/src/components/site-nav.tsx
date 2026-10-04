@@ -138,7 +138,7 @@ function ThemeToggle({ className }: { className?: string }) {
         type="button"
         aria-label="切换主题 / Switch theme"
         className={cn(
-          "inline-flex size-8 items-center justify-center text-mist transition-colors hover:bg-wash hover:text-ink focus:outline-none cursor-pointer",
+          "inline-flex size-8 items-center justify-center text-mist transition-colors hover:bg-wash hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper cursor-pointer",
           className,
         )}
       >
@@ -286,6 +286,7 @@ export function SiteNav({ locale, currentPath }: SiteNavProps) {
           <div className="inline-flex h-8 items-center rounded-full border border-line/70 bg-surface/90 shadow-2xs divide-x divide-line/60">
             {/* GitHub 按钮 */}
             <a
+              aria-label="GitHub source repository"
               className="inline-flex h-full items-center justify-center px-2.5 text-xs font-medium text-ink transition-colors hover:bg-wash first:rounded-l-full"
               href="https://github.com/realchendahuang/FlareMo"
               rel="noopener noreferrer"
@@ -300,11 +301,11 @@ export function SiteNav({ locale, currentPath }: SiteNavProps) {
               locale={norm}
               path={currentPath}
               short={true}
-              className="inline-flex h-full items-center gap-1 border-none rounded-none bg-transparent px-2.5 text-xs font-medium text-ink shadow-none transition-colors hover:bg-wash hover:border-none focus:outline-none cursor-pointer"
+              className="inline-flex h-full items-center gap-1 border-none rounded-none bg-transparent px-2.5 text-xs font-medium text-ink shadow-none transition-colors hover:bg-wash hover:border-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper cursor-pointer"
             />
 
             {/* 外观模式切换 (嵌入胶囊) */}
-            <ThemeToggle className="inline-flex h-full w-8 items-center justify-center border-none rounded-none text-mist transition-colors hover:bg-wash hover:text-ink focus:outline-none last:rounded-r-full cursor-pointer" />
+            <ThemeToggle className="inline-flex h-full w-8 items-center justify-center border-none rounded-none text-mist transition-colors hover:bg-wash hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper last:rounded-r-full cursor-pointer" />
           </div>
 
           {/* Cloudflare 注册快捷外链 (超宽屏幕 2xl 上显示，小桌面优雅隐藏防止挤压) */}

@@ -10,7 +10,10 @@ import {
   getRequestContext,
   type HonoBindings,
 } from "../../context";
-import { currentJsonError, ValidationCurrentError } from "./errors";
+import {
+  currentJsonError,
+  ValidationCurrentError,
+} from "../../memos-compat/current-errors";
 import { reactionToDto } from "./hydrate";
 import {
   type MemoReactionPage,

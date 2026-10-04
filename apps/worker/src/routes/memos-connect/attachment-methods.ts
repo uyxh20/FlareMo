@@ -52,7 +52,7 @@ export async function connectAttachmentMethod(
     }
     case "ListAttachments": {
       const filterExpression = optionalString(body.filter);
-      const filterPredicate = compileAttachmentFilter(filterExpression);
+      const filterPredicate = await compileAttachmentFilter(filterExpression);
       const result = await listAttachmentsPage(context.db, context.user, {
         pageSize: pageSize(body.pageSize),
         pageToken: optionalString(body.pageToken),

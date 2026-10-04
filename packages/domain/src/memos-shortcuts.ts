@@ -87,7 +87,7 @@ export async function createShortcut(
   if (input.parent) assertUserResourceName(input.parent, user);
   const title = (input.shortcut?.title ?? input.title ?? "").trim();
   const filter = (input.shortcut?.filter ?? input.filter ?? "").trim();
-  validateShortcut(title, filter);
+  await validateShortcut(title, filter);
   const now = new Date().toISOString();
   const row = {
     id: createSocialResourceId("shortcuts"),
@@ -145,7 +145,7 @@ export async function updateShortcut(
         existing.filter
       ).trim()
     : existing.filter;
-  validateShortcut(title, filter);
+  await validateShortcut(title, filter);
   const now = new Date().toISOString();
   await db
     .update(shortcuts)
@@ -221,12 +221,12 @@ function normalizeUpdateMask(mask: string | string[] | undefined) {
   return normalized;
 }
 
-function validateShortcut(title: string, filter: string) {
+async function validateShortcut(title: string, filter: string) {
   if (!title) throw new ValidationError("Shortcut title is required");
   if (title.length > 256)
     throw new ValidationError("Shortcut title is too long");
   if (!filter) throw new ValidationError("Shortcut filter is required");
   if (filter.length > 4_096)
     throw new ValidationError("Shortcut filter is too long");
-  if (filter) compileMemoFilter(filter);
+  if (filter) await compileMemoFilter(filter);
 }

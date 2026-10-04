@@ -5,13 +5,19 @@ import {
 import {
   type BinaryTransport,
   encodeBinaryError,
-  encodeBinaryResponse,
-  normalizeMemosJsonResponse,
   ProtoCodecError,
-} from "../../memos-protobuf";
+} from "../../memos-compat/proto-wire";
+import { loadMemosProtobuf } from "./protobuf-loader";
 import type { ConnectContext } from "./shared";
 
-function connectJson(c: ConnectContext, value: unknown) {
+/**
+ * The JSON transport still normalizes through the generated descriptors, so it
+ * loads the same runtime as the binary one — the split is about keeping the
+ * descriptor runtime off the isolate startup graph, not about making the JSON
+ * path independent of it.
+ */
+async function connectJson(c: ConnectContext, value: unknown) {
+  const { normalizeMemosJsonResponse } = await loadMemosProtobuf();
   const normalized = normalizeMemosJsonResponse(
     c.req.param("service") ?? "",
     c.req.param("method") ?? "",
@@ -20,12 +26,13 @@ function connectJson(c: ConnectContext, value: unknown) {
   return c.json(normalized, 200, { "content-type": "application/json" });
 }
 
-export function connectValue(
+export async function connectValue(
   c: ConnectContext,
   value: unknown,
   transport?: BinaryTransport,
 ) {
   if (!transport) return connectJson(c, value);
+  const { encodeBinaryResponse } = await loadMemosProtobuf();
   const encoded = encodeBinaryResponse(
     c.req.param("service") ?? "",
     c.req.param("method") ?? "",
@@ -50,6 +57,14 @@ export function connectError(
   });
 }
 
+/**
+ * Binary error envelope. Deliberately synchronous: it is reachable from the
+ * `catch` of a request that failed before any descriptor runtime was loaded
+ * (a 415, a credential rejection, an unparseable frame), so it must never
+ * depend on the lazy protobuf import resolving. The body here is pure framing
+ * and google.rpc.Status encoding, which is why encodeBinaryError lives in
+ * memos-compat/proto-wire.ts rather than behind the loader.
+ */
 export function connectErrorForTransport(
   c: ConnectContext,
   transport: BinaryTransport | undefined,

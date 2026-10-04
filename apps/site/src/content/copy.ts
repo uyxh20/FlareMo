@@ -1,23 +1,4 @@
 import { type Locale, normalizeLocale, type SupportedLocale } from "@/lib/seo";
-import { AR_HOME } from "./home/ar";
-import { EN_HOME } from "./home/en";
-import { ES_HOME } from "./home/es";
-import { FR_HOME } from "./home/fr";
-import { JA_HOME } from "./home/ja";
-import { KO_HOME } from "./home/ko";
-import { RU_HOME } from "./home/ru";
-import { ZH_HOME } from "./home/zh";
-
-export {
-  AR_HOME,
-  EN_HOME,
-  ES_HOME,
-  FR_HOME,
-  JA_HOME,
-  KO_HOME,
-  RU_HOME,
-  ZH_HOME,
-};
 
 export type HomeContent = {
   heroEyebrow: string;
@@ -60,21 +41,19 @@ export type HomeContent = {
   ctaButton: string;
 };
 
-/** Translation completeness guard: every supported locale must be present,
- *  so a locale file that is added (or removed) without touching this map is a
- *  compile error. */
-const HOME_BY_LOCALE: Record<SupportedLocale, HomeContent> = {
-  en: EN_HOME,
-  zh: ZH_HOME,
-  ja: JA_HOME,
-  fr: FR_HOME,
-  es: ES_HOME,
-  ko: KO_HOME,
-  ru: RU_HOME,
-  ar: AR_HOME,
+/** Keep locale modules out of the entry chunk; the route loader only fetches
+ *  the copy needed by the current statically rendered page. */
+const HOME_LOADERS: Record<SupportedLocale, () => Promise<HomeContent>> = {
+  en: () => import("./home/en").then(({ EN_HOME }) => EN_HOME),
+  zh: () => import("./home/zh").then(({ ZH_HOME }) => ZH_HOME),
+  ja: () => import("./home/ja").then(({ JA_HOME }) => JA_HOME),
+  fr: () => import("./home/fr").then(({ FR_HOME }) => FR_HOME),
+  es: () => import("./home/es").then(({ ES_HOME }) => ES_HOME),
+  ko: () => import("./home/ko").then(({ KO_HOME }) => KO_HOME),
+  ru: () => import("./home/ru").then(({ RU_HOME }) => RU_HOME),
+  ar: () => import("./home/ar").then(({ AR_HOME }) => AR_HOME),
 };
 
-export function getHomeContent(locale: Locale): HomeContent {
-  const norm = normalizeLocale(locale);
-  return HOME_BY_LOCALE[norm] ?? HOME_BY_LOCALE.en;
+export function loadHomeContent(locale: Locale): Promise<HomeContent> {
+  return HOME_LOADERS[normalizeLocale(locale)]();
 }

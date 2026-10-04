@@ -22,7 +22,7 @@ FlareMo 部署到 Cloudflare Workers。Worker 同时承载前端静态资源和 
 
 ## 手动部署
 
-仓库不跟踪 `wrangler.jsonc`（手动部署者的配置以本机文件形式存在），也没有 CI 或自动部署。先创建资源、复制配置模板并填入自己的值，再执行部署命令。
+仓库不跟踪 `wrangler.jsonc`（手动部署者的配置以本机文件形式存在）；上游仓库不通过 push 自动部署，自托管 fork 或部署仓库可以按上一节通过受控 GitHub Action 在 push 到 `main` 或 `workflow_dispatch` 时发布。先创建资源、复制配置模板并填入自己的值，再执行部署命令。
 
 安装依赖：
 
@@ -233,6 +233,16 @@ curl "$FLAREMO_URL/api/v1/memos" \
 
 旧的 `/api/v1/mcp` 是 FlareMo 既有 JSON-RPC MCP 子集，同样需要 cookie session 或 PAT；它继续保留给旧客户端。current Memos 风格的无状态 JSON Streamable HTTP MCP 位于根 `/mcp`，支持 `initialize`、`notifications/initialized`、`tools/list` 和 `tools/call`，但不承诺 SSE、有状态 session 或完整 method surface。
 
+### Workers 免费套餐的可用性边界
+
+FlareMo 是全功能应用（认证 + 全文/向量检索 + 附件 + 队列），Worker 的每请求 CPU 开销天然贴近 Cloudflare Workers **免费套餐的 10ms CPU/请求上限**。免费套餐可以跑轻量单用户实例，但要清楚这些边界（issue #138 的实测）：
+
+- **登录是全应用 CPU 最重的路径**（argon2/scrypt 密码校验），负载或冷启动叠加时最先失败，表现为偶发「密码正确但无响应」（Error 1102）。
+- 正常使用数小时后，突发高并发写入可能把后续请求（包括 `/api/app/health`）打成 503，需要等 isolate 冷却。
+- 批量操作（大批量删除/导入）在贴线状态下也可能单请求 1102，重试即可。
+
+免费套餐的建议用法：单用户、低频写入、避免自动化工具高并发打接口。付费套餐（Standard 起，无 10ms 限制）没有这些约束。如果你在免费套餐上稳定遇到 Error 1102，先确认是否属于上述场景，再考虑升级套餐——应用层配置无法绕开该限制。
+
 ### Cloudflare 资源用量面板（可选）
 
 Owner 用量面板除了应用内自测的向量用量，还可以展示 Cloudflare 官方口径的本实例资源用量（Workers 请求数、D1 存储与读/写行数、R2 存储与 Class A / B 操作）。数据来自 GraphQL Analytics API（`api.cloudflare.com/client/v4/graphql`），按本部署自己的 Worker 名、D1 database id、R2 bucket 过滤，共享账号下其他项目的用量不会被计入。
@@ -246,6 +256,44 @@ pnpm setup:usage
 脚本会检测现有 secret、给出创建 API token 的指引（自定义 token 只需要 **Account → Account Analytics → Read** 一条权限）、写入 `FLAREMO_CF_ANALYTICS_TOKEN`、`FLAREMO_CF_ACCOUNT_ID`、`FLAREMO_CF_WORKER_NAME`、`FLAREMO_CF_D1_ID`、`FLAREMO_CF_R2_BUCKET` 五个 Worker secret，并当场验证 token 能读到 analytics。secret 配置一次即随实例永久生效，之后的部署无需重复任何步骤；`--reset` 可只重新录入 token。
 
 Token 权限是账号级的（Cloudflare 不支持更细的 analytics 读取范围），但面板查询始终按资源 id 过滤。不配置 token 时该区块整体隐藏，应用其余功能不受影响。R2 存储指标约有 24 小时延迟；「本月」按 UTC 自然月对齐 Cloudflare 计费周期；最终计费以 Cloudflare Dashboard 为准。
+
+### D1 免费套餐的每日行数预算
+
+D1 免费套餐按 UTC 自然日重置额度，其中 `rows_read` 是 **5M 行 / 天**。FlareMo 消耗额度的大头不是写入，而是**读**：统计类查询的成本此前会随 memo 总数线性增长。
+
+一个真实案例：某位用户的实例上有约 4700 条 memo（含批量导入回填的历史笔记），正常使用一天后 D1 面板的 `rows_read` 已达约 **4.06M / 5M**，击穿后整站统计查询报错，直到次日额度重置才恢复。根因是 `/api/app/stats` 改造前每个数字都靠扫 `memos` 得出：`counts` 一次全量聚合、`active_days` 一次全量 group by、`activity` 再把时间窗内的 `created_at` 逐行拉回应用层分桶，外加 `tags` 的一次 `memo_tags` JOIN（索引读取同样计入）。在 4700 条的规模上单次请求约消耗 **2 万 rows_read**（下界）。按这个量级粗估，**约 250 次**这样的请求就能打满当日免费额度——一天里反复打开工作台、切换视图，或让脚本 / MCP 客户端重复拉统计，都可能做到。
+
+现在 `counts`、`active_days`、`activity` 三项改读一张聚合表 `memo_hourly_counts`（按作者 + UTC 小时 + 当前 status 分桶），成本从「随 memo 总数增长」变成「随你实际有活动的 UTC 小时数增长」。
+
+覆盖范围如下（这张表只描述**你自己写的** memo）：
+
+| 查询 | 走聚合表 | 说明 |
+| --- | --- | --- |
+| `/api/app/stats`（不带 `space`） | 是 | 工作台侧栏、Memos 兼容客户端、MCP 取到的都是这一条 |
+| `/api/app/stats?space=all` | 是 | 路由层把 `all` 归一为「不带 space」，与上面同一条路径 |
+| `/api/app/stats?space=personal` / `space=team` | 否 | 仍实时全表扫，见下 |
+| `/api/app/stats` 的 `tags` 字段 | 否 | 仍实时扫 `memo_tags` JOIN `memos` |
+
+**带 `space` 的查询为什么不能走快路径。** 这类查询的语料范围由 `memoReadScope` 加 space 分区共同决定。`space=personal` 的分区条件是 `team_id IS NULL`（个人 memo），`space=team` 是「本组织的 team memo」；而 `memoReadScope` 除了「我写的」，还包括**别人写的** public 正常 memo。聚合表按作者分桶，无法复现这种跨作者语料，所以 `space=personal` 和 `space=team` 保留实时查询。
+
+正常创建路径下这个差异其实看不出来：`resolveMemoTeamId` 规定 visibility 非 private 时必须带 team_id，所以别人写的 public memo 一定有 team_id，会落进 `space=team` 而不是 `space=personal`。**例外是导入与历史行**——`importData` 不写 `team_id`，一条以 `public` 导入的 memo 会是 `team_id IS NULL`，于是它既在 `space=personal` 里、又对所有人可见。只有单用户自托管实例才天然没有这个差异。
+
+**哪些部署形态会真的受益。**
+
+- **单用户自托管（默认形态，主要受益方）**：侧栏和 Memos 兼容客户端的统计都落在快路径上；残下的成本主要是 `tags` 那一次 `memo_tags` 扫描，约等于「带过标签的 memo 条数」——全都不打标签的实例，这项可以忽略。
+- **多租户 / 团队 SaaS**：只要用户在工作台切到 `personal` 或 `team` 分区，侧栏统计就退回全表扫，成本与改造前同量级。快路径只覆盖侧栏的 `all` 视图和无 space 的客户端调用。
+- 无论哪种形态，**每日一次的定时任务都会对 `memos` 做一次全量分组扫描做校准**（既有 cron，`17 3 * * *` UTC，不新增 trigger）。这是固定的每日成本，换来的是请求侧不再重复扫表。
+
+**怎么自己估算。** 用「单次请求读多少行 × 一天请求多少次」估：
+
+- 改造前，快路径的单次成本约等于 **memo 条数 × 4** 这个量级（多次全量聚合加索引读取）。拿自己实例的 memo 数乘 4，再乘上一天里打开工作台的次数，就能看出会不会逼近 5M。
+- 改造后，快路径的单次成本约等于 **历史上有活动的小时数**（聚合表行数）+ **带标签的 memo 条数**（`memo_tags` 行数）。批量导入回填了历史时间戳的话，前一项也可能到千级——比原来少一个量级，但不是常数。
+- 带 `space` 的查询仍然是每次请求数次 `memos` 全量扫描，是最容易击穿的入口。
+- 自己写脚本调 `/api/app/stats` 时，`days` 参数（默认 84，上限 366）决定 activity 窗口读多宽：值越大读的聚合行越多；带 `space` 时它还会同比拉长原始 memo 的扫描窗口。工作台为了渲染年视图会显式请求 `days=366`。
+
+**怎么读实际用量。** Cloudflare Dashboard 里进入 D1 → 你的数据库 → Metrics，看 `rows read` 曲线；或者按上一小节配置一次 `pnpm setup:usage`，直接在账户页的用量面板看同一口径。面板数据有延迟，击穿后看到的数值未必是当时的峰值，判断余量时留出余量。付费套餐（Standard 起）没有这层限制。
+
+**升级到含聚合表的版本需要手动做什么：不需要。** 新增一张表和一个 migration，纯新增 + 回填，向后兼容——migration 只读 `memos`，不改动任何既有表或列，所以迁移期间和迁移之后旧版本 Worker 都能正常工作。`pnpm deploy` 的执行顺序是「构建前端 → 应用远端 migrations → 发布 Worker」，GitHub Action 手动部署（`Deploy to Cloudflare`）跑的是同一条命令，所以两条路径都会在发布新 Worker 之前先建好表；Workers Builds 的自动迁移见 [更新指南](./update.md)。不需要新增变量、binding 或 cron，也没有需要回填的数据——migration 已经把存量 memo 按 UTC 小时回填进聚合表，定时任务随后每天做一次全量校准。
 
 ## Cloudflare Access（可选外层防线）
 

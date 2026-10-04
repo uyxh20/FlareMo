@@ -43,6 +43,34 @@ export function isDomainError(error: unknown): error is DomainError {
 }
 
 /**
+ * Narrow an unknown input to a plain object record (not `null`, not an
+ * array). The compat surfaces each re-declared this guard locally; keep the
+ * single copy next to the other shared classifiers.
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The HTTP status a framework error carries itself, or null when it is not a
+ * controlled caller-facing failure. Better Auth's APIError exposes both
+ * `statusCode` (numeric) and `status` (numeric or a name), so either is
+ * accepted; only 4xx qualifies. 5xx and status-less errors are deliberately
+ * excluded — their messages can carry driver or internal detail, so every
+ * envelope keeps answering those generically.
+ */
+export function controlledErrorStatus(error: unknown): number | null {
+  if (!isRecord(error)) return null;
+  const status =
+    typeof error.statusCode === "number"
+      ? error.statusCode
+      : typeof error.status === "number"
+        ? error.status
+        : null;
+  return status !== null && status >= 400 && status < 500 ? status : null;
+}
+
+/**
  * Status carried by a Better Auth HTTP rejection: 4xx keeps its own message,
  * everything else is not a controlled error.
  */

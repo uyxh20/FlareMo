@@ -20,6 +20,7 @@ export {
   getMemoById,
   getMemoByIdForViewer,
   getMemoStats,
+  getMemosByIdsForViewer,
   listMemos,
   listMemosForViewer,
   listMemoTotalsByUser,

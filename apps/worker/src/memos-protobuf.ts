@@ -20,14 +20,13 @@
 import type { DescMessage, JsonValue } from "@bufbuild/protobuf";
 import { fromBinary, fromJson, toBinary, toJson } from "@bufbuild/protobuf";
 import {
+  type BinaryTransport,
   decodeBase64,
   decodeGrpcUnaryFrame,
   decodeGrpcWebUnaryResponse,
   encodeBase64,
-  encodeGoogleRpcStatus,
   encodeGrpcUnaryFrame,
   encodeGrpcWebResponse,
-  encodeGrpcWebTrailerFrame,
   ProtoCodecError,
   type ProtoMessage,
 } from "./memos-compat/proto-wire";
@@ -36,10 +35,7 @@ import { AttachmentService } from "./memos-generated/api/v1/attachment_service_p
 import { AuthService } from "./memos-generated/api/v1/auth_service_pb";
 import { IdentityProviderService } from "./memos-generated/api/v1/idp_service_pb";
 import { InstanceService } from "./memos-generated/api/v1/instance_service_pb";
-import {
-  MemoSchema,
-  MemoService,
-} from "./memos-generated/api/v1/memo_service_pb";
+import { MemoService } from "./memos-generated/api/v1/memo_service_pb";
 import { ShortcutService } from "./memos-generated/api/v1/shortcut_service_pb";
 import { UserService } from "./memos-generated/api/v1/user_service_pb";
 
@@ -64,14 +60,12 @@ const generatedServices: Record<string, GeneratedService> = {
   "memos.api.v1.UserService": UserService,
 };
 
-export type { ProtoMessage } from "./memos-compat/proto-wire";
-export { ProtoCodecError } from "./memos-compat/proto-wire";
-
-export type BinaryTransport =
-  | "connect-proto"
-  | "grpc-proto"
-  | "grpc-web-proto"
-  | "grpc-web-text-proto";
+export type { BinaryTransport, ProtoMessage } from "./memos-compat/proto-wire";
+export {
+  detectBinaryTransport,
+  encodeBinaryError,
+  ProtoCodecError,
+} from "./memos-compat/proto-wire";
 
 /**
  * Normalize a handler response to the canonical protobuf-JSON shape.
@@ -109,35 +103,6 @@ export function normalizeMemosJsonResponse(
   }
 }
 
-export function detectBinaryTransport(
-  contentType: string,
-): BinaryTransport | undefined {
-  const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
-  if (mediaType === "application/proto") return "connect-proto";
-  // Native gRPC commonly uses application/grpc while gRPC-Web uses the
-  // explicit +proto subtype. Memos uses protobuf as its wire codec, so both
-  // media-type forms select the same unary protobuf framing.
-  if (
-    mediaType === "application/grpc" ||
-    mediaType === "application/grpc+proto"
-  ) {
-    return "grpc-proto";
-  }
-  if (
-    mediaType === "application/grpc-web" ||
-    mediaType === "application/grpc-web+proto"
-  ) {
-    return "grpc-web-proto";
-  }
-  if (
-    mediaType === "application/grpc-web-text" ||
-    mediaType === "application/grpc-web-text+proto"
-  ) {
-    return "grpc-web-text-proto";
-  }
-  return undefined;
-}
-
 export function decodeBinaryRequest(
   service: string,
   method: string,
@@ -169,27 +134,6 @@ export function encodeBinaryResponse(
     transport === "grpc-web-proto" || transport === "grpc-web-text-proto"
       ? encodeGrpcWebResponse(payload, 0)
       : encodeGrpcUnaryFrame(payload);
-  return transport === "grpc-web-text-proto" ? encodeBase64(framed) : framed;
-}
-
-export function encodeBinaryError(
-  message: string,
-  transport: BinaryTransport,
-  code = 3,
-) {
-  // google.rpc.Status: code=1, message=2. The HTTP status and transport
-  // headers remain authoritative for Connect/gRPC clients, but the body must
-  // carry the same status code instead of always pretending every failure is
-  // INVALID_ARGUMENT.
-  const status = encodeGoogleRpcStatus(code, message);
-  if (transport === "connect-proto") return status;
-  // gRPC-Web application errors are carried in a trailers-only frame. A
-  // protobuf google.rpc.Status data frame would be interpreted as a normal
-  // response message by generated browser clients.
-  const framed =
-    transport === "grpc-web-proto" || transport === "grpc-web-text-proto"
-      ? encodeGrpcWebTrailerFrame(code, message)
-      : encodeGrpcUnaryFrame(status);
   return transport === "grpc-web-text-proto" ? encodeBase64(framed) : framed;
 }
 

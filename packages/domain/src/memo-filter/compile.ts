@@ -3,7 +3,7 @@ import type { ParseResult } from "@marcbachmann/cel-js";
 import type { SQL } from "drizzle-orm";
 import { ValidationError } from "../errors";
 import { countAstNodes, isRecord, safeError } from "./ast-utils";
-import { memoFilterEnvironment } from "./environment";
+import { getMemoFilterEnvironment } from "./environment";
 import { MAX_MEMO_FILTER_AST_NODES, MAX_MEMO_FILTER_LENGTH } from "./limits";
 import {
   normalizeMemoFilterExpression,
@@ -38,9 +38,18 @@ export type CompiledMemoFilter = ((
 
 export type CompiledAttachmentFilter = (attachment: AttachmentRow) => boolean;
 
-export function compileMemoFilter(
+/**
+ * Compile a Memos CEL filter.
+ *
+ * Async because the CEL runtime is loaded on demand: a request without a
+ * `filter=` expression resolves to `undefined` without ever pulling cel-js
+ * into the isolate. The load is deliberately placed *after* the cheap
+ * syntactic guards below so an absent, blank, oversized, or reserved-name
+ * expression stays off the parser entirely.
+ */
+export async function compileMemoFilter(
   expression: string | undefined,
-): CompiledMemoFilter | undefined {
+): Promise<CompiledMemoFilter | undefined> {
   const value = expression?.trim();
   if (!value) return undefined;
   if (value.length > MAX_MEMO_FILTER_LENGTH) {
@@ -50,7 +59,7 @@ export function compileMemoFilter(
 
   let compiled: ParseResult;
   try {
-    compiled = memoFilterEnvironment.parse(
+    compiled = (await getMemoFilterEnvironment()).parse(
       normalizeMemoFilterExpression(value),
     );
   } catch (error) {
@@ -103,9 +112,9 @@ export function compileMemoFilter(
  * owner/deleted/state boundary in the domain service. The route never gets a
  * second ad-hoc filter grammar.
  */
-export function compileAttachmentFilter(
+export async function compileAttachmentFilter(
   expression: string | undefined,
-): CompiledAttachmentFilter | undefined {
+): Promise<CompiledAttachmentFilter | undefined> {
   const value = expression?.trim();
   if (!value) return undefined;
   if (value.length > MAX_MEMO_FILTER_LENGTH) {
@@ -115,7 +124,7 @@ export function compileAttachmentFilter(
 
   let compiled: ParseResult;
   try {
-    compiled = memoFilterEnvironment.parse(
+    compiled = (await getMemoFilterEnvironment()).parse(
       normalizeMemoFilterExpression(value),
     );
   } catch (error) {

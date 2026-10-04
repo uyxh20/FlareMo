@@ -146,7 +146,7 @@ async function buildTier(
     for (const [name, data] of Object.entries(files)) {
       zipEntries[`${manifest.id}/${name.slice(prefix.length)}`] = data;
     }
-    const zipped = zipPluginFiles(zipEntries);
+    const zipped = await zipPluginFiles(zipEntries);
     const artifactName = `${manifest.id}-${manifest.version}.zip`;
     await mkdir(path.join(storeDir, manifest.id), { recursive: true });
     await writeFile(path.join(storeDir, manifest.id, artifactName), zipped);

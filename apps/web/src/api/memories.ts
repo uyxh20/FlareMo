@@ -19,7 +19,14 @@ export type ListMemoriesParams = {
   needs_review?: boolean;
 };
 
-export async function listMemories(params: ListMemoriesParams = {}) {
+// The workspace renders the ledger whole (tabs, project groups and counts are
+// all derived client-side), so the browser still needs every page. It walks
+// the server cursor in bounded requests instead of asking the Worker for one
+// unbounded read; the cap only guards against a runaway loop.
+const MEMORY_PAGE_SIZE = 100;
+const MEMORY_PAGE_LIMIT = 50;
+
+function buildMemoryQuery(params: ListMemoriesParams) {
   const query = new URLSearchParams();
   if (params.q) query.set("q", params.q);
   if (params.type) query.set("type", params.type);
@@ -32,10 +39,25 @@ export async function listMemories(params: ListMemoriesParams = {}) {
   if (params.source_agent) query.set("source_agent", params.source_agent);
   if (params.needs_review !== undefined)
     query.set("needs_review", String(params.needs_review));
+  return query;
+}
 
-  return apiRequest<{ memories: Memory[] }>(
-    `/api/app/memory?${query.toString()}`,
-  );
+export async function listMemories(params: ListMemoriesParams = {}) {
+  const memories: Memory[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MEMORY_PAGE_LIMIT; page += 1) {
+    const query = buildMemoryQuery(params);
+    query.set("page_size", String(MEMORY_PAGE_SIZE));
+    if (pageToken) query.set("page_token", pageToken);
+    const result = await apiRequest<{
+      memories: Memory[];
+      next_page_token?: string;
+    }>(`/api/app/memory?${query.toString()}`);
+    memories.push(...result.memories);
+    pageToken = result.next_page_token;
+    if (!pageToken) break;
+  }
+  return { memories };
 }
 
 export async function listMemoryReview() {
@@ -119,5 +141,80 @@ export async function promoteMemoryToMemo(id: string) {
   return apiRequest<{ memory: Memory; memo: string }>(
     `/api/app/memory/${encodeURIComponent(id)}/promote`,
     { method: "POST" },
+  );
+}
+
+export async function restoreMemory(id: string) {
+  return apiRequest<{ memory: Memory }>(
+    `/api/app/memory/${encodeURIComponent(id)}/restore`,
+    { method: "POST" },
+  );
+}
+
+export async function pinMemory(id: string) {
+  return apiRequest<{ memory: Memory }>(
+    `/api/app/memory/${encodeURIComponent(id)}/pin`,
+    { method: "POST" },
+  );
+}
+
+export async function unpinMemory(id: string) {
+  return apiRequest<{ memory: Memory }>(
+    `/api/app/memory/${encodeURIComponent(id)}/unpin`,
+    { method: "POST" },
+  );
+}
+
+export async function resolveProposal(
+  id: string,
+  input: {
+    action: "accept" | "reject" | "modify";
+    modified_content?: string;
+    rejection_reason?: string;
+  },
+) {
+  return apiRequest<{
+    resolved: boolean;
+    action: string;
+    memory: Memory;
+  }>(`/api/app/memory/proposals/${encodeURIComponent(id)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getMemoryLineage(id: string) {
+  return apiRequest<{
+    lineage: {
+      current: Memory;
+      chain: Memory[];
+      revisions: MemoryRevision[];
+      evidence: unknown[];
+      events: unknown[];
+    };
+  }>(`/api/app/memory/${encodeURIComponent(id)}/lineage`);
+}
+
+export async function getMemoryEvidence(id: string) {
+  return apiRequest<{ evidence: unknown[] }>(
+    `/api/app/memory/${encodeURIComponent(id)}/evidence`,
+  );
+}
+
+export async function compileMemory(
+  params: {
+    scope_type?: string;
+    scope_key?: string;
+    agent_id?: string;
+    format?: "markdown" | "json";
+  } = {},
+) {
+  const query = new URLSearchParams();
+  if (params.scope_type) query.set("scope_type", params.scope_type);
+  if (params.scope_key) query.set("scope_key", params.scope_key);
+  if (params.agent_id) query.set("agent_id", params.agent_id);
+  if (params.format) query.set("format", params.format);
+  return apiRequest<{ compiled: string }>(
+    `/api/app/memory/compile?${query.toString()}`,
   );
 }

@@ -100,7 +100,7 @@ const tags = normalizeMemoTags(payload.tags ?? extractTags(input.content));
 | IM / MCP / agent / 直接 POST | 服务端（强） |
 | 导入 bundle | 取决于 bundle 是否带 tags |
 
-**实证**（mini 上运行中的 dev 实例，只读取证）：
+**实证**（本地运行中的 dev 实例，只读取证）：
 
 ```
 正文：      ……好的工具应该让人忘记工具本身。#随手记
@@ -198,7 +198,7 @@ or(eq(memoTags.tag, from), sql`${memoTags.tag} LIKE ${`${from}/%`}`),
 
 #### 实测：图标尺寸失控
 
-在 mini 上运行中的 dev 实例里逐个体测量侧栏 `svg` 的实际渲染尺寸：
+在本地运行中的 dev 实例里逐个体测量侧栏 `svg` 的实际渲染尺寸：
 
 | 位置 | 实际尺寸 | 相邻文字 |
 |---|---|---|

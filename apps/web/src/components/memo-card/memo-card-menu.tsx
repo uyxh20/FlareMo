@@ -8,9 +8,8 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { Memo } from "@/api";
-import { ShareImageDialog } from "@/components/share-image-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +29,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n";
+
+// The share-image dialog pulls in html-to-image and the plugin card registry;
+// keep it out of the entry chunk — it only downloads on first open.
+const ShareImageDialog = lazy(() =>
+  import("@/components/share-image-dialog").then((module) => ({
+    default: module.ShareImageDialog,
+  })),
+);
 
 type MemoCardMenuProps = {
   memo: Memo;
@@ -75,6 +82,9 @@ export function MemoCardMenu({
   const { t } = useI18n();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShareImageOpen, setIsShareImageOpen] = useState(false);
+  // Latch: mount the lazy dialog on first open, then keep it mounted so the
+  // close animation still plays (the chunk stays out of the entry graph).
+  const [shareImageMounted, setShareImageMounted] = useState(false);
   return (
     <>
       {(canManage || canGovern) && (
@@ -137,11 +147,14 @@ export function MemoCardMenu({
                       {t("memo.visibilityAndShare")}
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() =>
-                        onRequestShareImage
-                          ? onRequestShareImage(memo)
-                          : setIsShareImageOpen(true)
-                      }
+                      onClick={() => {
+                        if (onRequestShareImage) {
+                          onRequestShareImage(memo);
+                        } else {
+                          setShareImageMounted(true);
+                          setIsShareImageOpen(true);
+                        }
+                      }}
                     >
                       <ImageIcon />
                       {t("share.imageCard")}
@@ -198,12 +211,14 @@ export function MemoCardMenu({
           </AlertDialogContent>
         </AlertDialog>
       )}
-      {!onRequestShareImage && (
-        <ShareImageDialog
-          memo={memo}
-          open={isShareImageOpen}
-          onOpenChange={setIsShareImageOpen}
-        />
+      {!onRequestShareImage && shareImageMounted && (
+        <Suspense fallback={null}>
+          <ShareImageDialog
+            memo={memo}
+            open={isShareImageOpen}
+            onOpenChange={setIsShareImageOpen}
+          />
+        </Suspense>
       )}
     </>
   );

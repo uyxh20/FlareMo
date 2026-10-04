@@ -78,6 +78,53 @@ describe("FlareMo team and admin API", () => {
     expect(body.error.message).toContain("Member limit");
   });
 
+  it("rejects adding a member whose email is already taken", async () => {
+    const createMember = (email: string) =>
+      app.fetch(
+        new Request("http://flaremo.test/api/app/admin/users", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: sessionCookie,
+            origin: "http://flaremo.test",
+          },
+          body: JSON.stringify({ name: "Duplicate Member", email }),
+        }),
+        env,
+      );
+
+    expect((await createMember("duplicate@example.com")).status).toBe(201);
+
+    // The second attempt must name the real cause, not read as a server
+    // fault: the identity insert used to fail on the unique index and the
+    // bare driver error surfaced as a 500 "Internal server error".
+    const duplicate = await createMember("duplicate@example.com");
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({
+      error: { message: "That email is already in use." },
+    });
+
+    // A differently-cased address is the same identity: the byte-wise unique
+    // index would have admitted it and the link insert then failed, leaving
+    // an orphaned domain row behind.
+    const cased = await createMember("Duplicate@Example.com");
+    expect(cased.status).toBe(409);
+
+    // The owner's own address is equally taken.
+    expect((await createMember("owner@example.com")).status).toBe(409);
+
+    const members = await json<{
+      users: Array<{ email: string; role: string | null }>;
+    }>(await fetchApp("http://flaremo.test/api/app/admin/users"));
+    const matches = members.users.filter(
+      (user) => user.email === "duplicate@example.com",
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0]?.role).toBe("member");
+    // No orphan: every listed row carries a team membership.
+    expect(members.users.filter((user) => user.role === null)).toEqual([]);
+  });
+
   it("enforces team visibility and retains team content after removal", async () => {
     const createMemberResponse = await app.fetch(
       new Request("http://flaremo.test/api/app/admin/users", {

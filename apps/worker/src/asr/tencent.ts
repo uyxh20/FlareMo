@@ -3,6 +3,7 @@ import {
   type AsrConnection,
   AsrProviderError,
   type AsrSentence,
+  asrHttpFailure,
   type StreamingAsrProvider,
   sendAsrAudio,
 } from "./types";
@@ -31,12 +32,7 @@ const eventSchema = z.object({
 });
 
 function httpFailure(status?: number) {
-  if (status === 401 || status === 403)
-    return new AsrProviderError("authentication", false);
-  if (status === 429) return new AsrProviderError("capacity", true);
-  if (status && status >= 400 && status < 500)
-    return new AsrProviderError("configuration", false);
-  return new AsrProviderError("network", true);
+  return asrHttpFailure(status);
 }
 
 function tencentFailure(code: number) {

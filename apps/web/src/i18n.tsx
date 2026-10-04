@@ -4,17 +4,11 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { TranslationKey } from "./i18n/key";
-import { ar } from "./i18n/messages/ar";
 import { enUS } from "./i18n/messages/en-US";
-import { es } from "./i18n/messages/es";
-import { fr } from "./i18n/messages/fr";
-import { ja } from "./i18n/messages/ja";
-import { ko } from "./i18n/messages/ko";
-import { ru } from "./i18n/messages/ru";
-import { zhCN } from "./i18n/messages/zh-CN";
 
 export type { TranslationKey } from "./i18n/key";
 
@@ -34,16 +28,54 @@ export type Locale =
 
 const LOCALE_STORAGE_KEY = "flaremo.locale";
 
-const messages: Record<Locale, Record<TranslationKey, string>> = {
-  "zh-CN": zhCN,
+type Messages = Record<TranslationKey, string>;
+
+// en-US is the fallback every `t` lookup ends at, so it stays in the entry
+// chunk. The other seven catalogs download on first use through
+// `loadLocaleMessages` and register here so `t` keeps reading synchronously.
+const messages: Partial<Record<Locale, Messages>> = {
   "en-US": enUS,
-  ja,
-  fr,
-  es,
-  ko,
-  ru,
-  ar,
 };
+
+const localeLoaders: Record<
+  Exclude<Locale, "en-US">,
+  () => Promise<Messages>
+> = {
+  "zh-CN": () => import("./i18n/messages/zh-CN").then((module) => module.zhCN),
+  ja: () => import("./i18n/messages/ja").then((module) => module.ja),
+  fr: () => import("./i18n/messages/fr").then((module) => module.fr),
+  es: () => import("./i18n/messages/es").then((module) => module.es),
+  ko: () => import("./i18n/messages/ko").then((module) => module.ko),
+  ru: () => import("./i18n/messages/ru").then((module) => module.ru),
+  ar: () => import("./i18n/messages/ar").then((module) => module.ar),
+};
+
+const pendingPacks = new Map<Locale, Promise<Messages>>();
+
+/**
+ * Fetches a locale's catalog once and registers it into `messages`. Never
+ * rejects: a failed download leaves the pack unloaded (the per-key English
+ * fallback covers the gap) and clears the pending entry so the next request
+ * retries the fetch.
+ */
+export function loadLocaleMessages(locale: Locale): Promise<Messages> {
+  const loaded = messages[locale];
+  if (loaded) return Promise.resolve(loaded);
+  let pending = pendingPacks.get(locale);
+  if (!pending) {
+    pending = localeLoaders[locale as Exclude<Locale, "en-US">]()
+      .then((pack) => {
+        messages[locale] = pack;
+        return pack;
+      })
+      .catch(() => {
+        pendingPacks.delete(locale);
+        return enUS;
+      });
+    pendingPacks.set(locale, pending);
+  }
+  return pending;
+}
 
 /** Native names shown in the language switcher (never translated). */
 export const LOCALE_LABELS: Record<Locale, string> = {
@@ -57,7 +89,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   ar: "العربية",
 };
 
-export const SUPPORTED_LOCALES = Object.keys(messages) as Locale[];
+export const SUPPORTED_LOCALES = Object.keys(LOCALE_LABELS) as Locale[];
 
 /** RTL only for Arabic; every other locale is LTR. */
 export function isRtlLocale(locale: Locale): boolean {
@@ -73,7 +105,10 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocale] = useState<Locale>(() => getInitialLocale());
+  const [locale, setLocaleState] = useState<Locale>(() => getInitialLocale());
+  // Monotonic request id: when several switches race, only the newest one may
+  // commit — a slow pack can never resurrect an older language.
+  const requestRef = useRef(0);
 
   useEffect(() => {
     localStorage.setItem(LOCALE_STORAGE_KEY, locale);
@@ -82,10 +117,18 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(() => {
+    const setLocale = (next: Locale) => {
+      const requestId = ++requestRef.current;
+      void loadLocaleMessages(next).then(() => {
+        if (requestRef.current === requestId) {
+          setLocaleState(next);
+        }
+      });
+    };
     const t = (key: TranslationKey, params?: TranslationParams) => {
       const template =
-        messages[locale][key] ??
-        messages["en-US"][key] ??
+        messages[locale]?.[key] ??
+        messages["en-US"]?.[key] ??
         // Dynamic keys built from server enums (e.g. memory.type.*) can point
         // at values added server-side after this client shipped. A readable
         // fallback keeps the page alive; a throw would crash the route.

@@ -2,12 +2,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { resetPassword } from "@/api";
 import { AuthPageFrame } from "@/components/auth-page-frame";
+import {
+  MIN_PASSWORD_LENGTH,
+  NewPasswordFields,
+} from "@/components/new-password-fields";
 import { Button } from "@/components/ui/button";
-import { PasswordInput } from "@/components/ui/password-input";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/lib/error";
-
-const MIN_PASSWORD_LENGTH = 8;
 
 export function ResetPage({ token }: { token: string | undefined }) {
   const { t } = useI18n();
@@ -78,36 +79,14 @@ export function ResetPage({ token }: { token: string | undefined }) {
           void handleSubmit();
         }}
       >
-        <label
-          className="flex flex-col gap-1.5 text-sm font-medium"
-          htmlFor="reset-new-password"
-        >
-          {t("auth.newPassword")}
-          <PasswordInput
-            autoComplete="new-password"
-            disabled={isSubmitting}
-            id="reset-new-password"
-            minLength={MIN_PASSWORD_LENGTH}
-            required
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-          />
-        </label>
-        <label
-          className="flex flex-col gap-1.5 text-sm font-medium"
-          htmlFor="reset-confirmation"
-        >
-          {t("auth.confirmPassword")}
-          <PasswordInput
-            autoComplete="new-password"
-            disabled={isSubmitting}
-            id="reset-confirmation"
-            minLength={MIN_PASSWORD_LENGTH}
-            required
-            value={confirmation}
-            onChange={(event) => setConfirmation(event.target.value)}
-          />
-        </label>
+        <NewPasswordFields
+          confirmation={confirmation}
+          disabled={isSubmitting}
+          idPrefix="reset"
+          newPassword={newPassword}
+          onConfirmationChange={setConfirmation}
+          onNewPasswordChange={setNewPassword}
+        />
         {formError && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-sm text-destructive">
             {formError}

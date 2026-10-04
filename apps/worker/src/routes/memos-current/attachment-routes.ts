@@ -14,15 +14,16 @@ import {
 } from "../../attachment-http";
 import { getRequestContext, type HonoBindings } from "../../context";
 import { deleteMemosAttachment } from "../../memos-compat/attachment-delete";
+import { currentJsonError } from "../../memos-compat/current-errors";
 import { CompatValidationError } from "../../memos-compat/errors";
 import { normalizeAttachmentName } from "../../memos-compat/resource-names";
-import { currentJsonError } from "./errors";
 import {
   currentRequiredString,
   decodeBase64,
   isLegacyWireRequest,
   parsePageSize,
   parseUpdateMask,
+  readCurrentJsonObject,
   unwrapAttachmentBody,
   unwrapAttachmentPatchBody,
 } from "./helpers";
@@ -55,7 +56,7 @@ export function registerAttachmentRoutes(app: Hono<HonoBindings>) {
     }
     try {
       const body = unwrapAttachmentBody(
-        currentAttachmentBodySchema.parse(await c.req.json()),
+        currentAttachmentBodySchema.parse(await readCurrentJsonObject(c)),
       );
       if (body.attachmentId) {
         throw new CompatValidationError(
@@ -132,7 +133,7 @@ export function registerAttachmentRoutes(app: Hono<HonoBindings>) {
     if (isLegacyWireRequest(c)) return next();
     try {
       const rawBody = currentAttachmentPatchBodySchema.parse(
-        await c.req.json(),
+        await readCurrentJsonObject(c),
       );
       const body = unwrapAttachmentPatchBody(rawBody);
       const updateMask = parseUpdateMask(

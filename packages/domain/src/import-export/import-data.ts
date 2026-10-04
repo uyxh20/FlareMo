@@ -3,6 +3,8 @@ import type { FlareMoDb, UserRow } from "@flaremo/db";
 import {
   attachments,
   memoRelations,
+  memoryEvents,
+  memoryEvidence,
   memoryItems,
   memoryRelations,
   memoryResourceLinks,
@@ -14,8 +16,9 @@ import {
   taskActivity,
   tasks,
 } from "@flaremo/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createResourceId, createToken, parseResourceName } from "../ids";
+import { recalibrateUserHourlyCounts } from "../memo-hourly-counts";
 import {
   normalizeMemoClientId,
   normalizeMemoPayload,
@@ -50,28 +53,82 @@ export async function importData(
   let importedShares = 0;
   const cleanupR2Keys: string[] = [];
 
-  for (const memo of bundle.memos) {
+  // The per-memo conflict checks used to issue up to two SELECTs per memo —
+  // one by id, one by client_id. Both lookups are prefetched once here
+  // (chunked inArray scans) and then extended per iteration with the ids this
+  // import itself claims, so a bundle carrying duplicate names or duplicate
+  // client_ids keeps the old sequential dedup behavior.
+  const IMPORT_PREFETCH_CHUNK = 500;
+  const preparedMemos = bundle.memos.map((memo) => {
     const sourceId = parseResourceName(memo.name, "memos");
     const payload = normalizeMemoPayload(memo.payload);
     const requestedClientId = normalizeMemoClientId(payload.client_id);
     if (requestedClientId) payload.client_id = requestedClientId;
-
-    const existingById = await db
+    return { memo, sourceId, payload, requestedClientId };
+  });
+  const existingMemoIds = new Set<string>();
+  for (
+    let offset = 0;
+    offset < preparedMemos.length;
+    offset += IMPORT_PREFETCH_CHUNK
+  ) {
+    const rows = await db
       .select({ id: memos.id })
       .from(memos)
-      .where(and(eq(memos.id, sourceId), eq(memos.userId, user.id)))
-      .get();
-    const existingByClientId = requestedClientId
-      ? await db
-          .select({ id: memos.id })
-          .from(memos)
-          .where(
-            and(
-              eq(memos.userId, user.id),
-              eq(memos.clientId, requestedClientId),
-            ),
-          )
-          .get()
+      .where(
+        and(
+          eq(memos.userId, user.id),
+          inArray(
+            memos.id,
+            preparedMemos
+              .slice(offset, offset + IMPORT_PREFETCH_CHUNK)
+              .map((prepared) => prepared.sourceId),
+          ),
+        ),
+      );
+    for (const row of rows) existingMemoIds.add(row.id);
+  }
+  const requestedClientIds = [
+    ...new Set(
+      preparedMemos
+        .map((prepared) => prepared.requestedClientId)
+        .filter((clientId): clientId is string => Boolean(clientId)),
+    ),
+  ];
+  const claimedClientIds = new Map<string, string>();
+  for (
+    let offset = 0;
+    offset < requestedClientIds.length;
+    offset += IMPORT_PREFETCH_CHUNK
+  ) {
+    const rows = await db
+      .select({ id: memos.id, clientId: memos.clientId })
+      .from(memos)
+      .where(
+        and(
+          eq(memos.userId, user.id),
+          inArray(
+            memos.clientId,
+            requestedClientIds.slice(offset, offset + IMPORT_PREFETCH_CHUNK),
+          ),
+        ),
+      );
+    for (const row of rows) {
+      if (row.clientId && !claimedClientIds.has(row.clientId)) {
+        claimedClientIds.set(row.clientId, row.id);
+      }
+    }
+  }
+
+  for (const { memo, sourceId, payload, requestedClientId } of preparedMemos) {
+    const clientIdOwnerId = requestedClientId
+      ? claimedClientIds.get(requestedClientId)
+      : undefined;
+    const existingById = existingMemoIds.has(sourceId)
+      ? { id: sourceId }
+      : undefined;
+    const existingByClientId = clientIdOwnerId
+      ? { id: clientIdOwnerId }
       : undefined;
     const existing = existingById ?? existingByClientId;
 
@@ -150,6 +207,11 @@ export async function importData(
     } else {
       await insertMemo;
     }
+    // Rows claimed inside this import join the prefetched sets so later
+    // bundle entries dedup against them exactly like the old sequential
+    // SELECTs did.
+    existingMemoIds.add(importedId);
+    if (clientId) claimedClientIds.set(clientId, importedId);
     importedMemos += 1;
   }
 
@@ -280,6 +342,8 @@ export async function importData(
         kind: memory.kind,
         scopeType: memory.scope_type,
         scopeKey: memory.scope_key,
+        factKey: memory.fact_key ?? null,
+        tags: Array.isArray(memory.tags) ? memory.tags : [],
         tier: memory.tier,
         verification: memory.verification,
         status: memory.status,
@@ -293,6 +357,11 @@ export async function importData(
         sourceRef: memory.source_ref,
         validFrom: memory.valid_from,
         validTo: memory.valid_to,
+        observedAt: memory.observed_at ?? null,
+        expiresAt: memory.expires_at ?? null,
+        supersededById: memory.superseded_by_id ?? null,
+        supersededAt: memory.superseded_at ?? null,
+        rejectedAt: memory.rejected_at ?? null,
         // The canonical fingerprint is rebuilt from content on the next write;
         // an import-scoped placeholder keeps the per-user unique index intact
         // without trusting the exported (derived) value.
@@ -312,6 +381,8 @@ export async function importData(
           kind: memory.kind,
           scopeType: memory.scope_type,
           scopeKey: memory.scope_key,
+          factKey: memory.fact_key ?? null,
+          tags: Array.isArray(memory.tags) ? memory.tags : [],
           tier: memory.tier,
           verification: memory.verification,
           status: memory.status,
@@ -324,6 +395,11 @@ export async function importData(
           sourceRef: memory.source_ref,
           validFrom: memory.valid_from,
           validTo: memory.valid_to,
+          observedAt: memory.observed_at ?? null,
+          expiresAt: memory.expires_at ?? null,
+          supersededById: memory.superseded_by_id ?? null,
+          supersededAt: memory.superseded_at ?? null,
+          rejectedAt: memory.rejected_at ?? null,
           updatedAt,
         },
       });
@@ -458,57 +534,139 @@ export async function importData(
     importedTaskActivity += 1;
   }
 
+  // The five memory-adjacent tables are pure inserts: every row maps through
+  // memoryIdMap up front, then the statements flush through bounded
+  // db.batch calls instead of one awaited insert per row.
+  const IMPORT_INSERT_BATCH = 100;
+  const statements: unknown[] = [];
+
   for (const revision of bundle.memory_revisions) {
     const memoryId = memoryIdMap.get(revision.memory_id);
     if (!memoryId) continue;
-    await db
-      .insert(memoryRevisions)
-      .values({
-        id: parseResourceName(revision.name, "memories"),
-        memoryId,
-        userId: user.id,
-        content: revision.content,
-        metadataSnapshot: revision.metadata_snapshot,
-        createdByType: revision.created_by_type,
-        createdByAgent: revision.created_by_agent,
-        createdAt: revision.created_at ?? now,
-      })
-      .onConflictDoNothing();
+    statements.push(
+      db
+        .insert(memoryRevisions)
+        .values({
+          id: parseResourceName(revision.name, "memories"),
+          memoryId,
+          userId: user.id,
+          content: revision.content,
+          metadataSnapshot: revision.metadata_snapshot,
+          createdByType: revision.created_by_type,
+          createdByAgent: revision.created_by_agent,
+          createdAt: revision.created_at ?? now,
+        })
+        .onConflictDoNothing(),
+    );
   }
 
   for (const relation of bundle.memory_relations) {
     const memoryId = memoryIdMap.get(relation.memory_id);
     const relatedMemoryId = memoryIdMap.get(relation.related_memory_id);
     if (!memoryId || !relatedMemoryId) continue;
-    await db
-      .insert(memoryRelations)
-      .values({
-        id: createResourceId("memories"),
-        memoryId,
-        relatedMemoryId,
-        userId: user.id,
-        type: relation.type,
-        createdAt: relation.created_at ?? now,
-      })
-      .onConflictDoNothing();
+    statements.push(
+      db
+        .insert(memoryRelations)
+        .values({
+          id: createResourceId("memories"),
+          memoryId,
+          relatedMemoryId,
+          userId: user.id,
+          type: relation.type,
+          createdAt: relation.created_at ?? now,
+        })
+        .onConflictDoNothing(),
+    );
   }
 
   for (const link of bundle.memory_resource_links) {
     const memoryId = memoryIdMap.get(link.memory_id);
     if (!memoryId) continue;
-    await db
-      .insert(memoryResourceLinks)
-      .values({
-        id: createResourceId("memories"),
-        memoryId,
-        userId: user.id,
-        resourceType: link.resource_type,
-        resourceRef: link.resource_ref,
-        relationType: link.relation_type,
-        metadata: link.metadata,
-        createdAt: link.created_at ?? now,
-      })
-      .onConflictDoNothing();
+    statements.push(
+      db
+        .insert(memoryResourceLinks)
+        .values({
+          id: createResourceId("memories"),
+          memoryId,
+          userId: user.id,
+          resourceType: link.resource_type,
+          resourceRef: link.resource_ref,
+          relationType: link.relation_type,
+          metadata: link.metadata,
+          createdAt: link.created_at ?? now,
+        })
+        .onConflictDoNothing(),
+    );
+  }
+
+  for (const evidence of bundle.memory_evidence) {
+    const memoryId = memoryIdMap.get(evidence.memory_id);
+    if (!memoryId) continue;
+    statements.push(
+      db
+        .insert(memoryEvidence)
+        .values({
+          id: createResourceId("memories"),
+          memoryId,
+          userId: user.id,
+          sourceType: evidence.source_type,
+          sourceId: evidence.source_id,
+          sourceRevision: evidence.source_revision ?? null,
+          relationType: evidence.relation_type,
+          observedAt: evidence.observed_at ?? null,
+          excerpt: evidence.excerpt ?? null,
+          excerptHash: evidence.excerpt_hash ?? null,
+          metadata: evidence.metadata ?? {},
+          createdAt: evidence.created_at ?? now,
+        })
+        .onConflictDoNothing(),
+    );
+  }
+
+  for (const event of bundle.memory_events) {
+    const memoryId = memoryIdMap.get(event.memory_id);
+    if (!memoryId) continue;
+    statements.push(
+      db
+        .insert(memoryEvents)
+        .values({
+          id: createResourceId("memories"),
+          memoryId,
+          userId: user.id,
+          eventType: event.event_type,
+          actorType: event.actor_type,
+          actorName: event.actor_name ?? null,
+          metadata: event.metadata ?? {},
+          createdAt: event.created_at ?? now,
+        })
+        .onConflictDoNothing(),
+    );
+  }
+
+  for (
+    let offset = 0;
+    offset < statements.length;
+    offset += IMPORT_INSERT_BATCH
+  ) {
+    await db.batch(
+      statements.slice(
+        offset,
+        offset + IMPORT_INSERT_BATCH,
+      ) as unknown as Parameters<FlareMoDb["batch"]>[0],
+    );
+  }
+
+  // The activity counter is rebuilt for the importing user in one pass.
+  //
+  // This import writes `memos` directly and rewrites `created_at` on the
+  // overwrite branch, so it moves memos between UTC hour buckets without
+  // passing through the incremental counter statements that createMemo and
+  // updateMemo emit. Recomputing once is also far cheaper than the alternative:
+  // a bundle may carry 50k memos, and a per-memo adjustment would be 50k extra
+  // statements. Backfilling history is exactly the workload that made the
+  // heatmap expensive in the first place, so it has to leave the counter right.
+  if (importedMemos > 0 || overwrittenMemos > 0) {
+    await recalibrateUserHourlyCounts(db, user.id, now);
   }
 
   return {

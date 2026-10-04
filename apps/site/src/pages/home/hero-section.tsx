@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { STAT_TITLES } from "@/content/comparison-i18n";
-import type { getHomeContent } from "@/content/copy";
+import type { HomeContent } from "@/content/copy";
 import { getLocalizedPath, type SupportedLocale } from "@/lib/seo";
 /* ============================================================
    1. Hero 区块
@@ -28,7 +28,7 @@ export function Hero({
   home,
 }: {
   locale: SupportedLocale;
-  home: ReturnType<typeof getHomeContent>;
+  home: HomeContent;
 }) {
   const titles = STAT_TITLES[locale] || STAT_TITLES.en;
 

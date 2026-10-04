@@ -1,7 +1,6 @@
-import { createDb } from "@flaremo/db";
 import { getPluginSettings } from "@flaremo/domain";
 import { Hono } from "hono";
-import type { HonoBindings } from "../context";
+import { getFlareMoDb, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 
 /**
@@ -44,7 +43,7 @@ function contentTypeFor(path: string): string {
 
 pluginsApi.get("/", async (c) => {
   try {
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const settings = await getPluginSettings(db);
     return c.json(settings);
   } catch (error) {
@@ -76,7 +75,7 @@ pluginsApi.get("/assets/:id/:version/*", async (c) => {
     ) {
       return c.json({ error: { message: "Not found" } }, 404);
     }
-    const db = createDb(c.env.DB);
+    const db = getFlareMoDb(c.env);
     const settings = await getPluginSettings(db);
     const installed = settings.installed.some(
       (record) => record.id === id && record.version === version,

@@ -69,8 +69,12 @@ export async function semanticSearchMemos(
   const candidateIds = [
     ...new Set(matches.map((match) => memoIdFromVectorId(match.id))),
   ];
+  // The probe exists only to drop ids the caller may not read (the D1 scope is
+  // the authorization boundary; Vectorize candidates are untrusted). Selecting
+  // the id alone keeps the dropped rows — content and payload blobs — out of
+  // the read.
   const rows = await db
-    .select()
+    .select({ id: memos.id })
     .from(memos)
     .where(
       and(

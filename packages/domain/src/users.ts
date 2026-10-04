@@ -33,7 +33,17 @@ import {
   usageCounters,
   users,
 } from "@flaremo/db";
-import { and, asc, count, eq, inArray, isNotNull, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import {
   ConflictError,
   ForbiddenError,
@@ -41,6 +51,7 @@ import {
   ValidationError,
 } from "./errors";
 import type { PlanLimits } from "./limits";
+import { recalibrateUserHourlyCounts } from "./memo-hourly-counts";
 import { assertMemberQuota } from "./quotas";
 import type { TeamRole } from "./team-permissions";
 
@@ -162,7 +173,7 @@ export async function ensureSingleUser(
 
   const row = {
     id,
-    email: config.email,
+    email: config.email.trim().toLowerCase(),
     name: config.name,
     avatarUrl: null,
     status: "active" as const,
@@ -186,6 +197,15 @@ export async function getFlaremoUserById(
  * accounts. IDs are `users/<uuid>`: `memosSubjectForFlaremoUserId` already
  * hashes non-numeric ids deterministically and the link table keeps the
  * auth identity separate, so no counter table is required.
+ *
+ * The address is stored lowercased and an occupied address fails as a typed
+ * conflict. Both matter because the identity is created before this row:
+ * Better Auth answers a duplicate with a synthetic, unpersisted user when
+ * `autoSignIn` is off, so this insert — not the sign-up call — is where a
+ * collision surfaces. Left to the unique index it would raise a bare driver
+ * error with no status (a 500 on every surface), and a differently-cased
+ * duplicate would pass the byte-wise index only to fail on the link insert
+ * while leaving the orphaned `users` row behind.
  */
 export async function createFlaremoMember(
   db: FlareMoDb,
@@ -193,9 +213,13 @@ export async function createFlaremoMember(
 ): Promise<UserRow> {
   const id = `users/${crypto.randomUUID()}`;
   const now = new Date().toISOString();
+  const email = config.email.trim().toLowerCase();
+  if (await isFlaremoUserEmailTaken(db, email)) {
+    throw new ConflictError("That email is already in use.");
+  }
   const row = {
     id,
-    email: config.email,
+    email,
     name: config.name,
     avatarUrl: null,
     status: "active" as const,
@@ -628,22 +652,55 @@ export async function finalizeFlaremoMemberRemoval(
   // Adopt the removed member's team/public memos. The client id is dropped
   // with the old owner so the owner's `(user_id, client_id)` idempotency
   // index can never conflict.
-  await db
-    .update(memos)
-    .set({ userId: "users/owner", clientId: null })
+  //
+  // The ids are read before the update rather than in a subquery inside the
+  // same batch: statements in one batch must not depend on each other's
+  // effects, and this batch reassigns the very rows the tag filter selects on.
+  const adoptedMemoRows = await db
+    .select({ id: memos.id })
+    .from(memos)
     .where(and(eq(memos.userId, userId), isNotNull(memos.teamId)));
+  const adoptedMemoIds = adoptedMemoRows.map((row) => row.id);
+
+  // `memo_tags.user_id` is denormalized from the memo's author, so the
+  // adopted memos' tag rows have to move with them: the fast-path tag query
+  // filters on `memo_tags.user_id` while every other number filters on
+  // `memos.user_id`, and leaving them apart makes the owner see adopted memos
+  // in `counts` but not in `tags`. The `(memo_id, tag)` primary key and the
+  // `memo_tags_user_tag_memo_idx` both start with `user_id`, so the migration
+  // keeps the index usable.
+  if (adoptedMemoIds.length > 0) {
+    await db.batch([
+      db
+        .update(memos)
+        .set({ userId: "users/owner", clientId: null })
+        .where(inArray(memos.id, adoptedMemoIds)),
+      db
+        .update(memoTags)
+        .set({ userId: "users/owner" })
+        .where(inArray(memoTags.memoId, adoptedMemoIds)),
+    ]);
+  }
+
+  // Both halves above move memos without touching `memo_hourly_counts`: the
+  // purge deletes rows, the adoption reassigns them. Rebuild the two affected
+  // counters rather than emitting per-memo adjustments — this runs once per
+  // member removal, and the removed member's own rows have to disappear
+  // entirely (the `users` row is only soft-deleted, so the FK cascade that
+  // would normally clear them never fires). Left to the nightly recalibration
+  // this would read as the owner undercounting and the removed member still
+  // counting memos that no longer exist.
+  const now = new Date().toISOString();
+  await recalibrateUserHourlyCounts(db, "users/owner", now);
+  await recalibrateUserHourlyCounts(db, userId, now);
 }
 
 /**
- * Update the FlareMo domain user's email in the business `users` table. The
- * caller is responsible for updating the Better Auth `auth_users` credential
- * and for any prior identity verification; this service only keeps the domain
- * copy in sync and enforces the table's unique-email constraint. The email is
- * normalized to lowercase so the two unique email columns stay comparable.
- */
-/**
- * Whether the business `users` table already holds this (lowercased) email.
- * Used for early conflict feedback on email-change requests; the authoritative
+ * Whether the business `users` table already holds this email, compared
+ * case-insensitively. The unique index compares bytes, so rows written before
+ * addresses were normalized to lowercase still exist; matching on `lower()`
+ * keeps those rows authoritative instead of letting a differently-cased
+ * duplicate slip through to fail later on the link insert. The authoritative
  * unique-constraint enforcement stays inside updateFlaremoUserEmail.
  */
 export async function isFlaremoUserEmailTaken(
@@ -653,11 +710,18 @@ export async function isFlaremoUserEmailTaken(
 ): Promise<boolean> {
   const normalized = email.trim().toLowerCase();
   const taken = await db.query.users.findFirst({
-    where: eq(users.email, normalized),
+    where: sql`lower(${users.email}) = ${normalized}`,
   });
   return Boolean(taken && taken.id !== excludeUserId);
 }
 
+/**
+ * Update the FlareMo domain user's email in the business `users` table. The
+ * caller is responsible for updating the Better Auth `auth_users` credential
+ * and for any prior identity verification; this service only keeps the domain
+ * copy in sync and enforces the table's unique-email constraint. The email is
+ * normalized to lowercase so the two unique email columns stay comparable.
+ */
 export async function updateFlaremoUserEmail(
   db: FlareMoDb,
   user: UserRow,
@@ -667,10 +731,7 @@ export async function updateFlaremoUserEmail(
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new ValidationError("A valid email address is required.");
   }
-  const taken = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
-  if (taken && taken.id !== user.id) {
+  if (await isFlaremoUserEmailTaken(db, email, user.id)) {
     throw new ConflictError("That email is already in use.");
   }
   await db
