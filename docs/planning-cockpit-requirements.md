@@ -30,7 +30,9 @@ Follow-up decisions, 2026-10-04:
 8. **Review timing**: the weekly and monthly review stays in "Next".
 9. **Cost**: Cloudflare pricing is accepted, with no new services.
 
-The implementation plan is `docs/planning-cockpit-implementation-plan.md`, audited v2.
+The implementation plan is `docs/planning-cockpit-implementation-plan.md`, audited v2. The canonical project doc, which tracks state and history, is https://claude.ai/artifact/7nTJJXwmQALMZjtAPP4JhZ.
+
+10. **Reuse first** (2026-10-04): reuse upstream FlareMo wherever it already works and add only what's missing. The functional analysis and the proposed v3 are in the canonical doc.
 
 ## Requirements
 

@@ -2,6 +2,14 @@
 
 Status: v2, revised after an independent audit on 2026-10-04 (section 12). Executor: Sonnet, after the owner approves. Requirements: `docs/planning-cockpit-requirements.md`.
 
+Canonical project doc, with live status, decisions, build tracker and log: https://claude.ai/artifact/7nTJJXwmQALMZjtAPP4JhZ. A reuse-first v3 is proposed there:
+
+- History is copied from upstream `task_activity` on each sync, with no triggers.
+- Goals are upstream projects arranged in a tree.
+- The board is built from upstream components.
+
+This file becomes v3 once the owner approves, after a focused re-audit.
+
 ## 0. Locked decisions
 
 - **Columns by status, like the Notion board**: Backlog · To Do · Doing · Done.
