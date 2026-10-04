@@ -2,7 +2,8 @@ name: Prepare FlareMo update
 
 on:
   schedule:
-    - cron: "43 4 * * *"
+    # Fork: weekly check for new upstream releases (was daily).
+    - cron: "43 4 * * 1"
   workflow_dispatch:
     inputs:
       version:

@@ -6,19 +6,59 @@
 #   - 不跑 E2E、不构建、不部署：完整门禁（pnpm verify，含 Playwright E2E）
 #     只在维护者明确要求时本地执行；日常 release 默认不自动跑；
 #   - 上游与 push 流程不做生产部署；自托管 fork 的受控 workflow_dispatch 例外见 deploy-cloudflare.yml。
+
+# Fork change: CI runs nightly (only when non-doc files changed in the last 24h),
+# on pull requests and on demand, not on every push. This keeps usage within a
+# private repo's 2,000 free GitHub Actions minutes per month.
+# To go back to per-push CI, restore `push: branches: [main]` under `on:`.
 name: checks
 
 on:
-  push:
-    branches: [main]
+  schedule:
+    - cron: "41 3 * * *" # nightly, 03:41 UTC
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch: # manual "Run workflow" button, e.g. before a live deploy
 
 permissions:
   contents: read
 
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Nightly gate: skips the run when the last 24h touched only docs. It does not
+  # run for pull_request / workflow_dispatch, which always run `checks`.
+  changes:
+    name: changes (non-doc files touched in the last 24h?)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Diff non-doc files over the last 24h
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(git rev-list -1 --first-parent --before='24 hours ago' HEAD || true)"
+          if [ -z "$base" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          changed="$(git diff --name-only "$base" HEAD | grep -vE '^docs/|\.md$' || true)"
+          if [ -n "$changed" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; else echo "run=false" >> "$GITHUB_OUTPUT"; fi
+          echo "Non-doc files changed in the last 24h:"; echo "${changed:-<none>}"
+
   checks:
     name: checks (format / lint / typecheck / unit)
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.changes.outputs.run == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
