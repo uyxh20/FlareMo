@@ -233,6 +233,65 @@ export async function plannerTestInsertTasks(
   }
 }
 
+/**
+ * Inserts a goal-tree node exactly as given, skipping every guard, so a test
+ * can build a state the domain functions would refuse (a cycle, a deep chain).
+ */
+export async function plannerTestInsertNode(
+  database: PlannerTestDatabase,
+  node: {
+    projectId: string;
+    userId: string;
+    parentProjectId?: string | null;
+    level?: string | null;
+    periodStart?: string | null;
+    periodEnd?: string | null;
+    sortOrder?: number;
+    at?: string;
+  },
+): Promise<void> {
+  const at = node.at ?? "2026-10-01T00:00:00.000Z";
+  await plannerTestRun(
+    database,
+    `INSERT INTO planner_project_node (project_id, user_id, parent_project_id, level, period_start, period_end, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    node.projectId,
+    node.userId,
+    node.parentProjectId ?? null,
+    node.level ?? null,
+    node.periodStart ?? null,
+    node.periodEnd ?? null,
+    node.sortOrder ?? 0,
+    at,
+    at,
+  );
+}
+
+export type PlannerTestNode = {
+  project_id: string;
+  user_id: string;
+  parent_project_id: string | null;
+  level: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One project's node row, or undefined. */
+export async function plannerTestNode(
+  database: PlannerTestDatabase,
+  projectId: string,
+): Promise<PlannerTestNode | undefined> {
+  const [row] = await plannerTestRows<PlannerTestNode>(
+    database,
+    "SELECT * FROM planner_project_node WHERE project_id = ?",
+    projectId,
+  );
+  return row;
+}
+
 /** Inserts a `task_activity` row exactly as given. */
 export async function plannerTestInsertActivity(
   database: PlannerTestDatabase,
@@ -433,6 +492,31 @@ export function plannerTestFailBatch(
           if (shouldFail(texts)) {
             throw new Error("D1_ERROR: injected failure: SQLITE_BUSY");
           }
+          return (value as (statements: unknown) => Promise<unknown>).call(
+            target,
+            statements,
+          );
+        };
+      }
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+/**
+ * Wraps `db` so `hook` runs just before every `db.batch(...)`, which is how a
+ * test makes a competing write land between a function's reads and its write.
+ */
+export function plannerTestBeforeBatch(
+  db: FlareMoDb,
+  hook: () => Promise<void>,
+): FlareMoDb {
+  return new Proxy(db, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property === "batch") {
+        return async (statements: unknown) => {
+          await hook();
           return (value as (statements: unknown) => Promise<unknown>).call(
             target,
             statements,
