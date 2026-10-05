@@ -35,6 +35,7 @@ import {
   plannerTestInsertPlan,
   plannerTestInsertTask,
   plannerTestPlan,
+  plannerTestRun,
   plannerTestRuntime,
 } from "./test-support";
 
@@ -446,6 +447,40 @@ describe("planner plans", () => {
       ).rejects.toThrow(/injected failure/);
       expect(await plannerTestPlan(rt.database, task.id)).toBeUndefined();
       expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(0);
+    });
+
+    it("rolls the plan back inside D1 when its event cannot be written", async () => {
+      const task = await newTask();
+      // The plan upsert is the batch's first statement and succeeds; the event
+      // insert after it fails, and D1 must undo the plan.
+      await plannerTestRun(
+        rt.database,
+        "ALTER TABLE planner_task_event RENAME TO planner_task_event_away",
+      );
+      try {
+        await expect(
+          setPlan(task.id, { horizon: "day", day: TODAY }),
+        ).rejects.toThrow(/planner_task_event/);
+        await expect(
+          plannerDropTask(rt.db, {
+            user: rt.user,
+            actor: USER,
+            taskId: task.id,
+          }),
+        ).rejects.toThrow(/planner_task_event/);
+        expect(await plannerTestPlan(rt.database, task.id)).toBeUndefined();
+      } finally {
+        await plannerTestRun(
+          rt.database,
+          "ALTER TABLE planner_task_event_away RENAME TO planner_task_event",
+        );
+      }
+      // Nothing half-done: the task works as before.
+      await expect(
+        setPlan(task.id, { horizon: "day", day: TODAY }),
+      ).resolves.toMatchObject({
+        plan: { horizon: "day" },
+      });
     });
   });
 

@@ -172,6 +172,34 @@ describe("plannerSyncHistory against a changing schema", () => {
       expect(await plannerTestTypes(rt.database, task.id)).toEqual(["created"]);
     });
 
+    it("rolls the whole batch back when a late statement really fails inside D1", async () => {
+      const task = await createTask(rt.db, rt.user, USER, { title: "Atomic" });
+      // Only the last statement of the batch (the orphan node clean-up) reads
+      // this table, so the copy, the state update and the snapshot all ran first.
+      await plannerTestRun(
+        rt.database,
+        "ALTER TABLE planner_project_node RENAME TO planner_project_node_away",
+      );
+
+      await expect(sync(0)).resolves.toEqual({ history: "paused" });
+
+      expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(0);
+      expect(await plannerTestCount(rt.database, "planner_task_seen")).toBe(0);
+      const paused = await state();
+      expect(paused).toMatchObject({
+        status: "paused",
+        activity_watermark: null,
+      });
+      expect(paused?.paused_reason).toMatch(/planner_project_node/);
+
+      await plannerTestRun(
+        rt.database,
+        "ALTER TABLE planner_project_node_away RENAME TO planner_project_node",
+      );
+      await expect(sync(1)).resolves.toEqual({ history: "ok" });
+      expect(await plannerTestTypes(rt.database, task.id)).toEqual(["created"]);
+    });
+
     it("never throws even when the sync state cannot be read or written", async () => {
       await plannerTestRun(
         rt.database,

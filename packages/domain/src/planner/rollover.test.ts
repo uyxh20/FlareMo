@@ -19,6 +19,7 @@ import {
   plannerTestFailBatch,
   plannerTestInsertPlan,
   plannerTestPlan,
+  plannerTestRun,
   plannerTestRuntime,
   plannerTestSpyOnBatch,
 } from "./test-support";
@@ -337,6 +338,35 @@ describe("plannerRollover", () => {
         (event) => event.type === "carried_over",
       ),
     ).toHaveLength(5);
+  });
+
+  it("rolls the carry events back inside D1 when the update after them fails", async () => {
+    const a = await planned("A", { horizon: "day", periodStart: "2026-10-05" });
+    const b = await planned("B", { horizon: "day", periodStart: "2026-10-06" });
+    // Carrying both day plans to today would give two rows the same period,
+    // which this index refuses: the event insert has run, the update fails.
+    await plannerTestRun(
+      rt.database,
+      "CREATE UNIQUE INDEX planner_test_one_per_period ON planner_task_plan (period_start)",
+    );
+    try {
+      await expect(rollover()).rejects.toThrow(/UNIQUE/i);
+      expect(await carried(a)).toHaveLength(0);
+      expect(await carried(b)).toHaveLength(0);
+      expect((await plannerTestPlan(rt.database, a))?.period_start).toBe(
+        "2026-10-05",
+      );
+      expect((await plannerTestPlan(rt.database, b))?.carry_count).toBe(0);
+    } finally {
+      await plannerTestRun(
+        rt.database,
+        "DROP INDEX planner_test_one_per_period",
+      );
+    }
+    // And once the obstacle is gone it carries both, once each.
+    expect((await rollover()).carried).toBe(2);
+    expect(await carried(a)).toHaveLength(1);
+    expect(await carried(b)).toHaveLength(1);
   });
 
   it("runs the history sync first and reports its status", async () => {

@@ -501,6 +501,31 @@ describe("the goal tree", () => {
         });
       });
 
+      it("rolls the parent's new row back inside D1 when the node write fails", async () => {
+        const parent = await project("Parent");
+        const first = await project("First");
+        const second = await project("Second");
+        await upsert(first, { level: "goal" });
+        // A second node with the same level breaks this index, in the batch's
+        // second statement, after the parent's row was created by the first.
+        await plannerTestRun(
+          rt.database,
+          "CREATE UNIQUE INDEX planner_test_one_level ON planner_project_node (level)",
+        );
+        try {
+          await expect(
+            upsert(second, { parentProjectId: parent, level: "goal" }),
+          ).rejects.toThrow(/UNIQUE/i);
+          expect(await plannerTestNode(rt.database, parent)).toBeUndefined();
+          expect(await plannerTestNode(rt.database, second)).toBeUndefined();
+        } finally {
+          await plannerTestRun(
+            rt.database,
+            "DROP INDEX planner_test_one_level",
+          );
+        }
+      });
+
       it("writes the parent row and the node in one batch, or neither", async () => {
         const parent = await project("Parent");
         const child = await project("Child");
