@@ -37,6 +37,7 @@ import {
   plannerTestEvents,
   plannerTestInsertActivity,
   plannerTestInsertTask,
+  plannerTestInsertTasks,
   plannerTestRows,
   plannerTestRun,
   plannerTestRuntime,
@@ -368,6 +369,91 @@ describe("plannerSyncHistory", () => {
       });
       expect(spy.batches).toHaveLength(2);
       expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(1);
+    });
+
+    it("archives each event once when several syncs start together", async () => {
+      const project = await createProject(rt.db, rt.user, { name: "Busy" });
+      const a = await createTask(rt.db, rt.user, USER, {
+        title: "A",
+        project_id: project.id,
+      });
+      await updateTask(rt.db, rt.user, AGENT, a.id, { status: "in_progress" });
+      const b = await createTask(rt.db, rt.user, USER, { title: "B" });
+      await deleteTask(rt.db, rt.user, b.id);
+
+      // None has recorded a sync yet, so none is debounced: all three run.
+      const results = await Promise.all([sync(0), sync(0), sync(0)]);
+
+      expect(results).toEqual([
+        { history: "ok" },
+        { history: "ok" },
+        { history: "ok" },
+      ]);
+      expect(await plannerTestTypes(rt.database, a.id)).toEqual([
+        "created",
+        "status_changed",
+      ]);
+      expect(await plannerTestTypes(rt.database, b.id)).toEqual([
+        "created",
+        "deleted",
+      ]);
+      expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(4);
+      expect(await plannerTestCount(rt.database, "planner_task_seen")).toBe(2);
+      expect(await state()).toMatchObject({
+        status: "ok",
+        paused_reason: null,
+      });
+    });
+
+    it("copies a bulk of activity rows on the first run, then nothing", async () => {
+      const count = 300;
+      const ids = Array.from(
+        { length: count },
+        (_, index) => `tasks/bulk-${index}`,
+      );
+      await plannerTestInsertTasks(
+        rt.database,
+        ids.map((id, index) => ({
+          id,
+          userId: rt.user.id,
+          title: `Bulk ${index}`,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        })),
+      );
+      const inserts = ids.flatMap((id, index) =>
+        ["created", "updated", "status_changed"].map((action, step) =>
+          rt.database
+            .prepare(
+              "INSERT INTO task_activity (task_id, user_id, actor_type, actor_name, action, changes, created_at) VALUES (?, ?, 'user', NULL, ?, ?, ?)",
+            )
+            .bind(
+              id,
+              rt.user.id,
+              action,
+              JSON.stringify({ n: index, step }),
+              `2026-02-${String((step % 27) + 1).padStart(2, "0")}T00:00:00.000Z`,
+            ),
+        ),
+      );
+      for (let offset = 0; offset < inserts.length; offset += 100) {
+        await rt.database.batch(inserts.slice(offset, offset + 100));
+      }
+      expect(await plannerTestCount(rt.database, "task_activity")).toBe(
+        count * 3,
+      );
+
+      expect(await sync(0)).toEqual({ history: "ok" });
+
+      expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(
+        count * 3,
+      );
+      expect(await plannerTestCount(rt.database, "planner_task_seen")).toBe(
+        count,
+      );
+      expect(await sync(1)).toEqual({ history: "ok" });
+      expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(
+        count * 3,
+      );
     });
 
     it("never throws, even for a clock it cannot read", async () => {
