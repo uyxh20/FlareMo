@@ -266,6 +266,11 @@ export async function plannerReadTaskPlan(
  * fails, the task is still created and the result carries `plan: null` and a
  * `planError`, so the card lands in the backlog and can offer "Retry plan".
  * `today` is required whenever `plan` is given.
+ *
+ * The `planned` event is stamped AFTER `createTask` returns, unless the caller
+ * passes `now`. Upstream stamps its own `created` activity while it runs, so a
+ * clock read before the call put `planned` a few milliseconds earlier than
+ * `created` and the history listed the plan before the task existed.
  */
 export async function plannerCreateTask(
   db: FlareMoDb,
@@ -282,7 +287,6 @@ export async function plannerCreateTask(
     now?: Date;
   },
 ): Promise<{ task: TaskDto; plan: PlannerPlanDto | null; planError?: string }> {
-  const now = plannerNow(input.now);
   let resolved: ResolvedPlan | null = null;
   if (input.plan) {
     if (input.today === undefined) {
@@ -301,6 +305,9 @@ export async function plannerCreateTask(
   });
   if (!resolved) return { task, plan: null };
 
+  // Read the clock only now: `createTask` has finished, so its `created`
+  // activity is already stamped and this event can never sort before it.
+  const now = plannerNow(input.now);
   try {
     await writePlanChange(db, {
       userId: input.user.id,

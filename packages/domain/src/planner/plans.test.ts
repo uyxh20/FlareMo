@@ -20,6 +20,8 @@ import {
   updateTask,
 } from "../tasks";
 import type { PlannerColumn } from "./columns";
+import { plannerReadTaskHistory } from "./history-read";
+import { plannerSyncHistory } from "./history-sync";
 import {
   plannerApplyColumnMove,
   plannerCreateTask,
@@ -156,6 +158,75 @@ describe("planner plans", () => {
         from: { horizon: null, period_start: null },
         to: { horizon: "week", period_start: THIS_WEEK },
       });
+    });
+
+    it("stamps the planned event after upstream's created activity, so history reads created before planned", async () => {
+      // A clock that moves 5 ms on every reading, like the milliseconds a real
+      // D1 round trip takes. Read before `createTask`, the plan's timestamp is
+      // the earliest instant of the request; read after, it is the latest.
+      const RealDate = Date;
+      const start = RealDate.parse("2026-10-07T09:00:00.000Z");
+      let readings = 0;
+      const tick = () => start + readings++ * 5;
+      class TickingDate extends RealDate {
+        constructor(...args: unknown[]) {
+          if (args.length === 0) super(tick());
+          else super(...(args as [number]));
+        }
+        static override now() {
+          return tick();
+        }
+      }
+
+      let created: Awaited<ReturnType<typeof plannerCreateTask>>;
+      vi.stubGlobal("Date", TickingDate);
+      try {
+        // No `now`: the planned event takes the clock itself.
+        created = await plannerCreateTask(rt.db, {
+          user: rt.user,
+          actor: USER,
+          title: "Order matters",
+          plan: { horizon: "day", day: TODAY },
+          today: TODAY,
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+      expect(created.plan).not.toBeNull();
+
+      await plannerSyncHistory(rt.db, {
+        userId: rt.user.id,
+        now: new Date("2026-10-07T10:00:00.000Z"),
+      });
+      const history = await plannerReadTaskHistory(rt.db, {
+        userId: rt.user.id,
+        taskId: created.task.id,
+      });
+
+      // Newest first, so `planned` leads and `created` follows.
+      expect(history.map((entry) => [entry.source, entry.type])).toEqual([
+        ["planner", "planned"],
+        ["activity", "created"],
+      ]);
+      // Strictly later, not a tie that only the archive id happens to break.
+      expect(Date.parse(history[0]?.occurred_at ?? "")).toBeGreaterThan(
+        Date.parse(history[1]?.occurred_at ?? ""),
+      );
+    });
+
+    it("keeps an explicit now on the planned event", async () => {
+      const result = await plannerCreateTask(rt.db, {
+        user: rt.user,
+        actor: USER,
+        title: "Pinned clock",
+        plan: { horizon: "day", day: TODAY },
+        today: TODAY,
+        now: NOW,
+      });
+
+      const events = await plannerEvents(result.task.id);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.occurred_at).toBe(NOW.toISOString());
     });
 
     it("rejects a bad plan before it creates anything", async () => {
