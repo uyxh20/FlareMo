@@ -2,7 +2,6 @@ import {
   type PlannerBoardCard,
   type PlannerBoardResponse,
   type PlannerColumn,
-  type PlannerHorizon,
   type PlannerPlanDto,
   type PlannerPlanInput,
   plannerNextPeriodStart,
@@ -12,8 +11,8 @@ import {
 
 // The cockpit board as plain data (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, sections 4 and 5): which column a
-// card belongs in, how a column is ordered, what a card looks like right after an
-// edit, and how a horizon filter narrows To Do.
+// card belongs in, how a column is ordered, and what a card looks like right
+// after an edit. How the filter chips narrow To Do is in todo-filter.ts.
 //
 // The server decides all of this and the page refetches it after every change, so
 // nothing here is authoritative. It exists so an edit can show up the instant it
@@ -339,42 +338,6 @@ export function plannerCardFromTask(
 }
 
 // --- Reading the board --------------------------------------------------------
-
-/** The To Do filter: everything, or the cards planned at one horizon. */
-export type PlannerHorizonFilter = "all" | PlannerHorizon;
-
-export const plannerHorizonFilters: readonly PlannerHorizonFilter[] = [
-  "all",
-  "day",
-  "week",
-  "month",
-];
-
-/** To Do narrowed by plan horizon. The other columns are never filtered. */
-export function plannerFilterTodo(
-  cards: readonly PlannerBoardCard[],
-  filter: PlannerHorizonFilter,
-): PlannerBoardCard[] {
-  return filter === "all"
-    ? [...cards]
-    : cards.filter((card) => card.horizon === filter);
-}
-
-/** How many To Do cards each filter chip would show. */
-export function plannerTodoCounts(
-  cards: readonly PlannerBoardCard[],
-): Record<PlannerHorizonFilter, number> {
-  const counts: Record<PlannerHorizonFilter, number> = {
-    all: cards.length,
-    day: 0,
-    week: 0,
-    month: 0,
-  };
-  for (const card of cards) {
-    if (card.horizon !== null) counts[card.horizon] += 1;
-  }
-  return counts;
-}
 
 /** Past its due date and still open: the card's due chip turns red. */
 export function plannerIsOverdue(

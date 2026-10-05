@@ -16,27 +16,29 @@ import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { plannerFetchBoard } from "./api";
 import { PlannerBoard, PlannerBoardSkeleton } from "./board";
-import {
-  type PlannerHorizonFilter,
-  plannerBoardCardCount,
-  plannerHorizonFilters,
-  plannerTodoCounts,
-} from "./board-model";
+import { plannerBoardCardCount } from "./board-model";
 import { PlannerCardDialogs, usePlannerCardRequests } from "./card-dialogs";
+import { PlannerDroppedList } from "./dropped-list";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerQuickAdd } from "./quick-add";
 import { usePlannerStrings } from "./strings";
-import { PlannerTaskCard } from "./task-card";
+import {
+  type PlannerHorizonFilter,
+  plannerHorizonFilters,
+  plannerTodoCounts,
+} from "./todo-filter";
 import { usePlannerActions } from "./use-planner-actions";
 import { usePlannerToday } from "./use-planner-clock";
+import { usePlannerReveal } from "./use-planner-reveal";
 import { usePlannerRollover } from "./use-planner-rollover";
 
 // The planning cockpit at /cockpit (fork-owned add-on,
-// docs/planning-cockpit-implementation-plan.md, section 5): a quick add, a
-// horizon filter for To Do, and a Backlog / To Do / Doing / Done board. It opens
-// by rolling unfinished plans forward into the current period, then loads the
-// board. The layout is the same WorkspaceLayout and WorkspacePageHeader as
-// /projects.
+// docs/planning-cockpit-implementation-plan.md, section 5): a quick add, filter
+// chips for To Do (All, Today, This week, This month: what is planned inside the
+// current period), a Show dropped switch whose list sits right under them, and a
+// Backlog / To Do / Doing / Done board. It opens by rolling unfinished plans
+// forward into the current period, then loads the board. The layout is the same
+// WorkspaceLayout and WorkspacePageHeader as /projects.
 
 /** Short, quiet notes above the board: history paused, cards hidden by the cap. */
 function Notice({
@@ -72,7 +74,8 @@ export function PlannerCockpitPage() {
   const [filter, setFilter] = useState<PlannerHorizonFilter>("all");
   const quickAddRef = useRef<HTMLInputElement | null>(null);
   const showDroppedId = useId();
-  const actions = usePlannerActions({ today });
+  const { reveal, request: requestReveal } = usePlannerReveal();
+  const actions = usePlannerActions({ today, reveal: requestReveal });
   const requests = usePlannerCardRequests();
 
   const boardQuery = useQuery({
@@ -98,7 +101,7 @@ export function PlannerCockpitPage() {
     return () => window.clearTimeout(timer);
   }, [hasBoard]);
 
-  const counts = plannerTodoCounts(board?.columns.todo ?? []);
+  const counts = plannerTodoCounts(board?.columns.todo ?? [], today);
   const dropped = board?.columns.dropped;
 
   let content: ReactNode;
@@ -138,6 +141,7 @@ export function PlannerCockpitPage() {
         board={board}
         entering={entering}
         filter={filter}
+        reveal={reveal}
         today={today}
         onRequest={requests.show}
       />
@@ -204,6 +208,17 @@ export function PlannerCockpitPage() {
           </div>
         </div>
 
+        {includeDropped && (
+          <PlannerDroppedList
+            actions={actions}
+            cards={dropped}
+            failed={boardQuery.isError}
+            isRetrying={boardQuery.isRefetching}
+            onRequest={requests.show}
+            onRetry={() => void boardQuery.refetch()}
+          />
+        )}
+
         {board?.history === "paused" && (
           <Notice
             icon={<CirclePauseIcon />}
@@ -217,38 +232,6 @@ export function PlannerCockpitPage() {
         )}
 
         {content}
-
-        {includeDropped && dropped !== undefined && (
-          <section
-            aria-label={strings.column.dropped}
-            className="flex flex-col gap-2"
-            data-testid="planner-dropped"
-          >
-            <header className="flex items-center gap-2 px-1">
-              <h2 className="text-sm font-medium">{strings.column.dropped}</h2>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {dropped.length}
-              </span>
-            </header>
-            {dropped.length === 0 ? (
-              <p className="px-1 text-xs text-muted-foreground">
-                {strings.droppedEmpty}
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {dropped.map((card) => (
-                  <PlannerTaskCard
-                    actions={actions}
-                    card={card}
-                    key={card.id}
-                    today={today}
-                    onRequest={requests.show}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-        )}
       </div>
 
       <PlannerCardDialogs

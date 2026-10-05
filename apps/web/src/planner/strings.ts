@@ -47,8 +47,8 @@ export type PlannerStrings = {
   columnHint: {
     backlog: string;
     todo: string;
-    /** To Do when a horizon filter hides every card. */
-    todoFiltered: string;
+    /** To Do when a filter chip hides every card, by chip. */
+    todoFiltered: { day: string; week: string; month: string };
     doing: string;
     done: string;
     other: string;
@@ -165,6 +165,8 @@ export type PlannerStrings = {
     you: string;
     agent: string;
     agentNamed: (name: string) => string;
+    /** Who a carry-over is credited to: nobody chose it, the rollover did. */
+    automatic: string;
     created: string;
     planned: (target: string) => string;
     replanned: (target: string) => string;
@@ -213,7 +215,11 @@ const en: PlannerStrings = {
   columnHint: {
     backlog: "Tasks you have not planned yet wait here.",
     todo: "Plan a task for today, this week or this month.",
-    todoFiltered: "Nothing planned at this level. Pick All to see everything.",
+    todoFiltered: {
+      day: "Nothing planned for today. Pick All to see everything.",
+      week: "Nothing planned for this week. Pick All to see everything.",
+      month: "Nothing planned for this month. Pick All to see everything.",
+    },
     doing: "Drag a card here when you start it.",
     done: "Finished tasks stay here for two weeks.",
     other: "Tasks with a status the cockpit does not know.",
@@ -365,6 +371,7 @@ const en: PlannerStrings = {
     you: "You",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
+    automatic: "Automatic",
     created: "Created",
     planned: (target) => `Planned for ${target}`,
     replanned: (target) => `Re-planned to ${target}`,
@@ -413,7 +420,11 @@ const zhCN: PlannerStrings = {
   columnHint: {
     backlog: "还没安排的任务先放在这里。",
     todo: "把任务安排到今天、本周或本月。",
-    todoFiltered: "这个层级下没有计划。选“全部”可查看所有待办。",
+    todoFiltered: {
+      day: "今天还没有计划。选“全部”可查看所有待办。",
+      week: "本周还没有计划。选“全部”可查看所有待办。",
+      month: "本月还没有计划。选“全部”可查看所有待办。",
+    },
     doing: "开始做某件事时，把卡片拖到这里。",
     done: "完成的任务会在这里保留两周。",
     other: "状态未知的任务会出现在这里。",
@@ -550,6 +561,7 @@ const zhCN: PlannerStrings = {
     you: "你",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
+    automatic: "自动",
     created: "创建",
     planned: (target) => `安排到${target}`,
     replanned: (target) => `改期到${target}`,

@@ -340,6 +340,72 @@ describe("plannerDescribeHistory", () => {
     expect(actor({ actor: null })).toBeNull();
   });
 
+  it("credits a carry-over to Automatic, whatever actor is stored", () => {
+    const carry = (options: Parameters<typeof event>[2]) =>
+      plannerDescribeHistory(
+        [
+          event(
+            "carried_over",
+            {
+              from: point("day", "2026-10-06"),
+              to: point("day", "2026-10-07"),
+            },
+            options,
+          ),
+        ],
+        en,
+      )[0];
+    // The rollover stores the actor of the request that ran it, so the archive
+    // says "user" (or an agent) for something nobody chose.
+    expect(carry({ actor: "user" })?.actor).toBe("Automatic");
+    expect(carry({ actor: "agent", name: "pat:abcd1234" })?.actor).toBe(
+      "Automatic",
+    );
+    expect(carry({ actor: null })?.actor).toBe("Automatic");
+    expect(carry({ actor: "user" })).toMatchObject({
+      label: "Carried over to today",
+      type: "carried_over",
+    });
+  });
+
+  it("leaves every other plan event with the actor that made it", () => {
+    const entries = plannerDescribeHistory(
+      [
+        event("planned", { from: NONE, to: point("week", "2026-10-05") }),
+        event("replanned", {
+          from: point("week", "2026-10-05"),
+          to: point("day", "2026-10-07"),
+        }),
+        event("unplanned", { from: point("day", "2026-10-07"), to: NONE }),
+        event("dropped", {}),
+        event("undropped", {}),
+      ],
+      en,
+    );
+    expect(entries.map((entry) => entry.actor)).toEqual([
+      "You",
+      "You",
+      "You",
+      "You",
+      "You",
+    ]);
+  });
+
+  it("says Automatic in Chinese too, and still says who did the rest", () => {
+    const [carry, planned] = plannerDescribeHistory(
+      [
+        event("planned", { from: NONE, to: point("week", "2026-10-05") }),
+        event("carried_over", {
+          from: point("week", "2026-10-05"),
+          to: point("week", "2026-10-12"),
+        }),
+      ],
+      zh,
+    );
+    expect(carry?.actor).toBe("自动");
+    expect(planned?.actor).toBe("你");
+  });
+
   it("keeps the time and the archive id on each line", () => {
     const [entry] = plannerDescribeHistory(
       [event("created", { status: "todo" }, { id: 42, at: at(7) })],

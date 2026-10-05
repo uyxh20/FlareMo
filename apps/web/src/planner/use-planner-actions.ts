@@ -44,6 +44,11 @@ import { usePlannerStrings } from "./strings";
 // A rollback restores the one card, not the whole board, so it cannot undo a
 // second edit that was made while the first was still in flight, and the refresh
 // waits for every change to settle so it cannot snap a still-pending card back.
+//
+// A change that moves a card (a quick add, a move, a re-plan, an undrop) also asks
+// the page to point the card out, scrolled into view with a ring, because the
+// card may now sit below the fold or in a column that is off screen. A due date
+// leaves the card where it is, and a drop sends it away, so neither asks.
 
 export type PlannerActions = {
   move: (card: PlannerBoardCard, to: PlannerColumn) => void;
@@ -67,12 +72,18 @@ export function plannerInvalidateAll(queryClient: QueryClient) {
 
 const TOAST_ID = "planner-edit";
 
-export function usePlannerActions(input: { today: string }): PlannerActions {
+export function usePlannerActions(input: {
+  today: string;
+  /** Points a card out after a change that moved it (see use-planner-reveal.ts). */
+  reveal?: (taskId: string) => void;
+}): PlannerActions {
   const { today } = input;
   const queryClient = useQueryClient();
   const strings = usePlannerStrings();
   const stringsRef = useRef(strings);
   stringsRef.current = strings;
+  const revealRef = useRef(input.reveal);
+  revealRef.current = input.reveal;
   const pending = useRef(0);
 
   return useMemo(() => {
@@ -104,6 +115,8 @@ export function usePlannerActions(input: { today: string }): PlannerActions {
         request: () => Promise<PlannerTaskPlanResponse>;
         success: string | (() => string);
         failure: string;
+        /** Whether the change can put the card out of sight. Default true. */
+        reveal?: boolean;
       },
     ) => {
       // Counted before the first await, so a change that settles meanwhile
@@ -116,6 +129,7 @@ export function usePlannerActions(input: { today: string }): PlannerActions {
             options.predict(current, board),
           ),
         );
+        if (options.reveal !== false) revealRef.current?.(card.id);
         const response = await options.request();
         patchBoards((board) =>
           plannerUpdateCard(board, card.id, () =>
@@ -191,6 +205,7 @@ export function usePlannerActions(input: { today: string }): PlannerActions {
           success: () =>
             due ? text().toast.dueSet(due) : text().toast.dueCleared,
           failure: text().toast.dueFailed,
+          reveal: false,
         });
       },
 
@@ -201,6 +216,7 @@ export function usePlannerActions(input: { today: string }): PlannerActions {
             plannerUpdateTaskRequest(card.id, { today, dropped: true }),
           success: () => text().toast.dropped,
           failure: text().toast.dropFailed,
+          reveal: false,
         });
       },
 
@@ -225,6 +241,7 @@ export function usePlannerActions(input: { today: string }): PlannerActions {
           });
           const created = plannerCardFromTask(response.task, response.plan);
           patchBoards((board) => plannerPlaceCard(board, created));
+          revealRef.current?.(created.id);
           if (response.plan_error) {
             // The task exists and sits in the backlog; offer to try the plan again.
             toast.warning(text().toast.planNotSaved, {

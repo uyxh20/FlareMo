@@ -10,10 +10,8 @@ import {
   plannerCardColumn,
   plannerCardFromTask,
   plannerColumns,
-  plannerFilterTodo,
   plannerFindCard,
   plannerHasPlan,
-  plannerHorizonFilters,
   plannerIsOverdue,
   plannerPlaceCard,
   plannerPredictDrop,
@@ -22,7 +20,6 @@ import {
   plannerPredictPlan,
   plannerPredictUndrop,
   plannerSortCards,
-  plannerTodoCounts,
   plannerUpdateCard,
 } from "./board-model";
 
@@ -643,48 +640,6 @@ describe("plannerCardFromTask", () => {
       project_id: null,
       project_name: null,
     });
-  });
-});
-
-describe("the To Do filter", () => {
-  const todo = [
-    planned({ id: "tasks/d1", horizon: "day", period_start: TODAY }),
-    planned({ id: "tasks/d2", horizon: "day", period_start: "2026-10-08" }),
-    planned({ id: "tasks/w1" }),
-    planned({ id: "tasks/m1", horizon: "month", period_start: "2026-10-01" }),
-  ];
-
-  it("shows everything for All and one horizon for the others", () => {
-    expect(ids(plannerFilterTodo(todo, "all"))).toEqual(ids(todo));
-    expect(ids(plannerFilterTodo(todo, "day"))).toEqual([
-      "tasks/d1",
-      "tasks/d2",
-    ]);
-    expect(ids(plannerFilterTodo(todo, "week"))).toEqual(["tasks/w1"]);
-    expect(ids(plannerFilterTodo(todo, "month"))).toEqual(["tasks/m1"]);
-  });
-
-  it("returns a new array even when nothing is filtered", () => {
-    expect(plannerFilterTodo(todo, "all")).not.toBe(todo);
-  });
-
-  it("counts what each chip would show", () => {
-    expect(plannerTodoCounts(todo)).toEqual({
-      all: 4,
-      day: 2,
-      week: 1,
-      month: 1,
-    });
-    expect(plannerTodoCounts([])).toEqual({
-      all: 0,
-      day: 0,
-      week: 0,
-      month: 0,
-    });
-  });
-
-  it("lists the chips in order", () => {
-    expect(plannerHorizonFilters).toEqual(["all", "day", "week", "month"]);
   });
 });
 

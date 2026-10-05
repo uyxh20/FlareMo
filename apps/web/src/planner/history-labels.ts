@@ -26,7 +26,10 @@ export type PlannerHistoryEntry = {
   label: string;
   /** A second, quieter line, or null. */
   detail: string | null;
-  /** "You" or "Agent", with the agent's name when it has one; null when nobody did it. */
+  /**
+   * "You" or "Agent" (with the agent's name when it has one), "Automatic" for a
+   * carry-over, and null when the archive names nobody.
+   */
   actor: string | null;
   /** When it happened, an ISO instant. */
   occurredAt: string;
@@ -61,6 +64,11 @@ function actorLabel(
   event: PlannerEventDto,
   strings: PlannerStrings,
 ): string | null {
+  // A carry-over is stored with the actor of the request that ran the rollover
+  // (whoever opened the cockpit), but nobody chose it: the rollover moved the
+  // plan on its own. Crediting it to "You" would claim an edit the person never
+  // made, so it reads "Automatic" whatever the stored actor is.
+  if (event.type === "carried_over") return strings.history.automatic;
   if (event.actor_type === "user") return strings.history.you;
   if (event.actor_type === "agent") {
     return event.actor_name

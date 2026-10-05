@@ -19,24 +19,34 @@ import type {
   PlannerBoardResponse,
   PlannerColumn,
 } from "@flaremo/contracts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
   type PlannerColumnKey,
-  type PlannerHorizonFilter,
   plannerCardColumn,
   plannerColumns,
-  plannerFilterTodo,
   plannerFindCard,
 } from "./board-model";
+import {
+  plannerHaptic,
+  plannerIsTouchActivation,
+  plannerLiftClass,
+  plannerTouchActivation,
+} from "./drag-feel";
 import { usePlannerStrings } from "./strings";
 import {
   type PlannerCardRequest,
   PlannerColumnIcon,
   PlannerTaskCard,
 } from "./task-card";
+import { type PlannerHorizonFilter, plannerFilterTodo } from "./todo-filter";
 import type { PlannerActions } from "./use-planner-actions";
+import {
+  type PlannerReveal,
+  plannerRevealRingClass,
+  plannerScrollCardIntoView,
+} from "./use-planner-reveal";
 
 // The board itself (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 5): Backlog, To Do, Doing
@@ -46,11 +56,15 @@ import type { PlannerActions } from "./use-planner-actions";
 // pages/projects/board.tsx, minus the in-column sorting that this board, ordered
 // by plan, does not have.
 //
-// Sensors: a mouse sensor (the card lifts after 6px) and a touch sensor (a long
-// press lifts it, so a swipe still scrolls the board). Upstream pairs the touch
+// Sensors: a mouse sensor (the card lifts after 6px) and a touch sensor (a
+// deliberate long press lifts it, 400 ms without moving more than 5px, so even a
+// slow swipe still scrolls the board; see drag-feel.ts). Upstream pairs the touch
 // sensor with dnd-kit's PointerSensor, but that one also claims touch pointers
 // and wins the race, so there a long press never lifts anything and the swipe
 // that follows is cancelled. The mouse sensor leaves touch to the touch sensor.
+//
+// A card that was just added, moved or re-planned is scrolled into view and rings
+// in Ember for a moment (use-planner-reveal.ts); the page says which card.
 
 /** The column under the pointer; for a keyboard or an unmoved pointer, the one the card overlaps most. */
 const collide: CollisionDetection = (args) => {
@@ -64,6 +78,7 @@ function DraggableCard({
   card,
   dragging,
   enterIndex,
+  reveal,
   ...rest
 }: {
   card: PlannerBoardCard;
@@ -73,14 +88,29 @@ function DraggableCard({
   dragging: boolean;
   /** Set only while the board first appears, to stagger the cards in. */
   enterIndex?: number;
+  /** The card the person just acted on, if any; this one rings when it is its own. */
+  reveal: PlannerReveal | null;
 }) {
-  const { setNodeRef, listeners, isDragging } = useDraggable({ id: card.id });
+  const { setNodeRef, node, listeners, isDragging } = useDraggable({
+    id: card.id,
+  });
+
+  // Scroll into view when this card is pointed out: the moment it mounts into its
+  // new place while the request is current, and again when a newer request for
+  // the same card arrives.
+  const revealStamp = reveal?.id === card.id ? reveal.stamp : null;
+  useEffect(() => {
+    if (revealStamp !== null) plannerScrollCardIntoView(node.current);
+  }, [revealStamp, node]);
+
   return (
     <div
       ref={setNodeRef}
       {...listeners}
       className={cn(
-        "rounded-xl [@media(pointer:coarse)]:[-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none",
+        // `relative` holds the reveal ring; `scroll-my-3` keeps a card scrolled
+        // into view off the very edge of the page.
+        "relative scroll-my-3 rounded-xl [@media(pointer:coarse)]:[-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none",
         enterIndex !== undefined && "motion-safe:animate-rise",
         isDragging && "opacity-40",
         // While something is being dragged, hovering other cards must not offer
@@ -95,6 +125,15 @@ function DraggableCard({
       }
     >
       <PlannerTaskCard card={card} {...rest} />
+      {revealStamp !== null && (
+        <span
+          aria-hidden="true"
+          className={plannerRevealRingClass}
+          data-testid="planner-reveal"
+          // A new request for the same card restarts the fade.
+          key={revealStamp}
+        />
+      )}
     </div>
   );
 }
@@ -110,6 +149,7 @@ function Column({
   onRequest,
   entering,
   dragging,
+  reveal,
 }: {
   column: PlannerColumnKey;
   label: string;
@@ -121,6 +161,7 @@ function Column({
   onRequest: (request: PlannerCardRequest) => void;
   entering: boolean;
   dragging: boolean;
+  reveal: PlannerReveal | null;
 }) {
   const { isOver, setNodeRef } = useDroppable({
     id: columnId(column),
@@ -159,6 +200,7 @@ function Column({
               dragging={dragging}
               enterIndex={entering ? index : undefined}
               key={card.id}
+              reveal={reveal}
               today={today}
               onRequest={onRequest}
             />
@@ -176,6 +218,7 @@ export function PlannerBoard({
   actions,
   onRequest,
   entering,
+  reveal,
 }: {
   board: PlannerBoardResponse;
   filter: PlannerHorizonFilter;
@@ -183,21 +226,23 @@ export function PlannerBoard({
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
   entering: boolean;
+  /** The card to scroll to and ring, from the page; null when there is none. */
+  reveal: PlannerReveal | null;
 }) {
   const strings = usePlannerStrings();
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 8 },
-    }),
+    useSensor(TouchSensor, { activationConstraint: plannerTouchActivation }),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Whether the card in hand was lifted by a finger: it gets the lift cue.
+  const [lifted, setLifted] = useState(false);
   const activeCard =
     activeId === null ? undefined : plannerFindCard(board, activeId);
 
   const todo = useMemo(
-    () => plannerFilterTodo(board.columns.todo, filter),
-    [board.columns.todo, filter],
+    () => plannerFilterTodo(board.columns.todo, filter, today),
+    [board.columns.todo, filter, today],
   );
 
   // The library's own announcements read out raw task ids; say the task and the
@@ -225,10 +270,19 @@ export function PlannerBoard({
 
   const onDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
+    if (plannerIsTouchActivation(event.activatorEvent)) {
+      setLifted(true);
+      plannerHaptic();
+    }
+  };
+
+  const endDrag = () => {
+    setActiveId(null);
+    setLifted(false);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
-    setActiveId(null);
+    endDrag();
     const { active, over } = event;
     if (!over) return;
     const target = String(over.id).replace(/^column:/, "");
@@ -259,7 +313,7 @@ export function PlannerBoard({
       accessibility={{ announcements }}
       collisionDetection={collide}
       sensors={sensors}
-      onDragCancel={() => setActiveId(null)}
+      onDragCancel={endDrag}
       onDragEnd={onDragEnd}
       onDragStart={onDragStart}
     >
@@ -285,13 +339,14 @@ export function PlannerBoard({
               entering={entering}
               hint={
                 column === "todo" && filter !== "all"
-                  ? strings.columnHint.todoFiltered
+                  ? strings.columnHint.todoFiltered[filter]
                   : strings.columnHint[
                       column as Exclude<PlannerColumnKey, "dropped">
                     ]
               }
               key={column}
               label={strings.column[column]}
+              reveal={reveal}
               today={today}
               onRequest={onRequest}
             />
@@ -303,6 +358,7 @@ export function PlannerBoard({
           <PlannerTaskCard
             actions={actions}
             card={activeCard}
+            className={lifted ? plannerLiftClass : undefined}
             overlay
             today={today}
             onRequest={onRequest}
