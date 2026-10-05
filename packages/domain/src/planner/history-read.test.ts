@@ -143,10 +143,11 @@ describe("planner history reads", () => {
       const task = await createTask(rt.db, rt.user, USER, {
         title: "Gone soon",
       });
-      await plannerSyncHistory(rt.db, {
-        userId: rt.user.id,
-        now: new Date("2026-10-05T10:00:00.000Z"),
-      });
+      // Upstream stamps `created` with the real clock, so the sync clock has to
+      // start from it: a fixed date sorts the purge before the creation as soon
+      // as the real time passes that date. Five minutes apart clears the debounce.
+      const firstSync = new Date();
+      await plannerSyncHistory(rt.db, { userId: rt.user.id, now: firstSync });
       await plannerTestRun(
         rt.database,
         "UPDATE tasks SET deleted_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
@@ -155,7 +156,7 @@ describe("planner history reads", () => {
       await hardDeleteExpiredTasks(rt.db, "2026-02-01T00:00:00.000Z");
       await plannerSyncHistory(rt.db, {
         userId: rt.user.id,
-        now: new Date("2026-10-05T10:05:00.000Z"),
+        now: new Date(firstSync.getTime() + 5 * 60_000),
       });
 
       const history = await plannerReadTaskHistory(rt.db, {
