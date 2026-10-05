@@ -199,6 +199,40 @@ export async function plannerTestInsertTask(
   return task.id;
 }
 
+/** Inserts many task rows exactly as given, in bounded batches. */
+export async function plannerTestInsertTasks(
+  database: PlannerTestDatabase,
+  rows: Array<Parameters<typeof plannerTestInsertTask>[1]>,
+): Promise<void> {
+  const chunk = 100;
+  for (let offset = 0; offset < rows.length; offset += chunk) {
+    await database.batch(
+      rows.slice(offset, offset + chunk).map((task) => {
+        const createdAt = task.createdAt ?? "2026-01-01T00:00:00.000Z";
+        return database
+          .prepare(
+            `INSERT INTO tasks (id, user_id, project_id, title, status, priority, due_at, sort_order, completed_at, deleted_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            task.id,
+            task.userId,
+            task.projectId ?? null,
+            task.title ?? "Task",
+            task.status ?? "todo",
+            task.priority ?? "none",
+            task.dueAt ?? null,
+            task.sortOrder ?? 0,
+            task.completedAt ?? null,
+            task.deletedAt ?? null,
+            createdAt,
+            createdAt,
+          );
+      }),
+    );
+  }
+}
+
 /** Inserts a `task_activity` row exactly as given. */
 export async function plannerTestInsertActivity(
   database: PlannerTestDatabase,
@@ -226,6 +260,89 @@ export async function plannerTestInsertActivity(
     JSON.stringify(row.changes ?? {}),
     row.createdAt,
   );
+}
+
+/** Inserts a plan row exactly as given. */
+export async function plannerTestInsertPlan(
+  database: PlannerTestDatabase,
+  plan: {
+    taskId: string;
+    userId: string;
+    horizon?: "day" | "week" | "month" | null;
+    periodStart?: string | null;
+    carryCount?: number;
+    droppedAt?: string | null;
+    at?: string;
+  },
+): Promise<void> {
+  const at = plan.at ?? "2026-10-01T00:00:00.000Z";
+  await plannerTestRun(
+    database,
+    `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    plan.taskId,
+    plan.userId,
+    plan.horizon ?? null,
+    plan.periodStart ?? null,
+    plan.carryCount ?? 0,
+    plan.droppedAt ?? null,
+    at,
+    at,
+  );
+}
+
+/** Inserts many plan rows exactly as given, in bounded batches. */
+export async function plannerTestInsertPlans(
+  database: PlannerTestDatabase,
+  rows: Array<Parameters<typeof plannerTestInsertPlan>[1]>,
+): Promise<void> {
+  const chunk = 100;
+  for (let offset = 0; offset < rows.length; offset += chunk) {
+    await database.batch(
+      rows.slice(offset, offset + chunk).map((plan) => {
+        const at = plan.at ?? "2026-10-01T00:00:00.000Z";
+        return database
+          .prepare(
+            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            plan.taskId,
+            plan.userId,
+            plan.horizon ?? null,
+            plan.periodStart ?? null,
+            plan.carryCount ?? 0,
+            plan.droppedAt ?? null,
+            at,
+            at,
+          );
+      }),
+    );
+  }
+}
+
+export type PlannerTestPlan = {
+  task_id: string;
+  user_id: string;
+  horizon: string | null;
+  period_start: string | null;
+  carry_count: number;
+  dropped_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** One task's plan row, or undefined. */
+export async function plannerTestPlan(
+  database: PlannerTestDatabase,
+  taskId: string,
+): Promise<PlannerTestPlan | undefined> {
+  const [row] = await plannerTestRows<PlannerTestPlan>(
+    database,
+    "SELECT * FROM planner_task_plan WHERE task_id = ?",
+    taskId,
+  );
+  return row;
 }
 
 /** Inserts an archive row exactly as given. */

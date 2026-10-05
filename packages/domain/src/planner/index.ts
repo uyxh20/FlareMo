@@ -9,8 +9,12 @@
 // Task rows change only through upstream's domain services (M1); this layer
 // writes planner tables only, and reads `tasks`, `task_activity` and `projects`.
 
+export * from "./board";
+export * from "./columns";
 export * from "./history-read";
 export * from "./history-sync";
+export * from "./plans";
+export * from "./rollover";
 export type {
   PlannerActor,
   PlannerBatchResult,
