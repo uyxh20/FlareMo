@@ -109,6 +109,11 @@ const TeamProjectsPage = lazy(() =>
     default: module.TeamProjectsPage,
   })),
 );
+const CockpitPage = lazy(() =>
+  import("@/planner/cockpit-page").then((module) => ({
+    default: module.PlannerCockpitPage,
+  })),
+);
 const ProjectsPage = lazy(() =>
   import("@/pages/projects-page").then((module) => ({
     default: module.ProjectsPage,
@@ -490,6 +495,22 @@ const teamProjectsRoute = createRoute({
   component: TeamProjectsRoutePage,
 });
 
+function CockpitRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <CockpitPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+const cockpitRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/cockpit",
+  component: CockpitRoutePage,
+});
+
 function CaptureRoutePage() {
   return (
     <AuthenticatedRoute>
@@ -571,6 +592,7 @@ const router = createRouter({
     memoryRoute,
     projectsRoute,
     teamProjectsRoute,
+    cockpitRoute,
     captureRoute,
     articlesRoute,
     articleEditRoute,

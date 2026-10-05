@@ -474,7 +474,7 @@ Progress:
 - [x] A Baseline, schema and migration
 - [x] B History sync and domain services
 - [x] C Routes
-- [ ] D Web cockpit
+- [x] D Web cockpit
 - [ ] E Docs and dev deploy
 
 Acceptance:

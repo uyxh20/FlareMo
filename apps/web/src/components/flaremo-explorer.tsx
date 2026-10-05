@@ -46,6 +46,7 @@ import { currentStreak } from "@/lib/activity";
 import { queryKeys } from "@/lib/query-keys";
 import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
+import { PlannerNavLink } from "@/planner/nav-link";
 
 export type ExplorerView = "all" | "archived" | "trashed";
 
@@ -216,6 +217,7 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
             {t("nav.teamProjects")}
           </span>
         </Link>
+        <PlannerNavLink onNavigate={onNavigate} />
         <Link
           activeProps={{
             className: "!bg-accent !text-accent-foreground font-medium",
