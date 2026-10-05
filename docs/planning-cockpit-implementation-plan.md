@@ -464,7 +464,7 @@ Conformance:
 
 Progress:
 
-- [ ] A Baseline, schema and migration
+- [x] A Baseline, schema and migration
 - [ ] B History sync and domain services
 - [ ] C Routes
 - [ ] D Web cockpit
@@ -480,7 +480,7 @@ Acceptance:
 
 ## 11. Log
 
-- planner-base: (set at step A)
+- planner-base: 80287b09aba4003b977bbcbdb6d19d8a1b41f12e (2026-10-04)
 
 ## 12. Audit resolution
 
