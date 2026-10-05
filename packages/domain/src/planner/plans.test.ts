@@ -24,6 +24,7 @@ import {
   plannerApplyColumnMove,
   plannerCreateTask,
   plannerDropTask,
+  plannerReadTaskPlan,
   plannerSetPlan,
   plannerUndropTask,
 } from "./plans";
@@ -1083,6 +1084,96 @@ describe("planner plans", () => {
         }),
       ).rejects.toThrow(/injected failure/);
       expect(await plannerTestPlan(rt.database, task.id)).toBeUndefined();
+    });
+  });
+
+  describe("plannerReadTaskPlan", () => {
+    it("returns the task with a null plan when it was never planned", async () => {
+      const task = await newTask("Plain");
+
+      const result = await plannerReadTaskPlan(rt.db, {
+        user: rt.user,
+        taskId: task.id,
+      });
+
+      expect(result.task).toEqual(task);
+      expect(result.plan).toBeNull();
+    });
+
+    it("returns the plan as the writes do, for a bare or a namespaced id", async () => {
+      const task = await newTask("Planned");
+      const planned = await setPlan(task.id, { horizon: "week", day: TODAY });
+      await plannerDropTask(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: task.id,
+        now: NOW,
+      });
+
+      const dropped = await plannerReadTaskPlan(rt.db, {
+        user: rt.user,
+        taskId: task.id,
+      });
+      const bare = await plannerReadTaskPlan(rt.db, {
+        user: rt.user,
+        taskId: task.id.replace(/^tasks\//, ""),
+      });
+
+      expect(planned.plan).toMatchObject({ horizon: "week" });
+      expect(dropped.plan).toMatchObject({
+        task_id: task.id,
+        horizon: "week",
+        period_start: THIS_WEEK,
+        dropped_at: NOW.toISOString(),
+      });
+      expect(bare).toEqual(dropped);
+    });
+
+    it("reflects a task edited through upstream, which is what the PATCH route needs it for", async () => {
+      const task = await newTask("Before");
+      await setPlan(task.id, { horizon: "day", day: TODAY });
+      await updateTask(rt.db, rt.user, USER, task.id, {
+        title: "After",
+        priority: "high",
+      });
+
+      const result = await plannerReadTaskPlan(rt.db, {
+        user: rt.user,
+        taskId: task.id,
+      });
+
+      expect(result.task).toMatchObject({ title: "After", priority: "high" });
+      expect(result.plan).toMatchObject({
+        horizon: "day",
+        period_start: TODAY,
+      });
+    });
+
+    it("changes nothing", async () => {
+      const task = await newTask();
+      await setPlan(task.id, { horizon: "month", day: TODAY });
+      const events = await plannerTestCount(rt.database, "planner_task_event");
+      const activity = await listTaskActivity(rt.db, rt.user, task.id);
+
+      await plannerReadTaskPlan(rt.db, { user: rt.user, taskId: task.id });
+
+      expect(await plannerTestCount(rt.database, "planner_task_event")).toBe(
+        events,
+      );
+      expect(await listTaskActivity(rt.db, rt.user, task.id)).toEqual(activity);
+    });
+
+    it("is a 404 for a task that is missing, deleted or someone else's", async () => {
+      const task = await newTask();
+      const theirs = await createTask(rt.db, rt.other, USER, {
+        title: "Theirs",
+      });
+      const read = (taskId: string) =>
+        plannerReadTaskPlan(rt.db, { user: rt.user, taskId });
+      await expect(read("tasks/nope")).rejects.toBeInstanceOf(NotFoundError);
+      await expect(read(theirs.id)).rejects.toBeInstanceOf(NotFoundError);
+      await deleteTask(rt.db, rt.user, task.id);
+      await expect(read(task.id)).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 

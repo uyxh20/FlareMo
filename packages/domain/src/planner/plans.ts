@@ -241,6 +241,19 @@ async function resultFor(
   return { task, plan: plan ? plannerPlanToDto(plan) : null };
 }
 
+/**
+ * A live task and its plan, read back without changing anything. Upstream's
+ * `updateTask` returns only the task, so a route that has just edited task
+ * fields (and no plan) calls this to answer with the plan as well. A task that
+ * is missing, deleted or someone else's is a 404, like upstream's `getTask`.
+ */
+export async function plannerReadTaskPlan(
+  db: FlareMoDb,
+  input: { user: UserRow; taskId: string },
+): Promise<PlannerTaskPlanResult> {
+  return resultFor(db, input.user, plannerNormalizeTaskId(input.taskId));
+}
+
 // ---------------------------------------------------------------------------
 // Create
 // ---------------------------------------------------------------------------

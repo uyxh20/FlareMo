@@ -251,6 +251,10 @@ export function createFlareMoApp(
     return articlesApi;
   });
   app.route("/api/app/tasks", tasksApi);
+  mountLazyRoute(app, "/api/app/planner", async () => {
+    const { plannerApi } = await import("./routes/planner-api");
+    return plannerApi;
+  });
   app.route("/api/app", appApi);
   app.route("/api/public", publicApi);
   // SSR public pages (share/article + sitemap/feed): the largest lazy win —

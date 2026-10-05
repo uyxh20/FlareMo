@@ -298,7 +298,7 @@ The response is `{ history, carried }`.
 - **The card menu** offers "Move to…" plus plan choices: Today, Tomorrow, This week, Next week, This month, Next month, or a picked day.
 - **Drop and undrop**: drop follows D1, and the `dropped` event stores `previous_due_at`. Undrop doesn't restore the old due date.
 
-### Create: `POST /api/app/planner/tasks {title, plan?, due_at?, project_id?, notes?, priority?}`
+### Create: `POST /api/app/planner/tasks {title, today, plan?, due_at?, project_id?, notes?, priority?}`
 
 1. Upstream `createTask` with status `todo`.
 2. One batch writes the plan row and a `planned` event, when a plan is given.
@@ -307,7 +307,14 @@ If step 2 fails, the endpoint returns 201 `{task, plan: null, plan_error}`. The 
 
 ### Other routes, all under `/api/app/planner`
 
-- `PATCH /tasks/:id` — `{ plan?, status?, dropped?, due_at?, title?, project_id? }`. Upstream fields go through `updateTask`, planner fields through planner services.
+- `PATCH /tasks/:id` — `{ today, column?, plan?, dropped?, title?, notes?, priority?, due_at?, project_id? }`, answering `{ task, plan }`. Upstream fields go through `updateTask`, planner fields through planner services.
+  - `column` (`backlog` | `todo` | `doing` | `done`) replaces `status`. The move table above lives only on the server: the client sends the target column and the server sets the status and the plan (`plannerApplyColumnMove`). `column` and `plan` together are a 400, since a move sets the plan itself. `status` and `sort_order` are not accepted here.
+  - Apply order, each step only when its field is present:
+    1. `dropped: false` (undrop), so one request can revive and move a dropped task.
+    2. The upstream fields through `updateTask`, only those given. A request with none never calls it.
+    3. `column`, or else `plan` (`plannerSetPlan`).
+    4. `dropped: true` last, so a due date set in the same request is the one the `dropped` event remembers before it is cleared.
+  - Not atomic: a step that fails leaves the earlier ones applied, because task rows may change only through upstream services.
 - `GET /tasks/:id/history` — sync first, then events ordered by `occurred_at`, then `id`, newest first.
 - `GET /history?from&to` — the user's events in a range, after a sync.
 - `GET /tree` — non-deleted projects merged with their node rows. A child whose parent project is soft-deleted shows as a root.
@@ -466,7 +473,7 @@ Progress:
 
 - [x] A Baseline, schema and migration
 - [x] B History sync and domain services
-- [ ] C Routes
+- [x] C Routes
 - [ ] D Web cockpit
 - [ ] E Docs and dev deploy
 
