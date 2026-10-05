@@ -1,0 +1,16 @@
+// Query keys for the planning cockpit (fork-owned add-on,
+// docs/planning-cockpit-implementation-plan.md, section 5). Everything lives
+// under ["planner", ...], so one prefix invalidates the whole cockpit.
+
+export const plannerQueryKeys = {
+  /** The prefix: invalidating it refreshes every cockpit query. */
+  all: ["planner"] as const,
+  /** Every cached board, whatever its day or filters, for optimistic patches. */
+  boards: ["planner", "board"] as const,
+  board: (today: string, includeDropped: boolean) =>
+    ["planner", "board", today, includeDropped] as const,
+  /** One task's archived timeline. */
+  history: (taskId: string) => ["planner", "history", taskId] as const,
+  /** The full upstream task (with notes), for the edit dialog. */
+  task: (taskId: string) => ["planner", "task", taskId] as const,
+} as const;
