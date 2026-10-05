@@ -465,7 +465,7 @@ Conformance:
 Progress:
 
 - [x] A Baseline, schema and migration
-- [ ] B History sync and domain services
+- [x] B History sync and domain services
 - [ ] C Routes
 - [ ] D Web cockpit
 - [ ] E Docs and dev deploy
