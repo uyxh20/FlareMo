@@ -2549,9 +2549,14 @@ e2e("dev environment against a fake Cloudflare", () => {
         /tables outside the persistence manifest, copied too: planner_goals, planner_entries/,
       );
       assert.equal(fingerprint(prod), prodBefore);
+      // Only the fixture's two stand-ins for fork tables outside the manifest.
+      // The real planner tables are in the manifest and exist in neither fake
+      // database here, so the clone skips them.
       assert.deepEqual(
         summary.counts
-          .filter((row) => row.table.startsWith("planner_"))
+          .filter((row) =>
+            ["planner_goals", "planner_entries"].includes(row.table),
+          )
           .map((row) => [row.table, row.prod, row.dev, row.status]),
         [
           ["planner_goals", 2, 2, "ok"],
@@ -2742,7 +2747,14 @@ e2e("dev environment against a fake Cloudflare", () => {
     const before = h.fake.calls.length;
     const report = h.devEnv.status({ withProd: true });
     assert.deepEqual(report.problems, []);
-    assert.equal(report.devLatest, sortedMigrationFiles(MIGRATIONS_DIR).at(-1));
+    // The level is the newest upstream-track migration; the fork's 9xxx_planner_
+    // files are tracked beside it (devFork), so they never count as the level.
+    assert.equal(
+      report.devLatest,
+      sortedMigrationFiles(MIGRATIONS_DIR)
+        .filter((name) => /^0\d{3}_/.test(name))
+        .at(-1),
+    );
     assert.equal(report.prodLatest, PROD_LEVEL);
     assert.equal(report.bucket, true);
     assert.deepEqual(Object.values(report.queues), [true, true]);
