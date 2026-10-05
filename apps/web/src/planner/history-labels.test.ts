@@ -139,7 +139,7 @@ describe("plannerDescribeHistory", () => {
     ]);
   });
 
-  it("keeps the old plan as a quiet second line", () => {
+  it("puts the exact period and the old plan on a quiet second line", () => {
     const entries = plannerDescribeHistory(
       [
         event("planned", { from: NONE, to: point("week", "2026-10-05") }),
@@ -153,8 +153,8 @@ describe("plannerDescribeHistory", () => {
     );
     expect(entries.map((entry) => [entry.label, entry.detail])).toEqual([
       ["Unplanned", "Was tomorrow"],
-      ["Re-planned to tomorrow", "Was this week"],
-      ["Planned for this week", null],
+      ["Re-planned to tomorrow", "Thu, Oct 8, 2026 · Was this week"],
+      ["Planned for this week", "Week of Oct 5, 2026"],
     ]);
   });
 
@@ -170,7 +170,7 @@ describe("plannerDescribeHistory", () => {
     );
     expect(entry).toMatchObject({
       label: "Carried over to today",
-      detail: "Was yesterday",
+      detail: "Wed, Oct 7, 2026 · Was yesterday",
       type: "carried_over",
     });
   });

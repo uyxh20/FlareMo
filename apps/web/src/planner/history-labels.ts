@@ -209,10 +209,17 @@ export function plannerDescribeHistory(
         } else {
           label = strings.history.unplanned;
         }
+        // The label is worded against the day of the event ("this week"); the
+        // exact period under it keeps an old line from being misread.
+        const exact = plannerPlanLabel(to, day, strings, "phrase")?.title;
         const was = wording(from);
-        if (event.type !== "planned" && was !== null) {
-          detail = strings.history.detail.was(was);
-        }
+        const parts = [
+          exact ?? null,
+          event.type !== "planned" && was !== null
+            ? strings.history.detail.was(was)
+            : null,
+        ].filter((part): part is string => part !== null);
+        detail = parts.length > 0 ? parts.join(" · ") : null;
         hasPlan = to.horizon !== null;
         break;
       }

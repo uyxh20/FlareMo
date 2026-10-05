@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { plannerNavLabelFor } from "./nav-label";
 import { plannerStringsFor } from "./strings";
 
 const en = plannerStringsFor("en-US");
@@ -61,6 +62,12 @@ describe("plannerStringsFor", () => {
     expect(en.title).toBe("Cockpit");
     expect(zh.nav).toBe("驾驶舱");
     expect(zh.title).toBe("驾驶舱");
+    // The link reads the name from its own tiny module, not from this dictionary.
+    expect(plannerNavLabelFor("en-US")).toBe(en.nav);
+    expect(plannerNavLabelFor("zh-CN")).toBe(zh.nav);
+    for (const locale of ["ja", "fr", "es", "ko", "ru", "ar"]) {
+      expect(plannerNavLabelFor(locale)).toBe(plannerStringsFor(locale).nav);
+    }
   });
 
   it("keeps the four columns in the order the board shows them", () => {

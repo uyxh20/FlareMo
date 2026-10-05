@@ -1,0 +1,345 @@
+import {
+  type Announcements,
+  type CollisionDetection,
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
+  MouseSensor,
+  pointerWithin,
+  rectIntersection,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import type {
+  PlannerBoardCard,
+  PlannerBoardResponse,
+  PlannerColumn,
+} from "@flaremo/contracts";
+import { useMemo, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import {
+  type PlannerColumnKey,
+  type PlannerHorizonFilter,
+  plannerCardColumn,
+  plannerColumns,
+  plannerFilterTodo,
+  plannerFindCard,
+} from "./board-model";
+import { usePlannerStrings } from "./strings";
+import {
+  type PlannerCardRequest,
+  PlannerColumnIcon,
+  PlannerTaskCard,
+} from "./task-card";
+import type { PlannerActions } from "./use-planner-actions";
+
+// The board itself (fork-owned add-on,
+// docs/planning-cockpit-implementation-plan.md, section 5): Backlog, To Do, Doing
+// and Done side by side, plus Other when a task has a status the cockpit does not
+// know. Dropping a card on a column asks the server to move it
+// (`PATCH {column}`); the server owns the move table. Modelled on upstream's
+// pages/projects/board.tsx, minus the in-column sorting that this board, ordered
+// by plan, does not have.
+//
+// Sensors: a mouse sensor (the card lifts after 6px) and a touch sensor (a long
+// press lifts it, so a swipe still scrolls the board). Upstream pairs the touch
+// sensor with dnd-kit's PointerSensor, but that one also claims touch pointers
+// and wins the race, so there a long press never lifts anything and the swipe
+// that follows is cancelled. The mouse sensor leaves touch to the touch sensor.
+
+/** The column under the pointer; for a keyboard or an unmoved pointer, the one the card overlaps most. */
+const collide: CollisionDetection = (args) => {
+  const within = pointerWithin(args);
+  return within.length > 0 ? within : rectIntersection(args);
+};
+
+const columnId = (column: PlannerColumnKey) => `column:${column}`;
+
+function DraggableCard({
+  card,
+  dragging,
+  enterIndex,
+  ...rest
+}: {
+  card: PlannerBoardCard;
+  today: string;
+  actions: PlannerActions;
+  onRequest: (request: PlannerCardRequest) => void;
+  dragging: boolean;
+  /** Set only while the board first appears, to stagger the cards in. */
+  enterIndex?: number;
+}) {
+  const { setNodeRef, listeners, isDragging } = useDraggable({ id: card.id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      className={cn(
+        "rounded-xl [@media(pointer:coarse)]:[-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none",
+        enterIndex !== undefined && "motion-safe:animate-rise",
+        isDragging && "opacity-40",
+        // While something is being dragged, hovering other cards must not offer
+        // their menus: the pointer is busy.
+        dragging && !isDragging && "pointer-events-none",
+      )}
+      data-testid="planner-card"
+      style={
+        enterIndex === undefined
+          ? undefined
+          : { animationDelay: `${Math.min(enterIndex, 8) * 35}ms` }
+      }
+    >
+      <PlannerTaskCard card={card} {...rest} />
+    </div>
+  );
+}
+
+function Column({
+  column,
+  label,
+  hint,
+  cards,
+  droppable,
+  today,
+  actions,
+  onRequest,
+  entering,
+  dragging,
+}: {
+  column: PlannerColumnKey;
+  label: string;
+  hint: string;
+  cards: readonly PlannerBoardCard[];
+  droppable: boolean;
+  today: string;
+  actions: PlannerActions;
+  onRequest: (request: PlannerCardRequest) => void;
+  entering: boolean;
+  dragging: boolean;
+}) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: columnId(column),
+    disabled: !droppable,
+  });
+
+  return (
+    <section
+      aria-label={label}
+      className="flex min-w-0 snap-start flex-col gap-2"
+      data-column={column}
+    >
+      <header className="flex items-center gap-2 px-1">
+        <PlannerColumnIcon column={column} />
+        <h2 className="text-sm font-medium">{label}</h2>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {cards.length}
+        </span>
+      </header>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex min-h-32 flex-1 flex-col gap-2 rounded-xl bg-muted/35 p-2 motion-safe:transition-colors motion-safe:duration-150 sm:min-h-48",
+          droppable && isOver && "bg-accent ring-1 ring-brand-400/40",
+        )}
+      >
+        {cards.length === 0 ? (
+          <p className="rounded-lg px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+            {hint}
+          </p>
+        ) : (
+          cards.map((card, index) => (
+            <DraggableCard
+              actions={actions}
+              card={card}
+              dragging={dragging}
+              enterIndex={entering ? index : undefined}
+              key={card.id}
+              today={today}
+              onRequest={onRequest}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function PlannerBoard({
+  board,
+  filter,
+  today,
+  actions,
+  onRequest,
+  entering,
+}: {
+  board: PlannerBoardResponse;
+  filter: PlannerHorizonFilter;
+  today: string;
+  actions: PlannerActions;
+  onRequest: (request: PlannerCardRequest) => void;
+  entering: boolean;
+}) {
+  const strings = usePlannerStrings();
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
+    }),
+  );
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const activeCard =
+    activeId === null ? undefined : plannerFindCard(board, activeId);
+
+  const todo = useMemo(
+    () => plannerFilterTodo(board.columns.todo, filter),
+    [board.columns.todo, filter],
+  );
+
+  // The library's own announcements read out raw task ids; say the task and the
+  // column instead.
+  const announcements = useMemo<Announcements>(() => {
+    const titleOf = (id: string | number) =>
+      plannerFindCard(board, String(id))?.title ?? "";
+    const columnOf = (id: string | number) =>
+      strings.column[
+        String(id).replace(/^column:/, "") as keyof typeof strings.column
+      ] ?? "";
+    return {
+      onDragStart: ({ active }) => strings.drag.picked(titleOf(active.id)),
+      onDragOver: ({ active, over }) =>
+        over
+          ? strings.drag.over(titleOf(active.id), columnOf(over.id))
+          : undefined,
+      onDragEnd: ({ active, over }) =>
+        over
+          ? strings.drag.dropped(titleOf(active.id), columnOf(over.id))
+          : undefined,
+      onDragCancel: ({ active }) => strings.drag.cancelled(titleOf(active.id)),
+    };
+  }, [board, strings]);
+
+  const onDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const onDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const target = String(over.id).replace(/^column:/, "");
+    if (!(plannerColumns as readonly string[]).includes(target)) return;
+    const card = plannerFindCard(board, String(active.id));
+    if (!card || card.dropped_at !== null) return;
+    if (plannerCardColumn(card) === target) return;
+    actions.move(card, target as PlannerColumn);
+  };
+
+  const shown: {
+    column: PlannerColumnKey;
+    cards: readonly PlannerBoardCard[];
+  }[] = [
+    { column: "backlog", cards: board.columns.backlog },
+    { column: "todo", cards: todo },
+    { column: "doing", cards: board.columns.doing },
+    { column: "done", cards: board.columns.done },
+  ];
+  // Cards with a status the cockpit does not know get a column of their own,
+  // only while there are any. It is not a move target.
+  if (board.columns.other.length > 0) {
+    shown.push({ column: "other", cards: board.columns.other });
+  }
+
+  return (
+    <DndContext
+      accessibility={{ announcements }}
+      collisionDetection={collide}
+      sensors={sensors}
+      onDragCancel={() => setActiveId(null)}
+      onDragEnd={onDragEnd}
+      onDragStart={onDragStart}
+    >
+      <div
+        className={cn(
+          // overscroll-x-contain: a swipe that reaches the last column must not
+          // become the browser's back gesture.
+          "-mx-5 overflow-x-auto overscroll-x-contain px-5 pb-3 lg:mx-0 lg:px-0 max-sm:scroll-pl-5",
+          activeId === null
+            ? "max-sm:snap-x max-sm:snap-mandatory"
+            : "max-sm:snap-none",
+        )}
+        data-testid="planner-board"
+      >
+        <div className="grid grid-flow-col auto-cols-[85%] gap-3 sm:auto-cols-[minmax(13.5rem,1fr)]">
+          {shown.map(({ column, cards }) => (
+            <Column
+              actions={actions}
+              cards={cards}
+              column={column}
+              droppable={column !== "other"}
+              dragging={activeId !== null}
+              entering={entering}
+              hint={
+                column === "todo" && filter !== "all"
+                  ? strings.columnHint.todoFiltered
+                  : strings.columnHint[
+                      column as Exclude<PlannerColumnKey, "dropped">
+                    ]
+              }
+              key={column}
+              label={strings.column[column]}
+              today={today}
+              onRequest={onRequest}
+            />
+          ))}
+        </div>
+      </div>
+      <DragOverlay dropAnimation={null}>
+        {activeCard ? (
+          <PlannerTaskCard
+            actions={actions}
+            card={activeCard}
+            overlay
+            today={today}
+            onRequest={onRequest}
+          />
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+/** Four columns of ghost cards while the first board loads. */
+export function PlannerBoardSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      className="grid grid-flow-col auto-cols-[85%] gap-3 overflow-hidden sm:auto-cols-[minmax(13.5rem,1fr)]"
+      data-testid="planner-board-skeleton"
+    >
+      {[3, 2, 1, 2].map((rows, column) => (
+        <div
+          className="flex flex-col gap-2"
+          // The columns are fixed and never reorder.
+          // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder list
+          key={column}
+        >
+          <Skeleton className="mx-1 h-5 w-24" />
+          <div className="flex flex-col gap-2 rounded-xl bg-muted/35 p-2">
+            {Array.from({ length: rows }, (_, row) => (
+              <Skeleton
+                className="h-[4.5rem] w-full rounded-xl"
+                // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder list
+                key={row}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}

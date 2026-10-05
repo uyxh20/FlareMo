@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { type Locale, useI18n } from "@/i18n";
+import { plannerNavLabelEn, plannerNavLabelZhCN } from "./nav-label";
 
 // The cockpit's own copy, English and Simplified Chinese (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 5).
@@ -46,9 +47,19 @@ export type PlannerStrings = {
   columnHint: {
     backlog: string;
     todo: string;
+    /** To Do when a horizon filter hides every card. */
+    todoFiltered: string;
     doing: string;
     done: string;
     other: string;
+  };
+  droppedEmpty: string;
+  /** What a screen reader hears while a card is dragged. */
+  drag: {
+    picked: (title: string) => string;
+    over: (title: string, column: string) => string;
+    dropped: (title: string, column: string) => string;
+    cancelled: (title: string) => string;
   };
 
   quickAdd: {
@@ -125,6 +136,8 @@ export type PlannerStrings = {
     carried: (count: number) => string;
     added: { backlog: string; day: string; week: string; month: string };
     addFailed: string;
+    /** The edit dialog could not fetch the task it opens with. */
+    openFailed: string;
     moved: (column: string) => string;
     moveFailed: string;
     planned: (label: string) => string;
@@ -186,8 +199,8 @@ export type PlannerStrings = {
 
 const en: PlannerStrings = {
   intlLocale: "en-US",
-  nav: "Cockpit",
-  title: "Cockpit",
+  nav: plannerNavLabelEn,
+  title: plannerNavLabelEn,
 
   column: {
     backlog: "Backlog",
@@ -200,9 +213,17 @@ const en: PlannerStrings = {
   columnHint: {
     backlog: "Tasks you have not planned yet wait here.",
     todo: "Plan a task for today, this week or this month.",
+    todoFiltered: "Nothing planned at this level. Pick All to see everything.",
     doing: "Drag a card here when you start it.",
     done: "Finished tasks stay here for two weeks.",
     other: "Tasks with a status the cockpit does not know.",
+  },
+  droppedEmpty: "Nothing has been dropped.",
+  drag: {
+    picked: (title) => `Picked up ${title}.`,
+    over: (title, column) => `${title} is over ${column}.`,
+    dropped: (title, column) => `${title} was dropped in ${column}.`,
+    cancelled: (title) => `Moving ${title} was cancelled.`,
   },
 
   quickAdd: {
@@ -315,6 +336,7 @@ const en: PlannerStrings = {
       month: "Added for this month",
     },
     addFailed: "Couldn't add the task",
+    openFailed: "Couldn't open the task",
     moved: (column) => `Moved to ${column}`,
     moveFailed: "Couldn't move the task",
     planned: (label) => `Planned for ${label}`,
@@ -377,8 +399,8 @@ const en: PlannerStrings = {
 
 const zhCN: PlannerStrings = {
   intlLocale: "zh-CN",
-  nav: "驾驶舱",
-  title: "驾驶舱",
+  nav: plannerNavLabelZhCN,
+  title: plannerNavLabelZhCN,
 
   column: {
     backlog: "待规划",
@@ -391,9 +413,17 @@ const zhCN: PlannerStrings = {
   columnHint: {
     backlog: "还没安排的任务先放在这里。",
     todo: "把任务安排到今天、本周或本月。",
+    todoFiltered: "这个层级下没有计划。选“全部”可查看所有待办。",
     doing: "开始做某件事时，把卡片拖到这里。",
     done: "完成的任务会在这里保留两周。",
     other: "状态未知的任务会出现在这里。",
+  },
+  droppedEmpty: "还没有放弃过任务。",
+  drag: {
+    picked: (title) => `已拿起“${title}”。`,
+    over: (title, column) => `“${title}”在${column}上方。`,
+    dropped: (title, column) => `“${title}”已放入${column}。`,
+    cancelled: (title) => `已取消移动“${title}”。`,
   },
 
   quickAdd: {
@@ -492,6 +522,7 @@ const zhCN: PlannerStrings = {
       month: "已安排到本月",
     },
     addFailed: "添加任务失败",
+    openFailed: "无法打开任务",
     moved: (column) => `已移到${column}`,
     moveFailed: "移动任务失败",
     planned: (label) => `已安排到${label}`,
