@@ -9,6 +9,7 @@ import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listProjects } from "@/api";
 import { ApiError } from "@/api/client";
+import { formatDateTime } from "@/lib/date-format";
 import {
   plannerFetchTaskDetail,
   plannerFetchTaskHistory,
@@ -478,7 +479,10 @@ describe("the properties", () => {
       (time) => time.textContent?.startsWith("Updated"),
     );
     expect(updated?.getAttribute("datetime")).toBe("2026-10-07T09:00:00.000Z");
-    expect(updated?.getAttribute("title")).toMatch(/Oct 7, 2026/);
+    // The hover text is the exact moment, in the machine's own time zone.
+    expect(updated?.getAttribute("title")).toBe(
+      formatDateTime("2026-10-07T09:00:00.000Z", "en"),
+    );
   });
 
   it("shows when the task was made and last touched, the exact times on hover", async () => {
@@ -492,12 +496,17 @@ describe("the properties", () => {
     );
     expect(created?.getAttribute("datetime")).toBe(TASK.created_at);
     expect(updated?.getAttribute("datetime")).toBe(TASK.updated_at);
-    // The exact moment is the hover text, in the page's own language.
-    expect(created?.getAttribute("title")).toMatch(/Oct 1, 2026/);
+    // The exact moment is the hover text, in the page's own language and the
+    // machine's own time zone.
+    expect(created?.getAttribute("title")).toBe(
+      formatDateTime(TASK.created_at, "en"),
+    );
     expect(created?.textContent).toContain(
       created?.getAttribute("title") ?? "?",
     );
-    expect(updated?.getAttribute("title")).toMatch(/Oct 6, 2026/);
+    expect(updated?.getAttribute("title")).toBe(
+      formatDateTime(TASK.updated_at, "en"),
+    );
   });
 });
 
@@ -834,7 +843,8 @@ describe("the history", () => {
   });
 
   it("unfolds into the task's timeline, read when it opens", async () => {
-    const when = new Date(Date.now() - 5 * 60_000).toISOString();
+    // Five and a half minutes, so a slow run still reads "5 minutes ago".
+    const when = new Date(Date.now() - 5.5 * 60_000).toISOString();
     fetchHistory.mockResolvedValue({
       events: [
         {

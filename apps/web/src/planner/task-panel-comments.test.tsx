@@ -72,12 +72,15 @@ function comment(
   createdMinutesAgo: number,
   overrides: Partial<PlannerCommentDto> = {},
 ): PlannerCommentDto {
+  // One reading of the clock: two would differ by a millisecond now and then,
+  // and a comment whose updated_at is later than its created_at counts as edited.
+  const at = minutesAgo(createdMinutesAgo);
   return {
     id,
     task_id: TASK_ID,
     body,
-    created_at: minutesAgo(createdMinutesAgo),
-    updated_at: minutesAgo(createdMinutesAgo),
+    created_at: at,
+    updated_at: at,
     ...overrides,
   };
 }
@@ -85,7 +88,8 @@ function comment(
 /** Oldest first, as the server sends them. */
 const FIRST = comment("c-1", "Check the copy with Dana", 180);
 const SECOND = comment("c-2", "Design is signed off", 30);
-const THIRD = comment("c-3", "Waiting on the legal review", 2);
+// Two and a half minutes, so a slow run still reads "2 minutes ago".
+const THIRD = comment("c-3", "Waiting on the legal review", 2.5);
 
 let mounted: PlannerTestMount | undefined;
 let queryClient: QueryClient;
