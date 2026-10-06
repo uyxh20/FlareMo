@@ -9,7 +9,9 @@ import {
   plannerFetchTaskDetail,
   plannerFetchTaskHistory,
   plannerFetchTree,
+  plannerFitsKeepalive,
   plannerIsRateLimited,
+  plannerKeepaliveMaxBytes,
   plannerRolloverRequest,
   plannerUpdateCommentRequest,
   plannerUpdateTaskRequest,
@@ -155,6 +157,60 @@ describe("the task panel's requests", () => {
     });
     expect(bodyOf(calls[0])).toEqual({ today: "2026-10-07", effort: 3.5 });
     expect(bodyOf(calls[1])).toEqual({ today: "2026-10-07", effort: null });
+  });
+
+  it("asks fetch to keep an update alive past the page only when told to", async () => {
+    const calls = stubFetch(200, { task: {}, plan: null });
+    const input = { today: "2026-10-07", notes: "Quick note" };
+    await plannerUpdateTaskRequest("tasks/a", input);
+    await plannerUpdateTaskRequest("tasks/a", input, { keepalive: false });
+    await plannerUpdateTaskRequest("tasks/a", input, { keepalive: true });
+    expect(calls[0]?.init.keepalive).toBeUndefined();
+    expect(calls[1]?.init.keepalive).toBeUndefined();
+    expect(calls[2]?.init.keepalive).toBe(true);
+    // The request is the same one either way.
+    expect(calls[2]?.url).toBe("/api/app/planner/tasks/a");
+    expect(calls[2]?.init.method).toBe("PATCH");
+    expect(bodyOf(calls[2])).toEqual(input);
+  });
+
+  it("sends a body that is too big for keepalive as an ordinary request, whole", async () => {
+    const calls = stubFetch(200, { task: {}, plan: null });
+    // Browsers refuse a keepalive body past 64 KB for the whole page, and count
+    // bytes, not characters: 12,000 euro signs are 36,000 bytes in UTF-8.
+    await plannerUpdateTaskRequest(
+      "tasks/a",
+      { today: "2026-10-07", notes: "€".repeat(12_000) },
+      { keepalive: true },
+    );
+    await plannerUpdateTaskRequest(
+      "tasks/a",
+      { today: "2026-10-07", notes: "a".repeat(40_000) },
+      { keepalive: true },
+    );
+    await plannerUpdateTaskRequest(
+      "tasks/a",
+      { today: "2026-10-07", notes: "a".repeat(20_000) },
+      { keepalive: true },
+    );
+    expect(calls[0]?.init.keepalive).toBeUndefined();
+    expect(calls[1]?.init.keepalive).toBeUndefined();
+    expect(calls[2]?.init.keepalive).toBe(true);
+    expect(bodyOf(calls[0]).notes).toHaveLength(12_000);
+    expect(bodyOf(calls[1]).notes).toHaveLength(40_000);
+  });
+
+  it("counts a body's size in bytes, half of the 64 KB cap being the limit", () => {
+    expect(plannerKeepaliveMaxBytes).toBe(32 * 1024);
+    expect(plannerFitsKeepalive("a".repeat(plannerKeepaliveMaxBytes))).toBe(
+      true,
+    );
+    expect(plannerFitsKeepalive("a".repeat(plannerKeepaliveMaxBytes + 1))).toBe(
+      false,
+    );
+    // Three bytes each: 10,922 of them are 32,766 bytes, 10,923 are 32,769.
+    expect(plannerFitsKeepalive("€".repeat(10_922))).toBe(true);
+    expect(plannerFitsKeepalive("€".repeat(10_923))).toBe(false);
   });
 
   it("reads the goal tree", async () => {

@@ -16,9 +16,10 @@ import { usePlannerAutosave } from "./use-planner-autosave";
 // The task's notes (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): upstream's own
 // `notes` field, in a text box that grows with what is typed. It saves by itself,
-// about 800 ms after typing stops and when the box loses focus (see
-// use-planner-autosave.ts), and says so quietly: "Saving…", then "Saved". A save
-// that fails keeps the text, says "Couldn't save" with a Retry, and toasts.
+// about 800 ms after typing stops (at most every 5 s), when the box loses focus and
+// when the page is hidden or closed (see use-planner-autosave.ts), and says so
+// quietly: "Saving…", then "Saved". A save that fails keeps the text, says
+// "Couldn't save" with a Retry, and toasts.
 
 /** The most upstream stores in a task's notes. */
 const NOTES_MAX = 20_000;
@@ -57,13 +58,18 @@ export function PlannerTaskNotes({
 
   const autosave = usePlannerAutosave({
     saved: notes ?? "",
-    save: async (value) => {
+    save: async (value, { keepalive }) => {
       try {
-        const response = await plannerUpdateTaskRequest(taskId, {
+        const input = {
           today,
           // Empty notes are none, as upstream stores them.
           notes: value.trim() === "" ? null : value,
-        });
+        };
+        // A save made as the page is hidden or closed asks to outlive the page
+        // (api.ts sends it that way when the body is small enough).
+        const response = await (keepalive
+          ? plannerUpdateTaskRequest(taskId, input, { keepalive: true })
+          : plannerUpdateTaskRequest(taskId, input));
         queryClient.setQueryData<PlannerTaskDetailResponse>(
           plannerQueryKeys.detail(taskId),
           (detail) =>

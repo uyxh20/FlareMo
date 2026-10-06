@@ -132,6 +132,33 @@ export function plannerTestBlur(element: HTMLElement): void {
 }
 
 /**
+ * Puts the page in the background or brings it back, as a browser does when the
+ * person switches tab or app: `document.visibilityState` changes and a
+ * `visibilitychange` event follows. Undo it with `plannerTestRestoreVisibility`.
+ */
+export function plannerTestSetVisibility(state: "visible" | "hidden"): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => state,
+  });
+  act(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
+/** Gives `document.visibilityState` back to the page, whatever a test set it to. */
+export function plannerTestRestoreVisibility(): void {
+  Reflect.deleteProperty(document, "visibilityState");
+}
+
+/** The browser's `pagehide`: the page is being left or closed. */
+export function plannerTestPageHide(): void {
+  act(() => {
+    window.dispatchEvent(new Event("pagehide"));
+  });
+}
+
+/**
  * Every cockpit action as a spy, so a test can render a board, a card or a panel
  * and check which action a click reached. `satisfies` keeps the list honest: a new
  * action added to `PlannerActions` fails the type check here, in one place.

@@ -42,12 +42,15 @@ function setup(
   options: { minGapMs?: number; now?: () => number } = {},
 ) {
   const sent: string[] = [];
+  // Whether each save was asked to outlive the page.
+  const keepalives: boolean[] = [];
   const pending: Deferred[] = [];
   const states: PlannerAutosaveState[] = [];
   const controller = createPlannerAutosave({
     saved,
-    save: (value) => {
+    save: (value, context) => {
       sent.push(value);
+      keepalives.push(context.keepalive);
       const next = deferred();
       pending.push(next);
       return next.promise;
@@ -64,7 +67,7 @@ function setup(
     await vi.advanceTimersByTimeAsync(0);
   };
   const statuses = () => states.map((state) => state.status);
-  return { controller, sent, states, statuses, finish };
+  return { controller, sent, keepalives, states, statuses, finish };
 }
 
 describe("createPlannerAutosave", () => {
@@ -611,6 +614,117 @@ describe("createPlannerAutosave", () => {
       controller.change("one two");
       await vi.advanceTimersByTimeAsync(800);
       expect(sent).toEqual(["one", "one two"]);
+    });
+  });
+
+  // The page being hidden or closed (the hook calls this on `visibilitychange` to
+  // "hidden" and on `pagehide`): save at once like a blur does, but tell save() to
+  // send the request so that it outlives the page.
+  describe("flushOnHide", () => {
+    it("saves at once, ignoring the gap, and asks for a save that outlives the page", async () => {
+      const { controller, sent, keepalives, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      // The pause ran out inside the gap and is being held.
+      expect(sent).toEqual(["one"]);
+
+      controller.flushOnHide();
+      expect(sent).toEqual(["one", "one two"]);
+      expect(keepalives).toEqual([false, true]);
+
+      // The held pause is gone: it does not send a second copy.
+      await finish();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("is the only way to ask for that: the typing timer, a blur, retry() and dispose() do not", async () => {
+      const { controller, sent, keepalives, finish } = setup("", {
+        minGapMs: 0,
+      });
+      controller.change("a");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+
+      controller.change("ab");
+      controller.flush();
+      await finish(new Error("offline"));
+
+      controller.retry();
+      await finish();
+
+      controller.change("abc");
+      controller.dispose();
+      expect(sent).toEqual(["a", "ab", "ab", "abc"]);
+      expect(keepalives).toEqual([false, false, false, false]);
+    });
+
+    it("sends nothing when nothing is unsaved, and leaves nothing behind for the next save", async () => {
+      const { controller, sent, keepalives } = setup("saved text");
+      controller.flushOnHide();
+      expect(sent).toEqual([]);
+
+      controller.change("typed");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["typed"]);
+      expect(keepalives).toEqual([false]);
+    });
+
+    it("queues behind a save that is still out and sends the follow-up so that it outlives the page", async () => {
+      const { controller, sent, keepalives, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+
+      controller.change("one two");
+      controller.flushOnHide();
+      // Never two saves at once, hide or not.
+      expect(sent).toEqual(["one"]);
+
+      // The follow-up goes the moment the first ends, though the gap is not over.
+      await finish();
+      expect(sent).toEqual(["one", "one two"]);
+      expect(keepalives).toEqual([false, true]);
+      await finish();
+
+      // The request is not remembered: typing on is sent the ordinary way.
+      controller.change("one two three");
+      await vi.advanceTimersByTimeAsync(5_800);
+      expect(sent).toEqual(["one", "one two", "one two three"]);
+      expect(keepalives).toEqual([false, true, false]);
+    });
+
+    it("asks for nothing more when the save that was out already had the whole text, and does not remember the request", async () => {
+      const { controller, sent, keepalives, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+
+      // Nothing newer than what is out: the hide has nothing of its own to send.
+      controller.flushOnHide();
+      await finish();
+      expect(sent).toEqual(["one"]);
+
+      controller.change("two");
+      await vi.advanceTimersByTimeAsync(5_800);
+      expect(sent).toEqual(["one", "two"]);
+      expect(keepalives).toEqual([false, false]);
+    });
+
+    it("forgets the request when the save it was queued behind fails", async () => {
+      const { controller, sent, keepalives, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      controller.change("one two");
+      controller.flushOnHide();
+      await finish(new Error("offline"));
+      // Failed: nothing goes out on its own, and the next save is an ordinary one.
+      expect(sent).toEqual(["one"]);
+      controller.retry();
+      expect(sent).toEqual(["one", "one two"]);
+      expect(keepalives).toEqual([false, false]);
     });
   });
 });

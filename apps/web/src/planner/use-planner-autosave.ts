@@ -3,16 +3,30 @@ import { useEffect, useRef, useState } from "react";
 // Saving text as it is typed (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): the task panel's
 // notes. The text is saved about 800 ms after typing stops, though never sooner
-// than 5 s after the previous save began; at once when the field loses focus; and
-// once more when the panel goes away with something unsaved, so closing the panel
-// never loses a sentence.
+// than 5 s after the previous save began; at once when the field loses focus; at
+// once when the page is hidden or closed; and once more when the panel goes away
+// with something unsaved, so closing the panel never loses a sentence.
 //
 // The 5 s gap caps typing at about 12 saves a minute. Every save is a write in the
 // `planner` rate-limit bucket, which allows 30 a minute per user (wrangler.json)
 // and which moves, plans and comments share, so a long stretch of typing has to
-// leave room for them. What the gap costs: text typed in the last few seconds
-// before an abrupt close of the page is not saved yet. Leaving the field, or
-// closing the panel, saves it.
+// leave room for them.
+//
+// What the gap costs is text waiting for it when the page goes away. The hook
+// saves it at once when the page is hidden (`visibilitychange` to "hidden": a tab
+// or app switch, and most tab closes) and on `pagehide`, ignoring the gap, as a
+// request marked `keepalive`, which asks the browser to finish it even if the page
+// is gone (see `plannerUpdateTaskRequest` in api.ts for the size that is limited
+// to; a bigger body goes as an ordinary request). Coming back to the page does
+// nothing.
+//
+// That is best effort, and it works best where the page stays alive: on a tab or
+// app switch the save simply completes. When the page is being navigated away or
+// closed the browser may still drop the request. Observed in headless Chromium: a
+// save started during a real navigation was lost, with or without `keepalive`,
+// while the app's service worker controlled the page, and it arrived with service
+// workers blocked. So text typed in the last few seconds before a close can still
+// be lost, along with whatever a crash takes.
 //
 // The rules are a small state machine, written without React so they can be
 // tested with fake timers:
@@ -24,8 +38,10 @@ import { useEffect, useRef, useState } from "react";
 // - Saves the typing timer starts are at least `minGapMs` apart, counted from the
 //   start of the previous save, whoever started that one. A pause that ends inside
 //   the gap is re-armed for what is left of it, so the text waits and is never
-//   dropped. A blur, Enter, `retry()` and `dispose()` ignore the gap: they are the
-//   person saying "now", and there are few of them.
+//   dropped. A blur, Enter, `retry()`, `dispose()` and the page being hidden or
+//   closed (`flushOnHide()`) ignore the gap: they are the person saying "now", or
+//   the page going away, and there are few of them. Only the last is told to send
+//   its save so that it outlives the page.
 // - A failed save keeps what was typed (never rolled back: that would throw the
 //   person's words away), says so, and is retried by the next edit (after the
 //   gap), the next blur or `retry()`.
@@ -59,12 +75,26 @@ type Timers = {
   clear: (handle: unknown) => void;
 };
 
+/** What `save` is told about the save it is asked to make. */
+export type PlannerAutosaveSaveContext = {
+  /**
+   * True when the save was started because the page is being hidden or closed:
+   * send it so that it outlives the page (fetch's `keepalive`).
+   */
+  keepalive: boolean;
+};
+
 export type PlannerAutosave = {
   getState: () => PlannerAutosaveState;
   /** The field's text changed. */
   change: (value: string) => void;
   /** Save now, if there is anything to save (a blur, or Enter). */
   flush: () => void;
+  /**
+   * The page is being hidden or closed: save now, if there is anything to save,
+   * and ask for the save to outlive the page. Ignores the gap, like `flush`.
+   */
+  flushOnHide: () => void;
   /** Try again after a failure. */
   retry: () => void;
   /** The server's value changed: adopt it when nothing here is unsaved. */
@@ -77,12 +107,12 @@ export function createPlannerAutosave(options: {
   /** What the server has now. */
   saved: string;
   /** Saves one value; rejects when it could not be saved. */
-  save: (value: string) => Promise<void>;
+  save: (value: string, context: PlannerAutosaveSaveContext) => Promise<void>;
   delayMs?: number;
   /**
    * The least time from the start of one save to the start of the next one the
-   * typing timer makes; 0 turns the limit off. A blur, Enter, `retry()` and
-   * `dispose()` ignore it.
+   * typing timer makes; 0 turns the limit off. A blur, Enter, `retry()`,
+   * `dispose()` and `flushOnHide()` ignore it.
    */
   minGapMs?: number;
   /** Whether two texts are the same for saving; default: equal once trimmed. */
@@ -109,6 +139,9 @@ export function createPlannerAutosave(options: {
   let inFlight = false;
   // A flush that arrived while a save was in flight: run it when that one ends.
   let queued = false;
+  // Whether one of the flushes queued meanwhile came from the page going away: the
+  // save they run asks to outlive it.
+  let queuedKeepalive = false;
   // When the previous save began, whoever began it; null until the first one.
   let lastStartedAt: number | null = null;
 
@@ -147,44 +180,54 @@ export function createPlannerAutosave(options: {
         return;
       }
     }
-    flush();
+    flush(false);
   }
 
-  function flush() {
+  /**
+   * Save now, ignoring the gap. `keepalive` says the save is being made because
+   * the page is going away. It is a parameter of this internal function, not of the
+   * `flush` that is handed out, which a field's onBlur calls with its event.
+   */
+  function flush(keepalive: boolean) {
     stopTimer();
     if (inFlight) {
       queued = true;
+      queuedKeepalive = queuedKeepalive || keepalive;
       return;
     }
     if (same(value, saved)) return;
-    void run();
+    void run(keepalive);
   }
 
-  async function run() {
+  async function run(keepalive: boolean) {
     inFlight = true;
     queued = false;
+    queuedKeepalive = false;
     lastStartedAt = now();
     const sending = value;
     setStatus("saving");
     let ok = true;
     try {
-      await options.save(sending);
+      await options.save(sending, { keepalive });
     } catch {
       ok = false;
     }
     inFlight = false;
     if (!ok) {
       queued = false;
+      queuedKeepalive = false;
       setStatus("error");
       return;
     }
     saved = sending;
     if (same(value, saved)) {
       queued = false;
+      queuedKeepalive = false;
       setStatus("saved");
     } else if (queued) {
-      // Typing went on during the save, and its timer ran out meanwhile.
-      flush();
+      // Typing went on during the save, and a flush came meanwhile (the pause ran
+      // out past the gap, or a blur, or the page going away): send the rest now.
+      flush(queuedKeepalive);
     } else {
       // Typing went on and its timer is still running: it will send the rest.
       setStatus("dirty");
@@ -210,9 +253,11 @@ export function createPlannerAutosave(options: {
       startTimer();
     },
 
-    flush,
+    flush: () => flush(false),
 
-    retry: flush,
+    flushOnHide: () => flush(true),
+
+    retry: () => flush(false),
 
     reset(next) {
       saved = next;
@@ -234,7 +279,7 @@ export function createPlannerAutosave(options: {
         // The save in flight does not have the latest text: send it after.
         queued = true;
       } else {
-        void run();
+        void run(false);
       }
     },
   };
@@ -244,11 +289,12 @@ export function createPlannerAutosave(options: {
  * `createPlannerAutosave` for a text field: `value` for the textarea, `onChange`
  * and `onBlur` to hand it, and the status for the "Saved" line. One controller
  * lives as long as the component (give it a `key` per task), saves what is left
- * when the component goes away, and follows `saved` when the server's value moves.
+ * when the component goes away or the page is hidden or closed, and follows
+ * `saved` when the server's value moves.
  */
 export function usePlannerAutosave(options: {
   saved: string;
-  save: (value: string) => Promise<void>;
+  save: (value: string, context: PlannerAutosaveSaveContext) => Promise<void>;
   delayMs?: number;
   minGapMs?: number;
 }) {
@@ -265,7 +311,7 @@ export function usePlannerAutosave(options: {
   if (controllerRef.current === null) {
     controllerRef.current = createPlannerAutosave({
       saved: options.saved,
-      save: (value) => saveRef.current(value),
+      save: (value, context) => saveRef.current(value, context),
       delayMs: options.delayMs,
       minGapMs: options.minGapMs,
       onState: setState,
@@ -277,6 +323,23 @@ export function usePlannerAutosave(options: {
     controller.reset(options.saved);
   }, [controller, options.saved]);
   useEffect(() => () => controller.dispose(), [controller]);
+
+  // The page going away: hidden (switching tab or app, and most tab closes, which
+  // hide the page first) or `pagehide` (the rest, and leaving the page). Save what
+  // is unsaved at once, as a request that outlives the page. Becoming visible again
+  // does nothing.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") controller.flushOnHide();
+    };
+    const onPageHide = () => controller.flushOnHide();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [controller]);
 
   return {
     value: state.value,

@@ -18,6 +18,9 @@ import {
   plannerTestClick,
   plannerTestFocus,
   plannerTestMount,
+  plannerTestPageHide,
+  plannerTestRestoreVisibility,
+  plannerTestSetVisibility,
   plannerTestType,
 } from "./test-render";
 
@@ -94,6 +97,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
+  plannerTestRestoreVisibility();
   queryClient.clear();
   vi.useRealTimers();
 });
@@ -227,6 +231,53 @@ describe("the notes box", () => {
     });
     await wait(10_000);
     expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves at once when the page is hidden, even inside the gap, asking for a request that outlives the page", async () => {
+    const { box } = show();
+    plannerTestFocus(box());
+    plannerTestType(box(), "One");
+    await wait(800);
+    expect(update).toHaveBeenCalledTimes(1);
+    // The typing timer's save is an ordinary one: no options.
+    expect(update).toHaveBeenLastCalledWith(TASK_ID, {
+      today: TODAY,
+      notes: "One",
+    });
+
+    plannerTestType(box(), "One two");
+    plannerTestSetVisibility("hidden");
+    await wait(0);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith(
+      TASK_ID,
+      { today: TODAY, notes: "One two" },
+      { keepalive: true },
+    );
+
+    // Coming back to the page sends nothing, and the held pause sends no copy.
+    plannerTestSetVisibility("visible");
+    await wait(10_000);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves at once on pagehide too, and sends nothing when everything is saved", async () => {
+    const { box } = show();
+    plannerTestPageHide();
+    plannerTestSetVisibility("hidden");
+    await wait(0);
+    expect(update).not.toHaveBeenCalled();
+
+    plannerTestFocus(box());
+    plannerTestType(box(), "Typed just before the tab closed");
+    plannerTestPageHide();
+    await wait(0);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenLastCalledWith(
+      TASK_ID,
+      { today: TODAY, notes: "Typed just before the tab closed" },
+      { keepalive: true },
+    );
   });
 
   it("saves what is left when the panel goes away inside the gap", async () => {

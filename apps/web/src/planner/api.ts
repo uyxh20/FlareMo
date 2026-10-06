@@ -64,16 +64,43 @@ export function plannerCreateTaskRequest(input: PlannerCreateTaskInput) {
 }
 
 /**
+ * The biggest body the cockpit sends with `keepalive`. That option makes the
+ * browser finish a request even if the page goes away (a tab closing), but
+ * browsers cap the bodies of all such requests in flight at 64 KB for a page and
+ * refuse one that goes over. Half of the cap leaves room for headers and for a
+ * second request in flight; a bigger body goes as an ordinary request, which is
+ * still sent when the page is only hidden.
+ */
+export const plannerKeepaliveMaxBytes = 32 * 1024;
+
+/** Whether a request body is small enough, in bytes, to send with `keepalive`. */
+export function plannerFitsKeepalive(body: string): boolean {
+  return new TextEncoder().encode(body).length <= plannerKeepaliveMaxBytes;
+}
+
+/**
  * Column moves, plans, drops and task fields in one request. `column` and
  * `plan` together are a 400: a column move sets the plan itself.
+ *
+ * `keepalive` is for a save made as the page is hidden or closed (the notes'
+ * autosave): the browser then finishes the request even if the page goes. It is
+ * passed on only when the body fits (see `plannerKeepaliveMaxBytes`).
  */
 export function plannerUpdateTaskRequest(
   taskId: string,
   input: PlannerUpdateTaskInput,
+  options: { keepalive?: boolean } = {},
 ) {
+  const body = JSON.stringify(input);
   return apiRequest<PlannerTaskPlanResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}`,
-    { method: "PATCH", body: JSON.stringify(input) },
+    {
+      method: "PATCH",
+      body,
+      ...(options.keepalive && plannerFitsKeepalive(body)
+        ? { keepalive: true }
+        : {}),
+    },
   );
 }
 
