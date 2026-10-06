@@ -3,10 +3,15 @@ import {
   createPlannerAutosave,
   type PlannerAutosaveState,
   plannerAutosaveDelayMs,
+  plannerAutosaveMinGapMs,
 } from "./use-planner-autosave";
 
-// The notes' autosave rules, with fake timers: a debounce of 800 ms, a save on
-// blur, no overlapping saves, and a failed save that keeps the text.
+// The notes' autosave rules, with fake timers: a debounce of 800 ms, a gap of 5 s
+// between the saves the typing timer starts, a save on blur, no overlapping saves,
+// and a failed save that keeps the text. Three older cases (the two about overlap
+// and the one about retrying) run with the gap off, because the gap only moves
+// their timings; the gap has its own block at the end, which says the same things
+// again with it on.
 
 type Deferred = {
   promise: Promise<void>;
@@ -32,7 +37,10 @@ afterEach(() => {
 });
 
 /** A controller whose saves the test settles by hand. */
-function setup(saved = "") {
+function setup(
+  saved = "",
+  options: { minGapMs?: number; now?: () => number } = {},
+) {
   const sent: string[] = [];
   const pending: Deferred[] = [];
   const states: PlannerAutosaveState[] = [];
@@ -45,6 +53,7 @@ function setup(saved = "") {
       return next.promise;
     },
     onState: (state) => states.push(state),
+    ...options,
   });
   /** Settles the oldest save the test has not settled yet. */
   const finish = async (result: "ok" | Error = "ok") => {
@@ -141,7 +150,9 @@ describe("createPlannerAutosave", () => {
   });
 
   it("never runs two saves at once: typing during a save sends one more afterwards, with the newest text", async () => {
-    const { controller, sent, finish } = setup();
+    // The gap is off: this case is about overlap, and the gap's own block below
+    // says the same with it on.
+    const { controller, sent, finish } = setup("", { minGapMs: 0 });
 
     controller.change("one");
     await vi.advanceTimersByTimeAsync(800);
@@ -164,7 +175,8 @@ describe("createPlannerAutosave", () => {
   });
 
   it("waits out a still-running pause instead of saving again at once", async () => {
-    const { controller, sent, finish } = setup();
+    // The gap is off, as above.
+    const { controller, sent, finish } = setup("", { minGapMs: 0 });
     controller.change("one");
     await vi.advanceTimersByTimeAsync(800);
     controller.change("one two");
@@ -192,7 +204,8 @@ describe("createPlannerAutosave", () => {
   });
 
   it("tries again on retry, on the next blur and on the next keystroke", async () => {
-    const { controller, sent, finish } = setup();
+    // The gap is off: with it on, the keystroke waits (see the gap's block below).
+    const { controller, sent, finish } = setup("", { minGapMs: 0 });
     controller.change("a");
     await vi.advanceTimersByTimeAsync(800);
     await finish(new Error("offline"));
@@ -312,6 +325,292 @@ describe("createPlannerAutosave", () => {
       controller.dispose();
       await vi.advanceTimersByTimeAsync(5_000);
       expect(sent).toEqual(["once"]);
+    });
+  });
+
+  // Every save is a write in the shared `planner` rate-limit bucket (30 a minute),
+  // so the typing timer may not start one less than 5 s after the previous one
+  // began. A pause that ends sooner is held for what is left of the gap; a blur,
+  // Enter, retry() and dispose() are the person saying "now" and go ahead.
+  describe("the minimum gap between saves", () => {
+    /** A controller whose saves finish at once, with when each one began. */
+    function instant() {
+      const saves: { at: number; value: string }[] = [];
+      const controller = createPlannerAutosave({
+        saved: "",
+        save: async (value) => {
+          saves.push({ at: Date.now(), value });
+        },
+      });
+      return { controller, saves };
+    }
+
+    it("is 5 s unless it is told otherwise: at most 12 saves a minute", () => {
+      expect(plannerAutosaveMinGapMs).toBe(5_000);
+      expect(60_000 / plannerAutosaveMinGapMs).toBe(12);
+    });
+
+    it("holds a minute of steady typing to 12 saves, 5 s apart, and still saves the last text", async () => {
+      const { controller, saves } = instant();
+      const start = Date.now();
+      // A burst of typing, then a pause of 1 s, for a minute. A pause of 1 s is
+      // longer than the 800 ms that saves, so without the gap every one of them
+      // would be a save.
+      for (let second = 0; second < 60; second += 1) {
+        controller.change(`text ${second}`);
+        await vi.advanceTimersByTimeAsync(1_000);
+      }
+      expect(Date.now() - start).toBe(60_000);
+      expect(saves.length).toBeGreaterThan(1);
+      expect(saves.length).toBeLessThanOrEqual(12);
+      // Never two saves closer than the gap, counted from start to start.
+      for (let index = 1; index < saves.length; index += 1) {
+        const gap = (saves[index]?.at ?? 0) - (saves[index - 1]?.at ?? 0);
+        expect(gap).toBeGreaterThanOrEqual(plannerAutosaveMinGapMs);
+      }
+
+      // Typing stops. The text that was being held is not dropped: it goes out
+      // when the gap allows, and it is the last text.
+      await vi.advanceTimersByTimeAsync(plannerAutosaveMinGapMs);
+      expect(saves.at(-1)?.value).toBe("text 59");
+      expect(controller.getState()).toEqual({
+        value: "text 59",
+        status: "saved",
+      });
+    });
+
+    it("holds a pause that ends inside the gap until the gap is over, then saves the newest text", async () => {
+      const { controller, saves } = instant();
+      controller.change("one");
+      // Nothing came before it, so there is nothing to wait for.
+      await vi.advanceTimersByTimeAsync(800);
+      expect(saves.map((save) => save.value)).toEqual(["one"]);
+
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      // The pause ran out 1.6 s in, inside the gap: held, still unsaved.
+      expect(saves).toHaveLength(1);
+      expect(controller.getState().status).toBe("dirty");
+
+      // More typing while it is held starts the pause again, and the text it
+      // sends in the end is the newest.
+      controller.change("one two three");
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(saves).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1_199);
+      expect(saves).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(saves.map((save) => save.value)).toEqual(["one", "one two three"]);
+      // Exactly 5 s after the first one began (800 ms + 5 s).
+      expect((saves[1]?.at ?? 0) - (saves[0]?.at ?? 0)).toBe(5_000);
+    });
+
+    it("counts the gap from the start of the previous save, not from its end", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      // A slow save: it began at 800 ms and ends at 3.8 s.
+      await vi.advanceTimersByTimeAsync(3_000);
+      await finish();
+
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one"]);
+      await vi.advanceTimersByTimeAsync(1_199);
+      expect(sent).toEqual(["one"]);
+      // 5.8 s: 5 s after the first save began, not 5 s after it ended (8.8 s).
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("counts a save a blur started: typing right after it waits out the gap too", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      controller.flush();
+      await finish();
+
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one"]);
+      await vi.advanceTimersByTimeAsync(4_199);
+      expect(sent).toEqual(["one"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("saves at once on a blur inside the gap, and the held pause does not send a second copy", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      // The pause is being held, 1.6 s in.
+      expect(sent).toEqual(["one"]);
+      controller.flush();
+      expect(sent).toEqual(["one", "one two"]);
+      await finish();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("saves at once when the panel goes away inside the gap, whether the pause is running or being held", async () => {
+      const running = setup();
+      running.controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await running.finish();
+      running.controller.change("one two");
+      // Typed 0 ms ago: the pause is still running, and the gap is far from over.
+      running.controller.dispose();
+      expect(running.sent).toEqual(["one", "one two"]);
+      await running.finish();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(running.sent).toEqual(["one", "one two"]);
+
+      const held = setup();
+      held.controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await held.finish();
+      held.controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(held.sent).toEqual(["one"]);
+      held.controller.dispose();
+      expect(held.sent).toEqual(["one", "one two"]);
+      await held.finish();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(held.sent).toEqual(["one", "one two"]);
+    });
+
+    it("after a failed save, typing still waits out the gap while retry() does not", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish(new Error("offline"));
+      expect(controller.getState().status).toBe("error");
+
+      // The failed save began at 800 ms. Typing on holds the text until 5.8 s.
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one"]);
+
+      // retry() is the person pressing Retry, 1.6 s in: it goes at once.
+      controller.retry();
+      expect(sent).toEqual(["one", "one two"]);
+      await finish(new Error("still offline"));
+
+      // That retry began the gap again, at 1.6 s: typing waits until 6.6 s.
+      controller.change("one two three");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one", "one two"]);
+      await vi.advanceTimersByTimeAsync(4_199);
+      expect(sent).toEqual(["one", "one two"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toEqual(["one", "one two", "one two three"]);
+      await finish();
+      expect(controller.getState()).toEqual({
+        value: "one two three",
+        status: "saved",
+      });
+    });
+
+    it("never runs two saves at once: typing during a save is sent after the gap, with the newest text", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+
+      // The first save is still out. Type more, and let that pause run out too.
+      controller.change("one two");
+      controller.change("one two three");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one"]);
+      expect(controller.getState().status).toBe("saving");
+
+      // The save is over but the gap is not: the text waits, its pause still on.
+      await finish();
+      expect(sent).toEqual(["one"]);
+      expect(controller.getState().status).toBe("dirty");
+      await vi.advanceTimersByTimeAsync(4_199);
+      expect(sent).toEqual(["one"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toEqual(["one", "one two three"]);
+      await finish();
+      expect(controller.getState()).toEqual({
+        value: "one two three",
+        status: "saved",
+      });
+    });
+
+    it("queues a pause that ends after the gap while a slow save is still out, and sends it the moment that save ends", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      // The save began at 800 ms and stays out past the gap (5.8 s).
+      await vi.advanceTimersByTimeAsync(4_700);
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      // The pause ran out at 6.3 s, past the gap but with the save still out.
+      expect(sent).toEqual(["one"]);
+      expect(controller.getState().status).toBe("saving");
+      await finish();
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("still queues a blur that arrives during a save, and sends it the moment that save ends, gap or not", async () => {
+      const { controller, sent, finish } = setup();
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+
+      controller.change("one two");
+      controller.flush();
+      expect(sent).toEqual(["one"]);
+      // 0 ms into a 5 s gap, and it goes the moment the first save ends.
+      await finish();
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("measures the gap with the clock it is given", async () => {
+      let clock = 0;
+      const { controller, sent, finish } = setup("", { now: () => clock });
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+
+      // The given clock says 4 s have passed since that save began.
+      clock = 4_000;
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one"]);
+
+      // 1 s of the gap is left, so the pause was held for exactly that.
+      clock = 5_000;
+      await vi.advanceTimersByTimeAsync(999);
+      expect(sent).toEqual(["one"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("does not hold the text when the clock has been set back: the gap cannot be measured", async () => {
+      let clock = 1_000_000;
+      const { controller, sent, finish } = setup("", { now: () => clock });
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+
+      clock = 0;
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one", "one two"]);
+    });
+
+    it("is off with a gap of 0: every pause saves", async () => {
+      const { controller, sent, finish } = setup("", { minGapMs: 0 });
+      controller.change("one");
+      await vi.advanceTimersByTimeAsync(800);
+      await finish();
+      controller.change("one two");
+      await vi.advanceTimersByTimeAsync(800);
+      expect(sent).toEqual(["one", "one two"]);
     });
   });
 });

@@ -26,9 +26,16 @@ export function PlannerHistorySheet({
   const strings = usePlannerStrings();
   const taskId = card?.id ?? "";
 
+  // `outline-none` on the sheet: opening it focuses the sheet itself, and when
+  // that happens without a pointer (a keyboard open) the browser outlines the
+  // whole panel. The task panel does the same here; the shared sheet component is
+  // upstream's, so the class is passed in rather than added there.
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-md" side="right">
+      <SheetContent
+        className="w-full gap-0 outline-none sm:max-w-md"
+        side="right"
+      >
         <SheetHeader className="pr-12">
           <SheetTitle>{strings.history.title}</SheetTitle>
           <SheetDescription className="line-clamp-2 break-words">

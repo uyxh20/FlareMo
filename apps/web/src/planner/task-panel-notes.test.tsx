@@ -23,9 +23,10 @@ import {
 
 // The task panel's notes box (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): it saves by itself
-// about 800 ms after typing stops and when it loses focus, says "Saving…" and
-// "Saved", and keeps the words when a save fails. The timing rules themselves are
-// in use-planner-autosave.test.ts; this is the box as a person meets it, with the
+// about 800 ms after typing stops (never sooner than 5 s after the previous save
+// began) and when it loses focus, says "Saving…" and "Saved", and keeps the words
+// when a save fails. The timing rules themselves are in
+// use-planner-autosave.test.ts; this is the box as a person meets it, with the
 // network replaced and fake timers.
 
 vi.mock("sonner", () => ({
@@ -76,7 +77,8 @@ let mounted: PlannerTestMount | undefined;
 let queryClient: QueryClient;
 
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  // Date too: the box measures the 5 s between its saves with the clock.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   vi.clearAllMocks();
   queryClient = new QueryClient({
     defaultOptions: {
@@ -183,6 +185,62 @@ describe("the notes box", () => {
     await wait(300);
     expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith(TASK_ID, {
+      today: TODAY,
+      notes: "One two",
+    });
+  });
+
+  it("holds a second save until 5 s after the first began, so typing leaves room in the rate limit", async () => {
+    const { box } = show();
+    plannerTestFocus(box());
+    plannerTestType(box(), "One");
+    await wait(800);
+    expect(update).toHaveBeenCalledTimes(1);
+
+    plannerTestType(box(), "One two");
+    await wait(800);
+    // The pause ran out 1.6 s in, inside the gap: held, not dropped.
+    expect(update).toHaveBeenCalledTimes(1);
+    await wait(4_199);
+    expect(update).toHaveBeenCalledTimes(1);
+    await wait(1);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith(TASK_ID, {
+      today: TODAY,
+      notes: "One two",
+    });
+  });
+
+  it("saves at once on a blur inside the gap, and the held pause sends nothing more", async () => {
+    const { box } = show();
+    plannerTestFocus(box());
+    plannerTestType(box(), "One");
+    await wait(800);
+
+    plannerTestType(box(), "One two");
+    plannerTestBlur(box());
+    await wait(0);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith(TASK_ID, {
+      today: TODAY,
+      notes: "One two",
+    });
+    await wait(10_000);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("saves what is left when the panel goes away inside the gap", async () => {
+    const { box } = show();
+    plannerTestFocus(box());
+    plannerTestType(box(), "One");
+    await wait(800);
+
+    plannerTestType(box(), "One two");
+    mounted?.unmount();
+    mounted = undefined;
+    await wait(0);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenLastCalledWith(TASK_ID, {
       today: TODAY,
       notes: "One two",
     });
