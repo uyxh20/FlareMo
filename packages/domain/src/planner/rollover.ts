@@ -81,11 +81,20 @@ export async function plannerRollover(
     AND p.period_start < ${target}`;
 
   const [, update] = await plannerRunBatch(db, [
+    // Keep 'from', at the end of a line in this SQL: kernel-boundary.test.ts reads
+    // `from '…'` on one line as an import, and the text between the quotes as a
+    // package that is not registered anywhere.
     db.insert(plannerTaskEvent).select(sql`
       SELECT NULL, p.user_id, p.task_id, t.title, 'carried_over',
              json_object(
-               'from', json_object('horizon', p.horizon, 'period_start', p.period_start),
-               'to', json_object('horizon', p.horizon, 'period_start', ${target})),
+               'from',
+               json_object(
+                 'horizon', p.horizon,
+                 'period_start', p.period_start),
+               'to',
+               json_object(
+                 'horizon', p.horizon,
+                 'period_start', ${target})),
              'planner', NULL, ${actorType}, ${actorName}, ${nowIso}, ${nowIso}
       FROM planner_task_plan p
       JOIN tasks t ON t.id = p.task_id AND t.user_id = p.user_id
