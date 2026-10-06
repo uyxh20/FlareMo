@@ -2477,11 +2477,15 @@ e2e("dev environment against a fake Cloudflare", () => {
     const PLANNER = "9000_planner_init.sql";
     const NEXT_UPSTREAM = "0099_fixture_future_upgrade.sql";
 
-    // The real migrations, upstream's next release (0099), and the planner file.
+    // Upstream's real migrations, its next release (0099), and a stand-in planner
+    // file. The fork's real 9xxx files are left out: they alter the real planner
+    // tables (9001 adds a column to planner_task_plan), which the stand-in does
+    // not have, so applying them on top of it fails.
     function fixtureMigrations(t) {
       const dir = mkdtempSync(join(tmpdir(), "dev-env-migrations-"));
       t.after(() => rmSync(dir, { recursive: true, force: true }));
       for (const name of sortedMigrationFiles(MIGRATIONS_DIR)) {
+        if (!/^0\d{3}_/.test(name)) continue;
         copyFileSync(join(MIGRATIONS_DIR, name), join(dir, name));
       }
       writeFileSync(
@@ -2605,6 +2609,75 @@ e2e("dev environment against a fake Cloudflare", () => {
           .get().name,
         PLANNER,
       );
+      assert.equal(fingerprint(prod), prodBefore);
+    });
+
+    test("the real planner files: live has 9000 but not 9001, so dev gets live's data and then rehearses 9001", (t) => {
+      // The fork's real files, as the task panel's deploy meets them: production
+      // already runs the first planner migration, this checkout adds the second.
+      const files = sortedMigrationFiles(MIGRATIONS_DIR);
+      const upstream = files.filter((name) => /^0\d{3}_/.test(name));
+      const fork = files.filter((name) => /^9\d{3}_planner_/.test(name));
+      const [first, ...later] = fork;
+      assert.equal(first, "9000_planner_init.sql");
+      assert.ok(later.includes("9001_planner_task_details.sql"));
+
+      const h = harness(t);
+      const prod = seedProduction(h.fake, { applied: [...upstream, first] });
+      prod
+        .prepare(
+          "INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, created_at, updated_at) VALUES ('tasks/t1', 'users/owner', 'week', '2026-09-28', 1, ?, ?)",
+        )
+        .run(NOW, NOW);
+      const prodBefore = fingerprint(prod);
+      h.devEnv.provision({});
+      const summary = h.devEnv.clone({});
+      const dev = h.fake.dbByName("flaremo-dev");
+
+      assert.deepEqual(summary.plan.forkApplied, [first]);
+      assert.deepEqual(summary.plan.levelFiles, [...upstream, first]);
+      assert.deepEqual(summary.plan.upgrade, later);
+      assert.deepEqual(summary.plan.warnings, []);
+
+      // The plan row came across, and 9001 ran after the copy: dev has the new
+      // column (empty for the copied row) and the comments table, production
+      // has neither, and production was not touched.
+      const hasEffort = (db) =>
+        db
+          .prepare(
+            "SELECT 1 FROM pragma_table_info('planner_task_plan') WHERE name = 'effort'",
+          )
+          .get();
+      assert.ok(hasEffort(dev));
+      assert.equal(hasEffort(prod), undefined);
+      assert.ok(
+        dev
+          .prepare(
+            "SELECT 1 FROM sqlite_master WHERE name = 'planner_task_comment'",
+          )
+          .get(),
+      );
+      assert.deepEqual(
+        rowsOf(dev, "planner_task_plan").map(
+          ({ task_id, horizon, period_start, carry_count, effort }) => ({
+            task_id,
+            horizon,
+            period_start,
+            carry_count,
+            effort,
+          }),
+        ),
+        [
+          {
+            task_id: "tasks/t1",
+            horizon: "week",
+            period_start: "2026-09-28",
+            carry_count: 1,
+            effort: null,
+          },
+        ],
+      );
+      assert.equal(latestMigration(dev), later.at(-1));
       assert.equal(fingerprint(prod), prodBefore);
     });
 
