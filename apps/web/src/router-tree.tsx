@@ -508,6 +508,14 @@ function CockpitRoutePage() {
 const cockpitRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/cockpit",
+  // `?task=<id>` opens that task's panel: the address is what keeps the panel
+  // linkable and lets the back button close it (see planner/use-task-param.ts).
+  validateSearch: (search: Record<string, unknown>): { task?: string } => ({
+    task:
+      typeof search.task === "string" || typeof search.task === "number"
+        ? String(search.task)
+        : undefined,
+  }),
   component: CockpitRoutePage,
 });
 

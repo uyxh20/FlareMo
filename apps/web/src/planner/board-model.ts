@@ -287,6 +287,37 @@ export function plannerPredictDue(
   return { ...card, due_at: due, updated_at: now.toISOString() };
 }
 
+/** A new title, as upstream stores it (trimmed). */
+export function plannerPredictTitle(
+  card: PlannerBoardCard,
+  title: string,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, title: title.trim(), updated_at: now.toISOString() };
+}
+
+export function plannerPredictPriority(
+  card: PlannerBoardCard,
+  priority: string,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, priority, updated_at: now.toISOString() };
+}
+
+/** Moving a task to another goal (or to none): its project and the name the card shows. */
+export function plannerPredictProject(
+  card: PlannerBoardCard,
+  project: { id: string; name: string } | null,
+  now: Date,
+): PlannerBoardCard {
+  return {
+    ...card,
+    project_id: project?.id ?? null,
+    project_name: project?.name ?? null,
+    updated_at: now.toISOString(),
+  };
+}
+
 /** Dropping keeps the plan and clears the due date (decision D1). */
 export function plannerPredictDrop(
   card: PlannerBoardCard,
@@ -335,6 +366,81 @@ export function plannerCardFromTask(
     carry_count: plan?.carry_count ?? 0,
     dropped_at: plan?.dropped_at ?? null,
   };
+}
+
+// --- Cards the server has not answered for yet --------------------------------
+
+// A column's "+" button puts the new card on the board the instant Enter is
+// pressed (an optimistic insert), under an id no server task can have: real ids are
+// `tasks/<uuid>`. The card is swapped for the real one when the response lands, or
+// taken away when it fails. Until then it can be neither opened nor dragged.
+
+const PENDING_PREFIX = "tasks/pending-";
+
+/** The id of the `serial`th card that is still waiting for its server answer. */
+export function plannerPendingCardId(serial: number): string {
+  return `${PENDING_PREFIX}${serial}`;
+}
+
+export function plannerIsPendingCard(card: Pick<PlannerBoardCard, "id">) {
+  return card.id.startsWith(PENDING_PREFIX);
+}
+
+/** The upstream status of a task created in a column. */
+const COLUMN_STATUS: Record<PlannerColumn, string> = {
+  backlog: "todo",
+  todo: "todo",
+  doing: "in_progress",
+  done: "done",
+};
+
+/**
+ * The card a created task will be, by the server's create rules (the status of
+ * its column, a plan only as asked, a Done task completed now), for the moment
+ * before the response arrives.
+ */
+export function plannerPendingCard(input: {
+  id: string;
+  title: string;
+  column: PlannerColumn;
+  plan: PlannerPlanInput | null;
+  now: Date;
+}): PlannerBoardCard {
+  const at = input.now.toISOString();
+  return {
+    id: input.id,
+    project_id: null,
+    project_name: null,
+    title: input.title.trim(),
+    status: COLUMN_STATUS[input.column],
+    priority: "none",
+    due_at: null,
+    sort_order: 0,
+    completed_at: input.column === "done" ? at : null,
+    created_at: at,
+    updated_at: at,
+    horizon: input.plan ? input.plan.horizon : null,
+    period_start: input.plan
+      ? plannerPeriodStart(input.plan.horizon, input.plan.day)
+      : null,
+    carry_count: 0,
+    dropped_at: null,
+  };
+}
+
+/** The board without a task, wherever it is; unchanged when it is not on it. */
+export function plannerRemoveCard(
+  board: PlannerBoardResponse,
+  taskId: string,
+): PlannerBoardResponse {
+  const columns: Columns = { ...board.columns };
+  for (const name of COLUMN_NAMES) {
+    const list = columns[name];
+    if (list?.some((entry) => entry.id === taskId)) {
+      columns[name] = list.filter((entry) => entry.id !== taskId);
+    }
+  }
+  return { ...board, columns };
 }
 
 // --- Reading the board --------------------------------------------------------

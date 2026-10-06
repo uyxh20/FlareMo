@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  plannerAddCommentRequest,
   plannerCreateTaskRequest,
+  plannerDeleteCommentRequest,
   plannerErrorMessage,
   plannerFetchBoard,
   plannerFetchTask,
+  plannerFetchTaskDetail,
   plannerFetchTaskHistory,
+  plannerFetchTree,
   plannerIsRateLimited,
   plannerRolloverRequest,
+  plannerUpdateCommentRequest,
   plannerUpdateTaskRequest,
 } from "./api";
 
@@ -111,6 +116,95 @@ describe("the planner client", () => {
     await plannerFetchTask("tasks/abc-123");
     expect(calls[0]?.url).toBe("/api/app/planner/tasks/abc-123/history");
     expect(calls[1]?.url).toBe("/api/app/tasks/abc-123");
+  });
+});
+
+describe("the task panel's requests", () => {
+  it("creates a task straight in a column", async () => {
+    const calls = stubFetch(201, { task: {}, plan: null });
+    await plannerCreateTaskRequest({
+      title: "In Doing",
+      today: "2026-10-07",
+      column: "doing",
+    });
+    expect(bodyOf(calls[0])).toEqual({
+      title: "In Doing",
+      today: "2026-10-07",
+      column: "doing",
+    });
+  });
+
+  it("reads one task whole by its bare, encoded id", async () => {
+    const calls = stubFetch(200, { task: {}, plan: null, comments: [] });
+    await plannerFetchTaskDetail("tasks/3370e0a0-7d71");
+    await plannerFetchTaskDetail("abc 1/2");
+    expect(calls[0]?.url).toBe("/api/app/planner/tasks/3370e0a0-7d71");
+    expect(calls[0]?.init.method).toBeUndefined();
+    expect(calls[1]?.url).toBe("/api/app/planner/tasks/abc%201%2F2");
+  });
+
+  it("sets an effort, and clears it with null, in an ordinary patch", async () => {
+    const calls = stubFetch(200, { task: {}, plan: null });
+    await plannerUpdateTaskRequest("tasks/a", {
+      today: "2026-10-07",
+      effort: 3.5,
+    });
+    await plannerUpdateTaskRequest("tasks/a", {
+      today: "2026-10-07",
+      effort: null,
+    });
+    expect(bodyOf(calls[0])).toEqual({ today: "2026-10-07", effort: 3.5 });
+    expect(bodyOf(calls[1])).toEqual({ today: "2026-10-07", effort: null });
+  });
+
+  it("reads the goal tree", async () => {
+    const calls = stubFetch(200, { nodes: [] });
+    await plannerFetchTree();
+    expect(calls[0]?.url).toBe("/api/app/planner/tree");
+  });
+
+  it("adds a comment to a task by its bare id, sending only the text", async () => {
+    const calls = stubFetch(201, { comment: {} });
+    await plannerAddCommentRequest("tasks/abc-123", "Looks good");
+    expect(calls[0]?.url).toBe("/api/app/planner/tasks/abc-123/comments");
+    expect(calls[0]?.init.method).toBe("POST");
+    expect(bodyOf(calls[0])).toEqual({ body: "Looks good" });
+  });
+
+  it("edits and deletes a comment by its own, encoded id", async () => {
+    const calls = stubFetch(200, { comment: {}, ok: true });
+    await plannerUpdateCommentRequest(
+      "5b0e6a6c-6c0f-4d3a-9a52-1f3f0f0c2f11",
+      "Edited",
+    );
+    await plannerDeleteCommentRequest("5b0e6a6c-6c0f-4d3a-9a52-1f3f0f0c2f11");
+    await plannerDeleteCommentRequest("odd id/with?chars");
+    expect(calls[0]?.url).toBe(
+      "/api/app/planner/comments/5b0e6a6c-6c0f-4d3a-9a52-1f3f0f0c2f11",
+    );
+    expect(calls[0]?.init.method).toBe("PATCH");
+    expect(bodyOf(calls[0])).toEqual({ body: "Edited" });
+    expect(calls[1]?.init.method).toBe("DELETE");
+    expect(calls[1]?.init.body).toBeUndefined();
+    expect(calls[2]?.url).toBe(
+      "/api/app/planner/comments/odd%20id%2Fwith%3Fchars",
+    );
+  });
+
+  it("says why a comment could not be saved: the throttle, or the server's own message", async () => {
+    stubFetch(429, { error: { message: "Too many requests." } });
+    const throttled = await plannerAddCommentRequest("tasks/a", "hi").catch(
+      (caught: unknown) => caught,
+    );
+    expect(plannerIsRateLimited(throttled)).toBe(true);
+
+    stubFetch(400, { error: { message: "A comment cannot be empty." } });
+    const refused = await plannerAddCommentRequest("tasks/a", "  ").catch(
+      (caught: unknown) => caught,
+    );
+    expect(plannerErrorMessage(refused, "Couldn't comment", "Slow down")).toBe(
+      "A comment cannot be empty.",
+    );
   });
 });
 

@@ -13,4 +13,8 @@ export const plannerQueryKeys = {
   history: (taskId: string) => ["planner", "history", taskId] as const,
   /** The full upstream task (with notes), for the edit dialog. */
   task: (taskId: string) => ["planner", "task", taskId] as const,
+  /** One task as the panel shows it: task, plan, goal path and comments. */
+  detail: (taskId: string) => ["planner", "detail", taskId] as const,
+  /** The goal tree, for the goal picker's paths. */
+  tree: ["planner", "tree"] as const,
 } as const;

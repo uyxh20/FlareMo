@@ -68,6 +68,15 @@ export type PlannerStrings = {
     add: string;
     planFor: string;
   };
+  /** The "+" in a column's header and the composer card it opens. */
+  columnAdd: {
+    /** The button's name and tooltip: "Add to Doing". */
+    add: (column: string) => string;
+    /** The composer's input name: "New task in Doing". */
+    label: (column: string) => string;
+    placeholder: string;
+    hint: string;
+  };
   /** The plan choices of quick add, and the names of the filter chips. */
   horizon: { backlog: string; day: string; week: string; month: string };
   filter: { label: string; all: string };
@@ -135,6 +144,8 @@ export type PlannerStrings = {
   toast: {
     carried: (count: number) => string;
     added: { backlog: string; day: string; week: string; month: string };
+    /** A task added from a column's "+": "Added to Doing". */
+    addedTo: (column: string) => string;
     addFailed: string;
     /** The edit dialog could not fetch the task it opens with. */
     openFailed: string;
@@ -153,9 +164,77 @@ export type PlannerStrings = {
     rateLimited: string;
     planNotSaved: string;
     retryPlan: string;
+    /** The task panel's edits that nothing else on the page confirms. */
+    titleFailed: string;
+    priorityFailed: string;
+    goalFailed: string;
+    effortFailed: string;
+    notesFailed: string;
+    commentAddFailed: string;
+    commentEditFailed: string;
+    commentDeleteFailed: string;
   };
 
   priority: { none: string; low: string; medium: string; high: string };
+
+  /** The task panel: a card opened into its properties, notes, comments and history. */
+  panel: {
+    /** The dialog's name for a screen reader. */
+    label: string;
+    loading: string;
+    /** The task is gone (deleted, or a stale link). */
+    notFound: string;
+    titleLabel: string;
+    titlePlaceholder: string;
+    /** What a property with no value shows, as Notion does. */
+    empty: string;
+    none: string;
+    property: {
+      status: string;
+      plan: string;
+      due: string;
+      priority: string;
+      goal: string;
+      effort: string;
+      quarter: string;
+    };
+    quarterHint: string;
+    effortInvalid: string;
+    /** The Plan row of a finished task, which no longer plans anything. */
+    planFinished: string;
+    droppedHint: string;
+    noGoals: string;
+    notes: {
+      title: string;
+      placeholder: string;
+      saving: string;
+      saved: string;
+      failed: string;
+      retry: string;
+    };
+    comments: {
+      title: string;
+      empty: string;
+      placeholder: string;
+      /** The new-comment box's name. */
+      label: string;
+      send: string;
+      sending: string;
+      hint: string;
+      edit: string;
+      remove: string;
+      save: string;
+      edited: string;
+      you: string;
+      deleteTitle: string;
+      deleteBody: string;
+      deleteConfirm: string;
+    };
+    footer: {
+      created: (when: string) => string;
+      updated: (when: string) => string;
+    };
+  };
 
   history: {
     title: string;
@@ -182,11 +261,18 @@ export type PlannerStrings = {
     restored: string;
     purged: string;
     edited: string;
+    /** The panel's effort estimate: "Effort set to 3". */
+    effortSet: (value: string) => string;
+    effortCleared: string;
+    commented: string;
+    commentEdited: string;
+    commentDeleted: string;
     statusChanged: (status: string) => string;
     unknown: (type: string) => string;
     detail: {
       was: (label: string) => string;
       wasDue: (date: string) => string;
+      wasEffort: (value: string) => string;
       renamed: (title: string) => string;
       due: (date: string) => string;
       dueCleared: string;
@@ -237,6 +323,12 @@ const en: PlannerStrings = {
     placeholder: "Add a task…",
     add: "Add",
     planFor: "Plan for",
+  },
+  columnAdd: {
+    add: (column) => `Add to ${column}`,
+    label: (column) => `New task in ${column}`,
+    placeholder: "Add a task…",
+    hint: "Enter to add, Esc to cancel",
   },
   horizon: {
     backlog: "Backlog",
@@ -341,6 +433,7 @@ const en: PlannerStrings = {
       week: "Added for this week",
       month: "Added for this month",
     },
+    addedTo: (column) => `Added to ${column}`,
     addFailed: "Couldn't add the task",
     openFailed: "Couldn't open the task",
     moved: (column) => `Moved to ${column}`,
@@ -359,9 +452,71 @@ const en: PlannerStrings = {
       "Too many changes at once. Your edit was undone; try again in a moment.",
     planNotSaved: "Task added, but its plan wasn't saved.",
     retryPlan: "Retry plan",
+    titleFailed: "Couldn't rename the task",
+    priorityFailed: "Couldn't change the priority",
+    goalFailed: "Couldn't change the goal",
+    effortFailed: "Couldn't save the effort",
+    notesFailed: "Couldn't save the notes",
+    commentAddFailed: "Couldn't add the comment",
+    commentEditFailed: "Couldn't save the comment",
+    commentDeleteFailed: "Couldn't delete the comment",
   },
 
   priority: { none: "No priority", low: "Low", medium: "Medium", high: "High" },
+
+  panel: {
+    label: "Task details",
+    loading: "Loading the task",
+    notFound:
+      "This task isn't available any more. It may have been deleted. Close this panel to go back to the board.",
+    titleLabel: "Task title",
+    titlePlaceholder: "Untitled",
+    empty: "Empty",
+    none: "None",
+    property: {
+      status: "Status",
+      plan: "Plan",
+      due: "Due date",
+      priority: "Priority",
+      goal: "Goal",
+      effort: "Effort",
+      quarter: "Quarter",
+    },
+    quarterHint: "from plan or due date",
+    effortInvalid: "Use a number from 0 to 999, with one decimal at most.",
+    planFinished: "A finished task keeps its plan only as history.",
+    droppedHint: "Undrop it to plan or move it again.",
+    noGoals: "No projects yet. Create one under Projects.",
+    notes: {
+      title: "Notes",
+      placeholder: "Add notes…",
+      saving: "Saving…",
+      saved: "Saved",
+      failed: "Couldn't save",
+      retry: "Retry",
+    },
+    comments: {
+      title: "Comments",
+      empty: "No comments yet.",
+      placeholder: "Add a comment…",
+      label: "Write a comment",
+      send: "Send",
+      sending: "Sending…",
+      hint: "Enter to send, Shift+Enter for a new line",
+      edit: "Edit comment",
+      remove: "Delete comment",
+      save: "Save",
+      edited: "edited",
+      you: "You",
+      deleteTitle: "Delete this comment?",
+      deleteBody: "It is removed from this task. This can't be undone.",
+      deleteConfirm: "Delete",
+    },
+    footer: {
+      created: (when) => `Created ${when}`,
+      updated: (when) => `Updated ${when}`,
+    },
+  },
 
   history: {
     title: "History",
@@ -387,11 +542,17 @@ const en: PlannerStrings = {
     restored: "Restored",
     purged: "Purged",
     edited: "Edited",
+    effortSet: (value) => `Effort set to ${value}`,
+    effortCleared: "Effort cleared",
+    commented: "Comment added",
+    commentEdited: "Comment edited",
+    commentDeleted: "Comment deleted",
     statusChanged: (status) => `Status changed to ${status}`,
     unknown: (type) => type,
     detail: {
       was: (label) => `Was ${label}`,
       wasDue: (date) => `Was due ${date}`,
+      wasEffort: (value) => `Was ${value}`,
       renamed: (title) => `Renamed to “${title}”`,
       due: (date) => `Due ${date}`,
       dueCleared: "Due date cleared",
@@ -442,6 +603,12 @@ const zhCN: PlannerStrings = {
     placeholder: "添加任务…",
     add: "添加",
     planFor: "安排到",
+  },
+  columnAdd: {
+    add: (column) => `添加到${column}`,
+    label: (column) => `在${column}中新建任务`,
+    placeholder: "添加任务…",
+    hint: "回车添加，Esc 取消",
   },
   horizon: { backlog: "待规划", day: "今天", week: "本周", month: "本月" },
   filter: { label: "按计划筛选待办", all: "全部" },
@@ -532,6 +699,7 @@ const zhCN: PlannerStrings = {
       week: "已安排到本周",
       month: "已安排到本月",
     },
+    addedTo: (column) => `已添加到${column}`,
     addFailed: "添加任务失败",
     openFailed: "无法打开任务",
     moved: (column) => `已移到${column}`,
@@ -549,9 +717,70 @@ const zhCN: PlannerStrings = {
     rateLimited: "改动太频繁，刚才的操作已撤回，请稍后再试。",
     planNotSaved: "任务已添加，但计划没有保存成功。",
     retryPlan: "重试计划",
+    titleFailed: "重命名任务失败",
+    priorityFailed: "修改优先级失败",
+    goalFailed: "修改目标失败",
+    effortFailed: "保存工作量失败",
+    notesFailed: "保存备注失败",
+    commentAddFailed: "添加评论失败",
+    commentEditFailed: "保存评论失败",
+    commentDeleteFailed: "删除评论失败",
   },
 
   priority: { none: "无优先级", low: "低", medium: "中", high: "高" },
+
+  panel: {
+    label: "任务详情",
+    loading: "正在加载任务",
+    notFound: "这项任务已不存在，可能已被删除。关闭此面板即可回到看板。",
+    titleLabel: "任务标题",
+    titlePlaceholder: "无标题",
+    empty: "空",
+    none: "无",
+    property: {
+      status: "状态",
+      plan: "计划",
+      due: "截止日期",
+      priority: "优先级",
+      goal: "目标",
+      effort: "工作量",
+      quarter: "季度",
+    },
+    quarterHint: "由计划或截止日期得出",
+    effortInvalid: "请输入 0 到 999 的数字，最多一位小数。",
+    planFinished: "已完成任务的计划只作为历史保留。",
+    droppedHint: "撤销放弃后才能再安排或移动。",
+    noGoals: "还没有项目，请先在“项目”里创建。",
+    notes: {
+      title: "备注",
+      placeholder: "添加备注…",
+      saving: "正在保存…",
+      saved: "已保存",
+      failed: "保存失败",
+      retry: "重试",
+    },
+    comments: {
+      title: "评论",
+      empty: "还没有评论。",
+      placeholder: "添加评论…",
+      label: "写评论",
+      send: "发送",
+      sending: "正在发送…",
+      hint: "回车发送，Shift+回车换行",
+      edit: "编辑评论",
+      remove: "删除评论",
+      save: "保存",
+      edited: "已编辑",
+      you: "你",
+      deleteTitle: "删除这条评论？",
+      deleteBody: "评论会从这项任务中移除，无法撤销。",
+      deleteConfirm: "删除",
+    },
+    footer: {
+      created: (when) => `创建于 ${when}`,
+      updated: (when) => `更新于 ${when}`,
+    },
+  },
 
   history: {
     title: "历史记录",
@@ -577,11 +806,17 @@ const zhCN: PlannerStrings = {
     restored: "恢复",
     purged: "彻底删除",
     edited: "编辑",
+    effortSet: (value) => `工作量设为 ${value}`,
+    effortCleared: "已清除工作量",
+    commented: "添加了评论",
+    commentEdited: "编辑了评论",
+    commentDeleted: "删除了评论",
     statusChanged: (status) => `状态改为 ${status}`,
     unknown: (type) => type,
     detail: {
       was: (label) => `原为 ${label}`,
       wasDue: (date) => `原截止 ${date}`,
+      wasEffort: (value) => `原为 ${value}`,
       renamed: (title) => `改名为“${title}”`,
       due: (date) => `截止 ${date}`,
       dueCleared: "已清除截止日期",

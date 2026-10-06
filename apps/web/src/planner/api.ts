@@ -1,10 +1,14 @@
 import type {
   PlannerBoardResponse,
+  PlannerCommentResponse,
   PlannerCreateTaskInput,
   PlannerCreateTaskResponse,
+  PlannerDeleteCommentResponse,
   PlannerRolloverResponse,
+  PlannerTaskDetailResponse,
   PlannerTaskHistoryResponse,
   PlannerTaskPlanResponse,
+  PlannerTreeResponse,
   PlannerUpdateTaskInput,
 } from "@flaremo/contracts";
 import type { Task } from "@/api";
@@ -73,10 +77,50 @@ export function plannerUpdateTaskRequest(
   );
 }
 
+/**
+ * Everything the task panel shows for one task: the whole task (notes included),
+ * its plan with the effort estimate, its goal and the goal's path, and its
+ * comments. A task that is gone is a 404.
+ */
+export function plannerFetchTaskDetail(taskId: string) {
+  return apiRequest<PlannerTaskDetailResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}`,
+  );
+}
+
 /** Newest first. The server syncs the archive before it answers. */
 export function plannerFetchTaskHistory(taskId: string) {
   return apiRequest<PlannerTaskHistoryResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/history`,
+  );
+}
+
+/** The goal tree: every live project with its parent, for the goals' paths. */
+export function plannerFetchTree() {
+  return apiRequest<PlannerTreeResponse>(`${PLANNER_API}/tree`);
+}
+
+/** Adds a comment to a task. The server trims the text and keeps 1 to 5000 characters. */
+export function plannerAddCommentRequest(taskId: string, body: string) {
+  return apiRequest<PlannerCommentResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}/comments`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+// A comment id is a bare UUID, not namespaced like a task's.
+export function plannerUpdateCommentRequest(commentId: string, body: string) {
+  return apiRequest<PlannerCommentResponse>(
+    `${PLANNER_API}/comments/${encodeURIComponent(commentId)}`,
+    { method: "PATCH", body: JSON.stringify({ body }) },
+  );
+}
+
+/** A soft delete: the comment leaves the task, its row stays on the server. */
+export function plannerDeleteCommentRequest(commentId: string) {
+  return apiRequest<PlannerDeleteCommentResponse>(
+    `${PLANNER_API}/comments/${encodeURIComponent(commentId)}`,
+    { method: "DELETE" },
   );
 }
 

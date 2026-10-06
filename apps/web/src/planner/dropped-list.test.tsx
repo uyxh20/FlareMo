@@ -4,10 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlannerDroppedList } from "./dropped-list";
 import {
   type PlannerTestMount,
+  plannerTestActions,
   plannerTestClick,
   plannerTestMount,
 } from "./test-render";
-import type { PlannerActions } from "./use-planner-actions";
 
 const HOUR = 3_600_000;
 
@@ -37,17 +37,6 @@ function dropped(
   };
 }
 
-function actionsStub() {
-  return {
-    move: vi.fn(),
-    plan: vi.fn(),
-    setDue: vi.fn(),
-    drop: vi.fn(),
-    undrop: vi.fn(),
-    create: vi.fn(),
-  } satisfies PlannerActions;
-}
-
 let mounted: PlannerTestMount | undefined;
 
 afterEach(() => {
@@ -56,8 +45,9 @@ afterEach(() => {
 });
 
 function show(props: Partial<Parameters<typeof PlannerDroppedList>[0]> = {}) {
-  const actions = actionsStub();
+  const actions = plannerTestActions();
   const onRequest = vi.fn();
+  const onOpen = vi.fn();
   const onRetry = vi.fn();
   mounted = plannerTestMount(
     <PlannerDroppedList
@@ -65,12 +55,13 @@ function show(props: Partial<Parameters<typeof PlannerDroppedList>[0]> = {}) {
       cards={[]}
       failed={false}
       isRetrying={false}
+      onOpen={onOpen}
       onRequest={onRequest}
       onRetry={onRetry}
       {...props}
     />,
   );
-  return { actions, onRequest, onRetry, root: mounted.container };
+  return { actions, onOpen, onRequest, onRetry, root: mounted.container };
 }
 
 describe("PlannerDroppedList", () => {

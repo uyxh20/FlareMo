@@ -5,9 +5,12 @@ import type {
 } from "@flaremo/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PlannerBoard } from "./board";
-import { type PlannerTestMount, plannerTestMount } from "./test-render";
+import {
+  type PlannerTestMount,
+  plannerTestActions,
+  plannerTestMount,
+} from "./test-render";
 import type { PlannerHorizonFilter } from "./todo-filter";
-import type { PlannerActions } from "./use-planner-actions";
 import type { PlannerReveal } from "./use-planner-reveal";
 
 // Wednesday 7 October 2026.
@@ -69,17 +72,6 @@ function board(
   };
 }
 
-function actionsStub() {
-  return {
-    move: vi.fn(),
-    plan: vi.fn(),
-    setDue: vi.fn(),
-    drop: vi.fn(),
-    undrop: vi.fn(),
-    create: vi.fn(),
-  } satisfies PlannerActions;
-}
-
 let mounted: PlannerTestMount | undefined;
 let scrolled: { element: HTMLElement; options: ScrollIntoViewOptions }[];
 
@@ -111,12 +103,13 @@ function element(
 ) {
   return (
     <PlannerBoard
-      actions={actionsStub()}
+      actions={plannerTestActions()}
       board={data}
       entering={false}
       filter={options.filter ?? "all"}
       reveal={options.reveal ?? null}
       today={TODAY}
+      onOpen={vi.fn()}
       onRequest={vi.fn()}
     />
   );
