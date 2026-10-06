@@ -331,6 +331,9 @@ export const plannerPlanDtoSchema = z.object({
   carry_count: z.number().int().nonnegative(),
   // Set while the task is dropped, whatever its status.
   dropped_at: z.string().nullable(),
+  // The effort estimate, 0 to 999 with at most one decimal; null when unset. A
+  // plan row can exist only to hold it, with a null horizon (the backlog).
+  effort: z.number().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });

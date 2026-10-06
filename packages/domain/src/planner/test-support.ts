@@ -38,6 +38,7 @@ const RESET_TABLES = [
   "planner_task_seen",
   "planner_sync_state",
   "planner_project_node",
+  "planner_task_comment",
   "task_activity",
   "tasks",
   "projects",
@@ -331,20 +332,22 @@ export async function plannerTestInsertPlan(
     periodStart?: string | null;
     carryCount?: number;
     droppedAt?: string | null;
+    effort?: number | null;
     at?: string;
   },
 ): Promise<void> {
   const at = plan.at ?? "2026-10-01T00:00:00.000Z";
   await plannerTestRun(
     database,
-    `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     plan.taskId,
     plan.userId,
     plan.horizon ?? null,
     plan.periodStart ?? null,
     plan.carryCount ?? 0,
     plan.droppedAt ?? null,
+    plan.effort ?? null,
     at,
     at,
   );
@@ -362,8 +365,8 @@ export async function plannerTestInsertPlans(
         const at = plan.at ?? "2026-10-01T00:00:00.000Z";
         return database
           .prepare(
-            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             plan.taskId,
@@ -372,6 +375,7 @@ export async function plannerTestInsertPlans(
             plan.periodStart ?? null,
             plan.carryCount ?? 0,
             plan.droppedAt ?? null,
+            plan.effort ?? null,
             at,
             at,
           );
@@ -387,6 +391,7 @@ export type PlannerTestPlan = {
   period_start: string | null;
   carry_count: number;
   dropped_at: string | null;
+  effort: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -402,6 +407,60 @@ export async function plannerTestPlan(
     taskId,
   );
   return row;
+}
+
+export type PlannerTestComment = {
+  id: string;
+  user_id: string;
+  task_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+/** Every comment row of a task, deleted ones included, in insertion order. */
+export async function plannerTestComments(
+  database: PlannerTestDatabase,
+  taskId?: string,
+): Promise<PlannerTestComment[]> {
+  return taskId
+    ? plannerTestRows<PlannerTestComment>(
+        database,
+        "SELECT * FROM planner_task_comment WHERE task_id = ? ORDER BY rowid",
+        taskId,
+      )
+    : plannerTestRows<PlannerTestComment>(
+        database,
+        "SELECT * FROM planner_task_comment ORDER BY rowid",
+      );
+}
+
+/** Inserts a comment row exactly as given, for a task that may not exist. */
+export async function plannerTestInsertComment(
+  database: PlannerTestDatabase,
+  comment: {
+    id: string;
+    userId: string;
+    taskId: string;
+    body?: string;
+    createdAt?: string;
+    deletedAt?: string | null;
+  },
+): Promise<void> {
+  const createdAt = comment.createdAt ?? "2026-10-01T00:00:00.000Z";
+  await plannerTestRun(
+    database,
+    `INSERT INTO planner_task_comment (id, user_id, task_id, body, created_at, updated_at, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    comment.id,
+    comment.userId,
+    comment.taskId,
+    comment.body ?? "A comment",
+    createdAt,
+    createdAt,
+    comment.deletedAt ?? null,
+  );
 }
 
 /** Inserts an archive row exactly as given. */

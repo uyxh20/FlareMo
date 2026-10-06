@@ -11,6 +11,7 @@
 
 export * from "./board";
 export * from "./columns";
+export * from "./comments";
 export * from "./history-read";
 export * from "./history-sync";
 export * from "./plans";
@@ -18,6 +19,8 @@ export * from "./rollover";
 export type {
   PlannerActor,
   PlannerBatchResult,
+  PlannerEventType,
   PlannerHistoryStatus,
 } from "./shared";
+export * from "./task-detail";
 export * from "./tree";

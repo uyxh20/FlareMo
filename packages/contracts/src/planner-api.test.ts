@@ -438,6 +438,7 @@ const PLAN = {
   period_start: "2026-10-05",
   carry_count: 0,
   dropped_at: null,
+  effort: null,
   created_at: "2026-10-07T09:00:00.000Z",
   updated_at: "2026-10-07T09:00:00.000Z",
 } as const;
@@ -583,6 +584,20 @@ describe("planner API response schemas", () => {
         dropped_at: "2026-10-07T10:00:00.000Z",
       }).horizon,
     ).toBeNull();
+    // An effort-only row: no horizon, an estimate. The key is always present.
+    expect(
+      plannerPlanDtoSchema.parse({
+        ...PLAN,
+        horizon: null,
+        period_start: null,
+        effort: 3.5,
+      }),
+    ).toMatchObject({ horizon: null, effort: 3.5 });
+    expect(
+      plannerPlanDtoSchema.safeParse({ ...PLAN, effort: "3" }).success,
+    ).toBe(false);
+    const { effort: _effort, ...withoutEffort } = PLAN;
+    expect(plannerPlanDtoSchema.safeParse(withoutEffort).success).toBe(false);
     expect(
       plannerRolloverResponseSchema.parse({ history: "paused", carried: 4 }),
     ).toEqual({ history: "paused", carried: 4 });

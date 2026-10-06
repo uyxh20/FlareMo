@@ -602,6 +602,7 @@ describe("plannerCardFromTask", () => {
           period_start: TODAY,
           carry_count: 2,
           dropped_at: null,
+          effort: null,
           created_at: "2026-10-07T09:00:00.000Z",
           updated_at: "2026-10-07T09:00:00.000Z",
         },

@@ -6,13 +6,12 @@ import {
   type TaskPriority,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
-import { tasks } from "@flaremo/db";
 import {
   type PlannerTaskPlanRow,
   plannerTaskPlan,
 } from "@flaremo/db/src/schema/planner";
-import { and, eq, isNull } from "drizzle-orm";
-import { NotFoundError, ValidationError } from "../errors";
+import { and, eq } from "drizzle-orm";
+import { ValidationError } from "../errors";
 import { createTask, getTask, updateTask } from "../tasks";
 import {
   type PlannerColumn,
@@ -23,6 +22,8 @@ import {
 import {
   type PlannerActor,
   plannerEventStatement,
+  plannerLoadLiveTask,
+  plannerLoadPlan,
   plannerNormalizeTaskId,
   plannerNow,
   plannerRequireDay,
@@ -54,6 +55,11 @@ export type PlannerPlanDto = {
   carry_count: number;
   /** Set while the task is dropped, whatever its status. */
   dropped_at: string | null;
+  /**
+   * The effort estimate, 0 to 999 with at most one decimal; NULL when unset. A
+   * row can exist only to hold it, with a NULL horizon.
+   */
+  effort: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -65,6 +71,7 @@ export function plannerPlanToDto(row: PlannerTaskPlanRow): PlannerPlanDto {
     period_start: row.periodStart,
     carry_count: row.carryCount,
     dropped_at: row.droppedAt,
+    effort: row.effort ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };
@@ -77,6 +84,9 @@ export type PlannerTaskPlanResult = {
 };
 
 type ResolvedPlan = { horizon: PlannerHorizon; periodStart: string };
+
+/** The three statuses upstream's task enum has, which the four columns map onto. */
+type StatusTarget = "todo" | "in_progress" | "done";
 
 /** `{horizon, period_start}`, the shape the plan events store in `data`. */
 type PlanPoint = {
@@ -93,44 +103,11 @@ const PLAN_ERROR_MESSAGE = "The plan could not be saved.";
 // Loading and validation
 // ---------------------------------------------------------------------------
 
-/** One of the caller's live tasks, or a 404 like upstream's `requireTask`. */
-async function loadLiveTask(db: FlareMoDb, userId: string, taskId: string) {
-  const row = await db
-    .select({
-      id: tasks.id,
-      title: tasks.title,
-      status: tasks.status,
-      dueAt: tasks.dueAt,
-    })
-    .from(tasks)
-    .where(
-      and(
-        eq(tasks.id, taskId),
-        eq(tasks.userId, userId),
-        isNull(tasks.deletedAt),
-      ),
-    )
-    .get();
-  if (!row) throw new NotFoundError(`Task not found: ${taskId}`);
-  return row;
-}
-
-async function loadPlan(
-  db: FlareMoDb,
-  userId: string,
-  taskId: string,
-): Promise<PlannerTaskPlanRow | undefined> {
-  return db
-    .select()
-    .from(plannerTaskPlan)
-    .where(
-      and(
-        eq(plannerTaskPlan.taskId, taskId),
-        eq(plannerTaskPlan.userId, userId),
-      ),
-    )
-    .get();
-}
+// The loaders for a live task and its plan row live in shared.ts (the task
+// comments read them too); the old local names stay as short aliases so the
+// functions below read as they always did.
+const loadLiveTask = plannerLoadLiveTask;
+const loadPlan = plannerLoadPlan;
 
 /**
  * Checks a requested plan and turns it into a period. The horizon and day are
@@ -258,13 +235,34 @@ export async function plannerReadTaskPlan(
 // Create
 // ---------------------------------------------------------------------------
 
+/** The upstream status a task created in each column starts with. */
+const CREATE_STATUS: Record<PlannerColumn, StatusTarget> = {
+  backlog: "todo",
+  todo: "todo",
+  doing: "in_progress",
+  done: "done",
+};
+
 /**
- * Creates a task through upstream's `createTask` (status `todo`) and, when a
- * plan is given, writes the plan and its `planned` event in one batch.
+ * Creates a task through upstream's `createTask` and, when a plan is given,
+ * writes the plan and its `planned` event in one batch.
  *
- * A bad plan is rejected BEFORE the task exists. If the plan batch itself then
- * fails, the task is still created and the result carries `plan: null` and a
- * `planError`, so the card lands in the backlog and can offer "Retry plan".
+ * `column` says where the task should land, the way a column's "+" button does:
+ *
+ *   backlog   status `todo`, no plan (a plan is a 400)
+ *   todo      status `todo`, and a plan is required (a 400 without one)
+ *   doing     status `in_progress`; the plan is optional
+ *   done      status `done`, completed now; the plan is optional
+ *
+ * Without `column` the task is `todo`, planned when a plan is given, as before.
+ * The status goes in upstream's own `createTask` input, so a task made in Doing
+ * or Done is one write with one `created` activity, never a `todo` task that
+ * could be left behind if a second write failed.
+ *
+ * A bad column or plan is rejected BEFORE the task exists. If the plan batch
+ * itself then fails, the task is still created and the result carries
+ * `plan: null` and a `planError`, so the client can offer "Retry plan" (a To Do
+ * task without its plan reads as Backlog; Doing and Done stay where they are).
  * `today` is required whenever `plan` is given.
  *
  * The `planned` event is stamped AFTER `createTask` returns, unless the caller
@@ -282,11 +280,26 @@ export async function plannerCreateTask(
     priority?: TaskPriority;
     dueAt?: string;
     projectId?: string;
+    column?: PlannerColumn;
     plan?: PlannerPlanInput | null;
     today?: string;
     now?: Date;
   },
 ): Promise<{ task: TaskDto; plan: PlannerPlanDto | null; planError?: string }> {
+  const column = input.column;
+  if (column !== undefined) {
+    if (!plannerIsColumn(column)) {
+      throw new ValidationError("column must be backlog, todo, doing or done.");
+    }
+    if (column === "backlog" && input.plan) {
+      throw new ValidationError(
+        "A task created in Backlog cannot have a plan.",
+      );
+    }
+    if (column === "todo" && !input.plan) {
+      throw new ValidationError("A task created in To Do needs a plan.");
+    }
+  }
   let resolved: ResolvedPlan | null = null;
   if (input.plan) {
     if (input.today === undefined) {
@@ -301,7 +314,7 @@ export async function plannerCreateTask(
     priority: input.priority,
     due_at: input.dueAt,
     project_id: input.projectId,
-    status: "todo",
+    status: column === undefined ? "todo" : CREATE_STATUS[column],
   });
   if (!resolved) return { task, plan: null };
 
@@ -368,6 +381,92 @@ export async function plannerSetPlan(
     next,
     now: plannerNow(input.now),
   });
+  return resultFor(db, input.user, taskId);
+}
+
+// ---------------------------------------------------------------------------
+// Effort
+// ---------------------------------------------------------------------------
+
+/** The largest effort estimate. */
+export const plannerEffortMax = 999;
+
+/**
+ * A valid effort, or a 400: a finite number from 0 to 999 with at most one
+ * decimal place, or null to clear it. The result is the clean value to store
+ * (1.1 stays 1.1, not 1.1000000000000001; -0 becomes 0).
+ */
+export function plannerNormalizeEffort(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new ValidationError("effort must be a number, or null to clear it.");
+  }
+  if (value < 0 || value > plannerEffortMax) {
+    throw new ValidationError(`effort must be from 0 to ${plannerEffortMax}.`);
+  }
+  const tenths = Math.round(value * 10);
+  // Binary floats: 1.1 * 10 is 11.000000000000002, so compare with a tolerance.
+  if (Math.abs(value * 10 - tenths) > 1e-9) {
+    throw new ValidationError("effort can have at most one decimal place.");
+  }
+  return tenths === 0 ? 0 : tenths / 10;
+}
+
+/**
+ * Sets or clears a task's effort estimate and writes an `effort_changed` event
+ * `{from, to}` in the same batch. The estimate lives on the plan row, so a task
+ * that has none gets a row with a NULL horizon, which plans nothing (the board
+ * reads a NULL horizon as the backlog). A request that changes nothing writes
+ * nothing. Unlike a plan change it is allowed on a dropped task: the estimate
+ * does not move the task anywhere.
+ */
+export async function plannerSetEffort(
+  db: FlareMoDb,
+  input: {
+    user: UserRow;
+    actor: PlannerActor;
+    taskId: string;
+    effort: number | null;
+    now?: Date;
+  },
+): Promise<PlannerTaskPlanResult> {
+  const effort = plannerNormalizeEffort(input.effort);
+  const taskId = plannerNormalizeTaskId(input.taskId);
+  const task = await loadLiveTask(db, input.user.id, taskId);
+  const existing = await loadPlan(db, input.user.id, taskId);
+  const from = existing?.effort ?? null;
+
+  if (from !== effort) {
+    const nowIso = plannerNow(input.now).toISOString();
+    await plannerRunBatch(db, [
+      db
+        .insert(plannerTaskPlan)
+        .values({
+          taskId,
+          userId: input.user.id,
+          horizon: null,
+          periodStart: null,
+          carryCount: 0,
+          droppedAt: null,
+          effort,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        })
+        .onConflictDoUpdate({
+          target: plannerTaskPlan.taskId,
+          set: { effort, updatedAt: nowIso },
+        }),
+      plannerEventStatement(db, {
+        userId: input.user.id,
+        taskId,
+        taskTitle: task.title,
+        type: "effort_changed",
+        data: { from, to: effort },
+        actor: input.actor,
+        occurredAt: nowIso,
+      }),
+    ]);
+  }
   return resultFor(db, input.user, taskId);
 }
 
@@ -472,8 +571,6 @@ export async function plannerUndropTask(
 // ---------------------------------------------------------------------------
 // Column moves
 // ---------------------------------------------------------------------------
-
-type StatusTarget = "todo" | "in_progress" | "done";
 
 /** Plan before today's period: the one case where "Done to To Do" re-plans. */
 function isPast(plan: PlannerTaskPlanRow, today: string): boolean {

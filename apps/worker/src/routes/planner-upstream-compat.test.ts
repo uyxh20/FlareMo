@@ -904,7 +904,8 @@ describe("planner and upstream flows", () => {
               .all<{ name: string }>()
           ).results.length;
         expect(await tableNames(without)).toBe(0);
-        expect(await tableNames(withPlanner)).toBe(5);
+        // 9000 made five planner tables and 9001 added the comments.
+        expect(await tableNames(withPlanner)).toBe(6);
       } finally {
         await without.runtime.dispose();
         await withPlanner.runtime.dispose();
