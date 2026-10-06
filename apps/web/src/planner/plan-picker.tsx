@@ -36,11 +36,12 @@ import type { PlannerActions } from "./use-planner-actions";
 // today with the shared period helpers.
 
 /**
- * The card menu's Plan submenu: Today, Tomorrow, This week, Next week, This
- * month, Next month, Pick a day…, Clear plan. The plan the card has now is
- * marked.
+ * The choices of the Plan menu: Today, Tomorrow, This week, Next week, This month,
+ * Next month, Pick a day…, Clear plan. The plan the card has now is marked. They
+ * are the body of two menus, the card menu's Plan submenu and the task panel's
+ * Plan control, so the two always offer the same.
  */
-export function PlannerPlanSubmenu({
+export function PlannerPlanMenuItems({
   card,
   today,
   actions,
@@ -55,35 +56,61 @@ export function PlannerPlanSubmenu({
   const current = plannerPlanOptionOf(card, today);
 
   return (
+    <>
+      {plannerPlanOptionKeys.map((key) => (
+        <DropdownMenuItem
+          key={key}
+          onClick={() => {
+            if (key !== current) {
+              actions.plan(card, plannerPlanTarget(key, today));
+            }
+          }}
+        >
+          {strings.planOption[key]}
+          {key === current && <CheckIcon className="ml-auto" />}
+        </DropdownMenuItem>
+      ))}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={onPickDay}>
+        {strings.planOption.pickDay}
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        disabled={!plannerHasPlan(card)}
+        onClick={() => actions.plan(card, null)}
+      >
+        {strings.planOption.clear}
+      </DropdownMenuItem>
+    </>
+  );
+}
+
+/** The card menu's Plan submenu. */
+export function PlannerPlanSubmenu({
+  card,
+  today,
+  actions,
+  onPickDay,
+}: {
+  card: PlannerBoardCard;
+  today: string;
+  actions: PlannerActions;
+  onPickDay: () => void;
+}) {
+  const strings = usePlannerStrings();
+
+  return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
         <CalendarPlusIcon />
         {strings.menu.plan}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="min-w-44">
-        {plannerPlanOptionKeys.map((key) => (
-          <DropdownMenuItem
-            key={key}
-            onClick={() => {
-              if (key !== current) {
-                actions.plan(card, plannerPlanTarget(key, today));
-              }
-            }}
-          >
-            {strings.planOption[key]}
-            {key === current && <CheckIcon className="ml-auto" />}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onPickDay}>
-          {strings.planOption.pickDay}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          disabled={!plannerHasPlan(card)}
-          onClick={() => actions.plan(card, null)}
-        >
-          {strings.planOption.clear}
-        </DropdownMenuItem>
+        <PlannerPlanMenuItems
+          actions={actions}
+          card={card}
+          today={today}
+          onPickDay={onPickDay}
+        />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

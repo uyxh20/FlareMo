@@ -1,6 +1,9 @@
+import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { vi } from "vitest";
 import { I18nProvider } from "@/i18n";
+import type { PlannerActions } from "./use-planner-actions";
 
 // A small way to put a cockpit component in a jsdom page and click it, for the
 // tests (fork-owned add-on, docs/planning-cockpit-implementation-plan.md,
@@ -23,11 +26,26 @@ export type PlannerTestMount = {
   unmount: () => void;
 };
 
-export function plannerTestMount(ui: ReactNode): PlannerTestMount {
+/**
+ * Renders `ui` into a fresh element of the page. Pass a `queryClient` for a
+ * component that reads or writes the query cache (the task panel does).
+ */
+export function plannerTestMount(
+  ui: ReactNode,
+  options: { queryClient?: QueryClient } = {},
+): PlannerTestMount {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container);
-  const wrap = (node: ReactNode) => <I18nProvider>{node}</I18nProvider>;
+  const { queryClient } = options;
+  const wrap = (node: ReactNode) => {
+    const inner = <I18nProvider>{node}</I18nProvider>;
+    return queryClient ? (
+      <QueryClientProvider client={queryClient}>{inner}</QueryClientProvider>
+    ) : (
+      inner
+    );
+  };
   act(() => {
     root.render(wrap(ui));
   });
@@ -55,4 +73,81 @@ export function plannerTestClick(element: Element | null | undefined): void {
       new MouseEvent("click", { bubbles: true, cancelable: true }),
     );
   });
+}
+
+/**
+ * Types into an input or a textarea the way React hears it: through the native
+ * value setter, then an `input` event. Setting `.value` alone would be invisible
+ * to a controlled field.
+ */
+export function plannerTestType(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  act(() => {
+    setter?.call(element, value);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/**
+ * A key press on an element. Returns whether the page's handlers left the event
+ * alone (false when one of them called `preventDefault`, as Enter does in a field
+ * that sends on Enter).
+ */
+export function plannerTestKey(
+  element: Element,
+  key: string,
+  init: KeyboardEventInit = {},
+): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  act(() => {
+    element.dispatchEvent(event);
+  });
+  return !event.defaultPrevented;
+}
+
+/** Moves focus into an element, inside `act`. */
+export function plannerTestFocus(element: HTMLElement): void {
+  act(() => {
+    element.focus();
+  });
+}
+
+/** Takes focus away from an element, inside `act`, so its blur handlers run. */
+export function plannerTestBlur(element: HTMLElement): void {
+  act(() => {
+    element.blur();
+  });
+}
+
+/**
+ * Every cockpit action as a spy, so a test can render a board, a card or a panel
+ * and check which action a click reached. `satisfies` keeps the list honest: a new
+ * action added to `PlannerActions` fails the type check here, in one place.
+ */
+export function plannerTestActions() {
+  return {
+    move: vi.fn(),
+    plan: vi.fn(),
+    setDue: vi.fn(),
+    drop: vi.fn(),
+    undrop: vi.fn(),
+    setTitle: vi.fn(),
+    setPriority: vi.fn(),
+    setProject: vi.fn(),
+    setEffort: vi.fn(),
+    create: vi.fn(),
+    createIn: vi.fn(),
+  } satisfies PlannerActions;
 }

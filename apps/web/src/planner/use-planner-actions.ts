@@ -1,9 +1,13 @@
-import type {
-  PlannerBoardCard,
-  PlannerBoardResponse,
-  PlannerColumn,
-  PlannerPlanInput,
-  PlannerTaskPlanResponse,
+import {
+  type PlannerBoardCard,
+  type PlannerBoardResponse,
+  type PlannerColumn,
+  type PlannerPlanInput,
+  type PlannerTaskDetailResponse,
+  type PlannerTaskPlanResponse,
+  type PlannerTaskProject,
+  plannerPeriodStart,
+  type TaskPriority,
 } from "@flaremo/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
@@ -16,15 +20,27 @@ import {
 } from "./api";
 import {
   plannerCardFromTask,
+  plannerPendingCard,
+  plannerPendingCardId,
   plannerPlaceCard,
   plannerPredictDrop,
   plannerPredictDue,
   plannerPredictMove,
   plannerPredictPlan,
+  plannerPredictPriority,
+  plannerPredictProject,
+  plannerPredictTitle,
   plannerPredictUndrop,
+  plannerRemoveCard,
   plannerUpdateCard,
 } from "./board-model";
 import { plannerPlanLabel } from "./dates";
+import {
+  plannerCardFromDetail,
+  plannerDetailWithAnswer,
+  plannerDetailWithCard,
+  plannerDetailWithEffort,
+} from "./panel-model";
 import {
   type PlannerQuickAddChoice,
   plannerQuickAddPlan,
@@ -33,12 +49,16 @@ import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 
 // Every change a person can make from the cockpit (fork-owned add-on,
-// docs/planning-cockpit-implementation-plan.md, section 5), as optimistic edits:
+// docs/planning-cockpit-implementation-plan.md, sections 5 and 13), as optimistic
+// edits:
 //
-//   1. Patch the card into the cached board at once, where the server will put it.
+//   1. Patch the card into the cached board, and into the open task panel's
+//      cached detail, at once, where the server will put it.
 //   2. Send the request.
-//   3. Success: put the server's card in its place, say so in a toast.
-//      Failure (a 429 included): put this one card back as it was and say why.
+//   3. Success: put the server's answer in their place, and say so in a toast
+//      when the change needs saying (a card may have moved out of sight).
+//      Failure (a 429 included): put this one card, and its detail, back as they
+//      were and say why.
 //   4. When the last change in flight settles, refresh from the server.
 //
 // A rollback restores the one card, not the whole board, so it cannot undo a
@@ -49,6 +69,11 @@ import { usePlannerStrings } from "./strings";
 // the page to point the card out, scrolled into view with a ring, because the
 // card may now sit below the fold or in a column that is off screen. A due date
 // leaves the card where it is, and a drop sends it away, so neither asks.
+//
+// The task panel's edits (title, priority, goal, effort) go through the same
+// engine. They are silent when they work, because the panel shows the new value
+// where it was edited, and loud when they do not: the value goes back and a toast
+// says why.
 
 export type PlannerActions = {
   move: (card: PlannerBoardCard, to: PlannerColumn) => void;
@@ -56,10 +81,31 @@ export type PlannerActions = {
   setDue: (card: PlannerBoardCard, due: string | null) => void;
   drop: (card: PlannerBoardCard) => void;
   undrop: (card: PlannerBoardCard) => void;
+  /** The panel's title: trimmed by the server like any upstream title. */
+  setTitle: (card: PlannerBoardCard, title: string) => void;
+  setPriority: (card: PlannerBoardCard, priority: TaskPriority) => void;
+  /** The panel's goal: a project with its path above it, or null for none. */
+  setProject: (
+    card: PlannerBoardCard,
+    project: PlannerTaskProject | null,
+  ) => void;
+  /** The panel's effort estimate, 0 to 999 with at most one decimal, or null. */
+  setEffort: (card: PlannerBoardCard, effort: number | null) => void;
   /** Resolves true when the task was created, so the caller can clear its input. */
   create: (input: {
     title: string;
     choice: PlannerQuickAddChoice;
+  }) => Promise<boolean>;
+  /**
+   * Adds a task straight into a column, the way a column's "+" does. The card is
+   * on the board at once, under a pending id, and is swapped for the real one when
+   * the server answers or taken away when it refuses. Resolves true when the task
+   * was created, so the composer can keep its text when it was not.
+   */
+  createIn: (input: {
+    title: string;
+    column: PlannerColumn;
+    plan: PlannerPlanInput | null;
   }) => Promise<boolean>;
 };
 
@@ -70,7 +116,12 @@ export function plannerInvalidateAll(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ["projects"] });
 }
 
-const TOAST_ID = "planner-edit";
+/**
+ * The one toast every cockpit edit uses, so a run of edits replaces the toast
+ * instead of piling up. The panel's own saves (notes, comments) share it.
+ */
+export const plannerToastId = "planner-edit";
+const TOAST_ID = plannerToastId;
 
 export function usePlannerActions(input: {
   today: string;
@@ -85,6 +136,8 @@ export function usePlannerActions(input: {
   const revealRef = useRef(input.reveal);
   revealRef.current = input.reveal;
   const pending = useRef(0);
+  // Numbers the cards that wait for the server, so two quick adds never share an id.
+  const serial = useRef(0);
 
   return useMemo(() => {
     const text = () => stringsRef.current;
@@ -99,36 +152,65 @@ export function usePlannerActions(input: {
       );
     };
 
+    /** Applies `change` to one task's cached panel detail, when it has one. */
+    const patchDetail = (
+      taskId: string,
+      change: (detail: PlannerTaskDetailResponse) => PlannerTaskDetailResponse,
+    ) => {
+      queryClient.setQueryData<PlannerTaskDetailResponse>(
+        plannerQueryKeys.detail(taskId),
+        (detail) => (detail ? change(detail) : detail),
+      );
+    };
+
     const settle = () => {
       pending.current = Math.max(0, pending.current - 1);
       if (pending.current === 0) plannerInvalidateAll(queryClient);
     };
 
-    /** One optimistic edit of one card. */
+    /** One optimistic edit of one card, and of the task's open panel. */
     const edit = async (
       card: PlannerBoardCard,
       options: {
         predict: (
           card: PlannerBoardCard,
-          board: PlannerBoardResponse,
+          context: { week: string },
         ) => PlannerBoardCard;
+        /** A change only the panel's detail shows (an effort), after the card's. */
+        predictDetail?: (
+          detail: PlannerTaskDetailResponse,
+        ) => PlannerTaskDetailResponse;
         request: () => Promise<PlannerTaskPlanResponse>;
-        success: string | (() => string);
+        /** Left out, the edit is silent when it works. */
+        success?: string | (() => string);
         failure: string;
         /** Whether the change can put the card out of sight. Default true. */
         reveal?: boolean;
+        /** The project name the card shows after the edit; default: the one it had. */
+        projectName?: string | null;
       },
     ) => {
       // Counted before the first await, so a change that settles meanwhile
       // cannot see zero in flight and refresh over this one.
       pending.current += 1;
+      const detailKey = plannerQueryKeys.detail(card.id);
+      const detailBefore =
+        queryClient.getQueryData<PlannerTaskDetailResponse>(detailKey);
       try {
         await queryClient.cancelQueries({ queryKey: plannerQueryKeys.boards });
+        await queryClient.cancelQueries({ queryKey: detailKey });
         patchBoards((board) =>
           plannerUpdateCard(board, card.id, (current) =>
-            options.predict(current, board),
+            options.predict(current, { week: board.periods.week }),
           ),
         );
+        patchDetail(card.id, (detail) => {
+          const predicted = options.predict(plannerCardFromDetail(detail), {
+            week: plannerPeriodStart("week", today),
+          });
+          const shown = plannerDetailWithCard(detail, predicted);
+          return options.predictDetail ? options.predictDetail(shown) : shown;
+        });
         if (options.reveal !== false) revealRef.current?.(card.id);
         const response = await options.request();
         patchBoards((board) =>
@@ -136,18 +218,26 @@ export function usePlannerActions(input: {
             plannerCardFromTask(
               response.task,
               response.plan,
-              card.project_name,
+              options.projectName === undefined
+                ? card.project_name
+                : options.projectName,
             ),
           ),
         );
-        toast.success(
-          typeof options.success === "function"
-            ? options.success()
-            : options.success,
-          { id: TOAST_ID },
+        patchDetail(card.id, (detail) =>
+          plannerDetailWithAnswer(detail, response),
         );
+        if (options.success !== undefined) {
+          toast.success(
+            typeof options.success === "function"
+              ? options.success()
+              : options.success,
+            { id: TOAST_ID },
+          );
+        }
       } catch (error) {
         patchBoards((board) => plannerPlaceCard(board, card));
+        if (detailBefore) queryClient.setQueryData(detailKey, detailBefore);
         toast.error(
           plannerErrorMessage(error, options.failure, text().toast.rateLimited),
           { id: TOAST_ID },
@@ -160,10 +250,10 @@ export function usePlannerActions(input: {
     const actions: PlannerActions = {
       move: (card, to) => {
         void edit(card, {
-          predict: (current, board) =>
+          predict: (current, context) =>
             plannerPredictMove(current, to, {
               today,
-              week: board.periods.week,
+              week: context.week,
               now: new Date(),
             }),
           request: () =>
@@ -230,6 +320,53 @@ export function usePlannerActions(input: {
         });
       },
 
+      setTitle: (card, title) => {
+        void edit(card, {
+          predict: (current) => plannerPredictTitle(current, title, new Date()),
+          request: () => plannerUpdateTaskRequest(card.id, { today, title }),
+          failure: text().toast.titleFailed,
+          reveal: false,
+        });
+      },
+
+      setPriority: (card, priority) => {
+        void edit(card, {
+          predict: (current) =>
+            plannerPredictPriority(current, priority, new Date()),
+          request: () => plannerUpdateTaskRequest(card.id, { today, priority }),
+          failure: text().toast.priorityFailed,
+          reveal: false,
+        });
+      },
+
+      setProject: (card, project) => {
+        void edit(card, {
+          predict: (current) =>
+            plannerPredictProject(current, project, new Date()),
+          predictDetail: (detail) => ({ ...detail, project }),
+          request: () =>
+            plannerUpdateTaskRequest(card.id, {
+              today,
+              project_id: project?.id ?? null,
+            }),
+          projectName: project?.name ?? null,
+          failure: text().toast.goalFailed,
+          reveal: false,
+        });
+      },
+
+      setEffort: (card, effort) => {
+        void edit(card, {
+          // A card carries no effort: only the panel's detail shows it.
+          predict: (current) => current,
+          predictDetail: (detail) =>
+            plannerDetailWithEffort(detail, effort, new Date()),
+          request: () => plannerUpdateTaskRequest(card.id, { today, effort }),
+          failure: text().toast.effortFailed,
+          reveal: false,
+        });
+      },
+
       create: async ({ title, choice }) => {
         const plan = plannerQuickAddPlan(choice, today);
         pending.current += 1;
@@ -261,6 +398,75 @@ export function usePlannerActions(input: {
           }
           return true;
         } catch (error) {
+          toast.error(
+            plannerErrorMessage(
+              error,
+              text().toast.addFailed,
+              text().toast.rateLimited,
+            ),
+            { id: TOAST_ID },
+          );
+          return false;
+        } finally {
+          settle();
+        }
+      },
+
+      createIn: async ({ title, column, plan }) => {
+        serial.current += 1;
+        const pendingId = plannerPendingCardId(serial.current);
+        pending.current += 1;
+        try {
+          await queryClient.cancelQueries({
+            queryKey: plannerQueryKeys.boards,
+          });
+          // On the board before the server has heard of it, in the column it was
+          // made for and pointed out, so the person sees where it went at once.
+          patchBoards((board) =>
+            plannerPlaceCard(
+              board,
+              plannerPendingCard({
+                id: pendingId,
+                title,
+                column,
+                plan,
+                now: new Date(),
+              }),
+            ),
+          );
+          revealRef.current?.(pendingId);
+
+          const response = await plannerCreateTaskRequest({
+            title,
+            today,
+            column,
+            ...(plan ? { plan } : {}),
+          });
+          const created = plannerCardFromTask(response.task, response.plan);
+          // The pending card gives way to the real one, which takes its place.
+          patchBoards((board) =>
+            plannerPlaceCard(plannerRemoveCard(board, pendingId), created),
+          );
+          revealRef.current?.(created.id);
+          if (response.plan_error) {
+            // The task exists, in its column, without the plan it was given.
+            toast.warning(text().toast.planNotSaved, {
+              id: TOAST_ID,
+              action: plan
+                ? {
+                    label: text().toast.retryPlan,
+                    onClick: () => actions.plan(created, plan),
+                  }
+                : undefined,
+            });
+          } else {
+            toast.success(text().toast.addedTo(text().column[column]), {
+              id: TOAST_ID,
+            });
+          }
+          return true;
+        } catch (error) {
+          patchBoards((board) => plannerRemoveCard(board, pendingId));
           toast.error(
             plannerErrorMessage(
               error,

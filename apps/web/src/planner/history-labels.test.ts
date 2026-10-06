@@ -40,6 +40,10 @@ function event(
         "carried_over",
         "dropped",
         "undropped",
+        "effort_changed",
+        "commented",
+        "comment_edited",
+        "comment_deleted",
       ].includes(type)
         ? "planner"
         : "activity"),
@@ -445,5 +449,132 @@ describe("plannerDescribeHistory", () => {
       "创建",
     ]);
     expect(plannerDescribeHistory(events.slice(0, 1), zh)[0]?.actor).toBe("你");
+  });
+});
+
+describe("the task panel's events", () => {
+  const entries = (events: PlannerEventDto[], strings = en) =>
+    plannerDescribeHistory(events, strings);
+
+  it("reads an effort as 'Effort set to 3', with the old value underneath", () => {
+    const [first] = entries([event("effort_changed", { from: null, to: 3 })]);
+    expect(first).toMatchObject({
+      type: "effort_changed",
+      label: "Effort set to 3",
+      detail: null,
+      actor: "You",
+    });
+
+    const [changed] = entries([event("effort_changed", { from: 3, to: 5.5 })]);
+    expect(changed).toMatchObject({
+      label: "Effort set to 5.5",
+      detail: "Was 3",
+    });
+  });
+
+  it("reads 0 as an estimate, not as none", () => {
+    const [zero] = entries([event("effort_changed", { from: 2, to: 0 })]);
+    expect(zero).toMatchObject({ label: "Effort set to 0", detail: "Was 2" });
+    const [from0] = entries([event("effort_changed", { from: 0, to: 4 })]);
+    expect(from0).toMatchObject({ label: "Effort set to 4", detail: "Was 0" });
+  });
+
+  it("says when the estimate was cleared", () => {
+    const [cleared] = entries([event("effort_changed", { from: 4, to: null })]);
+    expect(cleared).toMatchObject({
+      label: "Effort cleared",
+      detail: "Was 4",
+    });
+  });
+
+  it("reads a damaged effort event as cleared instead of showing NaN", () => {
+    for (const data of [{}, { to: "3" }, { to: Number.NaN }, { from: "x" }]) {
+      const [entry] = entries([event("effort_changed", data)]);
+      expect(entry?.label, JSON.stringify(data)).toBe("Effort cleared");
+      expect(entry?.detail).toBeNull();
+    }
+  });
+
+  it("names the three comment events without ever showing what was said", () => {
+    const events = [
+      event("commented", { comment_id: "c1" }),
+      event("comment_edited", { comment_id: "c1" }),
+      event("comment_deleted", { comment_id: "c1" }),
+    ];
+    expect(labels(events)).toEqual([
+      "Comment deleted",
+      "Comment edited",
+      "Comment added",
+    ]);
+    for (const entry of entries(events)) {
+      expect(entry.detail).toBeNull();
+      expect(entry.actor).toBe("You");
+    }
+  });
+
+  it("credits an agent's comment to the agent", () => {
+    const [entry] = entries([
+      event(
+        "commented",
+        { comment_id: "c1" },
+        { actor: "agent", name: "pat:abcd1234" },
+      ),
+    ]);
+    expect(entry).toMatchObject({
+      label: "Comment added",
+      actor: "Agent · pat:abcd1234",
+    });
+  });
+
+  it("does not disturb the status and plan wording of the events around it", () => {
+    const events = [
+      event("created", { status: "todo", title: "Launch" }),
+      event("effort_changed", { from: null, to: 3 }),
+      event("planned", { from: NONE, to: point("week", "2026-10-05") }),
+      event("commented", { comment_id: "c1" }),
+      event("status_changed", { status: "todo", completed_at: null }),
+    ];
+    // The effort-only plan row planned nothing, so the move back to `todo` after
+    // a real plan still reads as To Do, not Backlog.
+    expect(labels(events)).toEqual([
+      "Moved to To Do",
+      "Comment added",
+      "Planned for this week",
+      "Effort set to 3",
+      "Created",
+    ]);
+  });
+
+  it("does not let an effort make a task look planned: Backlog stays Backlog", () => {
+    const events = [
+      event("created", { status: "todo", title: "Launch" }),
+      event("effort_changed", { from: null, to: 3 }),
+      event("status_changed", { status: "todo", completed_at: null }),
+    ];
+    expect(labels(events)).toEqual([
+      "Moved to Backlog",
+      "Effort set to 3",
+      "Created",
+    ]);
+  });
+
+  it("speaks Chinese when the app does", () => {
+    expect(
+      labels(
+        [
+          event("effort_changed", { from: 3, to: 5 }),
+          event("commented", { comment_id: "c1" }),
+          event("comment_edited", { comment_id: "c1" }),
+          event("comment_deleted", { comment_id: "c1" }),
+        ],
+        zh,
+      ),
+    ).toEqual(["删除了评论", "编辑了评论", "添加了评论", "工作量设为 5"]);
+    expect(
+      entries([event("effort_changed", { from: 3, to: 5 })], zh)[0]?.detail,
+    ).toBe("原为 3");
+    expect(
+      entries([event("effort_changed", { from: 3, to: null })], zh)[0]?.label,
+    ).toBe("已清除工作量");
   });
 });

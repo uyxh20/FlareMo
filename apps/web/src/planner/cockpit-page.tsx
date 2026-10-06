@@ -1,3 +1,4 @@
+import type { PlannerBoardCard } from "@flaremo/contracts";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CirclePauseIcon, GaugeIcon, InfoIcon, PlusIcon } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import { PlannerDroppedList } from "./dropped-list";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerQuickAdd } from "./quick-add";
 import { usePlannerStrings } from "./strings";
+import { PlannerTaskPanel } from "./task-panel";
 import {
   type PlannerHorizonFilter,
   plannerHorizonFilters,
@@ -31,6 +33,7 @@ import { usePlannerActions } from "./use-planner-actions";
 import { usePlannerToday } from "./use-planner-clock";
 import { usePlannerReveal } from "./use-planner-reveal";
 import { usePlannerRollover } from "./use-planner-rollover";
+import { usePlannerTaskParam } from "./use-task-param";
 
 // The planning cockpit at /cockpit (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 5): a quick add, filter
@@ -39,6 +42,9 @@ import { usePlannerRollover } from "./use-planner-rollover";
 // Backlog / To Do / Doing / Done board. It opens by rolling unfinished plans
 // forward into the current period, then loads the board. The layout is the same
 // WorkspaceLayout and WorkspacePageHeader as /projects.
+//
+// A card opens into its task panel (task-panel.tsx), whose state lives in the
+// address as `?task=<id>`: a link opens it, the back button closes it.
 
 /** Short, quiet notes above the board: history paused, cards hidden by the cap. */
 function Notice({
@@ -77,6 +83,8 @@ export function PlannerCockpitPage() {
   const { reveal, request: requestReveal } = usePlannerReveal();
   const actions = usePlannerActions({ today, reveal: requestReveal });
   const requests = usePlannerCardRequests();
+  const panel = usePlannerTaskParam();
+  const openCard = (card: PlannerBoardCard) => panel.open(card.id);
 
   const boardQuery = useQuery({
     queryKey: plannerQueryKeys.board(today, includeDropped),
@@ -143,6 +151,7 @@ export function PlannerCockpitPage() {
         filter={filter}
         reveal={reveal}
         today={today}
+        onOpen={openCard}
         onRequest={requests.show}
       />
     );
@@ -214,6 +223,7 @@ export function PlannerCockpitPage() {
             cards={dropped}
             failed={boardQuery.isError}
             isRetrying={boardQuery.isRefetching}
+            onOpen={openCard}
             onRequest={requests.show}
             onRetry={() => void boardQuery.refetch()}
           />
@@ -240,6 +250,16 @@ export function PlannerCockpitPage() {
         shown={requests.shown}
         today={today}
         onClose={requests.close}
+      />
+
+      <PlannerTaskPanel
+        actions={actions}
+        open={panel.taskId !== null}
+        taskId={panel.taskId}
+        today={today}
+        onOpenChange={(next) => {
+          if (!next) panel.close();
+        }}
       />
     </WorkspaceLayout>
   );

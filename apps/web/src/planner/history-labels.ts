@@ -10,7 +10,10 @@ import type { PlannerStrings } from "./strings";
 // Turns the archive's raw events into the lines of a task's timeline (fork-owned
 // add-on, docs/planning-cockpit-implementation-plan.md, sections 4 and 5):
 // "Created", "Planned for this week", "Re-planned to Wed 8", "Moved to Doing",
-// "Completed", "Reopened", "Carried over to today", "Dropped (due date cleared)".
+// "Completed", "Reopened", "Carried over to today", "Dropped (due date cleared)",
+// and the task panel's: "Effort set to 3", "Comment added", "Comment edited",
+// "Comment deleted". The comment lines never say what the comment said: the
+// archive keeps only the comment's id.
 //
 // The archive stores upstream's own words (`status_changed` with the new status)
 // next to the planner's (`planned`, `carried_over`). Two things a reader wants are
@@ -40,6 +43,9 @@ const DROP_CLEARING_WINDOW_MS = 10_000;
 
 const asString = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
+
+const asNumber = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -246,6 +252,28 @@ export function plannerDescribeHistory(
         lastDrop = { at, hadDueDate: previousDue !== null };
         break;
       }
+
+      case "effort_changed": {
+        const to = asNumber(data.to);
+        const from = asNumber(data.from);
+        label =
+          to === null
+            ? strings.history.effortCleared
+            : strings.history.effortSet(String(to));
+        detail =
+          from === null ? null : strings.history.detail.wasEffort(String(from));
+        break;
+      }
+
+      case "commented":
+        label = strings.history.commented;
+        break;
+      case "comment_edited":
+        label = strings.history.commentEdited;
+        break;
+      case "comment_deleted":
+        label = strings.history.commentDeleted;
+        break;
 
       case "undropped":
         label = strings.history.undropped;

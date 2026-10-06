@@ -20,6 +20,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { queryKeys } from "@/lib/query-keys";
+import { plannerCockpitSearch } from "@/planner/cockpit-search";
 import { AuthenticatedRoute } from "@/routes/authenticated-route";
 import { indexRoute } from "@/routes/index-route";
 import { rootRoute } from "@/routes/root-route";
@@ -508,6 +509,8 @@ function CockpitRoutePage() {
 const cockpitRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/cockpit",
+  // `?task=<id>` opens that task's panel (see planner/cockpit-search.ts).
+  validateSearch: plannerCockpitSearch,
   component: CockpitRoutePage,
 });
 
