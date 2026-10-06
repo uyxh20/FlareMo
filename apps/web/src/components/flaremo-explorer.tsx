@@ -41,6 +41,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ForkSidebarNav } from "@/fork/sidebar-nav";
 import { useI18n } from "@/i18n";
 import { currentStreak } from "@/lib/activity";
 import { queryKeys } from "@/lib/query-keys";
@@ -137,7 +138,7 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
         />
       </section>
 
-      <nav
+      <ForkSidebarNav
         aria-label={t("sidebar.navigation")}
         className="mt-2 flex flex-col gap-1 border-t border-border/60 pt-2.5"
       >
@@ -240,7 +241,7 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
           <FileTextIcon className="size-4 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{t("nav.articles")}</span>
         </Link>
-      </nav>
+      </ForkSidebarNav>
 
       <section className="mt-5 flex flex-col gap-2 px-1">
         <button
