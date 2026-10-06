@@ -391,14 +391,14 @@ New files live under `apps/web/src/planner/`.
     - convert-to-task
   - Assert that upstream results are unchanged and the expected archive events appear after a sync.
 - **Web**: unit tests for column grouping, the transition table and labels.
-- **E2E**: `tests/e2e/cockpit.spec.ts` covers the deep link, the anonymous redirect, the nav link and quick add. Register it by adding `cockpit` to the `memo-ui` `testMatch` regex in `playwright.config.ts`. Written, not run (G8).
+- **E2E**: `tests/e2e/cockpit.spec.ts` covers the deep link, the anonymous redirect, the nav link and quick add (v1.1 adds the column "+" and task panel cases, section 13). Register it by adding `cockpit` to the `memo-ui` `testMatch` regex in `playwright.config.ts`. Written, not run (G8).
 
 ## 7. Hook-in edits (the only upstream files touched)
 
 1. **`apps/worker/src/index.ts`**: `mountLazyRoute(app, "/api/app/planner", …)` loading `./routes/planner-api`, placed before `app.route("/api/app", appApi)`. Follow the neighbouring `mountLazyRoute` calls exactly. `scripts/startup-graph.mjs` is a report, not a gate: run it and confirm `planner-api` and `packages/domain/src/planner` aren't in the startup graph.
 2. **`packages/contracts/src/index.ts`**: append `export * from "./planner";`.
-3. **`scripts/persistence-manifest.mjs`**: append the five planner tables to `RESTORE_TABLES`. `pnpm persistence:check` must pass.
-4. **`apps/web/src/router-tree.tsx`**: a lazy `CockpitPage` and a `cockpitRoute` with the literal `path: "/cockpit"`, registered beside `teamProjectsRoute`.
+3. **`scripts/persistence-manifest.mjs`**: append the planner tables to `RESTORE_TABLES`: the five from `9000`, and `planner_task_comment` from `9001` (v1.1). `pnpm persistence:check` must pass.
+4. **`apps/web/src/router-tree.tsx`**: a lazy `CockpitPage` and a `cockpitRoute` with the literal `path: "/cockpit"`, registered beside `teamProjectsRoute`. v1.1 adds one import and `validateSearch: plannerCockpitSearch` on that route (the `?task=` address, section 13); the validator lives in `planner/cockpit-search.ts`.
 5. **`apps/worker/src/spa-routes.ts`**: add `"/cockpit"`.
 6. **`apps/web/src/components/flaremo-explorer.tsx`**: an import plus `<PlannerNavLink/>` after the team-projects link.
 7. **`playwright.config.ts`**: append `cockpit` to the `memo-ui` `testMatch` regex.
@@ -476,6 +476,7 @@ Progress:
 - [x] C Routes
 - [x] D Web cockpit
 - [ ] E Docs and dev deploy
+- [x] v1.1 Column "+" and task panel (section 13)
 
 Acceptance:
 
@@ -488,6 +489,7 @@ Acceptance:
 ## 11. Log
 
 - planner-base: 80287b09aba4003b977bbcbdb6d19d8a1b41f12e (2026-10-04)
+- v1.1 task panel (section 13): built 2026-10-06 on `main` at `cd24c41980892a13edb6dab96121b41da2116e3e`, in four commits (data, contracts and API, web, e2e and docs). The guard still prints only the eight hook-in files.
 
 ## 12. Audit resolution
 
@@ -519,3 +521,103 @@ v3 focused re-audit (Opus, 2026-10-04) found 0 blockers, 4 major and 6 minor iss
   - mechanics: guard regex, deep import, startup-graph as a report, PATCH for `/tree`, the domain test pattern, a `resolveActor` copy, and JS/`strftime` time maths
 
 The verified-OK list is in the canonical doc log.
+
+## 13. v1.1 task panel
+
+Built 2026-10-06. The owner asked for the Notion-style task experience: a "+" in each column header that adds straight into that column, click a card to open it (the card's menu stays for quick actions), and an opened task with clickable properties (Status, Due date, Effort, Goal, Priority, Quarter, plus Plan), a notes box and a comments section. Same guardrails as the rest of the plan: no foreign keys to upstream tables, no triggers, additive migrations, task rows change only through upstream services, no new Cloudflare bindings. The guard still prints only the eight hook-in files (section 7).
+
+### What shipped
+
+- **Column "+"**: Backlog, To Do, Doing and Done have a "+" in the header (the Other bucket has none). It opens an inline composer at the top of the column. Enter adds and keeps the composer open and focused for rapid entry, Esc closes, leaving it empty closes it, leaving it with text keeps it, an IME Enter does not send, and a failed add puts the text back. Where the task lands follows the column and the filter chip:
+
+  | Column | Plan |
+  |---|---|
+  | Backlog | none, whatever the chip says |
+  | To Do | the chip's period; All means today |
+  | Doing, Done | the chip's period; All means no plan |
+
+  The card shows at once as a pending card (dimmed, inert, not draggable), then is swapped for the server's card or removed with a toast.
+- **Click to open**: a click anywhere on a card opens it; the title is a real `<button>` (Enter and Space work, focus returns to it on close). The status icon and the ⋯ menu keep their own jobs, and a drag never opens the card: dnd-kit swallows the click that ends a drag, and a test with the real library proves it. The Dropped list opens a task the same way.
+- **Task panel**: a right-hand sheet, 34rem wide and the whole screen under the `sm` breakpoint.
+  - An editable title (Enter or blur saves, Esc puts the saved one back; an empty title is never saved).
+  - Property rows, each a clickable value: Status (pill menu of the four columns, or Undrop), Plan (the card menu's choices, read-only for a finished or dropped task), Due date (a date field, with an X to clear), Priority, Goal (live projects shown by their goal path), Effort (a number) and Quarter (derived, read-only). An unset property says "Empty".
+  - Notes that save by themselves, 800 ms after typing stops and on blur ("Saving…", "Saved", "Couldn't save" with Retry; typed text is never thrown away).
+  - Comments, oldest first, each with "You", a relative time (the exact time on hover and for screen readers) and an "edited" mark; edit in place; delete behind an AlertDialog; Enter sends and Shift+Enter adds a line.
+  - History, folded until opened (it shares the timeline of the card menu's History sheet), and a created/updated footer.
+  - A dropped task shows a banner with Undrop and offers nothing else.
+- **Address**: `/cockpit?task=<id>` opens the panel, so it can be linked to and reloaded. The back button closes it; closing leaves no stray history entry (it goes back when this page opened the panel and replaces the address when the link did).
+- **Strings**: English and Simplified Chinese in `strings.ts`, covered by the parity test.
+
+### Migration `9001_planner_task_details.sql`
+
+Hand-written, unjournaled, additive, no foreign keys, no triggers. Wrangler applies it after `9000`; vitest applies it through `applyPlannerMigrations`. It is also safe for the previous release: the new column is nullable and nothing old reads the new table.
+
+```sql
+ALTER TABLE `planner_task_plan` ADD COLUMN `effort` real;
+--> statement-breakpoint
+CREATE TABLE `planner_task_comment` (
+  `id` text PRIMARY KEY NOT NULL,                  -- a random UUID, not namespaced
+  `user_id` text NOT NULL,
+  `task_id` text NOT NULL,                         -- upstream tasks.id, no FK (G10)
+  `body` text NOT NULL,                            -- trimmed, 1 to 5000 characters
+  `created_at` text NOT NULL,
+  `updated_at` text NOT NULL,
+  `deleted_at` text
+);
+--> statement-breakpoint
+CREATE INDEX `planner_task_comment_task_idx` ON `planner_task_comment` (`task_id`,`created_at`);
+```
+
+`planner_task_comment` joins the restore manifest (`RESTORE_TABLES`), and `planner-upstream-compat.test.ts` now expects six planner tables.
+
+### API changes, under `/api/app/planner`
+
+| Route | Change |
+|---|---|
+| `GET /tasks/:id` | New. `{ task, plan, project, comments }`: the whole upstream task (notes included), its plan with `effort` (`null` when there is no plan row; a row with a null horizon only holds an effort), its goal as `{ id, name, ancestors }` with the live ancestors from the goal tree, root first, and its comments oldest first without the deleted ones. 404 for a missing, binned or another user's task. |
+| `PATCH /tasks/:id` | Gains `effort`: a number from 0 to 999 with at most one decimal, or `null` to clear. Applied after `column` or `plan` and before a drop. It never moves the task and is allowed on a dropped one. |
+| `POST /tasks` | Gains `column`. `backlog` refuses a plan (400), `todo` requires one (400), `doing` and `done` take an optional plan. Without `column` it behaves as before. |
+| `GET /tasks/:id/comments` | New. `{ comments }`, oldest first. |
+| `POST /tasks/:id/comments` | New. `{ body }`, answering 201 `{ comment }`. |
+| `PATCH /comments/:id` | New. `{ body }`, answering `{ comment }` with a later `updated_at`. |
+| `DELETE /comments/:id` | New. A soft delete, answering `{ ok: true }`. It is a real DELETE: the API's CORS allow-list already has it. |
+
+- **Comment rules**: the text is trimmed and must be 1 to 5000 characters. Another user's task or comment is a 404. Comment writes use the same `planner` rate-limit bucket as every other mutation, and the same Origin rules.
+- **New event types** (source `planner`, written in the same batch as the change, M3): `effort_changed` with `{ from, to }`, and `commented`, `comment_edited` and `comment_deleted`, which carry only `{ comment_id }`. A comment's text never enters the history archive. The history labels read "Effort set to 3.5", "Effort cleared" (with "Was 2"), "Comment added", "Comment edited" and "Comment deleted".
+- **Contracts**: `plannerPlanDtoSchema` gains `effort`; new `plannerEffortSchema`, `plannerCommentBodySchema`, the comment and detail schemas, and `plannerQuarterLabel`.
+
+### Decisions
+
+- **T1 Effort lives on the plan row.** There is no new task column, and the upstream `tasks` table is untouched. A backlog task gets a plan row with a null horizon only to hold its effort; the board already reads a null horizon as Backlog, so such a row plans nothing, and clearing a plan keeps the row for the same reason.
+- **T2 Effort is a number from 0 to 999 with one decimal.** `0` is an estimate, different from none (`null`). A comma is accepted as the decimal point in the field.
+- **T3 Comments are soft-deleted and outlive their task**, like the history archive, so `task_id` has no foreign key. There is no restore for a deleted comment in v1.1.
+- **T4 Doing and Done are created in one write.** `plannerCreateTask` passes the column's status to upstream `createTask`, rather than creating a `todo` task and updating it, so there is no half-created state and the history shows one `created` entry. This changes the "Create" description in section 4 for those two columns.
+- **T5 The panel reads one endpoint.** `GET /tasks/:id` carries everything the panel shows, so opening a task is one request. The board's card still leaves `notes` out.
+- **T6 Notes are upstream's `notes` field**, saved through `PATCH /tasks/:id` (empty notes are `null`). There is no second copy.
+- **T7 Quarter is derived, not stored**: the calendar quarter (UTC maths) of the plan's period start, else of the due date, shown as "Q4 2026". It cannot be edited; planning or setting a due date changes it.
+- **T8 Goal is upstream's `project_id`.** The menu lists live (active, not binned) projects by their goal path from the tree, and keeps an archived project in the list while the task still points at it.
+- **T9 The address is the panel's state.** `?task=<bare id>` (without `tasks/`), read by `usePlannerTaskParam` and validated by `plannerCockpitSearch`. The route's `validateSearch` is one line in `router-tree.tsx`, which is why the validator is a fork-owned module and not inline.
+- **T10 One optimistic engine for the board and the panel.** Every edit patches the board's cache and the open panel's cached detail together, rolls both back with a toast when the server refuses, and refreshes (`["planner"]`, upstream's task keys and `["projects"]`) only once the last change in flight has settled. Edits made in the panel are silent on success, because the panel shows the new value in place; the board's own actions still toast.
+- **T11 Autosave rules** (`use-planner-autosave.ts`, tested with fake timers): a change that is the same once trimmed is never sent; two saves never overlap, and typing during a save sends one more with the newest text; a failed save keeps the text and is retried by the next edit, the next blur or Retry; the server's value is adopted only while nothing is unsaved; closing the panel saves what is left.
+- **T12 Click versus drag.** The card's click handler ignores clicks that start inside a button, link, field, label or menu (including portaled menu items, which are React children but not DOM children of the card). Pending cards are inert. Escape inside a field of the panel (title, effort, due date, a comment being edited) belongs to the field: it never closes the panel.
+
+### Files
+
+All under `apps/web/src/planner/` unless noted.
+
+- **Add**: `column-composer.tsx`, `column-add.ts`, `task-panel.tsx`, `task-panel-properties.tsx`, `task-panel-notes.tsx`, `task-panel-comments.tsx`, `use-planner-autosave.ts`, `use-task-param.ts`, `cockpit-search.ts`, `panel-model.ts`, `effort.ts`, `history-timeline.tsx` (the timeline the History sheet and the panel share).
+- **Change**: `board.tsx`, `task-card.tsx`, `dropped-list.tsx`, `board-model.ts`, `use-planner-actions.ts` (adds `setTitle`, `setPriority`, `setProject`, `setEffort`, `createIn`), `plan-picker.tsx` (`PlannerPlanMenuItems`, shared by the card menu and the panel), `history-labels.ts`, `history-sheet.tsx`, `api.ts`, `query-keys.ts`, `strings.ts`, `cockpit-page.tsx`.
+- **Elsewhere**: `migrations/9001_planner_task_details.sql`, `packages/db/src/schema/planner.ts`, `packages/domain/src/planner/` (`comments.ts`, `task-detail.ts`, effort and create-in-column in `plans.ts`), `packages/contracts/src/planner.ts`, `apps/worker/src/routes/planner-api.ts`, and the two hook-in lines above.
+
+### Tests
+
+- **Domain and db**: `comments.test.ts`, `task-panel.test.ts` (detail, effort, create-in-column) and the 9001 cases in `planner-migrations.test.ts` (including applying 9001 on top of a 9000 database that has rows).
+- **Contracts and worker**: the effort, comment, column and detail schemas; the endpoint table, Origin, rate-limit and CORS tests extended to the new routes; new suites for detail, effort, create-in-column and comments (happy paths, 401, 404 for another user's records, 400 validation, PAT).
+- **Web**, with the network replaced and the real query cache: `use-planner-actions.test.tsx` (optimistic edits on both views, rollback, create-in-column); `board-interactions.test.tsx` (real dnd-kit click versus drag, the "+" buttons and composer, per-column and per-chip add targets); `task-card.test.tsx`; `task-panel.test.tsx` (loading, 404, error, every property, menus, title, effort, due date, dropped banner, history, footer); `task-panel-notes.test.tsx` (fake timers); `task-panel-comments.test.tsx`; `use-task-param.test.tsx` (a real router on an in-memory history); `use-planner-autosave.test.ts`; and the pure modules (`panel-model`, `effort`, `column-add`, `history-labels`, `api`).
+- **E2E** (`tests/e2e/cockpit.spec.ts`, written, not run, G8): a column's "+" adds into that column; the composer's close rules; a click opens the panel and Escape closes it; a click on a chip opens it while the ⋯ menu does not; the link, the back button and closing a linked panel; a link to a missing task; notes saved and kept after a reload; a comment sent, kept and deleted after a confirmation; properties saved while the card follows; a drag does not open the panel. Both languages are matched. While the panel is open the board behind it is hidden from the accessibility tree (the sheet is modal), so the cases close the panel before they look at the board.
+- Unit tests caught one bug before it shipped: in the title and effort fields Esc put the saved text back, but the blur it caused ran the save with the text as last rendered, so the text Esc discarded was saved. A ref now tells the save it is reverting.
+
+### Not in v1.1
+
+- Markdown, attachments, mentions or reactions in comments; comment pagination (the detail carries all of a task's comments); restoring a deleted comment; other authors' names (there is one user, shown as "You").
+- Editing the quarter, the source memo or the sort order from the panel; a next/previous card shortcut.
