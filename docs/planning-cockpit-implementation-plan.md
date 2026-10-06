@@ -489,7 +489,7 @@ Acceptance:
 ## 11. Log
 
 - planner-base: 80287b09aba4003b977bbcbdb6d19d8a1b41f12e (2026-10-04)
-- v1.1 task panel (section 13): built 2026-10-06 on `main` at `cd24c41980892a13edb6dab96121b41da2116e3e`, in four commits (data, contracts and API, web, e2e and docs). The guard still prints only the eight hook-in files.
+- v1.1 task panel (section 13): built 2026-10-06 on `main` at `cd24c41980892a13edb6dab96121b41da2116e3e`, as one branch of commits (data, contracts and API, web, e2e and docs, then the dev-env test fixture and a polish pass). The guard still prints only the eight hook-in files.
 
 ## 12. Audit resolution
 
@@ -543,7 +543,7 @@ Built 2026-10-06. The owner asked for the Notion-style task experience: a "+" in
   - Property rows, each a clickable value: Status (pill menu of the four columns, or Undrop), Plan (the card menu's choices, read-only for a finished or dropped task), Due date (a date field, with an X to clear), Priority, Goal (live projects shown by their goal path), Effort (a number) and Quarter (derived, read-only). An unset property says "Empty".
   - Notes that save by themselves, 800 ms after typing stops and on blur ("Saving…", "Saved", "Couldn't save" with Retry; typed text is never thrown away).
   - Comments, oldest first, each with "You", a relative time (the exact time on hover and for screen readers) and an "edited" mark; edit in place; delete behind an AlertDialog; Enter sends and Shift+Enter adds a line.
-  - History, folded until opened (it shares the timeline of the card menu's History sheet), and a created/updated footer.
+  - History, folded until opened (it shares the timeline of the card menu's History sheet), and a created/updated footer. "Updated" is the later of the task's time and its plan row's, because an effort, a plan or a drop changes only the plan row.
   - A dropped task shows a banner with Undrop and offers nothing else.
 - **Address**: `/cockpit?task=<id>` opens the panel, so it can be linked to and reloaded. The back button closes it; closing leaves no stray history entry (it goes back when this page opened the panel and replaces the address when the link did).
 - **Strings**: English and Simplified Chinese in `strings.ts`, covered by the parity test.
@@ -612,6 +612,7 @@ All under `apps/web/src/planner/` unless noted.
 ### Tests
 
 - **Domain and db**: `comments.test.ts`, `task-panel.test.ts` (detail, effort, create-in-column) and the 9001 cases in `planner-migrations.test.ts` (including applying 9001 on top of a 9000 database that has rows).
+- **Dev environment script** (`scripts/fork/dev-env.test.mjs`): the planner-track fixture now copies only upstream's migrations next to its stand-in planner file (the real 9001 alters a table the stand-in lacks), and a new case runs the fork's real files through the clone: production at 9000, this checkout adds 9001, so dev gets production's data and then rehearses 9001.
 - **Contracts and worker**: the effort, comment, column and detail schemas; the endpoint table, Origin, rate-limit and CORS tests extended to the new routes; new suites for detail, effort, create-in-column and comments (happy paths, 401, 404 for another user's records, 400 validation, PAT).
 - **Web**, with the network replaced and the real query cache: `use-planner-actions.test.tsx` (optimistic edits on both views, rollback, create-in-column); `board-interactions.test.tsx` (real dnd-kit click versus drag, the "+" buttons and composer, per-column and per-chip add targets); `task-card.test.tsx`; `task-panel.test.tsx` (loading, 404, error, every property, menus, title, effort, due date, dropped banner, history, footer); `task-panel-notes.test.tsx` (fake timers); `task-panel-comments.test.tsx`; `use-task-param.test.tsx` (a real router on an in-memory history); `use-planner-autosave.test.ts`; and the pure modules (`panel-model`, `effort`, `column-add`, `history-labels`, `api`).
 - **E2E** (`tests/e2e/cockpit.spec.ts`, written, not run, G8): a column's "+" adds into that column; the composer's close rules; a click opens the panel and Escape closes it; a click on a chip opens it while the ⋯ menu does not; the link, the back button and closing a linked panel; a link to a missing task; notes saved and kept after a reload; a comment sent, kept and deleted after a confirmation; properties saved while the card follows; a drag does not open the panel. Both languages are matched. While the panel is open the board behind it is hidden from the accessibility tree (the sheet is modal), so the cases close the panel before they look at the board.

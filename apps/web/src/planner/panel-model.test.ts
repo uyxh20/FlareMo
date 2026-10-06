@@ -20,6 +20,7 @@ import {
   plannerDetailWithEffort,
   plannerDetailWithoutComment,
   plannerIsPendingComment,
+  plannerLastTouched,
   plannerPendingCommentId,
   plannerProjectPathLabel,
   plannerProjectPaths,
@@ -434,6 +435,44 @@ describe("plannerProjectPathLabel", () => {
         " / ",
       ),
     ).toBe("A / B");
+  });
+});
+
+describe("plannerLastTouched", () => {
+  const TASK_TIME = "2026-10-06T08:00:00.000Z";
+
+  it("is the task's own time when there is no plan row", () => {
+    expect(plannerLastTouched(TASK_TIME, null)).toBe(TASK_TIME);
+    expect(plannerLastTouched(TASK_TIME, undefined)).toBe(TASK_TIME);
+    expect(plannerLastTouched(TASK_TIME, "")).toBe(TASK_TIME);
+  });
+
+  it("is the plan row's time when an effort, a plan or a drop touched it later", () => {
+    const later = "2026-10-07T09:00:00.000Z";
+    expect(plannerLastTouched(TASK_TIME, later)).toBe(later);
+  });
+
+  it("is the task's time when the plan row is older", () => {
+    expect(plannerLastTouched(TASK_TIME, "2026-10-02T08:00:00.000Z")).toBe(
+      TASK_TIME,
+    );
+  });
+
+  it("compares moments, not text: a different offset is the same clock", () => {
+    // 10:00 at +02:00 is 08:00 UTC, so the plan row is the older of the two.
+    expect(
+      plannerLastTouched(
+        "2026-10-06T08:30:00.000Z",
+        "2026-10-06T10:00:00+02:00",
+      ),
+    ).toBe("2026-10-06T08:30:00.000Z");
+  });
+
+  it("ignores a time that cannot be read", () => {
+    expect(plannerLastTouched(TASK_TIME, "not a time")).toBe(TASK_TIME);
+    expect(plannerLastTouched("not a time", "2026-10-07T09:00:00.000Z")).toBe(
+      "2026-10-07T09:00:00.000Z",
+    );
   });
 });
 

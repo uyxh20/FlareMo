@@ -348,6 +348,13 @@ describe("reading the task", () => {
     expect(titleField()?.value).toBe("Book the venue");
   });
 
+  it("keeps the focus on the sheet itself without drawing a ring round the whole panel", async () => {
+    // Opening a task focuses the sheet, not its first field; a deep link or a
+    // keyboard open would otherwise outline the whole panel.
+    await open();
+    expect(panel()?.className).toContain("outline-none");
+  });
+
   it("renders nothing for a panel that is closed and was never opened", async () => {
     await open({ taskId: null, open: false });
     expect(panel()).toBeNull();
@@ -457,6 +464,21 @@ describe("the properties", () => {
     });
     await open();
     expect(byLabel("Priority: Empty")).not.toBeNull();
+  });
+
+  it("counts a change to the plan (an effort, a plan, a drop) as the task being touched", async () => {
+    // Those edit the plan row, not the upstream task row, so the task's own
+    // time would keep saying "Updated" an hour ago right after one.
+    fetchDetail.mockResolvedValue({
+      ...DETAIL,
+      plan: { ...PLAN, updated_at: "2026-10-07T09:00:00.000Z" },
+    });
+    await open();
+    const updated = Array.from(panel()?.querySelectorAll("time") ?? []).find(
+      (time) => time.textContent?.startsWith("Updated"),
+    );
+    expect(updated?.getAttribute("datetime")).toBe("2026-10-07T09:00:00.000Z");
+    expect(updated?.getAttribute("title")).toMatch(/Oct 7, 2026/);
   });
 
   it("shows when the task was made and last touched, the exact times on hover", async () => {
@@ -776,6 +798,19 @@ describe("a dropped task", () => {
     expect(byLabel("Status: Dropped")).not.toBeNull();
     expect(byLabel("Plan: This week")).toBeNull();
     expect(text()).toContain("This week");
+  });
+
+  it("draws the read-only plan's icon at the size of the other rows' icons", async () => {
+    fetchDetail.mockResolvedValue(dropped);
+    await open();
+    const value = panel()?.querySelector(
+      '[title="Undrop it to plan or move it again."]',
+    );
+    expect(value).not.toBeNull();
+    // Outside a button nothing sizes an icon for it: left alone it is 24px.
+    expect(value?.querySelector("svg")?.getAttribute("class")).toContain(
+      "size-4",
+    );
   });
 
   it("has no banner for a task that is not dropped", async () => {

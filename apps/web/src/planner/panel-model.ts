@@ -207,6 +207,27 @@ export function plannerProjectPathLabel(
   );
 }
 
+// --- When it was last touched ------------------------------------------------
+
+/**
+ * When a task was last touched, for the panel's footer: the later of the task's
+ * own `updated_at` and its plan row's. An effort, a plan or a drop changes the
+ * plan row and not the upstream task row, so the task's time alone would still say
+ * "Updated an hour ago" right after one of them was edited. A time that cannot be
+ * read is ignored.
+ */
+export function plannerLastTouched(
+  taskUpdatedAt: string,
+  planUpdatedAt: string | null | undefined,
+): string {
+  if (!planUpdatedAt) return taskUpdatedAt;
+  const task = Date.parse(taskUpdatedAt);
+  const plan = Date.parse(planUpdatedAt);
+  if (Number.isNaN(plan)) return taskUpdatedAt;
+  if (Number.isNaN(task)) return planUpdatedAt;
+  return plan > task ? planUpdatedAt : taskUpdatedAt;
+}
+
 // --- The address -------------------------------------------------------------
 
 /**

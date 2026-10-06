@@ -19,7 +19,7 @@ import { plannerFetchTaskDetail } from "./api";
 import { plannerCardColumn } from "./board-model";
 import { plannerRelativeTime } from "./dates";
 import { PlannerHistoryTimeline } from "./history-timeline";
-import { plannerCardFromDetail } from "./panel-model";
+import { plannerCardFromDetail, plannerLastTouched } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 import { PlannerTaskComments } from "./task-panel-comments";
@@ -234,10 +234,11 @@ function PanelBody({
     detail.task.created_at,
     strings.intlLocale,
   );
-  const updatedExact = formatDateTime(
+  const touchedAt = plannerLastTouched(
     detail.task.updated_at,
-    strings.intlLocale,
+    detail.plan?.updated_at,
   );
+  const updatedExact = formatDateTime(touchedAt, strings.intlLocale);
 
   return (
     <>
@@ -311,13 +312,9 @@ function PanelBody({
             {strings.panel.footer.created(createdExact)}
           </time>
           <span aria-hidden="true">·</span>
-          <time dateTime={detail.task.updated_at} title={updatedExact}>
+          <time dateTime={touchedAt} title={updatedExact}>
             {strings.panel.footer.updated(
-              plannerRelativeTime(
-                detail.task.updated_at,
-                nowMs,
-                strings.intlLocale,
-              ),
+              plannerRelativeTime(touchedAt, nowMs, strings.intlLocale),
             )}
           </time>
         </p>
@@ -355,7 +352,7 @@ export function PlannerTaskPanel({
         // Wider than the sheet's default and, under the `sm` breakpoint, the whole
         // screen. The `data-[side=right]:` prefixes are what override the sheet's
         // own width classes, which carry them.
-        className="w-full gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-[34rem] max-sm:border-l-0"
+        className="w-full gap-0 p-0 outline-none data-[side=right]:w-full data-[side=right]:sm:max-w-[34rem] max-sm:border-l-0"
         // Focus the panel itself, not its first field: opening a task must not put
         // a caret in the title (or raise a keyboard on a phone).
         initialFocus={popupRef}

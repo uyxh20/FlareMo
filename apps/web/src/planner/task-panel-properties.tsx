@@ -207,7 +207,9 @@ function PlanControl({
   const label = plannerPlanLabel(card, today, strings);
   const value = label ? (
     <>
-      <CalendarPlusIcon className="text-muted-foreground" />
+      {/* Sized here, not by the button: a finished or dropped task shows this
+          outside a button, where an icon with no size would be 24px. */}
+      <CalendarPlusIcon className="size-4 text-muted-foreground" />
       <span className="truncate" title={label.title}>
         {label.label}
       </span>
