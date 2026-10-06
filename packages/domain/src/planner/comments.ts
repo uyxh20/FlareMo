@@ -1,3 +1,4 @@
+import { plannerCommentBodyMax } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import {
   type PlannerTaskCommentRow,
@@ -29,8 +30,9 @@ import {
 // comment also needs its task to be live: a task in the recycle bin has no
 // panel to show its comments in.
 
-/** The longest comment, in UTF-16 code units, which is what `String#length` and zod count. */
-export const plannerCommentBodyMax = 5000;
+// The longest comment is `plannerCommentBodyMax` (5000 UTF-16 code units, which
+// is what `String#length` and zod count), shared with the request schema in
+// @flaremo/contracts so the two cannot drift.
 
 /** A comment as the routes return it. */
 export type PlannerCommentDto = {

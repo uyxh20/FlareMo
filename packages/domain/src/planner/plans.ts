@@ -1,5 +1,6 @@
 import {
   type PlannerHorizon,
+  plannerEffortMax,
   plannerHorizons,
   plannerPeriodStart,
   type TaskDto,
@@ -388,11 +389,9 @@ export async function plannerSetPlan(
 // Effort
 // ---------------------------------------------------------------------------
 
-/** The largest effort estimate. */
-export const plannerEffortMax = 999;
-
 /**
- * A valid effort, or a 400: a finite number from 0 to 999 with at most one
+ * A valid effort, or a 400: a finite number from 0 to `plannerEffortMax` (999,
+ * shared with the request schema in @flaremo/contracts) with at most one
  * decimal place, or null to clear it. The result is the clean value to store
  * (1.1 stays 1.1, not 1.1000000000000001; -0 becomes 0).
  */

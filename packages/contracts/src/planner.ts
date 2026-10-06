@@ -170,6 +170,40 @@ export function plannerIsValidLevel(value: unknown): value is string {
   return typeof value === "string" && plannerLevelPattern.test(value);
 }
 
+// A due date is a bare `YYYY-MM-DD`, but a legacy row can carry a time after it
+// (upstream's own `nextDayKey` says as much), so the day is read off the front.
+const DAY_PREFIX = /^(\d{4}-\d{2}-\d{2})(?:[T ]|$)/;
+
+/**
+ * The calendar quarter a task falls in, written like "Q4 2026": the quarter of
+ * its plan's period start when it has a plan, otherwise of its due date,
+ * otherwise null. The task panel shows it as a read-only property, so a task
+ * planned for a month, a week or a day is grouped the way the Notion board's
+ * Quarter column grouped it, without anyone filling it in.
+ *
+ * It is the quarter of the period's FIRST day, which is how a week belongs to a
+ * month everywhere else in the cockpit: a week that starts Monday 28 September
+ * is in Q3, even though most of its days are in October. Quarters are calendar
+ * quarters (January to March is Q1) and the maths is UTC-only, like every other
+ * day maths here. A value that is not a real day (an empty string, 30 February,
+ * a bare month) counts as absent, so a damaged plan period falls back to the
+ * due date instead of producing a wrong label.
+ */
+export function plannerQuarterLabel(input: {
+  planPeriodStart?: string | null;
+  dueAt?: string | null;
+}): string | null {
+  for (const value of [input.planPeriodStart, input.dueAt]) {
+    const key = typeof value === "string" ? DAY_PREFIX.exec(value)?.[1] : null;
+    const date = key ? parseDayKey(key) : undefined;
+    if (date) {
+      const quarter = Math.floor(date.getUTCMonth() / 3) + 1;
+      return `Q${quarter} ${String(date.getUTCFullYear()).padStart(4, "0")}`;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // HTTP API: /api/app/planner
 // ---------------------------------------------------------------------------
@@ -177,15 +211,20 @@ export function plannerIsValidLevel(value: unknown): value is string {
 // Every route is JSON and authenticated like `/api/app/tasks`: a cookie session
 // (state-changing requests must carry FlareMo's Origin) or a `memos_pat_` PAT.
 //
-//   GET   /board?today&done_days&include_dropped  PlannerBoardResponse
-//   POST  /rollover                               PlannerRolloverResponse
-//   POST  /tasks                                  201 PlannerCreateTaskResponse
-//   PATCH /tasks/:id                              PlannerTaskPlanResponse
-//   GET   /tasks/:id/history                      PlannerTaskHistoryResponse
-//   GET   /history?from&to                        PlannerHistoryRangeResponse
-//   GET   /tree                                   PlannerTreeResponse
-//   PATCH /tree/:projectId                        PlannerTreeNodeResponse
-//   GET   /tree/:projectId/rollup?from&to         PlannerRollupResponse
+//   GET    /board?today&done_days&include_dropped  PlannerBoardResponse
+//   POST   /rollover                               PlannerRolloverResponse
+//   POST   /tasks                                  201 PlannerCreateTaskResponse
+//   GET    /tasks/:id                              PlannerTaskDetailResponse
+//   PATCH  /tasks/:id                              PlannerTaskPlanResponse
+//   GET    /tasks/:id/history                      PlannerTaskHistoryResponse
+//   GET    /tasks/:id/comments                     PlannerCommentListResponse
+//   POST   /tasks/:id/comments                     201 PlannerCommentResponse
+//   PATCH  /comments/:id                           PlannerCommentResponse
+//   DELETE /comments/:id                           PlannerDeleteCommentResponse
+//   GET    /history?from&to                        PlannerHistoryRangeResponse
+//   GET    /tree                                   PlannerTreeResponse
+//   PATCH  /tree/:projectId                        PlannerTreeNodeResponse
+//   GET    /tree/:projectId/rollup?from&to         PlannerRollupResponse
 //
 // `today` is the client's local date. The server accepts it only within one day
 // of its own UTC date (`plannerTodayWithinBounds`) and answers 400 otherwise;
@@ -236,13 +275,55 @@ export const plannerRolloverSchema = z.strictObject({
   today: plannerDaySchema,
 });
 
+/** The largest effort estimate. */
+export const plannerEffortMax = 999;
+
+/**
+ * An effort estimate: a number from 0 to 999 with at most one decimal place
+ * (3, 0.5, 12.3). `0` is an estimate, not the same as none; a request clears
+ * the estimate with `null`. The tolerance is for binary floats: 1.1 * 10 is
+ * 11.000000000000002.
+ */
+export const plannerEffortSchema = z
+  .number()
+  .min(0)
+  .max(plannerEffortMax)
+  .refine(
+    (value) => Math.abs(value * 10 - Math.round(value * 10)) <= 1e-9,
+    "Expected at most one decimal place.",
+  );
+
+/** The longest comment, in characters (UTF-16 code units, which is what zod counts). */
+export const plannerCommentBodyMax = 5000;
+
+/** A comment's text: trimmed, then 1 to 5000 characters. */
+export const plannerCommentBodySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(plannerCommentBodyMax);
+
+/**
+ * `column` says where the new task lands, the way a column's "+" button does:
+ *
+ *   backlog   no plan (a plan is a 400)
+ *   todo      status `todo`; a plan is required (a 400 without one)
+ *   doing     status `in_progress`; the plan is optional
+ *   done      status `done`; the plan is optional
+ *
+ * Without it the task is `todo`, planned when `plan` is given, as before. The
+ * rule that To Do needs a plan and Backlog refuses one is the domain's, so it
+ * answers in the domain's envelope.
+ */
 export const plannerCreateTaskSchema = z.strictObject({
   title: createTaskSchema.shape.title,
   notes: createTaskSchema.shape.notes,
   priority: taskPrioritySchema.optional(),
   due_at: createTaskSchema.shape.due_at,
   project_id: createTaskSchema.shape.project_id,
-  // Omitted or null: the task lands in the backlog.
+  column: plannerColumnSchema.optional(),
+  // Omitted or null: the task lands in the backlog (unless `column` says To Do,
+  // Doing or Done, which then carry their own rules).
   plan: plannerPlanInputSchema.nullable().optional(),
   today: plannerDaySchema,
 });
@@ -254,18 +335,22 @@ export const plannerCreateTaskSchema = z.strictObject({
  *   1. `dropped: false`  undrop
  *   2. title, notes, priority, due_at, project_id  through upstream's updateTask
  *   3. `column` (a column move) or else `plan`
- *   4. `dropped: true`   drop
+ *   4. `effort`          the estimate, on the plan row; `null` clears it
+ *   5. `dropped: true`   drop
  *
  * It is not atomic: a step that fails leaves the earlier steps applied. A
  * `column` move sets the plan itself (the move table lives on the server), so
  * sending `column` and `plan` together is a 400. `status` and `sort_order` are
  * not accepted here: move columns with `column`, reorder through `/api/app/tasks`.
+ * `effort` is the one planner-side field that is not a plan: setting it never
+ * moves the task, and it is allowed on a dropped task.
  */
 export const plannerUpdateTaskSchema = z
   .strictObject({
     today: plannerDaySchema,
     column: plannerColumnSchema.optional(),
     plan: plannerPlanInputSchema.nullable().optional(),
+    effort: plannerEffortSchema.nullable().optional(),
     dropped: z.boolean().optional(),
     title: updateTaskSchema.shape.title,
     notes: updateTaskSchema.shape.notes,
@@ -285,6 +370,16 @@ export const plannerUpdateTaskSchema = z
       ),
     "At least one field besides today must be updated.",
   );
+
+/** A new comment on a task. The server trims the text and stores 1 to 5000 characters. */
+export const plannerCreateCommentSchema = z.strictObject({
+  body: plannerCommentBodySchema,
+});
+
+/** The new text of a comment, under the same rules as a new one. */
+export const plannerUpdateCommentSchema = z.strictObject({
+  body: plannerCommentBodySchema,
+});
 
 export const plannerHistoryRangeQuerySchema = z
   .object({ from: plannerDaySchema, to: plannerDaySchema })
@@ -431,6 +526,56 @@ export const plannerTaskHistoryResponseSchema = z.object({
   events: z.array(plannerEventDtoSchema),
 });
 
+/** A comment on a task. Its text never appears in the history archive. */
+export const plannerCommentDtoSchema = z.object({
+  // A random UUID, not namespaced.
+  id: z.string(),
+  // Upstream's task id, namespaced (`tasks/<id>`), like every other task id.
+  task_id: z.string(),
+  body: z.string(),
+  created_at: z.string(),
+  // Later than `created_at` once the comment has been edited.
+  updated_at: z.string(),
+});
+
+/** The goal a task belongs to, and the path of goals above it. */
+export const plannerTaskProjectSchema = z.object({
+  // Upstream's project id.
+  id: z.string(),
+  name: z.string(),
+  // The goals above it in the tree, root first, ending with its own parent;
+  // empty for a root or a project with no node row.
+  ancestors: z.array(z.object({ id: z.string(), name: z.string() })),
+});
+
+/**
+ * Everything the task panel shows for one task. Unlike a board card it has the
+ * whole upstream task, `notes` included.
+ */
+export const plannerTaskDetailResponseSchema = z.object({
+  task: taskDtoSchema,
+  // Null for a task that never had a plan row. A row can exist with a null
+  // horizon only to hold the effort estimate.
+  plan: plannerPlanDtoSchema.nullable(),
+  // Null when the task has no project.
+  project: plannerTaskProjectSchema.nullable(),
+  // Oldest first, without the deleted ones.
+  comments: z.array(plannerCommentDtoSchema),
+});
+
+export const plannerCommentListResponseSchema = z.object({
+  // Oldest first.
+  comments: z.array(plannerCommentDtoSchema),
+});
+
+export const plannerCommentResponseSchema = z.object({
+  comment: plannerCommentDtoSchema,
+});
+
+export const plannerDeleteCommentResponseSchema = z.object({
+  ok: z.literal(true),
+});
+
 export const plannerHistoryRangeResponseSchema = z.object({
   // Newest first, for the UTC days `from` to `to` inclusive.
   events: z.array(plannerEventDtoSchema),
@@ -510,6 +655,12 @@ export type PlannerBoardQuery = z.output<typeof plannerBoardQuerySchema>;
 export type PlannerRolloverInput = z.input<typeof plannerRolloverSchema>;
 export type PlannerCreateTaskInput = z.input<typeof plannerCreateTaskSchema>;
 export type PlannerUpdateTaskInput = z.input<typeof plannerUpdateTaskSchema>;
+export type PlannerCreateCommentInput = z.input<
+  typeof plannerCreateCommentSchema
+>;
+export type PlannerUpdateCommentInput = z.input<
+  typeof plannerUpdateCommentSchema
+>;
 export type PlannerHistoryRangeQuery = z.output<
   typeof plannerHistoryRangeQuerySchema
 >;
@@ -534,6 +685,20 @@ export type PlannerCreateTaskResponse = z.infer<
 export type PlannerEventDto = z.infer<typeof plannerEventDtoSchema>;
 export type PlannerTaskHistoryResponse = z.infer<
   typeof plannerTaskHistoryResponseSchema
+>;
+export type PlannerCommentDto = z.infer<typeof plannerCommentDtoSchema>;
+export type PlannerTaskProject = z.infer<typeof plannerTaskProjectSchema>;
+export type PlannerTaskDetailResponse = z.infer<
+  typeof plannerTaskDetailResponseSchema
+>;
+export type PlannerCommentListResponse = z.infer<
+  typeof plannerCommentListResponseSchema
+>;
+export type PlannerCommentResponse = z.infer<
+  typeof plannerCommentResponseSchema
+>;
+export type PlannerDeleteCommentResponse = z.infer<
+  typeof plannerDeleteCommentResponseSchema
 >;
 export type PlannerHistoryRangeResponse = z.infer<
   typeof plannerHistoryRangeResponseSchema

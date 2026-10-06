@@ -1,3 +1,4 @@
+import { plannerCommentBodyMax } from "@flaremo/contracts";
 import {
   afterAll,
   afterEach,
@@ -17,7 +18,6 @@ import {
 } from "../tasks";
 import {
   plannerAddComment,
-  plannerCommentBodyMax,
   plannerDeleteComment,
   plannerListComments,
   plannerNormalizeCommentBody,

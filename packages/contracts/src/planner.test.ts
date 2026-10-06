@@ -7,6 +7,7 @@ import {
   plannerLevelPattern,
   plannerNextPeriodStart,
   plannerPeriodStart,
+  plannerQuarterLabel,
   plannerTodayWithinBounds,
 } from "./planner";
 
@@ -526,6 +527,94 @@ describe("plannerIsValidLevel", () => {
   });
 });
 
+describe("plannerQuarterLabel", () => {
+  const label = (planPeriodStart?: string | null, dueAt?: string | null) =>
+    plannerQuarterLabel({ planPeriodStart, dueAt });
+
+  it("names the calendar quarter of the plan's period start", () => {
+    expect(label("2026-10-05")).toBe("Q4 2026");
+    expect(label("2026-01-01")).toBe("Q1 2026");
+    expect(label("2027-05-17")).toBe("Q2 2027");
+    expect(label("2026-08-31")).toBe("Q3 2026");
+  });
+
+  it("changes quarter exactly on the first day of January, April, July and October", () => {
+    const edges: Array<[string, string]> = [
+      ["2026-03-31", "Q1 2026"],
+      ["2026-04-01", "Q2 2026"],
+      ["2026-06-30", "Q2 2026"],
+      ["2026-07-01", "Q3 2026"],
+      ["2026-09-30", "Q3 2026"],
+      ["2026-10-01", "Q4 2026"],
+      ["2026-12-31", "Q4 2026"],
+      ["2027-01-01", "Q1 2027"],
+    ];
+    for (const [day, expected] of edges) {
+      expect(label(day), day).toBe(expected);
+    }
+  });
+
+  it("takes a month plan's first day, a week plan's Monday and a day plan's day", () => {
+    // A month plan starts on the 1st.
+    expect(label(plannerPeriodStart("month", "2026-11-18"))).toBe("Q4 2026");
+    // The week of Monday 28 September is in Q3, though most of its days are in
+    // October: a period belongs to the quarter its first day is in.
+    expect(plannerPeriodStart("week", "2026-10-01")).toBe("2026-09-28");
+    expect(label(plannerPeriodStart("week", "2026-10-01"))).toBe("Q3 2026");
+    expect(label(plannerPeriodStart("day", "2026-10-01"))).toBe("Q4 2026");
+  });
+
+  it("uses the due date when there is no plan period", () => {
+    expect(label(null, "2026-02-14")).toBe("Q1 2026");
+    expect(label(undefined, "2027-12-25")).toBe("Q4 2027");
+    expect(label(undefined, "2026-07-04")).toBe("Q3 2026");
+  });
+
+  it("prefers the plan period over the due date, whatever the due date says", () => {
+    expect(label("2026-10-05", "2026-01-15")).toBe("Q4 2026");
+    expect(label("2026-04-06", "2027-12-31")).toBe("Q2 2026");
+  });
+
+  it("is null with neither", () => {
+    expect(label()).toBeNull();
+    expect(label(null, null)).toBeNull();
+    expect(plannerQuarterLabel({})).toBeNull();
+  });
+
+  it("treats a value that is not a real day as absent, so it falls back instead of guessing", () => {
+    for (const bad of [
+      "",
+      " ",
+      "2026-13-01",
+      "2026-02-30",
+      "2027-02-29",
+      "2026-10",
+      "2026-10-5",
+      "tomorrow",
+      "10/05/2026",
+      "0000-01-01",
+    ]) {
+      expect(label(bad), bad).toBeNull();
+      // ...and a good due date still wins over a damaged plan period.
+      expect(label(bad, "2026-11-02"), bad).toBe("Q4 2026");
+      // A damaged due date does not hide a good plan period either.
+      expect(label("2026-05-04", bad), bad).toBe("Q2 2026");
+    }
+  });
+
+  it("reads the day off a legacy due date that carries a time", () => {
+    expect(label(null, "2026-10-05T00:00:00.000Z")).toBe("Q4 2026");
+    expect(label(null, "2026-03-31 23:59:59")).toBe("Q1 2026");
+    // Not a time, just junk after a day: not accepted.
+    expect(label(null, "2026-10-05garbage")).toBeNull();
+  });
+
+  it("handles a leap day, and pads an early year like the day keys do", () => {
+    expect(label("2028-02-29")).toBe("Q1 2028");
+    expect(label("0005-06-07")).toBe("Q2 0005");
+  });
+});
+
 // A bug that reads local time (a date-only string parsed as UTC but read with
 // local getters, or the reverse) only shows in a zone other than the machine's,
 // and CI usually runs in UTC. So repeat the hard cases in zones on both sides of
@@ -554,6 +643,10 @@ describe("time zone independence", () => {
     ).toBe(januaryOffset);
 
     for (const c of PERIOD_CASES) expectPeriodCase(c);
+    expect(plannerQuarterLabel({ planPeriodStart: "2026-10-01" })).toBe(
+      "Q4 2026",
+    );
+    expect(plannerQuarterLabel({ dueAt: "2026-09-30" })).toBe("Q3 2026");
     expect(plannerIsValidDayKey("2028-02-29")).toBe(true);
     expect(plannerIsValidDayKey("2027-02-29")).toBe(false);
     const now = new Date("2026-10-05T12:00:00Z");

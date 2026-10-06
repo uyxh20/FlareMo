@@ -1,20 +1,29 @@
 import {
   type PlannerBoardResponse,
+  type PlannerCommentDto,
+  type PlannerCommentListResponse,
+  type PlannerCommentResponse,
   type PlannerCreateTaskResponse,
   type PlannerHistoryRangeResponse,
   type PlannerRolloverResponse,
   type PlannerRollupResponse,
+  type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
   type PlannerTreeNodeResponse,
   type PlannerTreeResponse,
   plannerBoardResponseSchema,
   plannerColumnSchema,
+  plannerCommentBodyMax,
+  plannerCommentListResponseSchema,
+  plannerCommentResponseSchema,
   plannerCreateTaskResponseSchema,
+  plannerDeleteCommentResponseSchema,
   plannerHistoryRangeResponseSchema,
   plannerPeriodStart,
   plannerRolloverResponseSchema,
   plannerRollupResponseSchema,
+  plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
   plannerTaskPlanResponseSchema,
   plannerTreeNodeResponseSchema,
@@ -70,6 +79,7 @@ const RESET_TABLES = [
   "planner_task_seen",
   "planner_sync_state",
   "planner_project_node",
+  "planner_task_comment",
   "task_activity",
   "tasks",
   "projects",
@@ -264,6 +274,18 @@ describe("planner API", () => {
     return created.task;
   }
 
+  /** A comment through the planner route, as the owner. */
+  async function createComment(
+    taskId: string,
+    text: string,
+  ): Promise<PlannerCommentDto> {
+    const created = await body<PlannerCommentResponse>(
+      send("POST", `${API}/tasks/${bare(taskId)}/comments`, { body: text }),
+      201,
+    );
+    return created.comment;
+  }
+
   const patchTask = (id: string, change: Record<string, unknown>) =>
     send("PATCH", `${API}/tasks/${bare(id)}`, { today: TODAY, ...change });
 
@@ -374,7 +396,11 @@ describe("planner API", () => {
   // --- the endpoints, for the credential tables --------------------------------
 
   /** Every route with a body that is valid, so a failure comes from auth alone. */
-  const endpoints = (taskId = "tasks/none", projectId = "projects/none") => {
+  const endpoints = (
+    taskId = "tasks/none",
+    projectId = "projects/none",
+    commentId = "none",
+  ) => {
     const range = `from=${TODAY}&to=${TODAY}`;
     return [
       { method: "GET", path: `/board?today=${TODAY}` },
@@ -389,7 +415,20 @@ describe("planner API", () => {
         path: `/tasks/${bare(taskId)}`,
         body: { today: TODAY, title: "Never renamed" },
       },
+      { method: "GET", path: `/tasks/${bare(taskId)}` },
       { method: "GET", path: `/tasks/${bare(taskId)}/history` },
+      { method: "GET", path: `/tasks/${bare(taskId)}/comments` },
+      {
+        method: "POST",
+        path: `/tasks/${bare(taskId)}/comments`,
+        body: { body: "Never commented" },
+      },
+      {
+        method: "PATCH",
+        path: `/comments/${commentId}`,
+        body: { body: "Never edited" },
+      },
+      { method: "DELETE", path: `/comments/${commentId}` },
       { method: "GET", path: `/history?${range}` },
       { method: "GET", path: "/tree" },
       {
@@ -401,8 +440,10 @@ describe("planner API", () => {
     ] as const;
   };
 
-  const mutations = (taskId?: string, projectId?: string) =>
-    endpoints(taskId, projectId).filter((entry) => entry.method !== "GET");
+  const mutations = (taskId?: string, projectId?: string, commentId?: string) =>
+    endpoints(taskId, projectId, commentId).filter(
+      (entry) => entry.method !== "GET",
+    );
 
   // ===========================================================================
   // Authentication and the Origin rules
@@ -455,8 +496,9 @@ describe("planner API", () => {
     it("refuses a cookie-session state change without FlareMo's Origin, and applies it with one", async () => {
       const task = await createTask("Origin check");
       const projectId = await createProject("Origin project");
+      const comment = await createComment(task.id, "Origin comment");
 
-      for (const entry of mutations(task.id, projectId)) {
+      for (const entry of mutations(task.id, projectId, comment.id)) {
         const label = `${entry.method} ${entry.path}`;
         for (const origin of [
           undefined,
@@ -480,9 +522,15 @@ describe("planner API", () => {
         (await rows<{ title: string }>("SELECT title FROM tasks"))[0]?.title,
       ).toBe("Origin check");
       expect(await count("planner_project_node")).toBe(0);
+      // Nor did any of them touch the comment.
+      expect(
+        await rows<{ body: string; deleted_at: string | null }>(
+          "SELECT body, deleted_at FROM planner_task_comment",
+        ),
+      ).toEqual([{ body: "Origin comment", deleted_at: null }]);
 
       // The same requests with the right Origin go through.
-      for (const entry of mutations(task.id, projectId)) {
+      for (const entry of mutations(task.id, projectId, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -492,6 +540,15 @@ describe("planner API", () => {
         );
       }
       expect(await count("tasks")).toBe(2);
+      // The new comment is added, the first is edited and then deleted.
+      expect(
+        await rows<{ body: string; deleted_at: string | null }>(
+          "SELECT body, deleted_at FROM planner_task_comment ORDER BY rowid",
+        ).then((all) => all.map((row) => [row.body, row.deleted_at !== null])),
+      ).toEqual([
+        ["Never edited", true],
+        ["Never commented", false],
+      ]);
     });
 
     it("lets a cookie session read without an Origin: only state changes need one", async () => {
@@ -2306,6 +2363,778 @@ describe("planner API", () => {
   });
 
   // ===========================================================================
+  // The task panel: detail, effort, create in a column, comments
+  // ===========================================================================
+
+  const detailPath = (id: string) => `${API}/tasks/${bare(id)}`;
+
+  const detailOk = async (id: string) =>
+    onTheWire(
+      plannerTaskDetailResponseSchema,
+      await body<PlannerTaskDetailResponse>(send("GET", detailPath(id))),
+    ) as PlannerTaskDetailResponse;
+
+  describe("GET /tasks/:id", () => {
+    it("returns the whole task with its plan, effort, goal path and comments", async () => {
+      const health = await createProject("Health");
+      const marathon = await createProject("Run a marathon");
+      await body(
+        send("PATCH", `${API}/tree/${bare(marathon)}`, {
+          parent_project_id: health,
+          level: "goal",
+        }),
+      );
+      const task = await createTask("Train for it", {
+        notes: "Long run on Sunday",
+        priority: "high",
+        due_at: shiftDay(TODAY, 6),
+        project_id: marathon,
+        plan: { horizon: "week", day: TODAY },
+      });
+      await patchTaskOk(task.id, { effort: 3.5 });
+      const first = await createComment(task.id, "First");
+      const second = await createComment(task.id, "Second");
+
+      const detail = await detailOk(task.id);
+
+      expect(detail.task).toMatchObject({
+        id: task.id,
+        title: "Train for it",
+        notes: "Long run on Sunday",
+        priority: "high",
+        due_at: shiftDay(TODAY, 6),
+        project_id: marathon,
+        status: "todo",
+      });
+      expect(detail.plan).toMatchObject({
+        task_id: task.id,
+        horizon: "week",
+        period_start: plannerPeriodStart("week", TODAY),
+        carry_count: 0,
+        dropped_at: null,
+        effort: 3.5,
+      });
+      expect(detail.project).toEqual({
+        id: marathon,
+        name: "Run a marathon",
+        ancestors: [{ id: health, name: "Health" }],
+      });
+      expect(detail.comments.map((c) => [c.id, c.body, c.task_id])).toEqual([
+        [first.id, "First", task.id],
+        [second.id, "Second", task.id],
+      ]);
+    });
+
+    it("answers a task with nothing else with null plan and project and no comments", async () => {
+      const task = await createTask("Plain");
+      const detail = await detailOk(task.id);
+      expect(Object.keys(detail).sort()).toEqual([
+        "comments",
+        "plan",
+        "project",
+        "task",
+      ]);
+      expect(detail).toMatchObject({ plan: null, project: null, comments: [] });
+      expect(detail.task.notes).toBeNull();
+    });
+
+    it("gives a project that has no node an empty path", async () => {
+      const home = await createProject("Home");
+      const task = await createTask("Chore", { project_id: home });
+      expect((await detailOk(task.id)).project).toEqual({
+        id: home,
+        name: "Home",
+        ancestors: [],
+      });
+    });
+
+    it("reads a backlog task that holds only an effort: a plan with no horizon", async () => {
+      const task = await createTask("Estimated");
+      await patchTaskOk(task.id, { effort: 2 });
+      expect((await detailOk(task.id)).plan).toMatchObject({
+        horizon: null,
+        period_start: null,
+        effort: 2,
+      });
+    });
+
+    it("shows notes the board leaves out, and an edit made through upstream's own route", async () => {
+      const task = await createUpstreamTask("Made in /projects", {
+        notes: "Written elsewhere",
+      });
+      expect((await detailOk(task.id)).task.notes).toBe("Written elsewhere");
+
+      await body(
+        send("PATCH", `/api/app/tasks/${bare(task.id)}`, {
+          title: "Renamed in /projects",
+          notes: "Edited elsewhere",
+        }),
+      );
+      expect((await detailOk(task.id)).task).toMatchObject({
+        title: "Renamed in /projects",
+        notes: "Edited elsewhere",
+      });
+      // The board card has no notes at all.
+      const card = (await boardOk()).columns.backlog.find(
+        (entry) => entry.id === task.id,
+      );
+      expect(card).toBeDefined();
+      expect(card).not.toHaveProperty("notes");
+    });
+
+    it("accepts a bare or a namespaced task id in the path", async () => {
+      const task = await createTask("Either way");
+      // The slash of a namespaced id travels percent-encoded, like the web client does.
+      for (const id of [bare(task.id), encodeURIComponent(task.id)]) {
+        const read = await body<PlannerTaskDetailResponse>(
+          send("GET", `${API}/tasks/${id}`),
+        );
+        expect(read.task.id).toBe(task.id);
+      }
+    });
+
+    it("is a 404 for a task that is missing, deleted or someone else's, in one envelope", async () => {
+      const mine = await createTask("Mine");
+      const gone = await createTask("Binned");
+      await body(send("DELETE", `/api/app/tasks/${bare(gone.id)}`));
+      const member = await createMember();
+
+      await domainError(send("GET", detailPath("tasks/no-such-task")), 404);
+      await domainError(send("GET", detailPath(gone.id)), 404);
+      await domainError(member.asMember("GET", detailPath(mine.id)), 404);
+
+      // Their own task is theirs to read, and not the owner's.
+      const theirs = await body<PlannerCreateTaskResponse>(
+        member.asMember("POST", `${API}/tasks`, {
+          title: "Member task",
+          today: TODAY,
+        }),
+        201,
+      );
+      expect(
+        (
+          await body<PlannerTaskDetailResponse>(
+            member.asMember("GET", detailPath(theirs.task.id)),
+          )
+        ).task.title,
+      ).toBe("Member task");
+      await domainError(send("GET", detailPath(theirs.task.id)), 404);
+    });
+
+    it("is a read: it writes nothing and is not throttled", async () => {
+      const task = await createTask("Read twice");
+      await createComment(task.id, "Here");
+      const counts = async () => [
+        await count("planner_task_plan"),
+        await count("planner_task_event"),
+        await count("planner_task_comment"),
+        await count("task_activity"),
+      ];
+      const before = await counts();
+      await detailOk(task.id);
+      await detailOk(task.id);
+      expect(await counts()).toEqual(before);
+    });
+
+    it("works for a personal access token, with no Origin", async () => {
+      const task = await createTask("For the agent");
+      const token = await createPat();
+      const read = await body<PlannerTaskDetailResponse>(
+        request("GET", detailPath(task.id), {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+      );
+      expect(read.task.title).toBe("For the agent");
+    });
+  });
+
+  describe("PATCH /tasks/:id with effort", () => {
+    it("sets, changes and clears the estimate, and answers with the plan that holds it", async () => {
+      const task = await createTask("Estimate me");
+
+      const set = onTheWire(
+        plannerTaskPlanResponseSchema,
+        await patchTaskOk(task.id, { effort: 3 }),
+      );
+      expect(set.plan).toMatchObject({
+        task_id: task.id,
+        horizon: null,
+        period_start: null,
+        effort: 3,
+      });
+      // It never goes through upstream: the task row and its trail are untouched.
+      expect(set.task.updated_at).toBe(task.updated_at);
+      expect(
+        (
+          await rows<{ action: string }>(
+            "SELECT action FROM task_activity WHERE task_id = ?",
+            task.id,
+          )
+        ).map((row) => row.action),
+      ).toEqual(["created"]);
+
+      expect((await patchTaskOk(task.id, { effort: 5.5 })).plan?.effort).toBe(
+        5.5,
+      );
+      expect((await patchTaskOk(task.id, { effort: 0 })).plan?.effort).toBe(0);
+      expect((await patchTaskOk(task.id, { effort: null })).plan?.effort).toBe(
+        null,
+      );
+
+      // One effort_changed event per change, with {from, to}.
+      expect(
+        (
+          await rows<{ type: string; data: string }>(
+            "SELECT type, data FROM planner_task_event WHERE task_id = ? ORDER BY id",
+            task.id,
+          )
+        ).map((row) => [row.type, JSON.parse(row.data)]),
+      ).toEqual([
+        ["effort_changed", { from: null, to: 3 }],
+        ["effort_changed", { from: 3, to: 5.5 }],
+        ["effort_changed", { from: 5.5, to: 0 }],
+        ["effort_changed", { from: 0, to: null }],
+      ]);
+    });
+
+    it("leaves the task in Backlog: an estimate is not a plan", async () => {
+      const task = await createTask("Still backlog");
+      await patchTaskOk(task.id, { effort: 4 });
+      const read = await boardOk();
+      expect(titles(read.columns.backlog)).toEqual(["Still backlog"]);
+      expect(read.columns.todo).toEqual([]);
+    });
+
+    it("combines with a title edit, a column move and a plan, applied in the documented order", async () => {
+      const task = await createTask("Combined");
+
+      const moved = await patchTaskOk(task.id, {
+        title: "Combined and moved",
+        column: "doing",
+        effort: 2,
+      });
+      expect(moved.task).toMatchObject({
+        title: "Combined and moved",
+        status: "in_progress",
+      });
+      expect(moved.plan?.effort).toBe(2);
+
+      const planned = await patchTaskOk(task.id, {
+        plan: { horizon: "week", day: TODAY },
+        effort: 4,
+      });
+      expect(planned.plan).toMatchObject({
+        horizon: "week",
+        period_start: plannerPeriodStart("week", TODAY),
+        effort: 4,
+      });
+      // Re-planning leaves the estimate; unplanning too.
+      expect((await patchTaskOk(task.id, { plan: null })).plan).toMatchObject({
+        horizon: null,
+        effort: 4,
+      });
+    });
+
+    it("keeps the estimate through a drop and an undrop, and allows setting it while dropped", async () => {
+      const task = await createTask("Dropped with effort");
+      await patchTaskOk(task.id, { effort: 6 });
+      const dropped = await patchTaskOk(task.id, { dropped: true });
+      expect(dropped.plan?.dropped_at).not.toBeNull();
+      expect(dropped.plan?.effort).toBe(6);
+
+      const changed = await patchTaskOk(task.id, { effort: 1.5 });
+      expect(changed.plan?.effort).toBe(1.5);
+      expect(changed.plan?.dropped_at).not.toBeNull();
+
+      const undropped = await patchTaskOk(task.id, { dropped: false });
+      expect(undropped.plan).toMatchObject({ dropped_at: null, effort: 1.5 });
+
+      // And one request can undrop, estimate and drop again, in that order.
+      const both = await patchTaskOk(task.id, { effort: 9, dropped: true });
+      expect(both.plan).toMatchObject({ effort: 9 });
+      expect(both.plan?.dropped_at).not.toBeNull();
+    });
+
+    it("answers 400 for an estimate out of range, with two decimals or not a number, and changes nothing", async () => {
+      const task = await createTask("Strict");
+      await patchTaskOk(task.id, { effort: 1 });
+      const events = await count("planner_task_event");
+      for (const effort of [-1, 1000, 2.25, "3", true, [], {}, 1e9]) {
+        expect(
+          (await patchTask(task.id, { effort })).status,
+          JSON.stringify(effort),
+        ).toBe(400);
+      }
+      expect(
+        (
+          await rows<{ effort: number }>("SELECT effort FROM planner_task_plan")
+        )[0]?.effort,
+      ).toBe(1);
+      expect(await count("planner_task_event")).toBe(events);
+    });
+
+    it("is a 404 for a task that is missing, deleted or someone else's, and writes nothing", async () => {
+      const mine = await createTask("Mine");
+      const gone = await createTask("Binned");
+      await body(send("DELETE", `/api/app/tasks/${bare(gone.id)}`));
+      const member = await createMember();
+
+      await domainError(
+        member.asMember("PATCH", `${API}/tasks/${bare(mine.id)}`, {
+          today: TODAY,
+          effort: 3,
+        }),
+        404,
+      );
+      await domainError(patchTask("tasks/no-such-task", { effort: 3 }), 404);
+      await domainError(patchTask(gone.id, { effort: 3 }), 404);
+      expect(await count("planner_task_plan")).toBe(0);
+      expect(await count("planner_task_event")).toBe(0);
+    });
+  });
+
+  describe("POST /tasks with a column", () => {
+    const createIn = (column: string, extra: Record<string, unknown> = {}) =>
+      send("POST", `${API}/tasks`, {
+        title: `In ${column}`,
+        today: TODAY,
+        column,
+        ...extra,
+      });
+    // TODAY is set in beforeEach, so the plan is built when a test asks for it.
+    const week = () => ({ horizon: "week", day: TODAY });
+
+    it("creates a Backlog task with no plan", async () => {
+      const created = onTheWire(
+        plannerCreateTaskResponseSchema,
+        await body<PlannerCreateTaskResponse>(createIn("backlog"), 201),
+      );
+      expect(created.task.status).toBe("todo");
+      expect(created.plan).toBeNull();
+      expect(titles((await boardOk()).columns.backlog)).toEqual(["In backlog"]);
+    });
+
+    it("creates a To Do task with its plan, and refuses one without a plan", async () => {
+      const created = await body<PlannerCreateTaskResponse>(
+        createIn("todo", { plan: week() }),
+        201,
+      );
+      expect(created.task.status).toBe("todo");
+      expect(created.plan).toMatchObject({
+        horizon: "week",
+        period_start: plannerPeriodStart("week", TODAY),
+      });
+      expect(titles((await boardOk()).columns.todo)).toEqual(["In todo"]);
+
+      const tasksBefore = await count("tasks");
+      await domainError(createIn("todo"), 400, "needs a plan");
+      await domainError(createIn("todo", { plan: null }), 400, "needs a plan");
+      expect(await count("tasks")).toBe(tasksBefore);
+    });
+
+    it("creates a Doing task, with or without a plan", async () => {
+      const bareOne = await body<PlannerCreateTaskResponse>(
+        createIn("doing"),
+        201,
+      );
+      expect(bareOne.task.status).toBe("in_progress");
+      expect(bareOne.plan).toBeNull();
+
+      const planned = await body<PlannerCreateTaskResponse>(
+        createIn("doing", { title: "Planned and doing", plan: week() }),
+        201,
+      );
+      expect(planned.task.status).toBe("in_progress");
+      expect(planned.plan?.horizon).toBe("week");
+
+      const read = await boardOk();
+      expect(titles(read.columns.doing).sort()).toEqual([
+        "In doing",
+        "Planned and doing",
+      ]);
+      // One write: a single created row in upstream's trail, no status change.
+      expect(
+        (
+          await rows<{ action: string }>(
+            "SELECT action FROM task_activity WHERE task_id = ?",
+            bareOne.task.id,
+          )
+        ).map((row) => row.action),
+      ).toEqual(["created"]);
+    });
+
+    it("creates a Done task, completed now, with or without a plan", async () => {
+      const finished = await body<PlannerCreateTaskResponse>(
+        createIn("done"),
+        201,
+      );
+      expect(finished.task.status).toBe("done");
+      expect(finished.task.completed_at).not.toBeNull();
+      expect(finished.plan).toBeNull();
+
+      const planned = await body<PlannerCreateTaskResponse>(
+        createIn("done", {
+          title: "Planned and done",
+          plan: { horizon: "day", day: TODAY },
+        }),
+        201,
+      );
+      expect(planned.plan).toMatchObject({
+        horizon: "day",
+        period_start: TODAY,
+      });
+
+      expect(titles((await boardOk()).columns.done).sort()).toEqual([
+        "In done",
+        "Planned and done",
+      ]);
+    });
+
+    it("refuses a plan for a Backlog task and creates nothing", async () => {
+      await domainError(
+        createIn("backlog", { plan: week() }),
+        400,
+        "cannot have a plan",
+      );
+      expect(await count("tasks")).toBe(0);
+    });
+
+    it("answers 400 for a column that does not exist, and still works without one", async () => {
+      for (const column of ["archive", "Doing", "", "dropped"]) {
+        expect((await createIn(column)).status, column).toBe(400);
+      }
+      expect(
+        (
+          await send("POST", `${API}/tasks`, {
+            title: "x",
+            today: TODAY,
+            column: null,
+          })
+        ).status,
+      ).toBe(400);
+      expect(await count("tasks")).toBe(0);
+
+      const plain = await body<PlannerCreateTaskResponse>(
+        send("POST", `${API}/tasks`, { title: "No column", today: TODAY }),
+        201,
+      );
+      expect(plain.task.status).toBe("todo");
+    });
+  });
+
+  describe("comments", () => {
+    const commentsPath = (taskId: string) =>
+      `${API}/tasks/${bare(taskId)}/comments`;
+    const commentPath = (commentId: string) => `${API}/comments/${commentId}`;
+
+    const listOk = async (taskId: string) =>
+      onTheWire(
+        plannerCommentListResponseSchema,
+        await body<PlannerCommentListResponse>(
+          send("GET", commentsPath(taskId)),
+        ),
+      ).comments as PlannerCommentDto[];
+
+    it("adds a comment, trimmed, answers 201 with exactly the contract, and lists it", async () => {
+      const task = await createTask("Discuss");
+
+      const created = onTheWire(
+        plannerCommentResponseSchema,
+        await body<PlannerCommentResponse>(
+          send("POST", commentsPath(task.id), { body: "  Looks good\n" }),
+          201,
+        ),
+      ).comment as PlannerCommentDto;
+
+      expect(created).toEqual({
+        id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        task_id: task.id,
+        body: "Looks good",
+        created_at: expect.any(String),
+        updated_at: created.created_at,
+      });
+      expect(await listOk(task.id)).toEqual([created]);
+      // The detail carries the same comment.
+      expect((await detailOk(task.id)).comments).toEqual([created]);
+    });
+
+    it("lists a task's comments oldest first and leaves out the deleted ones", async () => {
+      const task = await createTask("Thread");
+      const other = await createTask("Another thread");
+      const first = await createComment(task.id, "first");
+      const second = await createComment(task.id, "second");
+      const third = await createComment(task.id, "third");
+      await createComment(other.id, "elsewhere");
+      await body(send("DELETE", commentPath(second.id)));
+
+      expect((await listOk(task.id)).map((c) => c.id)).toEqual([
+        first.id,
+        third.id,
+      ]);
+      expect((await listOk(other.id)).map((c) => c.body)).toEqual([
+        "elsewhere",
+      ]);
+    });
+
+    it("edits a comment: new text, later update time, the same creation time", async () => {
+      const task = await createTask("Edit");
+      const comment = await createComment(task.id, "draft");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      const edited = onTheWire(
+        plannerCommentResponseSchema,
+        await body<PlannerCommentResponse>(
+          send("PATCH", commentPath(comment.id), { body: "  final " }),
+        ),
+      ).comment as PlannerCommentDto;
+
+      expect(edited).toMatchObject({
+        id: comment.id,
+        task_id: task.id,
+        body: "final",
+        created_at: comment.created_at,
+      });
+      expect(edited.updated_at > comment.updated_at).toBe(true);
+      expect((await listOk(task.id))[0]).toEqual(edited);
+    });
+
+    it("deletes a comment softly: gone from the lists, still in the table, answering ok", async () => {
+      const task = await createTask("Delete");
+      const comment = await createComment(task.id, "to go");
+
+      expect(
+        onTheWire(
+          plannerDeleteCommentResponseSchema,
+          await body(send("DELETE", commentPath(comment.id))),
+        ),
+      ).toEqual({ ok: true });
+
+      expect(await listOk(task.id)).toEqual([]);
+      expect((await detailOk(task.id)).comments).toEqual([]);
+      expect(
+        await rows<{ body: string; deleted_at: string | null }>(
+          "SELECT body, deleted_at FROM planner_task_comment WHERE id = ?",
+          comment.id,
+        ),
+      ).toEqual([{ body: "to go", deleted_at: expect.any(String) }]);
+      // A second delete, and an edit of a deleted comment, are 404s.
+      await domainError(send("DELETE", commentPath(comment.id)), 404);
+      await domainError(
+        send("PATCH", commentPath(comment.id), { body: "back" }),
+        404,
+      );
+    });
+
+    it("answers 400 for a blank, missing, too long or mistyped body and for keys it does not know, and writes nothing", async () => {
+      const task = await createTask("Strict comments");
+      const comment = await createComment(task.id, "keep me");
+      const events = await count("planner_task_event");
+
+      const bad: unknown[] = [
+        {},
+        { body: "" },
+        { body: "   \n\t " },
+        { body: "x".repeat(plannerCommentBodyMax + 1) },
+        { body: 42 },
+        { body: null },
+        { body: ["a"] },
+        { body: "ok", task_id: "tasks/other" },
+        { text: "ok" },
+      ];
+      for (const requestBody of bad) {
+        const label = JSON.stringify(requestBody).slice(0, 60);
+        expect(
+          (await send("POST", commentsPath(task.id), requestBody)).status,
+          `POST ${label}`,
+        ).toBe(400);
+        expect(
+          (await send("PATCH", commentPath(comment.id), requestBody)).status,
+          `PATCH ${label}`,
+        ).toBe(400);
+      }
+      // The longest body is fine.
+      await body(
+        send("POST", commentsPath(task.id), {
+          body: "y".repeat(plannerCommentBodyMax),
+        }),
+        201,
+      );
+
+      expect((await listOk(task.id)).map((c) => c.body.length)).toEqual([
+        7,
+        plannerCommentBodyMax,
+      ]);
+      expect(await count("planner_task_event")).toBe(events + 1);
+    });
+
+    it("answers 400 for a malformed JSON body", async () => {
+      const task = await createTask("Malformed");
+      const comment = await createComment(task.id, "ok");
+      for (const [method, path] of [
+        ["POST", commentsPath(task.id)],
+        ["PATCH", commentPath(comment.id)],
+      ] as const) {
+        const response = await fetchWorker(
+          new Request(url(path), {
+            method,
+            headers: { ...asOwnerCookie(), "content-type": "application/json" },
+            body: "{not json",
+          }),
+          ctx.env,
+        );
+        expect(response.status, method).toBe(400);
+      }
+    });
+
+    it("is a 404 for a task or comment that is missing, deleted or someone else's, whatever the verb", async () => {
+      const mine = await createTask("Mine");
+      const mineComment = await createComment(mine.id, "mine");
+      const gone = await createTask("Binned");
+      const goneComment = await createComment(gone.id, "binned");
+      await body(send("DELETE", `/api/app/tasks/${bare(gone.id)}`));
+      const member = await createMember();
+      const theirs = await body<PlannerCreateTaskResponse>(
+        member.asMember("POST", `${API}/tasks`, {
+          title: "Member task",
+          today: TODAY,
+        }),
+        201,
+      );
+      const theirComment = await body<PlannerCommentResponse>(
+        member.asMember("POST", commentsPath(theirs.task.id), {
+          body: "member comment",
+        }),
+        201,
+      );
+
+      // Someone else's task, a binned one, and one that never existed.
+      for (const taskId of [theirs.task.id, gone.id, "tasks/no-such-task"]) {
+        await domainError(send("GET", commentsPath(taskId)), 404);
+        await domainError(
+          send("POST", commentsPath(taskId), { body: "hello" }),
+          404,
+        );
+      }
+      // Someone else's comment, one on a binned task, and one that never existed.
+      for (const commentId of [
+        theirComment.comment.id,
+        goneComment.id,
+        "no-such-comment",
+      ]) {
+        await domainError(
+          send("PATCH", commentPath(commentId), { body: "changed" }),
+          404,
+        );
+        await domainError(send("DELETE", commentPath(commentId)), 404);
+      }
+      // The member cannot reach the owner's comment either.
+      await domainError(
+        member.asMember("PATCH", commentPath(mineComment.id), {
+          body: "hijacked",
+        }),
+        404,
+      );
+      await domainError(
+        member.asMember("DELETE", commentPath(mineComment.id)),
+        404,
+      );
+
+      // Nothing was changed by any of it.
+      expect(
+        await rows<{ body: string; deleted_at: string | null }>(
+          "SELECT body, deleted_at FROM planner_task_comment ORDER BY rowid",
+        ),
+      ).toEqual([
+        { body: "mine", deleted_at: null },
+        { body: "binned", deleted_at: null },
+        { body: "member comment", deleted_at: null },
+      ]);
+    });
+
+    it("writes commented, comment_edited and comment_deleted to the history, with the comment's id and never its text", async () => {
+      const task = await createTask("History");
+      const secret = "the password is hunter2";
+      const comment = await createComment(task.id, secret);
+      await body(
+        send("PATCH", commentPath(comment.id), { body: `${secret}!` }),
+      );
+      await body(send("DELETE", commentPath(comment.id)));
+
+      const { events } = await history(task.id);
+
+      expect(events.map((event) => event.type)).toEqual([
+        "comment_deleted",
+        "comment_edited",
+        "commented",
+        "created",
+      ]);
+      for (const event of events.filter((e) => e.type.startsWith("comment"))) {
+        expect(event).toMatchObject({
+          source: "planner",
+          actor_type: "user",
+          data: { comment_id: comment.id },
+        });
+      }
+      expect(JSON.stringify(events)).not.toContain("hunter2");
+    });
+
+    it("lets a personal access token comment as an agent, without an Origin", async () => {
+      const task = await createTask("Agent thread");
+      const token = await createPat();
+      const bearer = { authorization: `Bearer ${token}` };
+
+      const created = await body<PlannerCommentResponse>(
+        request("POST", commentsPath(task.id), {
+          body: { body: "Posted by a script" },
+          headers: bearer,
+        }),
+        201,
+      );
+      await body(
+        request("PATCH", commentPath(created.comment.id), {
+          body: { body: "Posted by a script, edited" },
+          headers: bearer,
+        }),
+      );
+      const listed = await body<PlannerCommentListResponse>(
+        request("GET", commentsPath(task.id), { headers: bearer }),
+      );
+      expect(listed.comments.map((c) => c.body)).toEqual([
+        "Posted by a script, edited",
+      ]);
+      await body(
+        request("DELETE", commentPath(created.comment.id), { headers: bearer }),
+      );
+
+      // Both writes carry an agent in the archive, and an Origin that is not on
+      // the allow-list is refused whichever verb it comes with.
+      expect(
+        (
+          await rows<{ type: string; actor_type: string }>(
+            "SELECT type, actor_type FROM planner_task_event WHERE task_id = ? AND type LIKE 'comment%' ORDER BY id",
+            task.id,
+          )
+        ).map((row) => [row.type, row.actor_type]),
+      ).toEqual([
+        ["commented", "agent"],
+        ["comment_edited", "agent"],
+        ["comment_deleted", "agent"],
+      ]);
+      for (const [method, path, requestBody] of [
+        ["POST", commentsPath(task.id), { body: "Never" }],
+        ["PATCH", commentPath("x"), { body: "Never" }],
+        ["DELETE", commentPath("x"), undefined],
+      ] as const) {
+        const response = await request(method, path, {
+          body: requestBody,
+          headers: { ...bearer, origin: "https://untrusted.example" },
+        });
+        expect(response.status, `${method} ${path}`).toBe(403);
+      }
+    });
+  });
+
+  // ===========================================================================
   // Rate limiting
   // ===========================================================================
 
@@ -2324,7 +3153,8 @@ describe("planner API", () => {
         },
       } as Env;
 
-      for (const entry of mutations(task.id, projectId)) {
+      const comment = await createComment(task.id, "Throttled comment");
+      for (const entry of mutations(task.id, projectId, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -2343,10 +3173,15 @@ describe("planner API", () => {
         (await rows<{ title: string }>("SELECT title FROM tasks"))[0]?.title,
       ).toBe("Throttled");
       expect(await count("planner_project_node")).toBe(0);
+      expect(
+        await rows<{ body: string; deleted_at: string | null }>(
+          "SELECT body, deleted_at FROM planner_task_comment",
+        ),
+      ).toEqual([{ body: "Throttled comment", deleted_at: null }]);
 
       // Reads are not throttled.
       keys.length = 0;
-      for (const entry of endpoints(task.id, projectId).filter(
+      for (const entry of endpoints(task.id, projectId, comment.id).filter(
         (e) => e.method === "GET",
       )) {
         const response = await request("GET", `${API}${entry.path}`, {
@@ -2430,12 +3265,16 @@ describe("planner API", () => {
       expect(put.status).toBe(404);
     });
 
-    it("is covered by the API's CORS rules, PATCH included", async () => {
+    it("is covered by the API's CORS rules, PATCH and DELETE included", async () => {
       for (const [method, path] of [
         ["PATCH", `${API}/tasks/x`],
         ["PATCH", `${API}/tree/x`],
+        ["PATCH", `${API}/comments/x`],
+        ["DELETE", `${API}/comments/x`],
+        ["POST", `${API}/tasks/x/comments`],
         ["POST", `${API}/rollover`],
         ["GET", `${API}/board`],
+        ["GET", `${API}/tasks/x`],
       ] as const) {
         const preflight = await request("OPTIONS", path, {
           headers: {

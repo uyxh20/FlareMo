@@ -4,14 +4,26 @@ import {
   type PlannerBoardCard,
   type PlannerBoardResponse,
   type PlannerColumn,
+  type PlannerCommentDto,
+  type PlannerCreateTaskInput,
   type PlannerHorizon,
+  type PlannerTaskDetailResponse,
   type PlannerUpdateTaskInput,
   plannerBoardQuerySchema,
   plannerBoardResponseSchema,
   plannerColumnSchema,
+  plannerCommentBodyMax,
+  plannerCommentBodySchema,
+  plannerCommentDtoSchema,
+  plannerCommentListResponseSchema,
+  plannerCommentResponseSchema,
+  plannerCreateCommentSchema,
   plannerCreateTaskResponseSchema,
   plannerCreateTaskSchema,
   plannerDaySchema,
+  plannerDeleteCommentResponseSchema,
+  plannerEffortMax,
+  plannerEffortSchema,
   plannerEventDtoSchema,
   plannerHistoryRangeQuerySchema,
   plannerHistoryRangeResponseSchema,
@@ -23,11 +35,13 @@ import {
   plannerRolloverSchema,
   plannerRollupQuerySchema,
   plannerRollupResponseSchema,
+  plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
   plannerTaskPlanResponseSchema,
   plannerTreeNodeDtoSchema,
   plannerTreeNodeResponseSchema,
   plannerTreeResponseSchema,
+  plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
   plannerUpdateTreeNodeSchema,
 } from "./planner";
@@ -205,9 +219,41 @@ describe("planner API request schemas", () => {
       ).toBeNull();
     });
 
+    it("takes the column a task is created in, each of the four", () => {
+      for (const column of ["backlog", "todo", "doing", "done"] as const) {
+        expect(
+          plannerCreateTaskSchema.parse({ title: "x", column, today: TODAY })
+            .column,
+        ).toBe(column);
+      }
+      expect(
+        plannerCreateTaskSchema.parse({ title: "x", today: TODAY }),
+      ).not.toHaveProperty("column");
+      // That To Do needs a plan and Backlog refuses one is the domain's rule, so
+      // it answers in the domain's envelope; the schema only checks the shape.
+      expect(
+        plannerCreateTaskSchema.safeParse({
+          title: "x",
+          column: "todo",
+          today: TODAY,
+        }).success,
+      ).toBe(true);
+      expect(
+        plannerCreateTaskSchema.safeParse({
+          title: "x",
+          column: "backlog",
+          plan: { horizon: "day", day: TODAY },
+          today: TODAY,
+        }).success,
+      ).toBe(true);
+    });
+
     it("rejects a missing today, a blank title, bad fields and keys it does not know", () => {
       for (const bad of [
         { title: "No today" },
+        { title: "x", column: "archive", today: TODAY },
+        { title: "x", column: "Doing", today: TODAY },
+        { title: "x", column: null, today: TODAY },
         { title: "   ", today: TODAY },
         { title: "", today: TODAY },
         { title: "x".repeat(2_001), today: TODAY },
@@ -238,9 +284,35 @@ describe("planner API request schemas", () => {
         { priority: "high" },
         { due_at: null },
         { project_id: null },
+        { effort: 3 },
+        { effort: 0 },
+        { effort: 2.5 },
+        { effort: null },
       ]) {
         expect(
           plannerUpdateTaskSchema.safeParse({ ...base, ...change }).success,
+        ).toBe(true);
+      }
+    });
+
+    it("counts an effort, even null, as the change a request needs", () => {
+      expect(plannerUpdateTaskSchema.parse({ ...base, effort: null })).toEqual({
+        ...base,
+        effort: null,
+      });
+      expect(plannerUpdateTaskSchema.safeParse(base).success).toBe(false);
+    });
+
+    it("accepts an effort beside a column move, a plan or a title edit", () => {
+      for (const change of [
+        { column: "doing", effort: 4 },
+        { plan: { horizon: "week", day: TODAY }, effort: 1.5 },
+        { title: "Renamed", effort: null },
+        { dropped: true, effort: 2 },
+      ]) {
+        expect(
+          plannerUpdateTaskSchema.safeParse({ ...base, ...change }).success,
+          JSON.stringify(change),
         ).toBe(true);
       }
     });
@@ -298,8 +370,116 @@ describe("planner API request schemas", () => {
         { ...base, status: "done" },
         { ...base, sort_order: 1 },
         { ...base, title: "x", typo: true },
+        // an effort is a number from 0 to 999 with at most one decimal
+        { ...base, effort: "3" },
+        { ...base, effort: -1 },
+        { ...base, effort: 1000 },
+        { ...base, effort: 3.25 },
+        { ...base, effort: Number.NaN },
+        { ...base, effort: Number.POSITIVE_INFINITY },
       ]) {
         expect(plannerUpdateTaskSchema.safeParse(bad).success).toBe(false);
+      }
+    });
+  });
+
+  describe("plannerEffortSchema", () => {
+    it("accepts 0 to 999 with at most one decimal place", () => {
+      for (const value of [0, 0.1, 0.5, 1, 3, 3.5, 12.3, 100.7, 998.9, 999]) {
+        expect(
+          plannerEffortSchema.safeParse(value).success,
+          String(value),
+        ).toBe(true);
+      }
+      expect(plannerEffortMax).toBe(999);
+    });
+
+    it("tolerates float noise on a value that has one decimal, and nothing else", () => {
+      // 1.1 * 10 is 11.000000000000002 in binary floats.
+      expect(plannerEffortSchema.safeParse(1.1).success).toBe(true);
+      expect(plannerEffortSchema.safeParse(0.1 + 0.2).success).toBe(true);
+      expect(plannerEffortSchema.safeParse(1.01).success).toBe(false);
+      expect(plannerEffortSchema.safeParse(0.05).success).toBe(false);
+    });
+
+    it("rejects a number out of range, with two decimals, or that is not a number", () => {
+      for (const bad of [
+        -0.1,
+        999.1,
+        1000,
+        3.25,
+        0.01,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        "3",
+        "",
+        null,
+        undefined,
+        true,
+      ]) {
+        expect(plannerEffortSchema.safeParse(bad).success, String(bad)).toBe(
+          false,
+        );
+      }
+    });
+  });
+
+  describe("comment bodies", () => {
+    it("trim, then need 1 to 5000 characters", () => {
+      expect(plannerCommentBodySchema.parse("  hello \n")).toBe("hello");
+      expect(plannerCommentBodySchema.parse("line one\nline two")).toBe(
+        "line one\nline two",
+      );
+      const longest = "x".repeat(plannerCommentBodyMax);
+      expect(plannerCommentBodySchema.parse(longest)).toBe(longest);
+      expect(plannerCommentBodyMax).toBe(5000);
+      // Padding does not count against the limit: it is trimmed first.
+      expect(plannerCommentBodySchema.safeParse(` ${longest} `).success).toBe(
+        true,
+      );
+    });
+
+    it("reject blank text, too long text and anything that is not text", () => {
+      for (const bad of [
+        "",
+        "   ",
+        "\n\t\n",
+        "x".repeat(plannerCommentBodyMax + 1),
+        null,
+        undefined,
+        42,
+        { text: "hi" },
+      ]) {
+        expect(
+          plannerCommentBodySchema.safeParse(bad).success,
+          String(bad).slice(0, 20),
+        ).toBe(false);
+      }
+    });
+
+    it("are the whole body of a create or an update, and nothing else is accepted", () => {
+      for (const schema of [
+        plannerCreateCommentSchema,
+        plannerUpdateCommentSchema,
+      ]) {
+        expect(schema.parse({ body: "  Looks good " })).toEqual({
+          body: "Looks good",
+        });
+        for (const bad of [
+          {},
+          { body: "" },
+          { body: "   " },
+          { body: "x".repeat(plannerCommentBodyMax + 1) },
+          { body: "ok", task_id: "tasks/1" },
+          { body: "ok", today: TODAY },
+          { text: "ok" },
+          null,
+          "ok",
+        ]) {
+          expect(schema.safeParse(bad).success, JSON.stringify(bad)).toBe(
+            false,
+          );
+        }
       }
     });
   });
@@ -667,6 +847,69 @@ describe("planner API response schemas", () => {
     ).toBe(false);
   });
 
+  const COMMENT = {
+    id: "5b0e6a6c-6c0f-4d3a-9a52-1f3f0f0c2f11",
+    task_id: "tasks/1",
+    body: "Remember the second screen.",
+    created_at: "2026-10-07T09:00:00.000Z",
+    updated_at: "2026-10-07T09:05:00.000Z",
+  };
+
+  it("describe a comment, and the list, create and delete answers", () => {
+    expect(plannerCommentDtoSchema.parse(COMMENT)).toEqual(COMMENT);
+    expect(
+      plannerCommentDtoSchema.safeParse({ ...COMMENT, body: undefined })
+        .success,
+    ).toBe(false);
+    expect(
+      plannerCommentListResponseSchema.parse({ comments: [COMMENT, COMMENT] }),
+    ).toEqual({ comments: [COMMENT, COMMENT] });
+    expect(
+      plannerCommentListResponseSchema.parse({ comments: [] }).comments,
+    ).toEqual([]);
+    expect(plannerCommentResponseSchema.parse({ comment: COMMENT })).toEqual({
+      comment: COMMENT,
+    });
+    expect(plannerDeleteCommentResponseSchema.parse({ ok: true })).toEqual({
+      ok: true,
+    });
+    expect(
+      plannerDeleteCommentResponseSchema.safeParse({ ok: false }).success,
+    ).toBe(false);
+  });
+
+  it("describe the task panel's detail: task, plan with effort, project with its path, comments", () => {
+    const detail = {
+      task: { ...TASK, notes: "Some notes" },
+      plan: { ...PLAN, effort: 3.5 },
+      project: {
+        id: "projects/marathon",
+        name: "Run a marathon",
+        ancestors: [{ id: "projects/health", name: "Health" }],
+      },
+      comments: [COMMENT],
+    };
+    expect(plannerTaskDetailResponseSchema.parse(detail)).toEqual(detail);
+
+    // A task with nothing else: every key is still there, null or empty.
+    const bare = { task: TASK, plan: null, project: null, comments: [] };
+    expect(plannerTaskDetailResponseSchema.parse(bare)).toEqual(bare);
+    for (const missing of ["task", "plan", "project", "comments"] as const) {
+      const { [missing]: _removed, ...rest } = detail;
+      expect(
+        plannerTaskDetailResponseSchema.safeParse(rest).success,
+        missing,
+      ).toBe(false);
+    }
+    // A project needs its path, even when it is empty.
+    expect(
+      plannerTaskDetailResponseSchema.safeParse({
+        ...bare,
+        project: { id: "projects/home", name: "Home" },
+      }).success,
+    ).toBe(false);
+  });
+
   it("export types that match their schemas", () => {
     expectTypeOf<PlannerColumn>().toEqualTypeOf<
       "backlog" | "todo" | "doing" | "done"
@@ -685,6 +928,20 @@ describe("planner API response schemas", () => {
     >();
     expectTypeOf<PlannerUpdateTaskInput["notes"]>().toEqualTypeOf<
       string | null | undefined
+    >();
+    expectTypeOf<PlannerUpdateTaskInput["effort"]>().toEqualTypeOf<
+      number | null | undefined
+    >();
+    expectTypeOf<PlannerCreateTaskInput["column"]>().toEqualTypeOf<
+      PlannerColumn | undefined
+    >();
+    expectTypeOf<PlannerTaskDetailResponse["project"]>().toEqualTypeOf<{
+      id: string;
+      name: string;
+      ancestors: Array<{ id: string; name: string }>;
+    } | null>();
+    expectTypeOf<PlannerCommentDto>().toEqualTypeOf<
+      z.infer<typeof plannerCommentDtoSchema>
     >();
   });
 });
