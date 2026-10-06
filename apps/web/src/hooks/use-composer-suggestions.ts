@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
 import { type RefObject, useState } from "react";
 import { listMemos, type Memo } from "@/api";
+import { FORK_TAG_PICKER_LIMIT } from "@/fork/tag-picker";
+import { type TagPicker, useTagPicker } from "@/fork/use-tag-picker";
 import {
   filterTagSuggestions,
   type TagSuggestion,
@@ -21,6 +23,14 @@ export type UseComposerSuggestionsResult = {
   setActiveWikiToken: (token: { from: number; query: string } | null) => void;
   tagSuggestions: TagSuggestion[];
   showTagSuggestions: boolean;
+  /**
+   * The "#" list's highlight, keys and Escape (fork add-on, see
+   * docs/fork-customizations.md).
+   */
+  activeTagIndex: TagPicker["activeIndex"];
+  setActiveTagIndex: TagPicker["setActiveIndex"];
+  handleSuggestionKeyDown: TagPicker["onKeyDown"];
+  claimDialogEscape: TagPicker["claimDialogEscape"];
   acceptTagSuggestion: (name: string) => void;
   wikiSuggestions: Memo[];
   showWikiSuggestions: boolean;
@@ -63,7 +73,7 @@ export function useComposerSuggestions({
 
   const tagSuggestions =
     tags && activeTagToken
-      ? filterTagSuggestions(tags, activeTagToken.text)
+      ? filterTagSuggestions(tags, activeTagToken.text, FORK_TAG_PICKER_LIMIT)
       : [];
   const showTagSuggestions = tagSuggestions.length > 0 && !isPending;
 
@@ -81,6 +91,14 @@ export function useComposerSuggestions({
       )
       .run();
   };
+
+  const tagPicker = useTagPicker({
+    token: activeTagToken,
+    suggestions: tagSuggestions,
+    enabled: showTagSuggestions,
+    onAccept: acceptTagSuggestion,
+    getEditor: () => editorRef.current,
+  });
 
   const wikiSuggestions = wikiSuggestionsQuery.data?.memos ?? [];
   const showWikiSuggestions =
@@ -113,7 +131,11 @@ export function useComposerSuggestions({
     setActiveTagToken,
     setActiveWikiToken,
     tagSuggestions,
-    showTagSuggestions,
+    showTagSuggestions: tagPicker.open,
+    activeTagIndex: tagPicker.activeIndex,
+    setActiveTagIndex: tagPicker.setActiveIndex,
+    handleSuggestionKeyDown: tagPicker.onKeyDown,
+    claimDialogEscape: tagPicker.claimDialogEscape,
     acceptTagSuggestion,
     wikiSuggestions,
     showWikiSuggestions,

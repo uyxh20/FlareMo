@@ -91,6 +91,12 @@ export type RichComposerEditorProps = {
   onTransaction?: (editor: Editor) => void;
   /** Emitted when Backspace is pressed at the start of the document (pos 1). */
   onBackspaceAtStart?: () => boolean | undefined;
+  /**
+   * First look at every keydown outside IME composition (fork: the "#" list's
+   * arrows, Tab, Enter and Escape). True means the key is taken and the editor
+   * does nothing else with it.
+   */
+  onSuggestionKeyDown?: (event: KeyboardEvent) => boolean;
 };
 
 /**
@@ -132,6 +138,7 @@ export function RichComposerEditor({
   contentClassName = "composer-editor-content",
   onTransaction,
   onBackspaceAtStart,
+  onSuggestionKeyDown,
 }: RichComposerEditorProps) {
   // Callbacks are read through refs: TipTap captures the options object once,
   // so prop closures would go stale across renders.
@@ -153,6 +160,8 @@ export function RichComposerEditor({
   onTransactionRef.current = onTransaction;
   const onBackspaceAtStartRef = useRef(onBackspaceAtStart);
   onBackspaceAtStartRef.current = onBackspaceAtStart;
+  const onSuggestionKeyDownRef = useRef(onSuggestionKeyDown);
+  onSuggestionKeyDownRef.current = onSuggestionKeyDown;
   // The markdown last pushed downstream. Guards the restore effect against
   // re-parsing the editor's own output (which would fight the update loop).
   const lastEmittedRef = useRef(content);
@@ -175,6 +184,13 @@ export function RichComposerEditor({
         class: contentClassName,
       },
       handleKeyDown: (view, event) => {
+        if (
+          !event.isComposing &&
+          event.keyCode !== 229 &&
+          onSuggestionKeyDownRef.current?.(event)
+        ) {
+          return true;
+        }
         // Enter sends; IME composition and Shift+Enter never submit. Same
         // contract the textarea era had — except inside a list item, where
         // Enter must continue the checklist instead of cutting the note off

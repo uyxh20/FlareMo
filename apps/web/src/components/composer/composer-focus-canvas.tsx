@@ -18,6 +18,7 @@ import type { ComposerPublishType } from "@/components/composer/composer-type-me
 import { VoiceCaptureBar } from "@/components/composer/voice-capture-bar";
 import { RichComposerEditor } from "@/components/rich-composer-editor";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
+import { withTagPickerEscape } from "@/fork/tag-picker";
 import { useComposerSuggestions } from "@/hooks/use-composer-suggestions";
 import { useComposerVoice } from "@/hooks/use-composer-voice";
 import { useInlineImageUploads } from "@/hooks/use-inline-image-uploads";
@@ -137,6 +138,10 @@ export function ComposerFocusCanvas({
     setActiveWikiToken,
     tagSuggestions,
     showTagSuggestions,
+    activeTagIndex,
+    setActiveTagIndex,
+    handleSuggestionKeyDown,
+    claimDialogEscape,
     acceptTagSuggestion,
     wikiSuggestions,
     showWikiSuggestions,
@@ -175,7 +180,10 @@ export function ComposerFocusCanvas({
   const readingTimeMinutes = Math.max(1, Math.ceil(charCount / 350));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={withTagPickerEscape(claimDialogEscape, onOpenChange)}
+    >
       <DialogPortal>
         <DialogPrimitive.Backdrop
           data-slot="composer-canvas-backdrop"
@@ -274,6 +282,7 @@ export function ComposerFocusCanvas({
                     onSubmitRequest={() => {
                       if (!isUploadingImages && !voiceActive) void submit();
                     }}
+                    onSuggestionKeyDown={handleSuggestionKeyDown}
                     onTransaction={handleTransaction}
                     onBackspaceAtStart={() => {
                       if (!draft.content.trim() && titleInputRef.current) {
@@ -299,8 +308,11 @@ export function ComposerFocusCanvas({
                   />
                 )}
                 <ComposerTagSuggestions
+                  anchor="canvas"
                   visible={showTagSuggestions}
                   suggestions={tagSuggestions}
+                  activeIndex={activeTagIndex}
+                  onActiveIndexChange={setActiveTagIndex}
                   onAccept={acceptTagSuggestion}
                 />
                 <ComposerWikiSuggestions
