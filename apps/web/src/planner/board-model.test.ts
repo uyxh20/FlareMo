@@ -17,6 +17,7 @@ import {
   plannerPendingCard,
   plannerPendingCardId,
   plannerPlaceCard,
+  plannerPlaceCardAt,
   plannerPredictDrop,
   plannerPredictDue,
   plannerPredictMove,
@@ -26,6 +27,7 @@ import {
   plannerPredictTitle,
   plannerPredictUndrop,
   plannerRemoveCard,
+  plannerResolveDrop,
   plannerSortCards,
   plannerUpdateCard,
 } from "./board-model";
@@ -58,6 +60,7 @@ function card(overrides: Partial<PlannerBoardCard> = {}): PlannerBoardCard {
     carry_count: 0,
     dropped_at: null,
     start_date: null,
+    board_rank: null,
     ...overrides,
   };
 }
@@ -613,6 +616,7 @@ describe("plannerCardFromTask", () => {
           carry_count: 2,
           dropped_at: null,
           start_date: null,
+          board_rank: null,
           effort: null,
           created_at: "2026-10-07T09:00:00.000Z",
           updated_at: "2026-10-07T09:00:00.000Z",
@@ -636,6 +640,7 @@ describe("plannerCardFromTask", () => {
       carry_count: 2,
       dropped_at: null,
       start_date: null,
+      board_rank: null,
     });
   });
 
@@ -811,5 +816,212 @@ describe("cards that wait for the server", () => {
       real,
     );
     expect(ids(swapped.columns.backlog)).toEqual(["tasks/real"]);
+  });
+});
+
+describe("manual order", () => {
+  it("sorts ranked cards first in key order in every column, then the natural order", () => {
+    const cards = [
+      card({ id: "tasks/n1", created_at: "2026-10-03T00:00:00.000Z" }),
+      card({ id: "tasks/b", board_rank: "b" }),
+      card({ id: "tasks/n2", created_at: "2026-10-05T00:00:00.000Z" }),
+      card({ id: "tasks/a", board_rank: "a" }),
+    ];
+    // Backlog is newest first for the cards without a rank.
+    expect(ids(plannerSortCards("backlog", cards))).toEqual([
+      "tasks/a",
+      "tasks/b",
+      "tasks/n2",
+      "tasks/n1",
+    ]);
+    for (const column of ["todo", "doing", "done"] as const) {
+      expect(ids(plannerSortCards(column, cards)).slice(0, 2)).toEqual([
+        "tasks/a",
+        "tasks/b",
+      ]);
+    }
+  });
+
+  it("does not order the Other and Dropped buckets by rank", () => {
+    const cards = [
+      card({
+        id: "tasks/x",
+        board_rank: "z",
+        created_at: "2026-10-09T00:00:00.000Z",
+      }),
+      card({
+        id: "tasks/y",
+        board_rank: "a",
+        created_at: "2026-10-01T00:00:00.000Z",
+      }),
+    ];
+    expect(ids(plannerSortCards("other", cards))).toEqual([
+      "tasks/x",
+      "tasks/y",
+    ]);
+  });
+
+  it("forgets the rank when a card changes column", () => {
+    const next = plannerPredictMove(
+      planned({ board_rank: "m" }),
+      "doing",
+      CONTEXT,
+    );
+    expect(next.board_rank).toBeNull();
+  });
+
+  it("reads the stored rank of a task for the column it is in, and drops another column's", () => {
+    const task = { id: "tasks/t", status: "todo" } as unknown as TaskDto;
+    const plan = {
+      task_id: "tasks/t",
+      horizon: "week" as const,
+      period_start: WEEK,
+      carry_count: 0,
+      dropped_at: null,
+      effort: null,
+      start_date: null,
+      board_rank: "todo|aV",
+      created_at: "x",
+      updated_at: "x",
+    };
+    expect(plannerCardFromTask(task, plan).board_rank).toBe("aV");
+    expect(
+      plannerCardFromTask(task, { ...plan, board_rank: "doing|aV" }).board_rank,
+    ).toBeNull();
+    expect(plannerCardFromTask(task, null).board_rank).toBeNull();
+  });
+});
+
+describe("plannerPlaceCardAt", () => {
+  const ranked = (name: string, rank: string | null) =>
+    planned({ id: `tasks/${name}`, board_rank: rank });
+
+  it("takes a key between its ranked neighbours and leaves them alone", () => {
+    const a = ranked("a", "d");
+    const b = ranked("b", "h");
+    const c = ranked("c", "m");
+    const result = plannerPlaceCardAt(board({ todo: [a, b, c] }), c, {
+      beforeId: "tasks/b",
+    });
+    expect(ids(result.columns.todo)).toEqual(["tasks/a", "tasks/c", "tasks/b"]);
+    const moved = plannerFindCard(result, "tasks/c");
+    expect(
+      moved?.board_rank && moved.board_rank > "d" && moved.board_rank < "h",
+    ).toBe(true);
+    expect(plannerFindCard(result, "tasks/a")?.board_rank).toBe("d");
+    expect(plannerFindCard(result, "tasks/b")?.board_rank).toBe("h");
+  });
+
+  it("places a card from another column below an anchor", () => {
+    const a = ranked("a", "d");
+    const b = ranked("b", "h");
+    const mover = card({ id: "tasks/m", status: "in_progress" });
+    const start = board({ todo: [a, b], doing: [mover] });
+    const landed = plannerPredictMove(mover, "todo", CONTEXT);
+    const result = plannerPlaceCardAt(start, landed, { afterId: "tasks/a" });
+    expect(ids(result.columns.todo)).toEqual(["tasks/a", "tasks/m", "tasks/b"]);
+    expect(ids(result.columns.doing)).toEqual([]);
+  });
+
+  it("gives the whole column fresh keys when the card above has none", () => {
+    const a = ranked("a", "d");
+    const b = ranked("b", null);
+    const c = ranked("c", null);
+    const result = plannerPlaceCardAt(board({ todo: [a, b, c] }), a, {
+      afterId: "tasks/c",
+    });
+    expect(ids(result.columns.todo)).toEqual(["tasks/b", "tasks/c", "tasks/a"]);
+    const keys = result.columns.todo.map((entry) => entry.board_rank);
+    expect(keys.every((key) => typeof key === "string")).toBe(true);
+    expect([...keys].sort()).toEqual(keys);
+    // The order is stable under the sort the board applies on every update.
+    expect(ids(plannerSortCards("todo", result.columns.todo))).toEqual(
+      ids(result.columns.todo),
+    );
+  });
+
+  it("falls back to the natural place when the anchor is not in the column", () => {
+    const a = ranked("a", "d");
+    const result = plannerPlaceCardAt(board({ todo: [a] }), a, {
+      beforeId: "tasks/nowhere",
+    });
+    expect(ids(result.columns.todo)).toEqual(["tasks/a"]);
+  });
+});
+
+describe("plannerResolveDrop", () => {
+  const a = planned({ id: "tasks/a" });
+  const b = planned({ id: "tasks/b" });
+  const c = planned({ id: "tasks/c" });
+  const x = card({ id: "tasks/x", status: "in_progress" });
+  const start = board({ todo: [a, b, c], doing: [x] });
+
+  it("puts a card dragged down inside its column after the card it is over, and up before it", () => {
+    expect(plannerResolveDrop(start, "tasks/a", "tasks/c", false)).toEqual({
+      to: "todo",
+      position: { afterId: "tasks/c" },
+      crossColumn: false,
+    });
+    expect(plannerResolveDrop(start, "tasks/c", "tasks/a", true)).toEqual({
+      to: "todo",
+      position: { beforeId: "tasks/a" },
+      crossColumn: false,
+    });
+  });
+
+  it("does nothing for a card over itself, over a place that is not a column, or back in its own slot", () => {
+    expect(plannerResolveDrop(start, "tasks/a", "tasks/a", false)).toBeNull();
+    expect(
+      plannerResolveDrop(start, "tasks/a", "column:todo", false),
+    ).toBeNull();
+    expect(
+      plannerResolveDrop(start, "tasks/a", "column:nowhere", false),
+    ).toBeNull();
+    expect(
+      plannerResolveDrop(start, "tasks/a", "tasks/missing", false),
+    ).toBeNull();
+  });
+
+  it("puts a card from another column above or below the one it is over", () => {
+    expect(plannerResolveDrop(start, "tasks/x", "tasks/b", false)).toEqual({
+      to: "todo",
+      position: { beforeId: "tasks/b" },
+      crossColumn: true,
+    });
+    expect(plannerResolveDrop(start, "tasks/x", "tasks/b", true)).toEqual({
+      to: "todo",
+      position: { afterId: "tasks/b" },
+      crossColumn: true,
+    });
+  });
+
+  it("makes a plain move onto an empty column, and none onto the column it is already in", () => {
+    expect(plannerResolveDrop(start, "tasks/a", "column:done", false)).toEqual({
+      to: "done",
+      crossColumn: true,
+    });
+    expect(
+      plannerResolveDrop(start, "tasks/x", "column:doing", false),
+    ).toBeNull();
+  });
+
+  it("will not place next to a card that is still waiting for the server, or move a dropped card", () => {
+    const pending = card({ id: plannerPendingCardId(1) });
+    const withPending = board({ todo: [a, pending] });
+    expect(
+      plannerResolveDrop(withPending, "tasks/a", pending.id, true),
+    ).toBeNull();
+    const dropped = planned({
+      id: "tasks/d",
+      dropped_at: "2026-10-06T00:00:00.000Z",
+    });
+    expect(
+      plannerResolveDrop(
+        board({ todo: [a], dropped: [dropped] }),
+        "tasks/d",
+        "tasks/a",
+        true,
+      ),
+    ).toBeNull();
   });
 });

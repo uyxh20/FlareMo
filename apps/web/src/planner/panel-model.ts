@@ -73,6 +73,7 @@ export function plannerDetailWithCard(
           dropped_at: card.dropped_at,
           effort: before?.effort ?? null,
           start_date: card.start_date,
+          board_rank: before?.board_rank ?? null,
           created_at: before?.created_at ?? card.updated_at,
           updated_at: planChanged
             ? card.updated_at
@@ -108,6 +109,7 @@ export function plannerDetailWithEffort(
         dropped_at: null,
         effort,
         start_date: null,
+        board_rank: null,
         created_at: at,
         updated_at: at,
       };

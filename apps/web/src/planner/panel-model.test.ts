@@ -62,6 +62,7 @@ const PLAN = {
   carry_count: 1,
   dropped_at: null,
   start_date: null,
+  board_rank: null,
   effort: 3,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -97,6 +98,7 @@ describe("plannerCardFromDetail", () => {
       carry_count: 1,
       dropped_at: null,
       start_date: null,
+      board_rank: null,
     });
     // A card never carries notes or an effort.
     expect(card).not.toHaveProperty("notes");
@@ -168,6 +170,7 @@ describe("plannerDetailWithCard", () => {
       carry_count: 0,
       dropped_at: null,
       start_date: null,
+      board_rank: null,
       effort: null,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),
@@ -272,6 +275,7 @@ describe("plannerDetailWithEffort", () => {
       carry_count: 0,
       dropped_at: null,
       start_date: null,
+      board_rank: null,
       effort: 2,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),
