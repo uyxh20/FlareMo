@@ -672,14 +672,17 @@ describe("planner migrations", () => {
   });
 
   describe("9002 start date", () => {
-    it("adds a nullable TEXT start_date column to the plan row, last, and leaves existing rows NULL", async () => {
+    it("adds a nullable TEXT start_date column to the plan row and leaves existing rows NULL", async () => {
       const columns = await rows<{
         name: string;
         type: string;
         notnull: number;
         dflt_value: string | null;
       }>("PRAGMA table_info(planner_task_plan)");
-      expect(columns.at(-1)).toMatchObject({
+      // 9004 added board_rank after it, so start_date is no longer the last column.
+      expect(
+        columns.find((column) => column.name === "start_date"),
+      ).toMatchObject({
         name: "start_date",
         type: "TEXT",
         notnull: 0,
@@ -715,6 +718,56 @@ describe("planner migrations", () => {
     });
   });
 
+  describe("9004 board rank", () => {
+    it("adds a nullable TEXT board_rank column to the plan row, last, and leaves existing rows NULL", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      expect(columns.at(-1)).toMatchObject({
+        name: "board_rank",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+      });
+
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, created_at, updated_at)
+         VALUES ('t1', 'u1', 'week', '2026-10-05', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{ board_rank: string | null }>(
+        "SELECT board_rank FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row?.board_rank).toBeNull();
+    });
+
+    it("lets a NULL-horizon row hold a rank, and sorts keys as plain strings", async () => {
+      for (const [id, rank] of [
+        ["t1", "todo|b"],
+        ["t2", "todo|V"],
+        ["t3", "todo|a"],
+      ] as const) {
+        await run(
+          `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, board_rank, created_at, updated_at)
+           VALUES (?, 'u1', NULL, NULL, ?, ?, ?)`,
+          id,
+          rank,
+          NOW,
+          NOW,
+        );
+      }
+      const ordered = await rows<{ task_id: string }>(
+        "SELECT task_id FROM planner_task_plan WHERE board_rank LIKE 'todo|%' ORDER BY board_rank",
+      );
+      // Code-unit order, the same as JavaScript's `<`: digits, capitals, lowercase.
+      expect(ordered.map((row) => row.task_id)).toEqual(["t2", "t3", "t1"]);
+    });
+  });
+
   describe("migration files", () => {
     it("orders planner migration files by number and ignores the rest", () => {
       expect(
@@ -744,6 +797,7 @@ describe("planner migrations", () => {
       expect(files).toContain("9000_planner_init.sql");
       expect(files).toContain("9001_planner_task_details.sql");
       expect(files).toContain("9002_planner_start_date.sql");
+      expect(files).toContain("9004_planner_board_rank.sql");
       // applyPlannerMigrations reads this list, so both reach the test databases.
       expect(plannerMigrationFiles(files)).toEqual(files.sort());
 

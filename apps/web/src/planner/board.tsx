@@ -1,26 +1,37 @@
 import {
+  type Active,
   type Announcements,
   type CollisionDetection,
+  closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragMoveEvent,
   DragOverlay,
   type DragStartEvent,
+  KeyboardSensor,
   MouseSensor,
+  type Over,
   pointerWithin,
   rectIntersection,
   TouchSensor,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type {
   PlannerBoardCard,
   PlannerBoardResponse,
   PlannerColumn,
 } from "@flaremo/contracts";
 import { PlusIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -35,6 +46,7 @@ import {
   plannerColumns,
   plannerFindCard,
   plannerIsPendingCard,
+  plannerResolveDrop,
 } from "./board-model";
 import { plannerColumnAddTarget } from "./column-add";
 import { PlannerColumnComposer } from "./column-composer";
@@ -81,18 +93,51 @@ import {
 // any more (section 13.x): the board always shows every card. Clicking a card opens its task panel (task-card.tsx);
 // a card still waiting for the server can be neither opened nor dragged.
 
-/** The column under the pointer; for a keyboard or an unmoved pointer, the one the card overlaps most. */
-const collide: CollisionDetection = (args) => {
-  const within = pointerWithin(args);
-  return within.length > 0 ? within : rectIntersection(args);
-};
-
 const columnId = (column: PlannerColumnKey) => `column:${column}`;
+const isColumnId = (id: string | number) => String(id).startsWith("column:");
+
+/**
+ * Two steps. First the column: the one under the pointer, or for a keyboard or
+ * an unmoved pointer the one the dragged card overlaps most. Then, inside it, the
+ * card whose centre is nearest (that is the place in the column); a column with
+ * no cards to order against answers with the column itself.
+ */
+function makeCollide(
+  cardsOfColumn: (column: string) => ReadonlySet<string>,
+): CollisionDetection {
+  return (args) => {
+    const columns = args.droppableContainers.filter((container) =>
+      isColumnId(container.id),
+    );
+    const within = args.pointerCoordinates
+      ? pointerWithin({ ...args, droppableContainers: columns })
+      : [];
+    const hit =
+      within[0] ??
+      rectIntersection({ ...args, droppableContainers: columns })[0];
+    if (!hit) return [];
+    const ids = cardsOfColumn(String(hit.id).slice("column:".length));
+    const cards = args.droppableContainers.filter((container) =>
+      ids.has(String(container.id)),
+    );
+    if (cards.length === 0) return [hit];
+    return closestCenter({ ...args, droppableContainers: cards }).slice(0, 1);
+  };
+}
+
+/** Whether the dragged card's centre is below the centre of the card it is over. */
+function isBelow(active: Active, over: Over): boolean {
+  const moved = active.rect.current.translated;
+  if (!moved) return false;
+  return moved.top + moved.height / 2 > over.rect.top + over.rect.height / 2;
+}
 
 function DraggableCard({
   card,
   dragging,
+  droppable,
   enterIndex,
+  hintSide,
   reveal,
   ...rest
 }: {
@@ -102,6 +147,10 @@ function DraggableCard({
   onRequest: (request: PlannerCardRequest) => void;
   onOpen: (card: PlannerBoardCard) => void;
   dragging: boolean;
+  /** Whether other cards can be dropped next to this one (not in Other). */
+  droppable: boolean;
+  /** Where a card from another column would land next to this one, if here. */
+  hintSide: "before" | "after" | null;
   /** Set only while the board first appears, to stagger the cards in. */
   enterIndex?: number;
   /** The card the person just acted on, if any; this one rings when it is its own. */
@@ -110,10 +159,33 @@ function DraggableCard({
   // A card the server has not answered for yet cannot be picked up: it may
   // vanish, or turn into another id, before it lands.
   const waiting = plannerIsPendingCard(card);
-  const { setNodeRef, node, listeners, isDragging } = useDraggable({
+  const {
+    setNodeRef,
+    setActivatorNodeRef,
+    node,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: card.id,
-    disabled: waiting,
+    disabled: { draggable: waiting, droppable: waiting || !droppable },
   });
+
+  // `aria-pressed` is a button's; this is a group.
+  const { "aria-pressed": _pressed, ...groupAttributes } = attributes;
+
+  // The card holds buttons of its own, so it cannot be a button: it is a labelled
+  // group that can be focused and lifted with the keyboard. A card still waiting
+  // for the server is only a label.
+  const cardProps = {
+    ...(waiting ? undefined : groupAttributes),
+    ...(waiting ? undefined : listeners),
+    "aria-label": card.title,
+    role: "group",
+    tabIndex: waiting ? undefined : 0,
+  };
 
   // Scroll into view when this card is pointed out: the moment it mounts into its
   // new place while the request is current, and again when a newer request for
@@ -125,12 +197,17 @@ function DraggableCard({
 
   return (
     <div
-      ref={setNodeRef}
-      {...(waiting ? undefined : listeners)}
+      ref={(element) => {
+        setNodeRef(element);
+        // Only a key pressed on the card itself lifts it, never one pressed on
+        // the buttons inside it (Enter on the title opens the panel).
+        setActivatorNodeRef(element);
+      }}
+      {...cardProps}
       className={cn(
         // `relative` holds the reveal ring; `scroll-my-3` keeps a card scrolled
         // into view off the very edge of the page.
-        "relative scroll-my-3 rounded-xl [@media(pointer:coarse)]:[-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none",
+        "relative scroll-my-3 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring/50 [@media(pointer:coarse)]:[-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none",
         enterIndex !== undefined && "motion-safe:animate-rise",
         isDragging && "opacity-40",
         // While something is being dragged, hovering other cards must not offer
@@ -138,12 +215,25 @@ function DraggableCard({
         dragging && !isDragging && "pointer-events-none",
       )}
       data-testid="planner-card"
-      style={
-        enterIndex === undefined
+      style={{
+        // The neighbours step aside while a card is carried over its own column.
+        transform: CSS.Translate.toString(transform),
+        transition,
+        ...(enterIndex === undefined
           ? undefined
-          : { animationDelay: `${Math.min(enterIndex, 8) * 35}ms` }
-      }
+          : { animationDelay: `${Math.min(enterIndex, 8) * 35}ms` }),
+      }}
     >
+      {hintSide !== null && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-x-1 z-10 h-0.5 rounded-full bg-brand-400",
+            hintSide === "before" ? "-top-[5px]" : "-bottom-[5px]",
+          )}
+          data-testid="planner-drop-hint"
+        />
+      )}
       <PlannerTaskCard card={card} {...rest} />
       {revealStamp !== null && (
         <span
@@ -171,6 +261,8 @@ function Column({
   onAdd,
   entering,
   dragging,
+  highlighted,
+  dropHint,
   reveal,
 }: {
   column: PlannerColumnKey;
@@ -186,10 +278,14 @@ function Column({
   onAdd?: (title: string) => Promise<boolean>;
   entering: boolean;
   dragging: boolean;
+  /** A dragged card is over this column. */
+  highlighted: boolean;
+  /** The card a dragged one from another column would land next to, and on which side. */
+  dropHint: { id: string; side: "before" | "after" } | null;
   reveal: PlannerReveal | null;
 }) {
   const strings = usePlannerStrings();
-  const { isOver, setNodeRef } = useDroppable({
+  const { setNodeRef } = useDroppable({
     id: columnId(column),
     disabled: !droppable,
   });
@@ -236,7 +332,7 @@ function Column({
         ref={setNodeRef}
         className={cn(
           "flex min-h-32 flex-1 flex-col gap-2 rounded-xl bg-muted/35 p-2 motion-safe:transition-colors motion-safe:duration-150 sm:min-h-48",
-          droppable && isOver && "bg-accent ring-1 ring-brand-400/40",
+          droppable && highlighted && "bg-accent ring-1 ring-brand-400/40",
         )}
       >
         {composing && onAdd && (
@@ -246,19 +342,26 @@ function Column({
             onSubmit={onAdd}
           />
         )}
-        {cards.length === 0
-          ? // The composer says what to do, so the hint steps aside while it is open.
-            !composing && (
-              <p className="rounded-lg px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-                {hint}
-              </p>
-            )
-          : cards.map((card, index) => (
+        {cards.length === 0 ? (
+          // The composer says what to do, so the hint steps aside while it is open.
+          !composing && (
+            <p className="rounded-lg px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+              {hint}
+            </p>
+          )
+        ) : (
+          <SortableContext
+            items={cards.map((card) => card.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {cards.map((card, index) => (
               <DraggableCard
                 actions={actions}
                 card={card}
                 dragging={dragging}
+                droppable={droppable}
                 enterIndex={entering ? index : undefined}
+                hintSide={dropHint?.id === card.id ? dropHint.side : null}
                 key={card.id}
                 reveal={reveal}
                 today={today}
@@ -266,6 +369,8 @@ function Column({
                 onRequest={onRequest}
               />
             ))}
+          </SortableContext>
+        )}
       </div>
     </section>
   );
@@ -294,35 +399,103 @@ export function PlannerBoard({
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: plannerTouchActivation }),
+    // Focus a card, Space to lift it, arrows to move it (the sortable
+    // coordinates step between cards and columns), Space to drop, Escape to cancel.
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   // Whether the card in hand was lifted by a finger: it gets the lift cue.
   const [lifted, setLifted] = useState(false);
+  // Where the card in hand would land if it were dropped now: the column it is
+  // over, and for a card from another column the card it would sit next to.
+  const [target, setTarget] = useState<{
+    column: string;
+    hint: { id: string; side: "before" | "after" } | null;
+  } | null>(null);
   const activeCard =
     activeId === null ? undefined : plannerFindCard(board, activeId);
 
+  const collide = useMemo(
+    () =>
+      makeCollide(
+        (column) =>
+          new Set(
+            (board.columns[column as keyof typeof board.columns] ?? []).map(
+              (card) => card.id,
+            ),
+          ),
+      ),
+    [board],
+  );
+
+  /** What dropping `active` on `over` does, from the board as it is drawn now. */
+  const resolve = useCallback(
+    (active: Active, over: Over | null) =>
+      over
+        ? plannerResolveDrop(
+            board,
+            String(active.id),
+            String(over.id),
+            isColumnId(over.id) ? false : isBelow(active, over),
+          )
+        : null,
+    [board],
+  );
+
   // The library's own announcements read out raw task ids; say the task and the
-  // column instead.
+  // column and place instead.
   const announcements = useMemo<Announcements>(() => {
     const titleOf = (id: string | number) =>
       plannerFindCard(board, String(id))?.title ?? "";
+    const columnName = (column: string) =>
+      strings.column[column as keyof typeof strings.column] ?? "";
     const columnOf = (id: string | number) =>
-      strings.column[
-        String(id).replace(/^column:/, "") as keyof typeof strings.column
-      ] ?? "";
+      isColumnId(id)
+        ? columnName(String(id).replace(/^column:/, ""))
+        : columnName(
+            (() => {
+              const over = plannerFindCard(board, String(id));
+              return over ? plannerCardColumn(over) : "";
+            })(),
+          );
+    const place = (active: Active, over: Over) => {
+      const overCard = plannerFindCard(board, String(over.id));
+      if (!overCard) return null;
+      const column = plannerCardColumn(overCard);
+      const list = board.columns[column as keyof typeof board.columns] ?? [];
+      const drop = resolve(active, over);
+      const index = list.findIndex((card) => card.id === over.id);
+      const cross = drop?.crossColumn ?? true;
+      const below = drop?.position?.afterId !== undefined;
+      return {
+        column: columnName(column),
+        place: Math.max(1, index + 1 + (cross && below ? 1 : 0)),
+        total: list.length + (cross ? 1 : 0),
+      };
+    };
     return {
       onDragStart: ({ active }) => strings.drag.picked(titleOf(active.id)),
-      onDragOver: ({ active, over }) =>
-        over
-          ? strings.drag.over(titleOf(active.id), columnOf(over.id))
-          : undefined,
+      onDragOver: ({ active, over }) => {
+        if (!over) return undefined;
+        const spot = isColumnId(over.id) ? null : place(active, over);
+        return spot
+          ? strings.drag.position(
+              titleOf(active.id),
+              spot.column,
+              spot.place,
+              spot.total,
+            )
+          : strings.drag.over(titleOf(active.id), columnOf(over.id));
+      },
       onDragEnd: ({ active, over }) =>
         over
           ? strings.drag.dropped(titleOf(active.id), columnOf(over.id))
           : undefined,
       onDragCancel: ({ active }) => strings.drag.cancelled(titleOf(active.id)),
     };
-  }, [board, strings]);
+  }, [board, resolve, strings]);
 
   const onDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
@@ -335,18 +508,55 @@ export function PlannerBoard({
   const endDrag = () => {
     setActiveId(null);
     setLifted(false);
+    setTarget(null);
+  };
+
+  // Follows the card while it is carried: which column lights up, and where a
+  // card from another column would go (a line between two cards).
+  const onDragMove = ({ active, over }: DragMoveEvent) => {
+    let next: typeof target = null;
+    if (over) {
+      const overCard = isColumnId(over.id)
+        ? undefined
+        : plannerFindCard(board, String(over.id));
+      const column = isColumnId(over.id)
+        ? String(over.id).replace(/^column:/, "")
+        : overCard
+          ? plannerCardColumn(overCard)
+          : "";
+      const drop = resolve(active, over);
+      next = {
+        column,
+        hint:
+          drop?.crossColumn && drop.position
+            ? {
+                id: (drop.position.beforeId ?? drop.position.afterId) as string,
+                side: drop.position.beforeId !== undefined ? "before" : "after",
+              }
+            : null,
+      };
+    }
+    setTarget((previous) =>
+      previous?.column === next?.column &&
+      previous?.hint?.id === next?.hint?.id &&
+      previous?.hint?.side === next?.hint?.side
+        ? previous
+        : next,
+    );
   };
 
   const onDragEnd = (event: DragEndEvent) => {
     endDrag();
     const { active, over } = event;
-    if (!over) return;
-    const target = String(over.id).replace(/^column:/, "");
-    if (!(plannerColumns as readonly string[]).includes(target)) return;
     const card = plannerFindCard(board, String(active.id));
     if (!card || card.dropped_at !== null) return;
-    if (plannerCardColumn(card) === target) return;
-    actions.move(card, target as PlannerColumn);
+    const drop = resolve(active, over);
+    if (!drop) return;
+    if (drop.crossColumn) {
+      actions.move(card, drop.to, drop.position);
+    } else if (drop.position) {
+      actions.reorder(card, drop.position);
+    }
   };
 
   // What a column's "+" adds: the column itself, and the plan that column needs.
@@ -381,6 +591,7 @@ export function PlannerBoard({
       sensors={sensors}
       onDragCancel={endDrag}
       onDragEnd={onDragEnd}
+      onDragMove={onDragMove}
       onDragStart={onDragStart}
     >
       <div
@@ -402,7 +613,9 @@ export function PlannerBoard({
               column={column}
               droppable={column !== "other"}
               dragging={activeId !== null}
+              dropHint={target?.column === column ? target.hint : null}
               entering={entering}
+              highlighted={target?.column === column}
               hint={
                 strings.columnHint[
                   column as Exclude<PlannerColumnKey, "dropped">

@@ -2731,6 +2731,142 @@ describe("planner API", () => {
     });
   });
 
+  describe("PATCH /tasks/:id placing a card in its column", () => {
+    const week = () => ({ horizon: "week", day: TODAY });
+    const todoTask = (title: string) =>
+      createTask(title, { column: "todo", plan: week() });
+    const order = async (column: "backlog" | "todo" | "doing" | "done") =>
+      titles((await boardOk()).columns[column]);
+
+    it("reorders inside a column, and the order survives a reload", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      const c = await todoTask("C");
+      const natural = await order("todo");
+      expect(natural).toHaveLength(3);
+
+      const moved = onTheWire(
+        plannerTaskPlanResponseSchema,
+        await patchTaskOk(c.id, { column: "todo", before_id: a.id }),
+      );
+      expect(moved.plan?.board_rank).toMatch(/^todo\|/);
+      expect(await order("todo")).toEqual(["C", "A", "B"]);
+
+      await patchTaskOk(a.id, { column: "todo", after_id: b.id });
+      expect(await order("todo")).toEqual(["C", "B", "A"]);
+      // A second read is the same: it is stored, not computed per request.
+      expect(await order("todo")).toEqual(["C", "B", "A"]);
+      const card = (await boardOk()).columns.todo.find((x) => x.id === b.id);
+      expect(card?.board_rank).toEqual(expect.any(String));
+    });
+
+    it("moves to another column at a place in it, in one request", async () => {
+      const a = await todoTask("A");
+      const x = await createTask("X", { column: "doing" });
+      const y = await createTask("Y", { column: "doing" });
+      await patchTaskOk(y.id, { column: "doing", before_id: x.id });
+      expect(await order("doing")).toEqual(["Y", "X"]);
+
+      const moved = await patchTaskOk(a.id, {
+        column: "doing",
+        after_id: y.id,
+      });
+      expect(moved.task.status).toBe("in_progress");
+      expect(await order("doing")).toEqual(["Y", "A", "X"]);
+      expect(await order("todo")).toEqual([]);
+    });
+
+    it("writes no history event for the order", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      const plannerEvents = async () =>
+        (
+          await rows<{ type: string }>(
+            "SELECT type FROM planner_task_event WHERE task_id = ? ORDER BY id",
+            b.id,
+          )
+        ).map((row) => row.type);
+      expect(await plannerEvents()).toEqual(["planned"]);
+      await patchTaskOk(b.id, { column: "todo", before_id: a.id });
+      await patchTaskOk(b.id, { column: "todo", after_id: a.id });
+      expect(await plannerEvents()).toEqual(["planned"]);
+    });
+
+    it("answers 400 for a card that is not in the column, and rolls nothing", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      const doing = await createTask("D", { column: "doing" });
+      await domainError(
+        patchTask(b.id, { column: "todo", before_id: doing.id }),
+        400,
+        "not in todo",
+      );
+      await domainError(
+        patchTask(b.id, { column: "todo", before_id: "tasks/nowhere" }),
+        400,
+        "not in todo",
+      );
+      expect(await order("todo")).toHaveLength(2);
+      void a;
+    });
+
+    it("rejects an anchor without a column, and before_id equal to after_id", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      expect((await patchTask(b.id, { before_id: a.id })).status).toBe(400);
+      expect(
+        (
+          await patchTask(b.id, {
+            column: "todo",
+            before_id: a.id,
+            after_id: a.id,
+          })
+        ).status,
+      ).toBe(400);
+    });
+
+    it("cannot reorder a dropped task", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      await patchTaskOk(b.id, { dropped: true });
+      await domainError(
+        patchTask(b.id, { column: "todo", before_id: a.id }),
+        400,
+        "dropped",
+      );
+    });
+
+    it("puts a new task on top of a column that has a manual order, and leaves an unranked column alone", async () => {
+      const a = await todoTask("A");
+      const b = await todoTask("B");
+      await patchTaskOk(b.id, { column: "todo", before_id: a.id });
+      const created = onTheWire(
+        plannerCreateTaskResponseSchema,
+        await body<PlannerCreateTaskResponse>(
+          send("POST", `${API}/tasks`, {
+            title: "New",
+            today: TODAY,
+            column: "todo",
+            plan: week(),
+          }),
+          201,
+        ),
+      );
+      expect(created.plan?.board_rank).toMatch(/^todo\|/);
+      expect(await order("todo")).toEqual(["New", "B", "A"]);
+
+      const backlog = await body<PlannerCreateTaskResponse>(
+        send("POST", `${API}/tasks`, {
+          title: "Plain",
+          today: TODAY,
+          column: "backlog",
+        }),
+        201,
+      );
+      expect(backlog.plan).toBeNull();
+    });
+  });
+
   describe("POST /tasks with a column", () => {
     const createIn = (column: string, extra: Record<string, unknown> = {}) =>
       send("POST", `${API}/tasks`, {

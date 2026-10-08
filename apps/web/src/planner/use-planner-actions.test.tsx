@@ -72,6 +72,7 @@ const PLAN = {
   carry_count: 0,
   dropped_at: null,
   start_date: null,
+  board_rank: null,
   effort: null,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -675,5 +676,155 @@ describe("adding into a column", () => {
     request.resolve(response());
     await added;
     expect(invalidate).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("placing a card in a column", () => {
+  const cardIn = (
+    id: string,
+    rank: string | null,
+    over: Partial<PlannerBoardCard> = {},
+  ): PlannerBoardCard => ({
+    ...plannerCardFromDetail({
+      ...DETAIL,
+      task: { ...TASK, id, title: id },
+      plan: { ...PLAN, task_id: id },
+    }),
+    board_rank: rank,
+    ...over,
+  });
+  const todoIds = () =>
+    queryClient
+      .getQueryData<PlannerBoardResponse>(boardKey)
+      ?.columns.todo.map((card) => card.id);
+  const doingIds = () =>
+    queryClient
+      .getQueryData<PlannerBoardResponse>(boardKey)
+      ?.columns.doing.map((card) => card.id);
+
+  function seedColumn() {
+    const a = cardIn("tasks/a", "d");
+    const b = cardIn("tasks/b", "h");
+    const c = cardIn("tasks/c", "m");
+    queryClient.setQueryData(boardKey, {
+      ...EMPTY_BOARD,
+      columns: { ...EMPTY_BOARD.columns, todo: [a, b, c] },
+    });
+    return { a, b, c };
+  }
+
+  it("reorders at once, sends the place, and keeps the order when the server answers", async () => {
+    const { c } = seedColumn();
+    const request = pendingRequest<PlannerTaskPlanResponse>();
+    update.mockReturnValue(request.promise);
+
+    actions.reorder(c, { beforeId: "tasks/b" });
+    await flush();
+
+    expect(update).toHaveBeenCalledWith("tasks/c", {
+      today: TODAY,
+      column: "todo",
+      before_id: "tasks/b",
+    });
+    expect(todoIds()).toEqual(["tasks/a", "tasks/c", "tasks/b"]);
+    // A reorder does not scroll the card into view: it is under the pointer.
+    expect(reveal).not.toHaveBeenCalled();
+
+    request.resolve({
+      task: { ...TASK, id: "tasks/c" },
+      plan: { ...PLAN, task_id: "tasks/c", board_rank: "todo|f" },
+    });
+    await flush();
+
+    expect(todoIds()).toEqual(["tasks/a", "tasks/c", "tasks/b"]);
+    // Silent when it works.
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("puts the column back exactly as it was when the server refuses, and says so", async () => {
+    const { c } = seedColumn();
+    update.mockRejectedValue(new ApiError("No", 400));
+
+    actions.reorder(c, { afterId: "tasks/a" });
+    await flush();
+
+    expect(todoIds()).toEqual(["tasks/a", "tasks/b", "tasks/c"]);
+    const board = queryClient.getQueryData<PlannerBoardResponse>(boardKey);
+    expect(board?.columns.todo.map((card) => card.board_rank)).toEqual([
+      "d",
+      "h",
+      "m",
+    ]);
+    expect(toast.error).toHaveBeenCalledWith(expect.any(String), {
+      id: "planner-edit",
+    });
+  });
+
+  it("restores both columns when a move to a place in another column fails", async () => {
+    const { a } = seedColumn();
+    const x = cardIn("tasks/x", "g", { status: "in_progress" });
+    queryClient.setQueryData(boardKey, {
+      ...EMPTY_BOARD,
+      columns: {
+        ...EMPTY_BOARD.columns,
+        todo: [a, cardIn("tasks/b", "h")],
+        doing: [x],
+      },
+    });
+    update.mockRejectedValue(new ApiError("No", 500));
+
+    actions.move(x, "todo", { beforeId: "tasks/b" });
+    await flush();
+
+    expect(todoIds()).toEqual(["tasks/a", "tasks/b"]);
+    expect(doingIds()).toEqual(["tasks/x"]);
+    expect(update).toHaveBeenCalledWith("tasks/x", {
+      today: TODAY,
+      column: "todo",
+      before_id: "tasks/b",
+    });
+  });
+
+  it("lands a move at its place straight away and sends no place for a plain move", async () => {
+    const x = cardIn("tasks/x", null, { status: "in_progress" });
+    const { a } = seedColumn();
+    queryClient.setQueryData(boardKey, {
+      ...EMPTY_BOARD,
+      columns: { ...EMPTY_BOARD.columns, todo: [a], doing: [x] },
+    });
+    update.mockReturnValue(new Promise(() => undefined));
+
+    actions.move(x, "todo", { afterId: "tasks/a" });
+    await flush();
+    expect(todoIds()).toEqual(["tasks/a", "tasks/x"]);
+    expect(doingIds()).toEqual([]);
+
+    actions.move(a, "doing");
+    await flush();
+    expect(update).toHaveBeenLastCalledWith("tasks/a", {
+      today: TODAY,
+      column: "doing",
+    });
+  });
+
+  it("puts a card added to a ranked column on top while it waits for the server", async () => {
+    seedColumn();
+    const request = pendingRequest<PlannerCreateTaskResponse>();
+    create.mockReturnValue(request.promise);
+
+    const added = actions.createIn({
+      title: "Fresh",
+      column: "todo",
+      plan: { horizon: "week", day: TODAY },
+    });
+    await flush();
+    expect(todoIds()?.[0]).toMatch(/^tasks\/pending-/);
+
+    request.resolve({
+      task: { ...TASK, id: "tasks/new", title: "Fresh" },
+      plan: { ...PLAN, task_id: "tasks/new", board_rank: "todo|5" },
+    });
+    expect(await added).toBe(true);
+    expect(todoIds()).toEqual(["tasks/new", "tasks/a", "tasks/b", "tasks/c"]);
   });
 });

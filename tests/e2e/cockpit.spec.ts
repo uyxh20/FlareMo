@@ -475,6 +475,134 @@ test("dragging a card moves it and does not open its panel", async ({
   await expect(page).toHaveURL(/\/cockpit$/);
 });
 
+/** The titles of a column's cards, top to bottom. */
+const titlesIn = (page: Page, column_: RegExp) =>
+  column(page, column_)
+    .getByTestId("planner-card")
+    .locator("button[aria-haspopup='dialog']")
+    .allTextContents();
+
+/** Drags a card with the mouse to just above or below another card of the board. */
+async function dragCard(
+  page: Page,
+  from: ReturnType<typeof card>,
+  to: ReturnType<typeof card>,
+  where: "above" | "below",
+) {
+  await from.scrollIntoViewIfNeeded();
+  const source = await from.boundingBox();
+  await to.scrollIntoViewIfNeeded();
+  const target = await to.boundingBox();
+  if (!source || !target) throw new Error("The board is not laid out.");
+  await page.mouse.move(source.x + 60, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(source.x + 70, source.y + source.height / 2 + 10, {
+    steps: 3,
+  });
+  await page.mouse.move(
+    target.x + target.width / 2,
+    where === "above" ? target.y + 4 : target.y + target.height - 4,
+    { steps: 12 },
+  );
+  await page.mouse.up();
+}
+
+test("dragging a card above another in To Do re-ranks it, and the order survives a reload", async ({
+  page,
+}) => {
+  const stamp = Date.now();
+  const first = `Cockpit rank A ${stamp}`;
+  const second = `Cockpit rank B ${stamp}`;
+  await quickAdd(page, first);
+  await quickAdd(page, second);
+
+  // Put B above A, whichever way the column listed them to begin with.
+  await dragCard(
+    page,
+    card(page, COLUMN.todo, second),
+    card(page, COLUMN.todo, first),
+    "above",
+  );
+  await expect
+    .poll(async () => {
+      const titles = await titlesIn(page, COLUMN.todo);
+      return titles.indexOf(second) < titles.indexOf(first);
+    })
+    .toBe(true);
+  // Dragging does not open the panel.
+  await expect(panel(page)).toHaveCount(0);
+
+  // The order is on the server: it holds after a refresh.
+  await page.reload();
+  await expect(card(page, COLUMN.todo, first)).toBeVisible();
+  const reloaded = await titlesIn(page, COLUMN.todo);
+  expect(reloaded.indexOf(second)).toBeLessThan(reloaded.indexOf(first));
+
+  // And back the other way.
+  await dragCard(
+    page,
+    card(page, COLUMN.todo, second),
+    card(page, COLUMN.todo, first),
+    "below",
+  );
+  await expect
+    .poll(async () => {
+      const titles = await titlesIn(page, COLUMN.todo);
+      return titles.indexOf(first) < titles.indexOf(second);
+    })
+    .toBe(true);
+});
+
+test("dropping a card between two cards of another column puts it there", async ({
+  page,
+}) => {
+  const stamp = Date.now();
+  const mover = `Cockpit place M ${stamp}`;
+  const upper = `Cockpit place U ${stamp}`;
+  const lower = `Cockpit place L ${stamp}`;
+  await quickAdd(page, upper);
+  await quickAdd(page, lower);
+  await quickAdd(page, mover);
+  // Put U and L next to each other in Doing, then fetch M down between them.
+  for (const title of [lower, upper]) {
+    await card(page, COLUMN.todo, title)
+      .getByRole("button", { name: /^(开始|Start)/ })
+      .click();
+    await expect(card(page, COLUMN.doing, title)).toBeVisible();
+  }
+  await dragCard(
+    page,
+    card(page, COLUMN.todo, mover),
+    card(page, COLUMN.doing, upper),
+    "below",
+  );
+  await expect(card(page, COLUMN.doing, mover)).toBeVisible();
+  const doing = await titlesIn(page, COLUMN.doing);
+  expect(doing.indexOf(mover)).toBe(doing.indexOf(upper) + 1);
+
+  await page.reload();
+  const reloaded = await titlesIn(page, COLUMN.doing);
+  expect(reloaded.indexOf(mover)).toBe(reloaded.indexOf(upper) + 1);
+});
+
+test("a card can be lifted and moved with the keyboard", async ({ page }) => {
+  const title = `Cockpit keys ${Date.now()}`;
+  await quickAdd(page, title);
+  const item = card(page, COLUMN.todo, title);
+  await item.focus();
+  await page.keyboard.press("Space");
+  await expect(
+    page.getByText(new RegExp(`(Picked up ${title}|已拿起“${title}”)`)),
+  ).toBeAttached();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByText(
+      new RegExp(`(Moving ${title} was cancelled|已取消移动“${title}”)`),
+    ),
+  ).toBeAttached();
+  await expect(panel(page)).toHaveCount(0);
+});
+
 test("a start date and a due date read as one range on the card, and the panel shows when the task was created", async ({
   page,
 }) => {
