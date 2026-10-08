@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import { articles, users } from "@flaremo/db";
 import {
   getBranding,
@@ -445,7 +446,9 @@ export function registerArticlePage(app: Hono<HonoBindings>): void {
     } catch {
       const branding = await getBranding(db).catch(() => null);
       return new Response(
-        renderArticleUnavailableDocument(branding?.product ?? "FlareMo"),
+        renderArticleUnavailableDocument(
+          branding?.product ?? FORK_PRODUCT_NAME,
+        ),
         { ...ARTICLE_RESPONSE_INIT, status: 404 },
       );
     }
@@ -459,7 +462,7 @@ export function registerArticlePage(app: Hono<HonoBindings>): void {
     }
     const input: ArticleMetaInput = {
       origin: publicOrigin(c.env, c.req.raw),
-      product: branding?.product ?? "FlareMo",
+      product: branding?.product ?? FORK_PRODUCT_NAME,
       faviconUrl: branding?.favicon
         ? `/api/app/branding/favicon?v=${encodeURIComponent(branding.favicon.updated_at)}`
         : null,
@@ -517,7 +520,7 @@ export function registerArticlePage(app: Hono<HonoBindings>): void {
   app.get("/feed.xml", async (c) => {
     const db = getFlareMoDb(c.env);
     const origin = publicOrigin(c.env, c.req.raw);
-    let product = "FlareMo";
+    let product = FORK_PRODUCT_NAME;
     try {
       product = (await getBranding(db)).product;
     } catch {

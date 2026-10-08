@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { OWNER_FLAREMO_USER_ID } from "./auth";
 import { NotFoundError, ValidationError } from "./errors";
@@ -23,7 +24,7 @@ export const BRANDING_MARK_CONTENT_TYPES = [
   "image/svg+xml",
 ] as const;
 export const BRANDING_PRODUCT_NAME_MAX_CHARS = 40;
-export const DEFAULT_FLAREMO_PRODUCT_NAME = "FlareMo";
+export const DEFAULT_FLAREMO_PRODUCT_NAME = FORK_PRODUCT_NAME;
 
 /**
  * Curated accent presets the instance can pick from, plus "custom": a seed

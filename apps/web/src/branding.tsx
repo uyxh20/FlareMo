@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import {
   createContext,
   type ReactNode,
@@ -34,7 +35,7 @@ export type Branding = {
 };
 
 export const DEFAULT_BRANDING: Branding = {
-  product: "FlareMo",
+  product: FORK_PRODUCT_NAME,
   accent: "flame",
   accentHex: null,
   markLightUrl: null,

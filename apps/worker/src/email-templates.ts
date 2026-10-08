@@ -1,3 +1,5 @@
+import { brandCopy } from "./fork/product-name";
+
 // Localized transactional email copy for the app's 8 locales (mirrors
 // apps/web/src/i18n). Recipient language is resolved from the requester's
 // Accept-Language header: every send path (signup, resend verification,
@@ -300,7 +302,7 @@ const COPY: Record<EmailLocale, EmailCopy> = {
 };
 
 export function emailCopy(locale: EmailLocale): EmailCopy {
-  return COPY[locale];
+  return brandCopy(COPY[locale]);
 }
 
 export function interpolate(

@@ -34,7 +34,7 @@ describe("FlareMo branding API", () => {
 
     expect(health).toMatchObject({
       ok: true,
-      product: "FlareMo",
+      product: "Schizo Diary",
       version: FLAREMO_API_VERSION,
       update_repository: "example/flaremo",
       update_workflow_url:
@@ -53,7 +53,7 @@ describe("FlareMo branding API", () => {
     const body = await json<{ product: string; mark_light_url: string | null }>(
       response,
     );
-    expect(body.product).toBe("FlareMo");
+    expect(body.product).toBe("Schizo Diary");
     expect(body.mark_light_url).toBeNull();
   });
 
@@ -76,6 +76,23 @@ describe("FlareMo branding API", () => {
       await fetchApp("http://flaremo.test/api/app/health"),
     );
     expect(health.product).toBe("KOS Notes");
+  });
+
+  it("falls back to the fork default when the custom product name is cleared", async () => {
+    const put = await fetchApp("http://flaremo.test/api/app/admin/branding", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ product_name: null }),
+    });
+    expect(put.status).toBe(200);
+    const anonymous = await fetchApp(
+      "http://flaremo.test/api/app/branding",
+      { method: "GET" },
+      { authenticated: false },
+    );
+    expect((await json<{ product: string }>(anonymous)).product).toBe(
+      "Schizo Diary",
+    );
   });
 
   it("stores, publishes, and resets an accent preset", async () => {

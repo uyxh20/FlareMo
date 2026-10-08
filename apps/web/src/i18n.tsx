@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useBranding } from "./branding";
+import { brandTemplate } from "./fork/product-name";
 import type { TranslationKey } from "./i18n/key";
 import { enUS } from "./i18n/messages/en-US";
 
@@ -106,6 +108,9 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => getInitialLocale());
+  // BrandingProvider wraps this provider (main.tsx), so the product name is
+  // already in context here. Fork hook: see src/fork/product-name.ts.
+  const { product } = useBranding();
   // Monotonic request id: when several switches race, only the newest one may
   // commit — a slow pack can never resurrect an older language.
   const requestRef = useRef(0);
@@ -134,10 +139,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         // fallback keeps the page alive; a throw would crash the route.
         key.split(".").at(-1) ??
         key;
-      return interpolate(template, params);
+      return interpolate(brandTemplate(key, template, product), params);
     };
     return { locale, setLocale, t };
-  }, [locale]);
+  }, [locale, product]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

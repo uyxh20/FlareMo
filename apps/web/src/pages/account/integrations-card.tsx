@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, MailIcon, ShieldCheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -264,7 +265,7 @@ export function EmailSettingsCard() {
                 autoComplete="off"
                 disabled={emailEditingDisabled}
                 id="email-from-name"
-                placeholder={config?.previews?.fromName ?? "FlareMo"}
+                placeholder={config?.previews?.fromName ?? FORK_PRODUCT_NAME}
                 value={fields.fromName}
                 onChange={(event) =>
                   setFields({ ...fields, fromName: event.target.value })
