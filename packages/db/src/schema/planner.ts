@@ -35,7 +35,8 @@ import {
 // `effort` (migration 9001) is the task's effort estimate, 0 to 999 with at most
 // one decimal. It lives here because the row already is the task's planner-side
 // record. A backlog task can get a row with a NULL horizon only to hold it, which
-// plans nothing: the board reads a NULL horizon as the backlog.
+// plans nothing: the board reads a NULL horizon as the backlog. `start_date`
+// (migration 9002) is the start day, held the same way.
 export const plannerTaskPlan = sqliteTable(
   "planner_task_plan",
   {
@@ -52,6 +53,9 @@ export const plannerTaskPlan = sqliteTable(
     updatedAt: text("updated_at").notNull(),
     // Added by 9001, so it is the last column, where ALTER TABLE puts it.
     effort: real("effort"),
+    // Added by 9002: the task's start day, YYYY-MM-DD, or NULL. Together with the
+    // due date it is the task's time range on the board.
+    startDate: text("start_date"),
   },
   (table) => [
     index("planner_task_plan_user_period_idx").on(

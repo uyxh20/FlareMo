@@ -288,10 +288,23 @@ describe("planner API request schemas", () => {
         { effort: 0 },
         { effort: 2.5 },
         { effort: null },
+        { start_date: "2026-10-08" },
+        { start_date: null },
       ]) {
         expect(
           plannerUpdateTaskSchema.safeParse({ ...base, ...change }).success,
         ).toBe(true);
+      }
+    });
+
+    it("takes a start date as a real YYYY-MM-DD day or null, and nothing else", () => {
+      for (const bad of [
+        { ...base, start_date: "2026-02-30" },
+        { ...base, start_date: "Oct 8" },
+        { ...base, start_date: "2026-10-08T09:00:00Z" },
+        { ...base, start_date: "" },
+      ]) {
+        expect(plannerUpdateTaskSchema.safeParse(bad).success).toBe(false);
       }
     });
 
@@ -619,6 +632,7 @@ const PLAN = {
   carry_count: 0,
   dropped_at: null,
   effort: null,
+  start_date: null,
   created_at: "2026-10-07T09:00:00.000Z",
   updated_at: "2026-10-07T09:00:00.000Z",
 } as const;
@@ -639,6 +653,7 @@ const CARD: PlannerBoardCard = {
   period_start: "2026-10-05",
   carry_count: 0,
   dropped_at: null,
+  start_date: null,
 };
 
 const EVENT = {
@@ -778,6 +793,12 @@ describe("planner API response schemas", () => {
     ).toBe(false);
     const { effort: _effort, ...withoutEffort } = PLAN;
     expect(plannerPlanDtoSchema.safeParse(withoutEffort).success).toBe(false);
+    // The start date is always there too, null when unset.
+    expect(
+      plannerPlanDtoSchema.parse({ ...PLAN, start_date: "2026-10-08" }),
+    ).toMatchObject({ start_date: "2026-10-08" });
+    const { start_date: _start, ...withoutStart } = PLAN;
+    expect(plannerPlanDtoSchema.safeParse(withoutStart).success).toBe(false);
     expect(
       plannerRolloverResponseSchema.parse({ history: "paused", carried: 4 }),
     ).toEqual({ history: "paused", carried: 4 });

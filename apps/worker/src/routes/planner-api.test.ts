@@ -1475,7 +1475,8 @@ describe("planner API", () => {
 
     it("applies the column move table on the server and answers only task and plan", async () => {
       const task = await createTask("On the move");
-      const thisWeek = plannerPeriodStart("week", TODAY);
+      // The To Do marker (v1.2): a To Do task is planned for today, horizon day.
+      const marker = TODAY;
 
       const steps: Array<{
         column: string;
@@ -1483,40 +1484,40 @@ describe("planner API", () => {
         horizon: string | null;
         periodStart?: string | null;
       }> = [
-        // Backlog to To Do: the plan defaults to this week.
+        // Backlog to To Do: the plan is the To Do marker, for today.
         {
           column: "todo",
           status: "todo",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
         // To Do to Doing: the plan is kept.
         {
           column: "doing",
           status: "in_progress",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
         // Doing to Done: the plan is kept for the record.
         {
           column: "done",
           status: "done",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
         // Done to Doing.
         {
           column: "doing",
           status: "in_progress",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
         // Doing to To Do: the plan is still there.
         {
           column: "todo",
           status: "todo",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
         // To Do to Backlog: the plan is cleared.
         { column: "backlog", status: "todo", horizon: null, periodStart: null },
@@ -1529,13 +1530,13 @@ describe("planner API", () => {
         },
         // Doing to Backlog.
         { column: "backlog", status: "todo", horizon: null, periodStart: null },
-        // Backlog to Done, and Done to To Do, which plans this week again.
+        // Backlog to Done, and Done to To Do, which gets the marker again.
         { column: "done", status: "done", horizon: null, periodStart: null },
         {
           column: "todo",
           status: "todo",
-          horizon: "week",
-          periodStart: thisWeek,
+          horizon: "day",
+          periodStart: marker,
         },
       ];
       for (const step of steps) {

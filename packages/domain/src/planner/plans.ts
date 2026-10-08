@@ -2,7 +2,9 @@ import {
   type PlannerHorizon,
   plannerEffortMax,
   plannerHorizons,
+  plannerIsValidDayKey,
   plannerPeriodStart,
+  plannerTodoHorizon,
   type TaskDto,
   type TaskPriority,
 } from "@flaremo/contracts";
@@ -61,6 +63,8 @@ export type PlannerPlanDto = {
    * row can exist only to hold it, with a NULL horizon.
    */
   effort: number | null;
+  /** The start day, YYYY-MM-DD, or NULL. Held on the row like the effort (v1.2). */
+  start_date: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -73,6 +77,7 @@ export function plannerPlanToDto(row: PlannerTaskPlanRow): PlannerPlanDto {
     carry_count: row.carryCount,
     dropped_at: row.droppedAt,
     effort: row.effort ?? null,
+    start_date: row.startDate ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };
@@ -125,6 +130,18 @@ function resolvePlan(plan: PlannerPlanInput, today: string): ResolvedPlan {
     throw new ValidationError("A plan cannot start before the current period.");
   }
   return { horizon: plan.horizon, periodStart };
+}
+
+/**
+ * The plan a To Do task gets on the way in (v1.2): today, with the To Do horizon
+ * from the contracts. Nothing shows the period and rollover never moves it, so
+ * the only job it does is to keep the task out of the backlog.
+ */
+function todoMarker(today: string): ResolvedPlan {
+  return {
+    horizon: plannerTodoHorizon,
+    periodStart: plannerPeriodStart(plannerTodoHorizon, today),
+  };
 }
 
 function pointOf(plan: PlannerTaskPlanRow | undefined): PlanPoint {
@@ -470,6 +487,82 @@ export async function plannerSetEffort(
 }
 
 // ---------------------------------------------------------------------------
+// Start date
+// ---------------------------------------------------------------------------
+
+/**
+ * A valid start day, `YYYY-MM-DD`, or null to clear it; anything else is a 400.
+ * The day is returned as it was given, since it has already been checked to be
+ * a real calendar day.
+ */
+export function plannerNormalizeStartDate(value: unknown): string | null {
+  if (value === null) return null;
+  if (!plannerIsValidDayKey(value)) {
+    throw new ValidationError(
+      "start_date must be a real YYYY-MM-DD day, or null to clear it.",
+    );
+  }
+  return value;
+}
+
+/**
+ * Sets or clears a task's start date and writes a `start_date_changed` event
+ * `{from, to}` in the same batch. Like the effort, the date lives on the plan row,
+ * so a task that has none gets a row with a NULL horizon, which plans nothing. A
+ * request that changes nothing writes nothing. It never moves the task, so it is
+ * allowed on a dropped task too.
+ */
+export async function plannerSetStartDate(
+  db: FlareMoDb,
+  input: {
+    user: UserRow;
+    actor: PlannerActor;
+    taskId: string;
+    startDate: string | null;
+    now?: Date;
+  },
+): Promise<PlannerTaskPlanResult> {
+  const startDate = plannerNormalizeStartDate(input.startDate);
+  const taskId = plannerNormalizeTaskId(input.taskId);
+  const task = await loadLiveTask(db, input.user.id, taskId);
+  const existing = await loadPlan(db, input.user.id, taskId);
+  const from = existing?.startDate ?? null;
+
+  if (from !== startDate) {
+    const nowIso = plannerNow(input.now).toISOString();
+    await plannerRunBatch(db, [
+      db
+        .insert(plannerTaskPlan)
+        .values({
+          taskId,
+          userId: input.user.id,
+          horizon: null,
+          periodStart: null,
+          carryCount: 0,
+          droppedAt: null,
+          startDate,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        })
+        .onConflictDoUpdate({
+          target: plannerTaskPlan.taskId,
+          set: { startDate, updatedAt: nowIso },
+        }),
+      plannerEventStatement(db, {
+        userId: input.user.id,
+        taskId,
+        taskTitle: task.title,
+        type: "start_date_changed",
+        data: { from, to: startDate },
+        actor: input.actor,
+        occurredAt: nowIso,
+      }),
+    ]);
+  }
+  return resultFor(db, input.user, taskId);
+}
+
+// ---------------------------------------------------------------------------
 // Drop and undrop
 // ---------------------------------------------------------------------------
 
@@ -633,19 +726,15 @@ export async function plannerApplyColumnMove(
   }
 
   const hasPlan = plannerHasPlan(existing);
-  const thisWeek: ResolvedPlan = {
-    horizon: "week",
-    periodStart: plannerPeriodStart("week", today),
-  };
   let status: StatusTarget | null = null;
   let plan: ResolvedPlan | null | undefined; // undefined: leave the plan alone
 
   switch (to) {
     case "todo":
       status = "todo";
-      if (from === "backlog" || !hasPlan) plan = thisWeek;
+      if (from === "backlog" || !hasPlan) plan = todoMarker(today);
       else if (from === "done" && existing && isPast(existing, today)) {
-        plan = thisWeek;
+        plan = todoMarker(today);
       }
       break;
     case "backlog":

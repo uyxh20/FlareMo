@@ -2649,6 +2649,15 @@ e2e("dev environment against a fake Cloudflare", () => {
           )
           .get();
       assert.ok(hasEffort(dev));
+      // 9002 (the start date) is part of the later upgrade too.
+      const hasStartDate = (db) =>
+        db
+          .prepare(
+            "SELECT 1 FROM pragma_table_info('planner_task_plan') WHERE name = 'start_date'",
+          )
+          .get();
+      assert.ok(hasStartDate(dev));
+      assert.equal(hasStartDate(prod), undefined);
       assert.equal(hasEffort(prod), undefined);
       assert.ok(
         dev

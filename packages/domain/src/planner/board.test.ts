@@ -162,6 +162,7 @@ describe("plannerReadBoard", () => {
       period_start: TODAY,
       carry_count: 2,
       dropped_at: null,
+      start_date: null,
     });
     expect(JSON.stringify(result)).not.toContain("Secret details");
     expect(card).not.toHaveProperty("notes");

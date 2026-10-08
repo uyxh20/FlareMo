@@ -29,6 +29,7 @@ import {
   plannerNormalizeEffort,
   plannerSetEffort,
   plannerSetPlan,
+  plannerSetStartDate,
 } from "./plans";
 import { plannerReadTaskDetail } from "./task-detail";
 import {
@@ -322,9 +323,10 @@ describe("planner task panel", () => {
 
       // A row with no horizon is the backlog, so this is Backlog to To Do.
       expect(moved.from).toBe("backlog");
+      // The To Do marker: today, with the day horizon (v1.2).
       expect(moved.plan).toMatchObject({
-        horizon: "week",
-        period_start: THIS_WEEK,
+        horizon: "day",
+        period_start: TODAY,
         effort: 3,
       });
       expect((await plannerEvents(task.id)).map((event) => event.type)).toEqual(
@@ -335,7 +337,7 @@ describe("planner task panel", () => {
         JSON.parse((await plannerEvents(task.id))[1]?.data ?? "{}"),
       ).toEqual({
         from: { horizon: null, period_start: null },
-        to: { horizon: "week", period_start: THIS_WEEK },
+        to: { horizon: "day", period_start: TODAY },
       });
     });
 
@@ -412,7 +414,15 @@ describe("planner task panel", () => {
 
     it("shows up in the task's history as an effort_changed event", async () => {
       const task = await newTask();
-      await setEffort(task.id, 3);
+      // Stamped after the task's own created activity, whatever today's date is:
+      // setEffort's fixed NOW can sit before the wall clock that stamped it.
+      await plannerSetEffort(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: task.id,
+        effort: 3,
+        now: new Date(Date.now() + 1000),
+      });
       await plannerSyncHistory(rt.db, { userId: rt.user.id, now: NOW });
       const history = await plannerReadTaskHistory(rt.db, {
         userId: rt.user.id,
@@ -427,6 +437,98 @@ describe("planner task panel", () => {
         data: { from: null, to: 3 },
         actor_type: "user",
       });
+    });
+  });
+
+  // ===========================================================================
+  // plannerSetStartDate (v1.2)
+  // ===========================================================================
+
+  describe("plannerSetStartDate", () => {
+    const setStart = (taskId: string, startDate: string | null) =>
+      plannerSetStartDate(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId,
+        startDate,
+        now: NOW,
+      });
+
+    const startOf = async (taskId: string) =>
+      (await plannerTestPlan(rt.database, taskId))?.start_date;
+
+    it("sets the start day on the plan row and writes start_date_changed {from, to}", async () => {
+      const task = await newTask("Starts");
+      const result = await setStart(task.id, "2026-10-08");
+
+      expect(result.plan).toMatchObject({
+        horizon: null,
+        period_start: null,
+        start_date: "2026-10-08",
+      });
+      expect(await startOf(task.id)).toBe("2026-10-08");
+      const events = await plannerEvents(task.id);
+      expect(events.map((event) => event.type)).toEqual(["start_date_changed"]);
+      expect(JSON.parse(events[0]?.data ?? "{}")).toEqual({
+        from: null,
+        to: "2026-10-08",
+      });
+    });
+
+    it("writes nothing when the day is already that", async () => {
+      const task = await newTask();
+      await setStart(task.id, "2026-10-08");
+      const before = (await plannerEvents(task.id)).length;
+      await setStart(task.id, "2026-10-08");
+      expect((await plannerEvents(task.id)).length).toBe(before);
+    });
+
+    it("clears the start day with null, and the event keeps what it was", async () => {
+      const task = await newTask();
+      await setStart(task.id, "2026-10-08");
+      const cleared = await setStart(task.id, null);
+      expect(cleared.plan?.start_date).toBeNull();
+      const last = (await plannerEvents(task.id)).at(-1);
+      expect(JSON.parse(last?.data ?? "{}")).toEqual({
+        from: "2026-10-08",
+        to: null,
+      });
+    });
+
+    it("leaves the plan and drop state alone, and works on a dropped task", async () => {
+      const task = await newTask();
+      await plannerSetPlan(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: task.id,
+        plan: { horizon: "day", day: TODAY },
+        today: TODAY,
+        now: NOW,
+      });
+      await plannerDropTask(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: task.id,
+        now: NOW,
+      });
+      const result = await setStart(task.id, "2026-10-09");
+      expect(result.plan).toMatchObject({
+        horizon: "day",
+        period_start: TODAY,
+        dropped_at: NOW.toISOString(),
+        start_date: "2026-10-09",
+      });
+    });
+
+    it("rejects a value that is not a real YYYY-MM-DD day, before anything is written", async () => {
+      const task = await newTask();
+      for (const bad of ["2026-02-30", "Oct 8", "2026-10-08T09:00:00Z", ""]) {
+        await expect(setStart(task.id, bad), bad).rejects.toThrowError(
+          ValidationError,
+        );
+      }
+      expect(await startOf(task.id)).toBeUndefined();
+      expect(await plannerEvents(task.id)).toEqual([]);
     });
   });
 
@@ -708,6 +810,7 @@ describe("planner task panel", () => {
         carry_count: 3,
         dropped_at: null,
         effort: 4.5,
+        start_date: null,
         created_at: NOW.toISOString(),
         updated_at: NOW.toISOString(),
       });

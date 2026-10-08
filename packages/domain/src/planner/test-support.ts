@@ -392,6 +392,7 @@ export type PlannerTestPlan = {
   carry_count: number;
   dropped_at: string | null;
   effort: number | null;
+  start_date: string | null;
   created_at: string;
   updated_at: string;
 };

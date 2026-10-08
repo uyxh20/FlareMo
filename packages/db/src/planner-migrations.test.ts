@@ -35,8 +35,8 @@ type ExpectedIndex = {
   columns: string[];
 };
 
-// What migrations/9000_planner_init.sql and 9001_planner_task_details.sql must
-// create, written out independently of the Drizzle definitions so the parity
+// What migrations/9000_planner_init.sql, 9001_planner_task_details.sql and
+// 9002_planner_start_date.sql must create, written out independently of the Drizzle definitions so the parity
 // test below compares two sources.
 const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
   planner_task_plan: [
@@ -518,14 +518,15 @@ describe("planner migrations", () => {
   });
 
   describe("9001 task details", () => {
-    it("adds a nullable REAL effort column to the plan row, last, and leaves existing rows NULL", async () => {
+    it("adds a nullable REAL effort column to the plan row, and leaves existing rows NULL", async () => {
       const columns = await rows<{
         name: string;
         type: string;
         notnull: number;
         dflt_value: string | null;
       }>("PRAGMA table_info(planner_task_plan)");
-      expect(columns.at(-1)).toMatchObject({
+      // 9002 added start_date after it, so effort is no longer the last column.
+      expect(columns.find((column) => column.name === "effort")).toMatchObject({
         name: "effort",
         type: "REAL",
         notnull: 0,
@@ -670,6 +671,50 @@ describe("planner migrations", () => {
     });
   });
 
+  describe("9002 start date", () => {
+    it("adds a nullable TEXT start_date column to the plan row, last, and leaves existing rows NULL", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      expect(columns.at(-1)).toMatchObject({
+        name: "start_date",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+      });
+
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, created_at, updated_at)
+         VALUES ('t1', 'u1', 'day', '2026-10-08', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{ start_date: string | null }>(
+        "SELECT start_date FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row?.start_date).toBeNull();
+    });
+
+    it("lets a NULL-horizon row hold a start day, as it holds an effort", async () => {
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, start_date, created_at, updated_at)
+         VALUES ('t1', 'u1', NULL, NULL, '2026-10-08', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{
+        start_date: string | null;
+        horizon: string | null;
+      }>(
+        "SELECT start_date, horizon FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row).toEqual({ start_date: "2026-10-08", horizon: null });
+    });
+  });
+
   describe("migration files", () => {
     it("orders planner migration files by number and ignores the rest", () => {
       expect(
@@ -698,6 +743,7 @@ describe("planner migrations", () => {
       );
       expect(files).toContain("9000_planner_init.sql");
       expect(files).toContain("9001_planner_task_details.sql");
+      expect(files).toContain("9002_planner_start_date.sql");
       // applyPlannerMigrations reads this list, so both reach the test databases.
       expect(plannerMigrationFiles(files)).toEqual(files.sort());
 

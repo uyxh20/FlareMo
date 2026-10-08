@@ -46,6 +46,7 @@ import {
   plannerRollover,
   plannerSetEffort,
   plannerSetPlan,
+  plannerSetStartDate,
   plannerSyncHistory,
   plannerUndropTask,
   plannerUpdateComment,
@@ -224,15 +225,16 @@ plannerApi.get("/tasks/:id", async (c) => {
   }
 });
 
-// One request can change a task's status column, plan, effort, drop state and upstream
-// fields together. The order is the contract (documented on
+// One request can change a task's status column, plan, effort, start date, drop state
+// and upstream fields together. The order is the contract (documented on
 // `plannerUpdateTaskSchema`): undrop first, so a dropped task can be planned or
 // moved in the same request; then the upstream fields, through upstream's own
 // `updateTask` and only the fields given; then the column move or the plan (the
-// schema rejects both together); then the effort estimate; and drop last, so it
-// also clears a due date set a step earlier. The steps are separate writes, so a step that fails leaves the
-// earlier ones applied. No step is given a shared `now`: each reads the clock
-// when it runs, so the events of one request come out in the order they happened.
+// schema rejects both together); then the effort estimate and the start date; and
+// drop last, so it also clears a due date set a step earlier. The steps are separate
+// writes, so a step that fails leaves the earlier ones applied. No step is given a
+// shared `now`: each reads the clock when it runs, so the events of one request come
+// out in the order they happened.
 plannerApi.patch(
   "/tasks/:id",
   zValidator("json", plannerUpdateTaskSchema),
@@ -241,7 +243,7 @@ plannerApi.patch(
       const context = await getRequestContext(c);
       const throttled = await rateLimitGuard(c, "planner", context.user.id);
       if (throttled) return throttled;
-      const { today, column, plan, effort, dropped, ...fields } =
+      const { today, column, plan, effort, start_date, dropped, ...fields } =
         c.req.valid("json");
       assertToday(today, new Date());
       const { db, user } = context;
@@ -277,6 +279,14 @@ plannerApi.patch(
       }
       if (effort !== undefined) {
         result = await plannerSetEffort(db, { user, actor, taskId, effort });
+      }
+      if (start_date !== undefined) {
+        result = await plannerSetStartDate(db, {
+          user,
+          actor,
+          taskId,
+          startDate: start_date,
+        });
       }
       if (dropped === true) {
         result = await plannerDropTask(db, { user, actor, taskId });

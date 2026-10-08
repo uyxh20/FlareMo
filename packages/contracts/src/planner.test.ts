@@ -528,10 +528,10 @@ describe("plannerIsValidLevel", () => {
 });
 
 describe("plannerQuarterLabel", () => {
-  const label = (planPeriodStart?: string | null, dueAt?: string | null) =>
-    plannerQuarterLabel({ planPeriodStart, dueAt });
+  const label = (startDate?: string | null, dueAt?: string | null) =>
+    plannerQuarterLabel({ startDate, dueAt });
 
-  it("names the calendar quarter of the plan's period start", () => {
+  it("names the calendar quarter of the start date", () => {
     expect(label("2026-10-05")).toBe("Q4 2026");
     expect(label("2026-01-01")).toBe("Q1 2026");
     expect(label("2027-05-17")).toBe("Q2 2027");
@@ -564,13 +564,13 @@ describe("plannerQuarterLabel", () => {
     expect(label(plannerPeriodStart("day", "2026-10-01"))).toBe("Q4 2026");
   });
 
-  it("uses the due date when there is no plan period", () => {
+  it("uses the due date when there is no start date", () => {
     expect(label(null, "2026-02-14")).toBe("Q1 2026");
     expect(label(undefined, "2027-12-25")).toBe("Q4 2027");
     expect(label(undefined, "2026-07-04")).toBe("Q3 2026");
   });
 
-  it("prefers the plan period over the due date, whatever the due date says", () => {
+  it("prefers the start date over the due date, whatever the due date says", () => {
     expect(label("2026-10-05", "2026-01-15")).toBe("Q4 2026");
     expect(label("2026-04-06", "2027-12-31")).toBe("Q2 2026");
   });
@@ -643,9 +643,7 @@ describe("time zone independence", () => {
     ).toBe(januaryOffset);
 
     for (const c of PERIOD_CASES) expectPeriodCase(c);
-    expect(plannerQuarterLabel({ planPeriodStart: "2026-10-01" })).toBe(
-      "Q4 2026",
-    );
+    expect(plannerQuarterLabel({ startDate: "2026-10-01" })).toBe("Q4 2026");
     expect(plannerQuarterLabel({ dueAt: "2026-09-30" })).toBe("Q3 2026");
     expect(plannerIsValidDayKey("2028-02-29")).toBe(true);
     expect(plannerIsValidDayKey("2027-02-29")).toBe(false);

@@ -105,7 +105,8 @@ export function plannerShiftDay(dayKey: string, days: number): string {
 
 /**
  * The planner-sourced event types: the plan events, then the task panel's
- * (migration 9001). Comment events carry only `{comment_id}`, never the text.
+ * (migrations 9001 and 9002). Comment events carry only `{comment_id}`, never the
+ * text.
  */
 export type PlannerEventType =
   | "planned"
@@ -114,6 +115,7 @@ export type PlannerEventType =
   | "dropped"
   | "undropped"
   | "effort_changed"
+  | "start_date_changed"
   | "commented"
   | "comment_edited"
   | "comment_deleted";

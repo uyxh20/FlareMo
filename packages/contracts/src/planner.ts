@@ -170,30 +170,39 @@ export function plannerIsValidLevel(value: unknown): value is string {
   return typeof value === "string" && plannerLevelPattern.test(value);
 }
 
+/**
+ * The horizon a To Do task carries (v1.2, docs/planning-cockpit-implementation-plan.md,
+ * section 13.x). The cockpit has no periods any more, but a To Do task still needs
+ * a plan row to tell it from the backlog, so every move into To Do plans it for
+ * today with this horizon. Nothing shows it and rollover never moves it.
+ */
+export const plannerTodoHorizon = "day" as const satisfies PlannerHorizon;
+
+/** The plan a To Do task gets on the way in: today, with `plannerTodoHorizon`. */
+export function plannerTodoMarker(today: string): PlannerPlanInput {
+  return { horizon: plannerTodoHorizon, day: today };
+}
+
 // A due date is a bare `YYYY-MM-DD`, but a legacy row can carry a time after it
 // (upstream's own `nextDayKey` says as much), so the day is read off the front.
 const DAY_PREFIX = /^(\d{4}-\d{2}-\d{2})(?:[T ]|$)/;
 
 /**
  * The calendar quarter a task falls in, written like "Q4 2026": the quarter of
- * its plan's period start when it has a plan, otherwise of its due date,
- * otherwise null. The task panel shows it as a read-only property, so a task
- * planned for a month, a week or a day is grouped the way the Notion board's
- * Quarter column grouped it, without anyone filling it in.
+ * its start date when it has one, otherwise of its due date, otherwise null. The
+ * task panel shows it as a read-only property, so a task that starts or is due
+ * in a quarter is grouped that way without anyone filling it in.
  *
- * It is the quarter of the period's FIRST day, which is how a week belongs to a
- * month everywhere else in the cockpit: a week that starts Monday 28 September
- * is in Q3, even though most of its days are in October. Quarters are calendar
- * quarters (January to March is Q1) and the maths is UTC-only, like every other
- * day maths here. A value that is not a real day (an empty string, 30 February,
- * a bare month) counts as absent, so a damaged plan period falls back to the
- * due date instead of producing a wrong label.
+ * Quarters are calendar quarters (January to March is Q1) and the maths is
+ * UTC-only, like every other day maths here. A value that is not a real day (an
+ * empty string, 30 February, a bare month) counts as absent, so a damaged start
+ * date falls back to the due date instead of producing a wrong label.
  */
 export function plannerQuarterLabel(input: {
-  planPeriodStart?: string | null;
+  startDate?: string | null;
   dueAt?: string | null;
 }): string | null {
-  for (const value of [input.planPeriodStart, input.dueAt]) {
+  for (const value of [input.startDate, input.dueAt]) {
     const key = typeof value === "string" ? DAY_PREFIX.exec(value)?.[1] : null;
     const date = key ? parseDayKey(key) : undefined;
     if (date) {
@@ -335,15 +344,15 @@ export const plannerCreateTaskSchema = z.strictObject({
  *   1. `dropped: false`  undrop
  *   2. title, notes, priority, due_at, project_id  through upstream's updateTask
  *   3. `column` (a column move) or else `plan`
- *   4. `effort`          the estimate, on the plan row; `null` clears it
+ *   4. `effort` and `start_date`  on the plan row; `null` clears either
  *   5. `dropped: true`   drop
  *
  * It is not atomic: a step that fails leaves the earlier steps applied. A
  * `column` move sets the plan itself (the move table lives on the server), so
  * sending `column` and `plan` together is a 400. `status` and `sort_order` are
  * not accepted here: move columns with `column`, reorder through `/api/app/tasks`.
- * `effort` is the one planner-side field that is not a plan: setting it never
- * moves the task, and it is allowed on a dropped task.
+ * `effort` and `start_date` are planner-side fields that are not a plan: setting
+ * them never moves the task, and they are allowed on a dropped task.
  */
 export const plannerUpdateTaskSchema = z
   .strictObject({
@@ -351,6 +360,8 @@ export const plannerUpdateTaskSchema = z
     column: plannerColumnSchema.optional(),
     plan: plannerPlanInputSchema.nullable().optional(),
     effort: plannerEffortSchema.nullable().optional(),
+    // The start day, YYYY-MM-DD, or null to clear it (v1.2, migration 9002).
+    start_date: plannerDaySchema.nullable().optional(),
     dropped: z.boolean().optional(),
     title: updateTaskSchema.shape.title,
     notes: updateTaskSchema.shape.notes,
@@ -429,6 +440,8 @@ export const plannerPlanDtoSchema = z.object({
   // The effort estimate, 0 to 999 with at most one decimal; null when unset. A
   // plan row can exist only to hold it, with a null horizon (the backlog).
   effort: z.number().nullable(),
+  // The start day, YYYY-MM-DD, or null. Held the same way as the effort.
+  start_date: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -456,6 +469,8 @@ export const plannerBoardCardSchema = z.object({
   period_start: z.string().nullable(),
   carry_count: z.number().int().nonnegative(),
   dropped_at: z.string().nullable(),
+  // The start day, YYYY-MM-DD, or null. The card shows it with the due date.
+  start_date: z.string().nullable(),
 });
 
 export const plannerBoardResponseSchema = z.object({

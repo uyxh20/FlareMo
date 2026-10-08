@@ -1,0 +1,18 @@
+-- migrations/9002_planner_start_date.sql: fork-owned, hand-written. Never edit once applied (add 9003_planner_...).
+--
+-- The task's start date (docs/planning-cockpit-implementation-plan.md, section 13.x,
+-- "v1.2 simplification"): a nullable day, YYYY-MM-DD, that stands with the due date as
+-- the time range of a task. It lives on the task's plan row, like the effort does.
+-- Hand-written and not listed in migrations/meta/_journal.json, like 9000 and 9001:
+-- never run pnpm db:generate for these (G3, the fork exception to AGENTS.md). Wrangler
+-- orders migration files by leading number, so this one is applied after 9001.
+--
+-- Rules for this file, the same as for every 9NNN_planner_ file:
+--   G10  no foreign key to an upstream table (planner-internal keys are fine)
+--   G11  no triggers
+--   G12  never edit a file once it is applied to a real database (dev or live)
+--   G13  additive only: never rebuild a planner table here
+--
+-- A plan row can exist only to hold a value (an effort, now a start date) with a
+-- NULL horizon, which plans nothing: the board reads a NULL horizon as the backlog.
+ALTER TABLE `planner_task_plan` ADD COLUMN `start_date` text;

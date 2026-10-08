@@ -50,6 +50,8 @@ export type PlannerBoardCard = {
   period_start: string | null;
   carry_count: number;
   dropped_at: string | null;
+  /** The start day, YYYY-MM-DD, or null. Shown on the card with the due date. */
+  start_date: string | null;
 };
 
 export type PlannerBoard = {
@@ -186,6 +188,7 @@ export async function plannerReadBoard(
         periodStart: plannerTaskPlan.periodStart,
         carryCount: plannerTaskPlan.carryCount,
         droppedAt: plannerTaskPlan.droppedAt,
+        startDate: plannerTaskPlan.startDate,
       })
       .from(tasks)
       .leftJoin(plannerTaskPlan, eq(plannerTaskPlan.taskId, tasks.id))
@@ -231,6 +234,7 @@ export async function plannerReadBoard(
       period_start: row.periodStart ?? null,
       carry_count: row.carryCount ?? 0,
       dropped_at: row.droppedAt ?? null,
+      start_date: row.startDate ?? null,
     };
     groups[
       plannerColumnFor({
