@@ -112,7 +112,7 @@ describe("plannerSyncHistory", () => {
   };
 
   describe("activity copy", () => {
-    it("copies upstream activity with its actor, the current title and an id-free source_ref", async () => {
+    it("copies upstream activity with its actor, the title at the time and an id-free source_ref", async () => {
       const task = await createTask(rt.db, rt.user, USER, {
         title: "Write the plan",
       });
@@ -133,7 +133,7 @@ describe("plannerSyncHistory", () => {
           event.task_title,
         ]),
       ).toEqual([
-        ["created", "activity", "user", null, "Write the v3 plan"],
+        ["created", "activity", "user", null, "Write the plan"],
         ["updated", "activity", "agent", "pat:abcd1234", "Write the v3 plan"],
         ["status_changed", "activity", "user", null, "Write the v3 plan"],
       ]);
@@ -197,6 +197,74 @@ describe("plannerSyncHistory", () => {
           .filter((event) => event.user_id === rt.user.id)
           .map((e) => e.task_id),
       ).toEqual([mine.id]);
+    });
+
+    it("gives a batch of events the title the task had at each event, not the current one", async () => {
+      const task = await createTask(rt.db, rt.user, USER, { title: "One" });
+      await updateTask(rt.db, rt.user, USER, task.id, { priority: "high" });
+      await updateTask(rt.db, rt.user, USER, task.id, { title: "Two" });
+      await updateTask(rt.db, rt.user, USER, task.id, { status: "done" });
+      await updateTask(rt.db, rt.user, USER, task.id, { title: "Three" });
+      await updateTask(rt.db, rt.user, USER, task.id, { notes: "n" });
+
+      // One sync sees all six events; the live title is "Three".
+      await sync(0);
+
+      expect(
+        (await plannerTestEvents(rt.database, task.id)).map((event) => [
+          event.type,
+          event.task_title,
+        ]),
+      ).toEqual([
+        ["created", "One"],
+        ["updated", "One"],
+        ["updated", "Two"],
+        ["status_changed", "Two"],
+        ["updated", "Three"],
+        ["updated", "Three"],
+      ]);
+    });
+
+    it("uses the snapshot's title for events before the first rename in a later batch", async () => {
+      const task = await createTask(rt.db, rt.user, USER, { title: "Alpha" });
+      await sync(0);
+      // Activity rows that name no title, then a rename, all in one batch.
+      await updateTask(rt.db, rt.user, USER, task.id, { priority: "low" });
+      await updateTask(rt.db, rt.user, USER, task.id, { title: "Beta" });
+      await sync(1);
+      expect(
+        (await plannerTestEvents(rt.database, task.id)).map(
+          (event) => event.task_title,
+        ),
+      ).toEqual(["Alpha", "Alpha", "Beta"]);
+    });
+
+    it("records the project's name at event time, so it outlives the project", async () => {
+      const project = await createProject(rt.db, rt.user, { name: "Launch" });
+      const other = await createProject(rt.db, rt.user, { name: "Ops" });
+      const task = await createTask(rt.db, rt.user, USER, {
+        title: "Ship",
+        project_id: project.id,
+      });
+      await updateTask(rt.db, rt.user, USER, task.id, { title: "Ship it" });
+      await updateTask(rt.db, rt.user, USER, task.id, {
+        project_id: other.id,
+      });
+      await updateTask(rt.db, rt.user, USER, task.id, { priority: "high" });
+      await sync(0);
+
+      const names = (await plannerTestEvents(rt.database, task.id)).map(
+        (event) => JSON.parse(event.data).project_name,
+      );
+      // The project the task was in at each event; the live name is used for
+      // the project it is in. A rename event gets no project_id key (the
+      // history reads that key as "project changed").
+      expect(names).toEqual(["Launch", "Launch", "Ops", "Ops"]);
+      const rename = (await plannerTestEvents(rt.database, task.id))[1];
+      expect(JSON.parse(rename?.data ?? "{}")).toEqual({
+        title: "Ship it",
+        project_name: "Launch",
+      });
     });
 
     it("keeps each event's title as it was when the event was archived", async () => {
@@ -695,6 +763,57 @@ describe("plannerSyncHistory", () => {
       expect(events[1]?.occurred_at).toBe(deletedAt);
     });
 
+    it("names the project in the deleted and purged events, even when the project is purged too", async () => {
+      const project = await createProject(rt.db, rt.user, { name: "Launch" });
+      const task = await createTask(rt.db, rt.user, USER, {
+        title: "Ship",
+        project_id: project.id,
+      });
+      await deleteTask(rt.db, rt.user, task.id);
+      await sync(0);
+      // The project goes (and its tasks and activity with it); the next sync
+      // can no longer look the name up.
+      await plannerTestRun(
+        rt.database,
+        "DELETE FROM projects WHERE id = ?",
+        project.id,
+      );
+      await sync(1);
+
+      const events = await plannerTestEvents(rt.database, task.id);
+      expect(events.map((event) => event.type)).toEqual([
+        "created",
+        "deleted",
+        "purged",
+      ]);
+      expect(
+        events.map((event) => JSON.parse(event.data).project_name),
+      ).toEqual(["Launch", "Launch", "Launch"]);
+    });
+
+    it("force skips the debounce", async () => {
+      const task = await createTask(rt.db, rt.user, USER, { title: "Soon" });
+      await sync(0);
+      await deleteTask(rt.db, rt.user, task.id);
+      // Ten seconds later: debounced, nothing new.
+      expect(
+        await plannerSyncHistory(rt.db, {
+          userId: rt.user.id,
+          now: plannerTestAt(T0, 0.1),
+        }),
+      ).toEqual({ history: "ok" });
+      expect(await plannerTestTypes(rt.database, task.id)).toEqual(["created"]);
+      await plannerSyncHistory(rt.db, {
+        userId: rt.user.id,
+        now: plannerTestAt(T0, 0.1),
+        force: true,
+      });
+      expect(await plannerTestTypes(rt.database, task.id)).toEqual([
+        "created",
+        "deleted",
+      ]);
+    });
+
     it("records deleted, restored, then deleted again across separate syncs", async () => {
       const task = await createTask(rt.db, rt.user, USER, { title: "Yo-yo" });
       await sync(0);
@@ -801,6 +920,7 @@ describe("plannerSyncHistory", () => {
       expect(JSON.parse(events[0]?.data ?? "{}")).toEqual({
         status: "in_progress",
         project_id: project.id,
+        project_name: "Imported",
         due_at: "2020-03-05",
       });
       // A task with an activity `created` gets no second one.

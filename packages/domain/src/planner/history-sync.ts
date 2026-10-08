@@ -24,7 +24,9 @@ import {
 // There are no triggers anywhere (G11) and no writes to upstream tables (G14):
 // this module only reads `tasks`, `task_activity` and `projects`.
 //
-// It runs on cockpit open and before history reads, never on a schedule.
+// It runs on cockpit open and before history reads, and nightly around the
+// trash purge (history-sync-nightly.ts), which would otherwise wipe tasks
+// the archive has never seen.
 
 /** A sync that ran less than this long ago is skipped, and its status returned. */
 export const plannerSyncDebounceMs = 30_000;
@@ -193,6 +195,52 @@ function activitySelection(state: {
   return sql.join(clauses, sql` OR `);
 }
 
+/** The current name of the project with the given id, or NULL. */
+const projectNameOf = (projectId: SQL) =>
+  sql`(SELECT p.name FROM projects p WHERE p.id = ${projectId})`;
+
+/**
+ * Event data with the project's name added as `project_name`, so the history
+ * still names the project after the project has been purged. Only the name is
+ * added, never `project_id`: the history labels read a `project_id` key as "the
+ * project changed". `base` is JSON text for an object; the data is left alone
+ * when there is no project or the project is already gone.
+ */
+const withProjectName = (base: SQL, projectId: SQL) =>
+  sql`CASE WHEN ${projectNameOf(projectId)} IS NOT NULL
+    THEN json_set(${base}, '$.project_name', ${projectNameOf(projectId)})
+    ELSE ${base} END`;
+
+/**
+ * The project a task was in when an activity row happened: the latest activity
+ * row up to and including this one that names a project (`created`, or an edit
+ * that moved or cleared it; a cleared project reads as ''). Without one, every
+ * move is later than the event, so the snapshot's project is right; without a
+ * snapshot, the live one is the best that is left.
+ */
+const projectIdAtActivity = sql`NULLIF(COALESCE(
+  (SELECT COALESCE(json_extract(p.changes, '$.project_id'), '') FROM task_activity p
+   WHERE p.task_id = a.task_id AND json_valid(p.changes)
+     AND json_type(p.changes, '$.project_id') IS NOT NULL
+     AND (p.created_at < a.created_at OR (p.created_at = a.created_at AND p.id <= a.id))
+   ORDER BY p.created_at DESC, p.id DESC LIMIT 1),
+  s.project_id, t.project_id), '')`;
+
+/**
+ * The title a task had when an activity row happened: the title of the latest
+ * activity row up to and including this one that names a title (upstream's
+ * `created` and every `updated` that renames it). Without one, every rename is
+ * later than the event, so the snapshot's title (the title at the last sync) is
+ * right; without a snapshot, the live title is the best that is left.
+ */
+const titleAtActivity = sql`COALESCE(
+  (SELECT json_extract(p.changes, '$.title') FROM task_activity p
+   WHERE p.task_id = a.task_id AND json_valid(p.changes)
+     AND json_extract(p.changes, '$.title') IS NOT NULL
+     AND (p.created_at < a.created_at OR (p.created_at = a.created_at AND p.id <= a.id))
+   ORDER BY p.created_at DESC, p.id DESC LIMIT 1),
+  s.title, t.title, '')`;
+
 /**
  * Builds the sync's statements, in `plannerSyncBatchSteps` order. Every one is a
  * Drizzle builder, because a batch can only carry builders. Each insert uses
@@ -218,8 +266,10 @@ function buildSyncStatements(
     db.insert(plannerTaskEvent).select(select).onConflictDoNothing();
 
   const copyActivity = eventsFrom(sql`
-    SELECT NULL, a.user_id, a.task_id, COALESCE(t.title, s.title), a.action,
-           a.changes, 'activity',
+    SELECT NULL, a.user_id, a.task_id, ${titleAtActivity}, a.action,
+           CASE WHEN json_valid(a.changes) AND json_type(a.changes) = 'object'
+             THEN ${withProjectName(sql`a.changes`, projectIdAtActivity)}
+             ELSE a.changes END, 'activity',
            'a:' || a.task_id || '@' || a.created_at || '|' || a.action || '|' || COALESCE(a.changes, ''),
            a.actor_type, a.actor_name, a.created_at, ${nowIso}
     FROM task_activity a
@@ -259,7 +309,8 @@ function buildSyncStatements(
   // A snapshot of a deleted task whose live row now has a different stamp: it
   // was restored (and maybe deleted again). Keyed by the stamp it was restored from.
   const restored = eventsFrom(sql`
-    SELECT NULL, t.user_id, t.id, t.title, 'restored', '{"detected":true}', 'sync',
+    SELECT NULL, t.user_id, t.id, t.title, 'restored',
+           ${withProjectName(sql`'{"detected":true}'`, sql`t.project_id`)}, 'sync',
            'res:' || t.id || '@' || s.deleted_at, NULL, NULL, ${nowIso}, ${nowIso}
     FROM planner_task_seen s
     JOIN tasks t ON t.id = s.task_id
@@ -270,7 +321,8 @@ function buildSyncStatements(
   // and deleted between two syncs. Skipped when upstream starts logging
   // `deleted` itself and that event is already in the archive.
   const deleted = eventsFrom(sql`
-    SELECT NULL, t.user_id, t.id, t.title, 'deleted', '{}', 'sync',
+    SELECT NULL, t.user_id, t.id, t.title, 'deleted',
+           ${withProjectName(sql`'{}'`, sql`t.project_id`)}, 'sync',
            'del:' || t.id || '@' || t.deleted_at, NULL, NULL, t.deleted_at, ${nowIso}
     FROM tasks t
     LEFT JOIN planner_task_seen s ON s.task_id = t.id
@@ -281,10 +333,23 @@ function buildSyncStatements(
         WHERE e.task_id = t.id AND e.source = 'activity' AND e.type = 'deleted'
           AND e.occurred_at = t.deleted_at)`);
 
+  // The project's name at purge time: the project itself if it survives, else
+  // the name an earlier event of this task (its deletion, say) recorded for it.
+  const purgedProjectName = sql`COALESCE(
+    ${projectNameOf(sql`s.project_id`)},
+    (SELECT json_extract(e.data, '$.project_name') FROM planner_task_event e
+     WHERE e.task_id = s.task_id AND s.project_id IS NOT NULL
+       AND json_valid(e.data)
+       AND json_extract(e.data, '$.project_name') IS NOT NULL
+     ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1))`;
+
   // A snapshot with no task behind it: hard-deleted upstream. The title comes
   // from the snapshot, the only copy left.
   const purged = eventsFrom(sql`
-    SELECT NULL, s.user_id, s.task_id, s.title, 'purged', '{"detected":true}', 'sync',
+    SELECT NULL, s.user_id, s.task_id, s.title, 'purged',
+           CASE WHEN ${purgedProjectName} IS NOT NULL
+             THEN json_set('{"detected":true}', '$.project_name', ${purgedProjectName})
+             ELSE '{"detected":true}' END, 'sync',
            'pur:' || s.task_id, NULL, NULL, ${nowIso}, ${nowIso}
     FROM planner_task_seen s
     WHERE s.user_id = ${userId}
@@ -313,7 +378,7 @@ function buildSyncStatements(
   // `created` activity never logs, such as the due date.
   const created = eventsFrom(sql`
     SELECT NULL, t.user_id, t.id, t.title, 'created',
-           json_object('status', t.status, 'project_id', t.project_id, 'due_at', t.due_at),
+           ${withProjectName(sql`json_object('status', t.status, 'project_id', t.project_id, 'due_at', t.due_at)`, sql`t.project_id`)},
            'sync', 'new:' || t.id, NULL, NULL, t.created_at, ${nowIso}
     FROM tasks t
     LEFT JOIN planner_task_seen s ON s.task_id = t.id
@@ -412,9 +477,14 @@ function logPaused(reason: string): void {
  */
 export async function plannerSyncHistory(
   db: FlareMoDb,
-  input: { userId: string; now: Date },
+  input: {
+    userId: string;
+    now: Date;
+    /** Skip the debounce. For the nightly runs around the trash purge. */
+    force?: boolean;
+  },
 ): Promise<PlannerSyncResult> {
-  const { userId, now } = input;
+  const { userId, now, force = false } = input;
   try {
     const nowIso = now.toISOString();
 
@@ -424,7 +494,7 @@ export async function plannerSyncHistory(
       .from(plannerSyncState)
       .where(eq(plannerSyncState.userId, userId))
       .get();
-    if (state?.lastSyncAt) {
+    if (!force && state?.lastSyncAt) {
       const elapsed = now.getTime() - Date.parse(state.lastSyncAt);
       if (elapsed >= 0 && elapsed < plannerSyncDebounceMs) {
         return { history: state.status };

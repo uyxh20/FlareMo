@@ -14,6 +14,7 @@ export * from "./columns";
 export * from "./comments";
 export * from "./history-read";
 export * from "./history-sync";
+export * from "./history-sync-nightly";
 export * from "./plans";
 export * from "./rollover";
 export type {

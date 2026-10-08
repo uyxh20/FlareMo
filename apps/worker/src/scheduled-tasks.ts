@@ -37,6 +37,7 @@ import {
   type UserPlanLimits,
   updateMemberRemovalJob,
 } from "@flaremo/domain";
+import { plannerSyncAllUsers } from "@flaremo/domain/src/planner/history-sync-nightly";
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { cleanupFlaremoArtifacts } from "./artifact-cleanup";
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
@@ -301,8 +302,10 @@ export async function runScheduledMaintenance(
     // Projects first: the FK cascade removes their binned tasks and trails
     // in the same statement, so the task sweep below only ever handles
     // tasks deleted independently of their project.
+    await plannerSyncAllUsers(db, new Date(scheduledTime)); // fork: archive before the purge
     const purgedProjects = await hardDeleteExpiredProjects(db, trashCutoff);
     const purgedTasks = await hardDeleteExpiredTasks(db, trashCutoff);
+    await plannerSyncAllUsers(db, new Date(scheduledTime)); // fork: record `purged`
     if (purgedProjects > 0 || purgedTasks > 0) {
       console.log(
         JSON.stringify({

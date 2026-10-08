@@ -30,7 +30,7 @@ Build defaults (adopted for the build; the owner can change them after QA):
 - **D2 The cockpit lives at `/cockpit`**, beside `/projects` in navigation.
 - **D3 Goals are upstream projects arranged in a tree** (`planner_project_node`). Tasks belong to goals through upstream `tasks.project_id`. A node's `level` is a validated slug (`^[a-z][a-z0-9-]{0,23}$`, for example `area`, `year`, `quarter`, `goal`, `milestone`), so adding a level needs no schema change.
 - **D4 History is a permanent copy of upstream `task_activity`**, plus delete, restore and purge detection by comparing `tasks` with a snapshot. No SQL triggers anywhere.
-- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. There is no cron. Upstream keeps trash for 30 days, so a delete is missed only if the cockpit isn't opened for 30 days. A nightly hook into `apps/worker/src/scheduled-tasks.ts` stays an option for later.
+- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
 
 ## 1. Guardrails
 
