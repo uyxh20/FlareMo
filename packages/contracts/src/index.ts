@@ -2,6 +2,7 @@ export * from "./articles";
 export * from "./calendar";
 export * from "./capture";
 export * from "./embedding";
+export * from "./fork-brand";
 export * from "./memory";
 export * from "./memos";
 export * from "./memos-current";

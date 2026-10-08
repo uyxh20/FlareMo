@@ -351,7 +351,7 @@ describe("scheduled maintenance", () => {
     expect(pushes).toHaveLength(1);
     expect(pushes[0]?.userId).toBe(user.id);
     expect(pushes[0]?.payload).toMatchObject({
-      title: "FlareMo 任务提醒",
+      title: "Schizo Diary 任务提醒",
       body: "有 1 个任务已经逾期。",
       url: "/projects",
     });

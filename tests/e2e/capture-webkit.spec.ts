@@ -109,7 +109,7 @@ test("completes the voice-note flow in mobile WebKit with a mock microphone", as
 
   await transcript.fill(`${unique} edited on mobile WebKit`);
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page).toHaveURL(/\/memo\//);
   const response = await page.request.get(

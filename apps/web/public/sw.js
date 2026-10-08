@@ -241,7 +241,7 @@ function hasNoStoreDirective(response) {
 // --- Web Push -------------------------------------------------------------
 
 self.addEventListener("push", (event) => {
-  let payload = { title: "FlareMo", body: "", url: "/" };
+  let payload = { title: "Schizo Diary", body: "", url: "/" };
   try {
     if (event.data) {
       const parsed = event.data.json();

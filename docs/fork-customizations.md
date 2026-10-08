@@ -35,6 +35,42 @@ Now, in the timeline composer and in the focus canvas alike:
 
 The `[[` wiki-link list is untouched.
 
+### 3. Product name: "Schizo Diary"
+
+The owner calls the product **Schizo Diary**. Every place a user reads the product name shows it by default. Nothing is written to the database: the default lives in code, so a fresh install and the owner's existing instance both show the new name. An admin-set name (Admin → Branding) still wins wherever it reached before.
+
+What changed:
+
+- **Browser and installed app:** the tab title, `apple-mobile-web-app-title`, the manifest `name` and `short_name`, the offline page title, and the service worker's fallback push title.
+- **Web UI:** every translated string that says "FlareMo" shows the live product name. The catalogs keep the upstream word, and `t()` swaps it at render time (`apps/web/src/fork/product-name.ts`), so none of the eight locale files changed. The default branding, the media-player metadata and the email sender placeholder use the same name.
+- **Worker:** the default branding (`/api/app/branding` and the health endpoint), the share and article page titles and their unavailable pages, the RSS feed title, the 2FA issuer (Better Auth `appName`), the daily-review and overdue-task push titles, the transactional email copy in all eight locales, and the test email.
+
+Two behaviours to know:
+
+- The UI strings and the push titles read the live name, so an admin-set name shows there. **Emails do not.** Their copy is static and has no database handle, so they always say "Schizo Diary". They said "FlareMo" before this change, so nothing regressed, but an admin-set name does not reach them.
+- The static HTML and manifest carry the fork default until the app loads. `BrandingProvider` then sets `document.title` to the admin's name.
+
+Where the name lives: `FORK_PRODUCT_NAME` in `packages/contracts/src/fork-brand.ts`, which both the worker and the web import. `DEFAULT_FLAREMO_PRODUCT_NAME` in `packages/domain/src/branding.ts` keeps its upstream identifier, but its value is now the fork constant, so that upstream file changes by one line.
+
+**To change the name again**, edit the constant and the static copy:
+
+1. `FORK_PRODUCT_NAME` in `packages/contracts/src/fork-brand.ts`. This changes every code default at once.
+2. The static copy that cannot import it: `apps/web/index.html` (`<title>` and `apple-mobile-web-app-title`), `apps/web/public/site.webmanifest` (`name` and `short_name`), `apps/web/public/offline.html` (`<title>`), and the fallback title in `apps/web/public/sw.js`.
+3. The expectations that assert the default: `apps/worker/src/api/branding.test.ts`, `apps/worker/src/scheduled.test.ts`, and in e2e `tests/e2e/branding.spec.ts` and the "Save to …" button regexes in the two capture specs.
+4. Run `pnpm exec vitest run apps/web/src/fork apps/worker/src/fork apps/worker/src/api/branding.test.ts apps/worker/src/scheduled.test.ts --config vitest.config.ts`.
+
+**Deliberately left as "flaremo"**, because they are identifiers, protocol text or upstream references:
+
+- **Identifiers:** `FLAREMO_*` environment variables, the `flaremo` Worker, D1 and R2 names, cookie names, the `memos_pat_` token prefix, storage keys (`flaremo.locale`, `flaremo-audio-position:`, the `flaremo-branding` channel), API paths, the `flaremo-app-shell` marker, the `/brand/flaremo-*` asset paths, the `window.FlareMo` plugin global, and code names such as `FlareMoDb`, `FlareMoLogo`, `DEFAULT_FLAREMO_PRODUCT_NAME` and `FlareMoApp`.
+- **MCP and feed metadata:** the MCP server `name` in `routes/mcp/legacy-jsonrpc.ts` and the feed `generator` meta. Both are technical identifiers, not product chrome.
+- **Upstream references:** the GitHub release and update links (`realchendahuang/FlareMo`), `DEFAULT_RELEASE_REPOSITORY`, and the official plugin directory (its URL is `https://flaremo.app/…`, and its label "FlareMo 官方目录" names that upstream directory). Renaming any of these would point the update check or the plugin source at the wrong place.
+- **Speech recognition:** `normalizeTranscript` in `asr/bridge.ts` maps spoken spellings of "FlareMo" to "FlareMo" in transcripts. Changing its output would rewrite what users dictated.
+- **Avatar seed:** the `"FlareMo"` seed in `components/ui/avatar.tsx` sets the artwork for nameless users. It is never displayed, and changing it would change every such avatar.
+- **Example project name:** `memory.composerCustomProjectPrompt` keeps "e.g. FlareMo" (listed in `PRODUCT_NAME_EXCLUDED_KEYS`). It is an example folder name, and someone with a repo called FlareMo should see it unchanged.
+- **Protocol and API error text:** messages such as "…not configured on FlareMo", "Please use the FlareMo web app to sign up." and "This browser request must use FlareMo's origin." (a web test matches the last one), plus the MCP tool descriptions. They are read by API and MCP clients, not by the app's chrome. This is a follow-up candidate if the owner wants them renamed.
+- **Other apps:** the Telegram bot (`apps/telegram-bot`) returns its own "FlareMo" error text. It is a separate Worker and out of this change.
+- **Owner's user name:** the `FLAREMO_SINGLE_USER_NAME` example ("FlareMo Owner") in `worker-configuration.d.ts` is a user name, not the product name.
+
 ## Upstream files with a hook-in
 
 These are the only upstream files changed (`git diff --numstat`, added / removed lines).
@@ -48,6 +84,21 @@ These are the only upstream files changed (`git diff --numstat`, added / removed
 | `apps/web/src/components/memo-composer.tsx` | Passes the picker's keys to the editor, and the highlight to the list. | +6 |
 | `apps/web/src/components/composer/composer-focus-canvas.tsx` | The same, plus `anchor="canvas"` and the dialog's `onOpenChange` wrapped in `withTagPickerEscape`. | +13 / -1 |
 | `playwright.config.ts` | `fork-ui` added to the `memo-ui` project's `testMatch` alternation. | +1 / -1 |
+| `packages/contracts/src/index.ts` | `export * from "./fork-brand";`. | +1 |
+| `packages/domain/src/branding.ts` | Imports `FORK_PRODUCT_NAME`; `DEFAULT_FLAREMO_PRODUCT_NAME` equals it. | +2 / -1 |
+| `apps/worker/src/auth.ts` | Imports the constant; Better Auth `appName` (the 2FA issuer). | +2 / -1 |
+| `apps/worker/src/routes/share-page.ts` | Imports the constant; the unavailable page's fallback name. | +2 / -1 |
+| `apps/worker/src/routes/article-page.ts` | Imports the constant; the unavailable page, the page title and the feed title fallbacks. The `generator` meta stays. | +6 / -3 |
+| `apps/worker/src/scheduled-tasks.ts` | Imports `resolveProductName`; the two push titles use the live name (only when push is configured). | +4 / -2 |
+| `apps/worker/src/email-templates.ts` | `emailCopy` returns `brandCopy(COPY[locale])`, and imports it. | +3 / -1 |
+| `apps/worker/src/email.ts` | Imports the constant; the test email's subject and text. | +3 / -2 |
+| `apps/web/src/i18n.tsx` | `I18nProvider` reads `useBranding()` and runs `brandTemplate` on each template in `t()` before interpolation. | +7 / -2 |
+| `apps/web/src/branding.tsx` | `DEFAULT_BRANDING.product` is the fork constant. | +2 / -1 |
+| `apps/web/src/components/reading/reading-audio-provider.tsx` | The media-session artist and album read the live product. | +5 / -3 |
+| `apps/web/src/pages/account/integrations-card.tsx` | The email sender placeholder falls back to the fork constant. | +2 / -1 |
+| `apps/web/index.html`, `apps/web/public/site.webmanifest`, `apps/web/public/offline.html`, `apps/web/public/sw.js` | Static text: the title, the Apple web-app title, the manifest name and short name, the offline title, the push fallback. | +2 / -2, +2 / -2, +1 / -1, +1 / -1 |
+| `apps/worker/src/api/branding.test.ts`, `apps/worker/src/scheduled.test.ts` | Expectations for the default name, plus one case that clearing the custom name restores it. | +19 / -2, +1 / -1 |
+| `tests/e2e/branding.spec.ts`, `tests/e2e/capture-flow.spec.ts`, `tests/e2e/capture-webkit.spec.ts` | Expectations for the new name: the login text and the "Save to …" button label. Not run. | +2 / -2, +7 / -7, +1 / -1 |
 
 ## Fork-owned files
 
@@ -61,6 +112,12 @@ All new, none in conflict with anything upstream ships.
 | `apps/web/src/fork/use-tag-picker-list.ts` | What the list does in the DOM: measuring where it opens, keeping the highlighted row in view, lifting the composer above the notes while it is open. |
 | `apps/web/src/fork/*.test.ts(x)` | Unit tests for all of the above, plus `sidebar-nav-wiring.test.ts` and `tag-picker-wiring.test.ts`, which fail when an upstream sync drops a hook-in. `test-render.tsx` is their small jsdom helper (not imported by the app). |
 | `tests/e2e/fork-ui.spec.ts` | Playwright cases for both changes (see below). |
+| `packages/contracts/src/fork-brand.ts` | `FORK_PRODUCT_NAME` (the name) and `UPSTREAM_PRODUCT_NAME` (the word the hook replaces). |
+| `apps/worker/src/fork/product-name.ts` | `resolveProductName` (the live name, falling back to the default), `brandText` and `brandCopy` (for the email copy). |
+| `apps/worker/src/fork/product-name.test.ts` | Unit tests for the three helpers. |
+| `apps/web/src/fork/product-name.ts` | `brandTemplate`, plus the two key lists: `PRODUCT_NAME_EXCLUDED_KEYS` and `STOCK_BRAND_KEYS`. |
+| `apps/web/src/fork/product-name.test.ts` | Unit tests for `brandTemplate`, and a check across all eight catalogs that the key lists still match. |
+| `apps/web/src/fork/product-name-wiring.test.ts` | Fails when an upstream sync drops the `i18n.tsx`, `branding.tsx` or media-session hook-ins. |
 | `docs/fork-customizations.md` | This file. |
 
 ## Undoing a change
@@ -73,11 +130,14 @@ All new, none in conflict with anything upstream ships.
 - No keyboard completion: drop `onSuggestionKeyDown={handleSuggestionKeyDown}` from `MemoComposer` and the focus canvas. The list still scrolls and opens where it fits.
 - Keep the list above the composer, as upstream does: replace `positionClass` in `use-tag-picker-list.ts` with a constant `"bottom-12"`.
 
+**Product name.** Set `FORK_PRODUCT_NAME` back to `"FlareMo"` (and the static copy listed under "To change the name again") to return to the upstream name in one step. To drop the hook-ins entirely, revert the upstream hunks in the table above, then delete `apps/worker/src/fork/product-name*`, `apps/web/src/fork/product-name*` and `packages/contracts/src/fork-brand.ts`. The i18n hook is the only one that touches every translated string, so revert `i18n.tsx` first.
+
 ## Upstream sync notes
 
 - **The wiring tests are the alarm.** After a merge run `pnpm exec vitest run apps/web/src/fork --config vitest.config.ts`. `sidebar-nav-wiring.test.ts` fails if `flaremo-explorer.tsx` no longer routes its nav through `ForkSidebarNav`, or if a hidden route's `to="…"` link was renamed or removed (the filter would then match nothing, and the entry would quietly come back). `tag-picker-wiring.test.ts` does the same for the composer hook-ins.
 - **New upstream sidebar links** show up on their own: only the three routes in the list are filtered. If upstream renames one of them, update `forkHiddenSidebarRoutes` to match.
 - **`ComposerTagSuggestions` restyled upstream:** keep their markup and re-apply the fork's attributes (`role`, `aria-selected`, `ref`, `style`, the position class, the mousedown guard). The behaviour lives in `use-tag-picker-list.ts` and does not need to change.
+- **The product-name alarm:** `product-name-wiring.test.ts` fails if `i18n.tsx` stops branding its templates, if `branding.tsx` stops using the fork constant, or if the media session stops reading the live product. A new upstream string that says "FlareMo" is not caught automatically: check it against the exclusion list in `apps/web/src/fork/product-name.ts` (a new repo or folder example belongs there). A new hard-coded "FlareMo" in worker copy would show up in a grep for `"FlareMo"` in `apps/worker/src`.
 - **The focus canvas's Escape depends on Base UI's dialog.** Its `onOpenChange(open, details)` gets `details.reason === "escape-key"` and `details.cancel()`. Today the editor hears the Escape first and the dialog second, so the list identifies "the Escape the list just used" by the keypress itself. (`defaultPrevented` cannot say that: ProseMirror prevents the default of every Escape.) After a `@base-ui/react` upgrade, run the "Escape in the focus canvas" e2e case.
 - **TipTap throws if `editor.view` is read before the view is mounted.** `editorElement()` in `use-tag-picker.ts` is the one place that reads it, and it catches that.
 - **The planner's guard.** Section 10 of `planning-cockpit-implementation-plan.md` has a guard command that lists every changed file outside its allowlist: planner paths plus `docs/fork-` and `scripts/fork/`. This file matches `docs/fork-`. The fork-owned `apps/web/src/fork/` files, `tests/e2e/fork-ui.spec.ts` and the hook-ins above are not planner paths, so they will also show up in that guard's output. That is expected; this document is the explanation. Adding `apps/web/src/fork/` and `tests/e2e/fork-ui\.spec\.ts` to the allowlist would silence them, which is an edit for whoever owns that plan.

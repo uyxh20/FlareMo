@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useBranding } from "@/branding";
 
 const POSITION_KEY_PREFIX = "flaremo-audio-position:";
 
@@ -92,6 +93,7 @@ export function ReadingAudioProvider({
   tracks: ReadingAudioTrack[];
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const { product } = useBranding();
   // Object refs are detached before passive-effect cleanup runs, so this
   // second ref intentionally survives unmount and lets the last position be
   // saved after React has already cleared audioRef.
@@ -230,8 +232,8 @@ export function ReadingAudioProvider({
 
     mediaSession.metadata = new MediaMetadata({
       title: track?.filename ?? "",
-      artist: "FlareMo",
-      album: "FlareMo",
+      artist: product,
+      album: product,
     });
     mediaSession.playbackState = playing ? "playing" : "paused";
 
@@ -281,7 +283,7 @@ export function ReadingAudioProvider({
       ] as const;
       for (const action of actions) safeSet(action, null);
     };
-  }, [playing, seek, track]);
+  }, [playing, product, seek, track]);
 
   // The OS scrubber needs an explicit position state; browsers do not derive
   // it from the media element on their own.

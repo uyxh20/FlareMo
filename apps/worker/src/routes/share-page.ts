@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import { getBranding, getPublicShareByToken } from "@flaremo/domain";
 import type { Context, Hono } from "hono";
 import { SitemapIndexStream, streamToPromise } from "sitemap";
@@ -451,7 +452,7 @@ export function registerSharePage(app: Hono<HonoBindings>): void {
       });
     } catch {
       const branding = await getBranding(db).catch(() => null);
-      const product = branding?.product ?? "FlareMo";
+      const product = branding?.product ?? FORK_PRODUCT_NAME;
       return new Response(renderShareUnavailableDocument(product), {
         ...SHARE_RESPONSE_INIT,
         status: 404,

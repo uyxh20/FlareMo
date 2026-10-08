@@ -42,6 +42,7 @@ import { cleanupFlaremoArtifacts } from "./artifact-cleanup";
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
 import { runDataExportTask } from "./export-task";
+import { resolveProductName } from "./fork/product-name";
 import { hardDeleteMemoWithAttachments } from "./memo-hard-delete";
 import { runMemoryConflictPatrol, runMemoryDreaming } from "./memory-dreaming";
 
@@ -354,6 +355,7 @@ export async function runScheduledMaintenance(
   // notification rows.
   const pushKeys = pushKeysFromEnv(env);
   if (pushKeys) {
+    const productName = await resolveProductName(db);
     const reviewReceivers = await db
       .select({ receiverId: memosNotifications.receiverId })
       .from(memosNotifications)
@@ -365,7 +367,7 @@ export async function runScheduledMaintenance(
       );
     for (const { receiverId } of reviewReceivers) {
       await pushNotificationToUser(db, pushKeys, receiverId, {
-        title: "FlareMo 每日回顾",
+        title: `${productName} 每日回顾`,
         body: "今天有「那年今天」的记录值得回看。",
         url: "/review/daily",
       }).catch(() => undefined);
@@ -388,7 +390,7 @@ export async function runScheduledMaintenance(
       .groupBy(tasks.userId);
     for (const row of overdueByUser) {
       await pushNotificationToUser(db, pushKeys, row.userId, {
-        title: "FlareMo 任务提醒",
+        title: `${productName} 任务提醒`,
         body: `有 ${row.count} 个任务已经逾期。`,
         url: "/projects",
       }).catch(() => undefined);

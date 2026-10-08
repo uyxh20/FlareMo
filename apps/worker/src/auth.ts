@@ -1,5 +1,6 @@
 import { apiKey } from "@better-auth/api-key";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import {
   authAccounts,
   authApiKeys,
@@ -116,7 +117,7 @@ export function createFlareMoAuth(
   const hasSocialProviders = Object.keys(socialProviders).length > 0;
 
   const auth = betterAuth({
-    appName: "FlareMo",
+    appName: FORK_PRODUCT_NAME,
     baseURL: publicUrl,
     basePath: "/api/auth",
     secret,

@@ -1,3 +1,4 @@
+import { FORK_PRODUCT_NAME } from "@flaremo/contracts";
 import {
   type EmailLocale,
   emailCopy,
@@ -268,7 +269,7 @@ export async function sendTestEmail(
   if (config.provider === "none" || !config.from) return false;
   return deliverEmail(env, db, {
     to,
-    subject: "FlareMo — 邮件配置测试成功 / test email",
+    subject: `${FORK_PRODUCT_NAME} — 邮件配置测试成功 / test email`,
     html: emailHtml(
       "zh-CN",
       "邮件配置测试成功",
@@ -276,6 +277,6 @@ export async function sendTestEmail(
       "",
       "",
     ),
-    text: "FlareMo 邮件配置测试成功 / FlareMo test email: your email configuration works.",
+    text: `${FORK_PRODUCT_NAME} 邮件配置测试成功 / ${FORK_PRODUCT_NAME} test email: your email configuration works.`,
   });
 }

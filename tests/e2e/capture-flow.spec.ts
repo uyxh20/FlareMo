@@ -223,7 +223,7 @@ test("captures PCM and saves a searchable, tagged, exportable timeline memo", as
   expect(await microphoneStates(page)).toEqual(["ended"]);
   await transcript.fill(`${unique} edited final sentence`);
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page).toHaveURL(/\/memo\//);
   await page.goto("/");
@@ -294,12 +294,12 @@ test("keeps the latest edit after a committed create response is lost", async ({
   });
 
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page.getByRole("alert")).toContainText(/保存失败|Save failed/);
   await transcript.fill(`${unique} latest edit must survive`);
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page).toHaveURL(/\/memo\//);
   expect(createResponsesLost).toBe(1);
@@ -346,7 +346,7 @@ test("preserves the draft instead of overwriting a concurrently edited memo", as
   });
 
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page.getByRole("alert")).toContainText(/保存失败|Save failed/);
   expect(committedMemoId).not.toBe("");
@@ -370,7 +370,7 @@ test("preserves the draft instead of overwriting a concurrently edited memo", as
   const localEdit = `${unique} local draft must remain`;
   await transcript.fill(localEdit);
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
 
   await expect(page).toHaveURL(/\/capture$/);
@@ -470,7 +470,7 @@ test("keeps one microphone across reconnect and saves an explicit transcript gap
   expect(await microphoneStates(page)).toEqual(["ended"]);
 
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page).toHaveURL(/\/memo\//);
   const response = await page.request.get(
@@ -735,7 +735,7 @@ test("saves successfully when IndexedDB is unavailable from the start", async ({
 
   await page.getByRole("button", { name: /停止录音|Stop recording/ }).click();
   await page
-    .getByRole("button", { name: /保存到 FlareMo|Save to FlareMo/ })
+    .getByRole("button", { name: /保存到 Schizo Diary|Save to Schizo Diary/ })
     .click();
   await expect(page).toHaveURL(/\/memo\//);
   expect(await microphoneStates(page)).toEqual(["ended"]);

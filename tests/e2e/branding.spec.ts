@@ -9,11 +9,11 @@ test.describe.configure({ mode: "serial" });
 
 const CUSTOM_PRODUCT_NAME = "KOS 知识库";
 
-test("anonymous visitors see the default FlareMo branding on the login page", async ({
+test("anonymous visitors see the default Schizo Diary branding on the login page", async ({
   page,
 }) => {
   await page.goto(`${E2E_BASE_URL}/login`);
-  await expect(page.getByText("FlareMo").first()).toBeVisible();
+  await expect(page.getByText("Schizo Diary").first()).toBeVisible();
 });
 
 test("the owner can customize the product name and it reaches the login page", async ({
