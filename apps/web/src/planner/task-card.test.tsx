@@ -30,6 +30,7 @@ function card(overrides: Partial<PlannerBoardCard> = {}): PlannerBoardCard {
     period_start: TODAY,
     carry_count: 1,
     dropped_at: null,
+    start_date: null,
     ...overrides,
   };
 }

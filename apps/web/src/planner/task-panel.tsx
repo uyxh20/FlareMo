@@ -265,14 +265,13 @@ function PanelBody({
             <BanIcon className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 text-muted-foreground">
               {card.dropped_at &&
-                `${strings.card.dropped(
+                strings.card.dropped(
                   plannerRelativeTime(
                     card.dropped_at,
                     nowMs,
                     strings.intlLocale,
                   ),
-                )}. `}
-              {strings.panel.droppedHint}
+                )}
             </span>
             <Button
               size="sm"
@@ -285,11 +284,7 @@ function PanelBody({
           </div>
         )}
 
-        <PlannerTaskProperties
-          actions={actions}
-          detail={detail}
-          today={today}
-        />
+        <PlannerTaskProperties actions={actions} detail={detail} />
 
         <div className="border-t border-border/60 pt-5">
           <PlannerTaskNotes

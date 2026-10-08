@@ -12,7 +12,6 @@ import {
   plannerFitsKeepalive,
   plannerIsRateLimited,
   plannerKeepaliveMaxBytes,
-  plannerRolloverRequest,
   plannerUpdateCommentRequest,
   plannerUpdateTaskRequest,
 } from "./api";
@@ -56,15 +55,6 @@ describe("the planner client", () => {
       "/api/app/planner/board?today=2026-10-07&include_dropped=true&done_days=30",
     );
     expect(calls[0]?.init.method).toBeUndefined();
-  });
-
-  it("posts the local date to roll over", async () => {
-    const calls = stubFetch(200, { history: "ok", carried: 2 });
-    const result = await plannerRolloverRequest("2026-10-07");
-    expect(result).toEqual({ history: "ok", carried: 2 });
-    expect(calls[0]?.url).toBe("/api/app/planner/rollover");
-    expect(calls[0]?.init.method).toBe("POST");
-    expect(bodyOf(calls[0])).toEqual({ today: "2026-10-07" });
   });
 
   it("creates a task with its plan", async () => {

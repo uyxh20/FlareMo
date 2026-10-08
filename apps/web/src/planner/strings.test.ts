@@ -79,15 +79,11 @@ describe("plannerStringsFor", () => {
     ]).toEqual(["Backlog", "To Do", "Doing", "Done"]);
   });
 
-  it("pluralises the carry-over toast", () => {
-    expect(en.toast.carried(1)).toBe("1 unfinished task carried forward");
-    expect(en.toast.carried(3)).toBe("3 unfinished tasks carried forward");
-    expect(zh.toast.carried(3)).toBe("3 项未完成任务已顺延");
-  });
-
-  it("writes the carried badge as ×N", () => {
-    expect(en.card.carried(2)).toBe("Carried ×2");
-    expect(zh.card.carried(2)).toBe("顺延 ×2");
+  it("writes the start date in words, for the card and the history", () => {
+    expect(en.card.starts("Oct 8")).toBe("Starts Oct 8");
+    expect(zh.card.starts("10月8日")).toBe("10月8日 开始");
+    expect(en.history.startDateSet("Oct 8")).toBe("Start date set to Oct 8");
+    expect(zh.history.startDateSet("10月8日")).toBe("开始日期设为 10月8日");
   });
 
   it("keeps Chinese text to full-width punctuation and the single ellipsis character", () => {

@@ -50,7 +50,6 @@ import {
   PlannerColumnIcon,
   PlannerTaskCard,
 } from "./task-card";
-import { type PlannerHorizonFilter, plannerFilterTodo } from "./todo-filter";
 import type { PlannerActions } from "./use-planner-actions";
 import {
   type PlannerReveal,
@@ -77,9 +76,9 @@ import {
 // in Ember for a moment (use-planner-reveal.ts); the page says which card.
 //
 // Each column's header has a "+" that opens a composer at the top of the column
-// (column-composer.tsx): the new task goes straight into that column, with the
-// plan the active To Do chip implies (column-add.ts), and shows on the board
-// before the server answers. Clicking a card opens its task panel (task-card.tsx);
+// (column-composer.tsx): the new task goes straight into that column (column-add.ts),
+// and shows on the board before the server answers. There are no period filters
+// any more (section 13.x): the board always shows every card. Clicking a card opens its task panel (task-card.tsx);
 // a card still waiting for the server can be neither opened nor dragged.
 
 /** The column under the pointer; for a keyboard or an unmoved pointer, the one the card overlaps most. */
@@ -274,7 +273,6 @@ function Column({
 
 export function PlannerBoard({
   board,
-  filter,
   today,
   actions,
   onRequest,
@@ -283,7 +281,6 @@ export function PlannerBoard({
   reveal,
 }: {
   board: PlannerBoardResponse;
-  filter: PlannerHorizonFilter;
   today: string;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
@@ -303,11 +300,6 @@ export function PlannerBoard({
   const [lifted, setLifted] = useState(false);
   const activeCard =
     activeId === null ? undefined : plannerFindCard(board, activeId);
-
-  const todo = useMemo(
-    () => plannerFilterTodo(board.columns.todo, filter, today),
-    [board.columns.todo, filter, today],
-  );
 
   // The library's own announcements read out raw task ids; say the task and the
   // column instead.
@@ -357,9 +349,9 @@ export function PlannerBoard({
     actions.move(card, target as PlannerColumn);
   };
 
-  // What a column's "+" adds: the column itself, and the plan the To Do chip implies.
+  // What a column's "+" adds: the column itself, and the plan that column needs.
   const addTo = (column: PlannerColumn) => (title: string) => {
-    const target = plannerColumnAddTarget(column, filter, today);
+    const target = plannerColumnAddTarget(column, today);
     return actions.createIn({
       title,
       column: target.column,
@@ -372,7 +364,7 @@ export function PlannerBoard({
     cards: readonly PlannerBoardCard[];
   }[] = [
     { column: "backlog", cards: board.columns.backlog },
-    { column: "todo", cards: todo },
+    { column: "todo", cards: board.columns.todo },
     { column: "doing", cards: board.columns.doing },
     { column: "done", cards: board.columns.done },
   ];
@@ -412,11 +404,9 @@ export function PlannerBoard({
               dragging={activeId !== null}
               entering={entering}
               hint={
-                column === "todo" && filter !== "all"
-                  ? strings.columnHint.todoFiltered[filter]
-                  : strings.columnHint[
-                      column as Exclude<PlannerColumnKey, "dropped">
-                    ]
+                strings.columnHint[
+                  column as Exclude<PlannerColumnKey, "dropped">
+                ]
               }
               key={column}
               label={strings.column[column]}

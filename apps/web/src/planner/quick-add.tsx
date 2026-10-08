@@ -1,25 +1,16 @@
-import { CheckIcon, ChevronDownIcon, PlusIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { type RefObject, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import {
-  type PlannerQuickAddChoice,
-  plannerQuickAddChoices,
-} from "./plan-targets";
 import { usePlannerStrings } from "./strings";
 import type { PlannerActions } from "./use-planner-actions";
 
 // Quick add (fork-owned add-on, docs/planning-cockpit-implementation-plan.md,
-// section 5): a title and where to plan it, Today unless told otherwise. Enter
-// adds. The field empties and keeps focus the moment the request goes out, so
-// the next task can be typed while the last one is still being saved; if it
-// fails, the text comes back (unless something new was typed meanwhile).
+// section 5): a title, added to the Backlog. Enter adds. The field empties and keeps
+// focus the moment the request goes out, so the next task can be typed while the
+// last one is still being saved; if it fails, the text comes back (unless something
+// new was typed meanwhile). There is no period to choose (section 13.x): a task
+// moves on from the Backlog by its column.
 
 export function PlannerQuickAdd({
   actions,
@@ -30,9 +21,6 @@ export function PlannerQuickAdd({
 }) {
   const strings = usePlannerStrings();
   const [title, setTitle] = useState("");
-  const [choice, setChoice] = useState<PlannerQuickAddChoice>("day");
-
-  const choiceLabel = strings.horizon[choice];
   const canAdd = title.trim().length > 0;
 
   const submit = () => {
@@ -40,9 +28,11 @@ export function PlannerQuickAdd({
     if (!text) return;
     setTitle("");
     inputRef.current?.focus();
-    void actions.create({ title: text, choice }).then((created) => {
-      if (!created) setTitle((current) => (current === "" ? text : current));
-    });
+    void actions
+      .createIn({ title: text, column: "backlog", plan: null })
+      .then((created) => {
+        if (!created) setTitle((current) => (current === "" ? text : current));
+      });
   };
 
   return (
@@ -67,35 +57,6 @@ export function PlannerQuickAdd({
           }
         }}
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label={`${strings.quickAdd.planFor}: ${choiceLabel}`}
-              className="h-9 shrink-0"
-              variant="outline"
-            >
-              {choiceLabel}
-              <ChevronDownIcon data-icon="inline-end" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="end" className="min-w-40">
-          {/* Plain items with their own tick, not the library's radio items:
-              their indicator is always mounted, so every row would show one. */}
-          {plannerQuickAddChoices.map((option) => (
-            <DropdownMenuItem
-              aria-checked={option === choice}
-              key={option}
-              role="menuitemradio"
-              onClick={() => setChoice(option)}
-            >
-              {strings.horizon[option]}
-              {option === choice && <CheckIcon className="ml-auto" />}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
       <Button
         className="h-9 shrink-0 max-sm:w-9 max-sm:px-0"
         disabled={!canAdd}

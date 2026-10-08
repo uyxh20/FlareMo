@@ -34,7 +34,7 @@ import {
 const TODAY = "2026-10-07";
 const WEEK = "2026-10-05";
 const NOW = new Date("2026-10-07T09:00:00.000Z");
-const CONTEXT = { today: TODAY, week: WEEK, now: NOW };
+const CONTEXT = { today: TODAY, now: NOW };
 
 let sequence = 0;
 
@@ -57,6 +57,7 @@ function card(overrides: Partial<PlannerBoardCard> = {}): PlannerBoardCard {
     period_start: null,
     carry_count: 0,
     dropped_at: null,
+    start_date: null,
     ...overrides,
   };
 }
@@ -366,12 +367,12 @@ describe("plannerPredictMove", () => {
     expect(move(dropped, "doing")).toBe(dropped);
   });
 
-  it("Backlog to To Do plans this week", () => {
+  it("Backlog to To Do takes the To Do marker for today", () => {
     const next = move(card(), "todo");
     expect(next).toMatchObject({
       status: "todo",
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
     expect(plannerCardColumn(next)).toBe("todo");
   });
@@ -416,7 +417,7 @@ describe("plannerPredictMove", () => {
     }
   });
 
-  it("Doing to To Do keeps a plan and gives a planless card this week", () => {
+  it("Doing to To Do keeps a plan and gives a planless card the To Do marker", () => {
     const day = planned({
       status: "in_progress",
       horizon: "day",
@@ -429,8 +430,8 @@ describe("plannerPredictMove", () => {
     });
     expect(move(card({ status: "in_progress" }), "todo")).toMatchObject({
       status: "todo",
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
   });
 
@@ -467,18 +468,18 @@ describe("plannerPredictMove", () => {
       horizon: "day",
       period_start: "2026-10-09",
     });
-    // The plan is past: this week.
+    // The plan is past: the To Do marker for today.
     expect(
       move(finished({ horizon: "day", period_start: "2026-10-02" }), "todo"),
-    ).toMatchObject({ horizon: "week", period_start: WEEK });
+    ).toMatchObject({ horizon: "day", period_start: TODAY });
     // A week plan that started last week is past too.
     expect(
       move(finished({ horizon: "week", period_start: "2026-09-28" }), "todo"),
-    ).toMatchObject({ horizon: "week", period_start: WEEK });
+    ).toMatchObject({ horizon: "day", period_start: TODAY });
     // No plan at all.
     expect(move(finished({}), "todo")).toMatchObject({
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
   });
 
@@ -499,6 +500,7 @@ describe("plannerPredictMove", () => {
     expect(move(card({ status: "blocked" }), "doing").status).toBe(
       "in_progress",
     );
+    // Its plan is kept: only a card with no plan gets the To Do marker.
     expect(move(planned({ status: "blocked" }), "todo")).toMatchObject({
       status: "todo",
       horizon: "week",
@@ -563,6 +565,7 @@ describe("the other predictions", () => {
     );
     expect(next).toMatchObject({
       dropped_at: NOW.toISOString(),
+      start_date: null,
       due_at: null,
       horizon: "day",
     });
@@ -609,6 +612,7 @@ describe("plannerCardFromTask", () => {
           period_start: TODAY,
           carry_count: 2,
           dropped_at: null,
+          start_date: null,
           effort: null,
           created_at: "2026-10-07T09:00:00.000Z",
           updated_at: "2026-10-07T09:00:00.000Z",
@@ -631,6 +635,7 @@ describe("plannerCardFromTask", () => {
       period_start: TODAY,
       carry_count: 2,
       dropped_at: null,
+      start_date: null,
     });
   });
 
@@ -645,6 +650,7 @@ describe("plannerCardFromTask", () => {
       period_start: null,
       carry_count: 0,
       dropped_at: null,
+      start_date: null,
       project_id: null,
       project_name: null,
     });

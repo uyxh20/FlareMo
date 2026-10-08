@@ -4,7 +4,6 @@ import type {
   PlannerCreateTaskInput,
   PlannerCreateTaskResponse,
   PlannerDeleteCommentResponse,
-  PlannerRolloverResponse,
   PlannerTaskDetailResponse,
   PlannerTaskHistoryResponse,
   PlannerTaskPlanResponse,
@@ -46,14 +45,6 @@ export function plannerFetchBoard(input: {
     query.set("done_days", String(input.doneDays));
   }
   return apiRequest<PlannerBoardResponse>(`${PLANNER_API}/board?${query}`);
-}
-
-/** Syncs the history, then carries unfinished plans into the current period. */
-export function plannerRolloverRequest(today: string) {
-  return apiRequest<PlannerRolloverResponse>(`${PLANNER_API}/rollover`, {
-    method: "POST",
-    body: JSON.stringify({ today }),
-  });
 }
 
 export function plannerCreateTaskRequest(input: PlannerCreateTaskInput) {

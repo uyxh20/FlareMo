@@ -174,7 +174,7 @@ export function plannerTestActions() {
     setPriority: vi.fn(),
     setProject: vi.fn(),
     setEffort: vi.fn(),
-    create: vi.fn(),
+    setStartDate: vi.fn(),
     createIn: vi.fn(),
   } satisfies PlannerActions;
 }

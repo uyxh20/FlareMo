@@ -1,19 +1,21 @@
-import type { PlannerEventDto } from "@flaremo/contracts";
+import { type PlannerEventDto, plannerTodoHorizon } from "@flaremo/contracts";
 import {
   type PlannerPlanPoint,
   plannerDueLabel,
   plannerLocalDayOf,
+  plannerMonthDay,
   plannerPlanLabel,
 } from "./dates";
 import type { PlannerStrings } from "./strings";
 
 // Turns the archive's raw events into the lines of a task's timeline (fork-owned
 // add-on, docs/planning-cockpit-implementation-plan.md, sections 4 and 5):
-// "Created", "Planned for this week", "Re-planned to Wed 8", "Moved to Doing",
-// "Completed", "Reopened", "Carried over to today", "Dropped (due date cleared)",
-// and the task panel's: "Effort set to 3", "Comment added", "Comment edited",
-// "Comment deleted". The comment lines never say what the comment said: the
-// archive keeps only the comment's id.
+// "Created", "Moved to To Do", "Moved to Doing", "Completed", "Reopened", "Dropped
+// (due date cleared)", and the task panel's: "Effort set to 3", "Start date set to
+// Oct 8", "Comment added", "Comment edited", "Comment deleted". Plan events from
+// before v1.2 still read as they did ("Planned for this week", "Carried over to
+// today"). The comment lines never say what the comment said: the archive keeps
+// only the comment's id.
 //
 // The archive stores upstream's own words (`status_changed` with the new status)
 // next to the planner's (`planned`, `carried_over`). Two things a reader wants are
@@ -31,7 +33,7 @@ export type PlannerHistoryEntry = {
   detail: string | null;
   /**
    * "You" or "Agent" (with the agent's name when it has one), "Automatic" for a
-   * carry-over, and null when the archive names nobody.
+   * carry-over from before v1.2, and null when the archive names nobody.
    */
   actor: string | null;
   /** When it happened, an ISO instant. */
@@ -46,6 +48,8 @@ const asString = (value: unknown): string | null =>
 
 const asNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const sameYear = (a: string, b: string) => a.slice(0, 4) === b.slice(0, 4);
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -214,14 +218,22 @@ export function plannerDescribeHistory(
         const from = readPlanPoint(data.from);
         const to = readPlanPoint(data.to);
         const target = wording(to);
-        if (event.type === "planned") {
+        // Since v1.2 a plan event is a column move: a To Do task carries a plan
+        // (the To Do marker, a day), and unplanning it is a move back to the
+        // backlog. Carry-over and week or month plans keep their period wording.
+        const todoMove =
+          (event.type === "planned" || event.type === "replanned") &&
+          to.horizon === plannerTodoHorizon;
+        if (event.type === "unplanned") {
+          label = strings.history.movedTo(strings.column.backlog);
+        } else if (todoMove) {
+          label = strings.history.movedTo(strings.column.todo);
+        } else if (event.type === "planned") {
           label = strings.history.planned(target ?? "?");
         } else if (event.type === "replanned") {
           label = strings.history.replanned(target ?? "?");
-        } else if (event.type === "carried_over") {
-          label = strings.history.carriedOver(target ?? "?");
         } else {
-          label = strings.history.unplanned;
+          label = strings.history.carriedOver(target ?? "?");
         }
         // The label is worded against the day of the event ("this week"); the
         // exact period under it keeps an old line from being misread.
@@ -233,7 +245,8 @@ export function plannerDescribeHistory(
             ? strings.history.detail.was(was)
             : null,
         ].filter((part): part is string => part !== null);
-        detail = parts.length > 0 ? parts.join(" · ") : null;
+        // A To Do move's day is not something the person chose: no detail for it.
+        detail = todoMove || parts.length === 0 ? null : parts.join(" · ");
         hasPlan = to.horizon !== null;
         break;
       }
@@ -250,6 +263,24 @@ export function plannerDescribeHistory(
           );
         }
         lastDrop = { at, hadDueDate: previousDue !== null };
+        break;
+      }
+
+      case "start_date_changed": {
+        const to = asString(data.to);
+        const from = asString(data.from);
+        label =
+          to === null
+            ? strings.history.startDateCleared
+            : strings.history.startDateSet(
+                plannerMonthDay(to, strings.intlLocale, !sameYear(to, day)),
+              );
+        detail =
+          from === null
+            ? null
+            : strings.history.detail.was(
+                plannerMonthDay(from, strings.intlLocale, !sameYear(from, day)),
+              );
         break;
       }
 

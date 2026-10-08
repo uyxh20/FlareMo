@@ -15,9 +15,8 @@ import { useI18n } from "@/i18n";
 import { stripResourceName } from "@/lib/utils";
 import { TaskFormDialog } from "@/pages/projects/task-form-dialog";
 import { plannerFetchTask } from "./api";
+import { PlannerDayDialog } from "./day-dialog";
 import { PlannerHistorySheet } from "./history-sheet";
-import { PlannerDayDialog } from "./plan-picker";
-import { plannerPlanForDay } from "./plan-targets";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 import type { PlannerCardRequest } from "./task-card";
@@ -119,13 +118,11 @@ export function PlannerCardDialogs({
   shown,
   open,
   onClose,
-  today,
   actions,
 }: {
   shown: Shown | null;
   open: boolean;
   onClose: () => void;
-  today: string;
   actions: PlannerActions;
 }) {
   const { t } = useI18n();
@@ -159,19 +156,6 @@ export function PlannerCardDialogs({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <PlannerDayDialog
-        confirmLabel={strings.dayDialog.planConfirm}
-        description={strings.dayDialog.planDescription}
-        initial={today}
-        min={today}
-        open={open && kind === "pickDay"}
-        title={strings.dayDialog.planTitle}
-        onConfirm={(day) => {
-          if (request) actions.plan(request.card, plannerPlanForDay(day));
-        }}
-        onOpenChange={onOpenChange}
-      />
 
       <PlannerDayDialog
         confirmLabel={strings.dayDialog.dueConfirm}

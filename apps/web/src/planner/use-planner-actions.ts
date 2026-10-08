@@ -1,13 +1,12 @@
-import {
-  type PlannerBoardCard,
-  type PlannerBoardResponse,
-  type PlannerColumn,
-  type PlannerPlanInput,
-  type PlannerTaskDetailResponse,
-  type PlannerTaskPlanResponse,
-  type PlannerTaskProject,
-  plannerPeriodStart,
-  type TaskPriority,
+import type {
+  PlannerBoardCard,
+  PlannerBoardResponse,
+  PlannerColumn,
+  PlannerPlanInput,
+  PlannerTaskDetailResponse,
+  PlannerTaskPlanResponse,
+  PlannerTaskProject,
+  TaskPriority,
 } from "@flaremo/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
@@ -29,6 +28,7 @@ import {
   plannerPredictPlan,
   plannerPredictPriority,
   plannerPredictProject,
+  plannerPredictStartDate,
   plannerPredictTitle,
   plannerPredictUndrop,
   plannerRemoveCard,
@@ -41,10 +41,6 @@ import {
   plannerDetailWithCard,
   plannerDetailWithEffort,
 } from "./panel-model";
-import {
-  type PlannerQuickAddChoice,
-  plannerQuickAddPlan,
-} from "./plan-targets";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 
@@ -91,11 +87,8 @@ export type PlannerActions = {
   ) => void;
   /** The panel's effort estimate, 0 to 999 with at most one decimal, or null. */
   setEffort: (card: PlannerBoardCard, effort: number | null) => void;
-  /** Resolves true when the task was created, so the caller can clear its input. */
-  create: (input: {
-    title: string;
-    choice: PlannerQuickAddChoice;
-  }) => Promise<boolean>;
+  /** The panel's start date, a day or null. */
+  setStartDate: (card: PlannerBoardCard, startDate: string | null) => void;
   /**
    * Adds a task straight into a column, the way a column's "+" does. The card is
    * on the board at once, under a pending id, and is swapped for the real one when
@@ -172,10 +165,7 @@ export function usePlannerActions(input: {
     const edit = async (
       card: PlannerBoardCard,
       options: {
-        predict: (
-          card: PlannerBoardCard,
-          context: { week: string },
-        ) => PlannerBoardCard;
+        predict: (card: PlannerBoardCard) => PlannerBoardCard;
         /** A change only the panel's detail shows (an effort), after the card's. */
         predictDetail?: (
           detail: PlannerTaskDetailResponse,
@@ -201,13 +191,11 @@ export function usePlannerActions(input: {
         await queryClient.cancelQueries({ queryKey: detailKey });
         patchBoards((board) =>
           plannerUpdateCard(board, card.id, (current) =>
-            options.predict(current, { week: board.periods.week }),
+            options.predict(current),
           ),
         );
         patchDetail(card.id, (detail) => {
-          const predicted = options.predict(plannerCardFromDetail(detail), {
-            week: plannerPeriodStart("week", today),
-          });
+          const predicted = options.predict(plannerCardFromDetail(detail));
           const shown = plannerDetailWithCard(detail, predicted);
           return options.predictDetail ? options.predictDetail(shown) : shown;
         });
@@ -250,12 +238,8 @@ export function usePlannerActions(input: {
     const actions: PlannerActions = {
       move: (card, to) => {
         void edit(card, {
-          predict: (current, context) =>
-            plannerPredictMove(current, to, {
-              today,
-              week: context.week,
-              now: new Date(),
-            }),
+          predict: (current) =>
+            plannerPredictMove(current, to, { today, now: new Date() }),
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, column: to }),
           success: () => text().toast.moved(text().column[to]),
@@ -367,49 +351,15 @@ export function usePlannerActions(input: {
         });
       },
 
-      create: async ({ title, choice }) => {
-        const plan = plannerQuickAddPlan(choice, today);
-        pending.current += 1;
-        try {
-          const response = await plannerCreateTaskRequest({
-            title,
-            today,
-            ...(plan ? { plan } : {}),
-          });
-          const created = plannerCardFromTask(response.task, response.plan);
-          patchBoards((board) => plannerPlaceCard(board, created));
-          revealRef.current?.(created.id);
-          if (response.plan_error) {
-            // The task exists and sits in the backlog; offer to try the plan again.
-            toast.warning(text().toast.planNotSaved, {
-              id: TOAST_ID,
-              action: plan
-                ? {
-                    label: text().toast.retryPlan,
-                    onClick: () => actions.plan(created, plan),
-                  }
-                : undefined,
-            });
-          } else {
-            toast.success(
-              text().toast.added[choice === "backlog" ? "backlog" : choice],
-              { id: TOAST_ID },
-            );
-          }
-          return true;
-        } catch (error) {
-          toast.error(
-            plannerErrorMessage(
-              error,
-              text().toast.addFailed,
-              text().toast.rateLimited,
-            ),
-            { id: TOAST_ID },
-          );
-          return false;
-        } finally {
-          settle();
-        }
+      setStartDate: (card, startDate) => {
+        void edit(card, {
+          predict: (current) =>
+            plannerPredictStartDate(current, startDate, new Date()),
+          request: () =>
+            plannerUpdateTaskRequest(card.id, { today, start_date: startDate }),
+          failure: text().toast.startFailed,
+          reveal: false,
+        });
       },
 
       createIn: async ({ title, column, plan }) => {

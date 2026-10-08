@@ -84,13 +84,14 @@ describe("plannerDescribeHistory", () => {
       event("status_changed", { status: "done", completed_at: at(30) }),
       event("status_changed", { status: "todo", completed_at: null }),
     ];
+    // Since v1.2 a plan on a day is a move into To Do (the To Do marker).
     expect(labels(events)).toEqual([
       "Reopened",
       "Completed",
       "Moved to Doing",
       "Edited",
-      "Re-planned to today",
-      "Re-planned to tomorrow",
+      "Moved to To Do",
+      "Moved to To Do",
       "Planned for this week",
       "Created",
     ]);
@@ -109,7 +110,7 @@ describe("plannerDescribeHistory", () => {
     const shuffled = [events[2], events[0], events[1]];
     expect(labels(shuffled)).toEqual([
       "Completed",
-      "Planned for today",
+      "Moved to To Do",
       "Created",
     ]);
   });
@@ -136,9 +137,23 @@ describe("plannerDescribeHistory", () => {
         { at: at(2, 1) },
       ),
     ];
-    // Both happened on 1 October, in the week of 28 September.
-    expect(labels(events)).toEqual([
-      "Re-planned to Sun 4",
+    // Both happened on 1 October, in the week of 28 September. A plan for a month
+    // is still worded against the day it was made.
+    const monthly = [
+      event(
+        "planned",
+        { from: NONE, to: point("week", "2026-09-28") },
+        { at: at(1, 1) },
+      ),
+      event(
+        "replanned",
+        { from: point("week", "2026-09-28"), to: point("month", "2026-10-01") },
+        { at: at(2, 1) },
+      ),
+    ];
+    expect(labels(events)).toEqual(["Moved to To Do", "Planned for this week"]);
+    expect(labels(monthly)).toEqual([
+      "Re-planned to Oct",
       "Planned for this week",
     ]);
   });
@@ -155,9 +170,10 @@ describe("plannerDescribeHistory", () => {
       ],
       en,
     );
+    // A To Do move's day is the marker, not something the person chose: no detail.
     expect(entries.map((entry) => [entry.label, entry.detail])).toEqual([
-      ["Unplanned", "Was tomorrow"],
-      ["Re-planned to tomorrow", "Thu, Oct 8, 2026 · Was this week"],
+      ["Moved to Backlog", "Was tomorrow"],
+      ["Moved to To Do", null],
       ["Planned for this week", "Week of Oct 5, 2026"],
     ]);
   });
@@ -204,7 +220,7 @@ describe("plannerDescribeHistory", () => {
     expect(labels(events)).toEqual([
       "Moved to Backlog",
       "Moved to Doing",
-      "Unplanned",
+      "Moved to Backlog",
       "Moved to To Do",
       "Moved to Doing",
       "Planned for this week",

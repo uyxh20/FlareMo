@@ -61,6 +61,7 @@ const PLAN = {
   period_start: WEEK,
   carry_count: 1,
   dropped_at: null,
+  start_date: null,
   effort: 3,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -95,6 +96,7 @@ describe("plannerCardFromDetail", () => {
       period_start: WEEK,
       carry_count: 1,
       dropped_at: null,
+      start_date: null,
     });
     // A card never carries notes or an effort.
     expect(card).not.toHaveProperty("notes");
@@ -120,7 +122,6 @@ describe("plannerDetailWithCard", () => {
     const before = detail({ plan: PLAN });
     const moved = plannerPredictMove(plannerCardFromDetail(before), "doing", {
       today: TODAY,
-      week: WEEK,
       now: NOW,
     });
     const after = plannerDetailWithCard(before, moved);
@@ -145,7 +146,6 @@ describe("plannerDetailWithCard", () => {
     const before = detail({ plan: PLAN });
     const done = plannerPredictMove(plannerCardFromDetail(before), "done", {
       today: TODAY,
-      week: WEEK,
       now: NOW,
     });
     expect(plannerDetailWithCard(before, done).task).toMatchObject({
@@ -167,6 +167,7 @@ describe("plannerDetailWithCard", () => {
       period_start: TODAY,
       carry_count: 0,
       dropped_at: null,
+      start_date: null,
       effort: null,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),
@@ -270,6 +271,7 @@ describe("plannerDetailWithEffort", () => {
       period_start: null,
       carry_count: 0,
       dropped_at: null,
+      start_date: null,
       effort: 2,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),

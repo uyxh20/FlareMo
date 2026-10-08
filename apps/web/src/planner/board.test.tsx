@@ -10,7 +10,6 @@ import {
   plannerTestActions,
   plannerTestMount,
 } from "./test-render";
-import type { PlannerHorizonFilter } from "./todo-filter";
 import type { PlannerReveal } from "./use-planner-reveal";
 
 // Wednesday 7 October 2026.
@@ -37,6 +36,7 @@ function card(
     period_start: null,
     carry_count: 0,
     dropped_at: null,
+    start_date: null,
     ...overrides,
   };
 }
@@ -98,7 +98,6 @@ function element(
   data: PlannerBoardResponse,
   options: {
     reveal?: PlannerReveal | null;
-    filter?: PlannerHorizonFilter;
   } = {},
 ) {
   return (
@@ -106,7 +105,6 @@ function element(
       actions={plannerTestActions()}
       board={data}
       entering={false}
-      filter={options.filter ?? "all"}
       reveal={options.reveal ?? null}
       today={TODAY}
       onOpen={vi.fn()}
@@ -176,16 +174,6 @@ describe("the reveal on the board", () => {
     expect(rings(container)).toHaveLength(0);
   });
 
-  it("does not point at a card a filter chip hides", () => {
-    // Today shows one card; the Tomorrow card is out of the filtered list.
-    const { container } = show(board(), {
-      filter: "day",
-      reveal: { id: "tasks/tomorrow", stamp: 1 },
-    });
-    expect(cardTitled(container, "Prep the Friday review")).toBeUndefined();
-    expect(scrolled).toHaveLength(0);
-  });
-
   it("scrolls to a card that arrives in its new column after the request", () => {
     const reveal = { id: "tasks/new", stamp: 1 };
     const view = show(board(), { reveal });
@@ -246,50 +234,13 @@ describe("the reveal on the board", () => {
   });
 });
 
-describe("the To Do column and the filter chips", () => {
-  const titles = (root: HTMLElement) =>
-    Array.from(
-      root.querySelectorAll(
+describe("the To Do column", () => {
+  it("shows every To Do card, with no period to filter by", () => {
+    const { container } = show(board());
+    expect(
+      container.querySelectorAll(
         '[data-column="todo"] [data-testid="planner-card"]',
       ),
-    ).map((entry) => entry.textContent ?? "");
-
-  it("shows every To Do card under All", () => {
-    const { container } = show(board());
-    expect(titles(container)).toHaveLength(3);
-  });
-
-  it("shows only today's cards under Today, not Tomorrow's or the week's", () => {
-    const { container } = show(board(), { filter: "day" });
-    const shown = titles(container);
-    expect(shown).toHaveLength(1);
-    expect(shown[0]).toContain("Reply to design feedback");
-  });
-
-  it("shows today's, tomorrow's and this week's cards under This week", () => {
-    const { container } = show(board(), { filter: "week" });
-    expect(titles(container)).toHaveLength(3);
-  });
-
-  it("leaves the other columns alone whatever the chip", () => {
-    const { container } = show(board(), { filter: "day" });
-    for (const column of ["backlog", "doing", "done"]) {
-      expect(
-        container.querySelectorAll(
-          `[data-column="${column}"] [data-testid="planner-card"]`,
-        ),
-      ).toHaveLength(1);
-    }
-  });
-
-  it("says which period is empty when a chip hides every card", () => {
-    const data = board({
-      todo: [day("tasks/tomorrow", "Prep the Friday review", "2026-10-08")],
-    });
-    const { container } = show(data, { filter: "day" });
-    expect(titles(container)).toHaveLength(0);
-    expect(container.textContent).toContain(
-      "Nothing planned for today. Pick All to see everything.",
-    );
+    ).toHaveLength(3);
   });
 });

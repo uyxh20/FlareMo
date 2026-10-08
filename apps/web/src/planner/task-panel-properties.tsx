@@ -17,6 +17,7 @@ import {
   FlagIcon,
   FolderIcon,
   GaugeIcon,
+  PlayIcon,
   TargetIcon,
   Undo2Icon,
   XIcon,
@@ -48,15 +49,13 @@ import {
   plannerCardColumn,
   plannerColumns,
 } from "./board-model";
-import { plannerDayLong, plannerPlanLabel } from "./dates";
+import { plannerDayLong, plannerLocalDayOf } from "./dates";
 import { plannerFormatEffort, plannerParseEffort } from "./effort";
 import {
   plannerCardFromDetail,
   plannerProjectPathLabel,
   plannerProjectPaths,
 } from "./panel-model";
-import { PlannerDayDialog, PlannerPlanMenuItems } from "./plan-picker";
-import { plannerPlanForDay } from "./plan-targets";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 import { PlannerColumnIcon } from "./task-card";
@@ -190,97 +189,11 @@ function StatusControl({
   );
 }
 
-// --- Plan ---------------------------------------------------------------------
-
-function PlanControl({
-  card,
-  today,
-  actions,
-}: {
-  card: PlannerBoardCard;
-  today: string;
-  actions: PlannerActions;
-}) {
-  const strings = usePlannerStrings();
-  const [pickingDay, setPickingDay] = useState(false);
-  const column = plannerCardColumn(card);
-  const label = plannerPlanLabel(card, today, strings);
-  const value = label ? (
-    <>
-      {/* Sized here, not by the button: a finished or dropped task shows this
-          outside a button, where an icon with no size would be 24px. */}
-      <CalendarPlusIcon className="size-4 text-muted-foreground" />
-      <span className="truncate" title={label.title}>
-        {label.label}
-      </span>
-    </>
-  ) : (
-    <Empty />
-  );
-
-  // A finished task keeps its plan only as history, and a dropped one cannot be
-  // planned until it is undropped: both show the plan without offering to change it.
-  if (column === "done" || column === "dropped") {
-    return (
-      <span
-        className="inline-flex h-8 min-w-0 items-center gap-1.5 px-2 text-sm text-muted-foreground"
-        title={
-          column === "done"
-            ? strings.panel.planFinished
-            : strings.panel.droppedHint
-        }
-      >
-        <span className="sr-only">{strings.panel.property.plan}: </span>
-        {value}
-      </span>
-    );
-  }
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              aria-label={named(
-                strings.panel.property.plan,
-                label?.label ?? strings.panel.empty,
-              )}
-              className={VALUE_BUTTON}
-              variant="ghost"
-            >
-              {value}
-            </Button>
-          }
-        />
-        <DropdownMenuContent className="min-w-44">
-          <PlannerPlanMenuItems
-            actions={actions}
-            card={card}
-            today={today}
-            onPickDay={() => setPickingDay(true)}
-          />
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <PlannerDayDialog
-        confirmLabel={strings.dayDialog.planConfirm}
-        description={strings.dayDialog.planDescription}
-        initial={today}
-        min={today}
-        open={pickingDay}
-        title={strings.dayDialog.planTitle}
-        onConfirm={(day) => actions.plan(card, plannerPlanForDay(day))}
-        onOpenChange={setPickingDay}
-      />
-    </>
-  );
-}
-
-// --- Due date -----------------------------------------------------------------
+// --- Start and due dates ------------------------------------------------------
 
 // A year typed into a date field passes through 0002, 0020 and 0202 on its way to
 // 2026, and each of those is a valid date to the browser. Only a plausible year is
-// saved, so typing the year does not save three wrong due dates on the way.
+// saved, so typing the year does not save three wrong dates on the way.
 const EARLIEST_DUE_YEAR = 1900;
 
 /** Whether a date field's value is a complete day worth saving. */
@@ -291,22 +204,33 @@ function isSavableDay(value: string): boolean {
   );
 }
 
-function DueControl({
-  card,
-  actions,
+/**
+ * A day property, the start date or the due date: shows the saved day, and opens a
+ * date field when clicked. A complete day saves at once; an empty or cleared one
+ * is sent as null by the clear button.
+ */
+function DateControl({
+  current,
+  label,
+  clearLabel,
+  onSave,
 }: {
-  card: PlannerBoardCard;
-  actions: PlannerActions;
+  /** The saved day, or null. */
+  current: string | null;
+  /** The property's name, for the field and the value button. */
+  label: string;
+  clearLabel: string;
+  onSave: (day: string | null) => void;
 }) {
   const strings = usePlannerStrings();
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(card.due_at ?? "");
+  const [draft, setDraft] = useState(current ?? "");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Follow the saved date whenever the field is not being typed into.
   useEffect(() => {
-    if (!editing) setDraft(card.due_at ?? "");
-  }, [card.due_at, editing]);
+    if (!editing) setDraft(current ?? "");
+  }, [current, editing]);
 
   // The picker opens as the field appears: one click from "Empty" to a calendar.
   useEffect(() => {
@@ -325,33 +249,33 @@ function DueControl({
       <>
         <Button
           aria-label={named(
-            strings.panel.property.due,
-            card.due_at
-              ? plannerDayLong(card.due_at, strings.intlLocale)
+            label,
+            current
+              ? plannerDayLong(current, strings.intlLocale)
               : strings.panel.empty,
           )}
           className={VALUE_BUTTON}
           variant="ghost"
           onClick={() => setEditing(true)}
         >
-          {card.due_at ? (
+          {current ? (
             <>
               <CalendarDaysIcon className="text-muted-foreground" />
               <span className="truncate">
-                {plannerDayLong(card.due_at, strings.intlLocale)}
+                {plannerDayLong(current, strings.intlLocale)}
               </span>
             </>
           ) : (
             <Empty />
           )}
         </Button>
-        {card.due_at && (
+        {current && (
           <Button
-            aria-label={strings.menu.clearDue}
+            aria-label={clearLabel}
             size="icon-sm"
-            title={strings.menu.clearDue}
+            title={clearLabel}
             variant="ghost"
-            onClick={() => actions.setDue(card, null)}
+            onClick={() => onSave(null)}
           >
             <XIcon />
           </Button>
@@ -362,7 +286,7 @@ function DueControl({
 
   return (
     <Input
-      aria-label={strings.panel.property.due}
+      aria-label={label}
       className="h-8 w-44 border-input"
       ref={inputRef}
       type="date"
@@ -373,7 +297,7 @@ function DueControl({
         setDraft(value);
         if (isSavableDay(value)) {
           setEditing(false);
-          if (value !== card.due_at) actions.setDue(card, value);
+          if (value !== current) onSave(value);
         }
       }}
       onKeyDown={(event) => {
@@ -642,18 +566,16 @@ function EffortControl({
 
 export function PlannerTaskProperties({
   detail,
-  today,
   actions,
 }: {
   detail: PlannerTaskDetailResponse;
-  today: string;
   actions: PlannerActions;
 }) {
   const strings = usePlannerStrings();
   const card = useMemo(() => plannerCardFromDetail(detail), [detail]);
   const quarter = plannerQuarterLabel({
-    planPeriodStart: detail.plan?.period_start,
-    dueAt: detail.task.due_at,
+    startDate: card.start_date,
+    dueAt: card.due_at,
   });
 
   return (
@@ -664,17 +586,24 @@ export function PlannerTaskProperties({
       >
         <StatusControl actions={actions} card={card} />
       </PropertyRow>
-      <PropertyRow
-        icon={<CalendarPlusIcon />}
-        label={strings.panel.property.plan}
-      >
-        <PlanControl actions={actions} card={card} today={today} />
+      <PropertyRow icon={<PlayIcon />} label={strings.panel.property.start}>
+        <DateControl
+          clearLabel={strings.panel.clearStart}
+          current={card.start_date}
+          label={strings.panel.property.start}
+          onSave={(day) => actions.setStartDate(card, day)}
+        />
       </PropertyRow>
       <PropertyRow
         icon={<CalendarDaysIcon />}
         label={strings.panel.property.due}
       >
-        <DueControl actions={actions} card={card} />
+        <DateControl
+          clearLabel={strings.menu.clearDue}
+          current={card.due_at}
+          label={strings.panel.property.due}
+          onSave={(day) => actions.setDue(card, day)}
+        />
       </PropertyRow>
       <PropertyRow icon={<FlagIcon />} label={strings.panel.property.priority}>
         <PriorityControl actions={actions} card={card} />
@@ -698,6 +627,18 @@ export function PlannerTaskProperties({
           <span className="text-xs text-muted-foreground">
             {strings.panel.quarterHint}
           </span>
+        </span>
+      </PropertyRow>
+      {/* Read-only, like the quarter: when the task was made. */}
+      <PropertyRow
+        icon={<CalendarPlusIcon />}
+        label={strings.panel.property.created}
+      >
+        <span className="inline-flex min-h-8 min-w-0 items-center px-2 text-sm">
+          {plannerDayLong(
+            plannerLocalDayOf(detail.task.created_at),
+            strings.intlLocale,
+          )}
         </span>
       </PropertyRow>
     </div>

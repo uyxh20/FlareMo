@@ -183,6 +183,25 @@ export function plannerDueLabel(
   return plannerMonthDay(due, strings.intlLocale, !sameYear(due, today));
 }
 
+/** A start date as a chip: "Oct 8", with the year when it is not this one. */
+export function plannerStartLabel(
+  start: string,
+  today: string,
+  strings: PlannerStrings,
+): string {
+  return plannerMonthDay(start, strings.intlLocale, !sameYear(start, today));
+}
+
+/** A task's time range, "Oct 8 → Oct 12": the start date, then the due date. */
+export function plannerRangeLabel(
+  start: string,
+  due: string,
+  today: string,
+  strings: PlannerStrings,
+): string {
+  return `${plannerStartLabel(start, today, strings)} → ${plannerDueLabel(due, today, strings)}`;
+}
+
 const relativeFormatters = new Map<string, Intl.RelativeTimeFormat>();
 
 /**

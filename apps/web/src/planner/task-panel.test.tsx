@@ -15,7 +15,6 @@ import {
   plannerFetchTaskHistory,
   plannerFetchTree,
 } from "./api";
-import { plannerPlanTarget } from "./plan-targets";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerTaskPanel } from "./task-panel";
 import {
@@ -82,6 +81,7 @@ const PLAN = {
   period_start: WEEK,
   carry_count: 0,
   dropped_at: null,
+  start_date: null,
   effort: 3.5,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -369,7 +369,7 @@ describe("the properties", () => {
   it("lays them out as rows: status, plan, due date, priority, goal, effort and quarter", async () => {
     await open();
     expect(byLabel("Status: To Do")).not.toBeNull();
-    expect(byLabel("Plan: This week")).not.toBeNull();
+    expect(byLabel("Start date: Empty")).not.toBeNull();
     expect(byLabel("Due date: Fri, Oct 9, 2026")).not.toBeNull();
     expect(byLabel("Priority: High")).not.toBeNull();
     expect(byLabel("Goal: Work › Website relaunch")).not.toBeNull();
@@ -379,16 +379,17 @@ describe("the properties", () => {
       '[data-testid="planner-properties"]',
     )?.textContent;
     expect(rows).toContain("Q4 2026");
-    expect(rows).toContain("from plan or due date");
-    // The labels read in the order a Notion page would show them.
+    expect(rows).toContain("from start or due date");
+    // The labels read in the order a Notion page would show them, Created last.
     const order = [
       "Status",
-      "Plan",
+      "Start date",
       "Due date",
       "Priority",
       "Goal",
       "Effort",
       "Quarter",
+      "Created",
     ].map((label) => rows?.indexOf(label) ?? -1);
     expect(order.every((position) => position >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -399,7 +400,7 @@ describe("the properties", () => {
     await open();
     expect(byLabel("Status: To Do")).toBeNull();
     expect(byLabel("Status: Backlog")).not.toBeNull();
-    expect(byLabel("Plan: Empty")).not.toBeNull();
+    expect(byLabel("Start date: Empty")).not.toBeNull();
     expect(byLabel("Due date: Empty")).not.toBeNull();
     expect(byLabel("Priority: Empty")).not.toBeNull();
     expect(byLabel("Goal: Empty")).not.toBeNull();
@@ -432,7 +433,6 @@ describe("the properties", () => {
     });
     await open();
     expect(byLabel("Status: Backlog")).not.toBeNull();
-    expect(byLabel("Plan: Empty")).not.toBeNull();
     expect(effortField()?.value).toBe("2");
   });
 
@@ -452,10 +452,6 @@ describe("the properties", () => {
     queryClient.clear();
     await open();
     expect(byLabel("Status: Done")).not.toBeNull();
-    // A finished task keeps its plan only as history: shown, not editable.
-    expect(byLabel("Plan: This week")).toBeNull();
-    expect(text()).toContain("Plan: ");
-    expect(text()).toContain("This week");
   });
 
   it("falls back to No priority for a priority it does not know", async () => {
@@ -781,6 +777,7 @@ describe("a dropped task", () => {
     plan: {
       ...PLAN,
       dropped_at: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+      start_date: null,
     },
   };
 
@@ -789,9 +786,6 @@ describe("a dropped task", () => {
     const { actions } = await open();
     const banner = panel()?.querySelector('[role="status"]');
     expect(banner?.textContent).toContain("Dropped 3 hours ago");
-    expect(banner?.textContent).toContain(
-      "Undrop it to plan or move it again.",
-    );
     const undrop = Array.from(banner?.querySelectorAll("button") ?? []).find(
       (button) => button.textContent === "Undrop",
     );
@@ -801,25 +795,11 @@ describe("a dropped task", () => {
     );
   });
 
-  it("shows Dropped as its status, and shows its plan without offering to change it", async () => {
+  it("shows Dropped as its status", async () => {
     fetchDetail.mockResolvedValue(dropped);
     await open();
     expect(byLabel("Status: Dropped")).not.toBeNull();
-    expect(byLabel("Plan: This week")).toBeNull();
-    expect(text()).toContain("This week");
-  });
-
-  it("draws the read-only plan's icon at the size of the other rows' icons", async () => {
-    fetchDetail.mockResolvedValue(dropped);
-    await open();
-    const value = panel()?.querySelector(
-      '[title="Undrop it to plan or move it again."]',
-    );
-    expect(value).not.toBeNull();
-    // Outside a button nothing sizes an icon for it: left alone it is 24px.
-    expect(value?.querySelector("svg")?.getAttribute("class")).toContain(
-      "size-4",
-    );
+    expect(byLabel("Start date: Empty")).not.toBeNull();
   });
 
   it("has no banner for a task that is not dropped", async () => {
@@ -987,72 +967,6 @@ describe("the menus", () => {
       const { actions } = await open();
       await openAndPick("Priority: High", "High");
       expect(actions.setPriority).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("plan", () => {
-    it("offers the same choices as the card's menu, the current plan ticked", async () => {
-      await open();
-      openMenu(byLabel("Plan: This week"));
-      await settle();
-      expect(names()).toEqual([
-        "Today",
-        "Tomorrow",
-        "This week",
-        "Next week",
-        "This month",
-        "Next month",
-        "Pick a day…",
-        "Clear plan",
-      ]);
-      expect(checked()).toEqual(["This week"]);
-    });
-
-    it("plans the task for the choice that is picked", async () => {
-      const { actions } = await open();
-      await openAndPick("Plan: This week", "Today");
-      expect(actions.plan).toHaveBeenCalledWith(
-        expect.objectContaining({ id: TASK_ID }),
-        plannerPlanTarget("today", TODAY),
-      );
-    });
-
-    it("clears the plan", async () => {
-      const { actions } = await open();
-      await openAndPick("Plan: This week", "Clear plan");
-      expect(actions.plan).toHaveBeenCalledWith(expect.anything(), null);
-    });
-
-    it("cannot clear a plan there is not one of", async () => {
-      fetchDetail.mockResolvedValue(BARE);
-      await open();
-      openMenu(byLabel("Plan: Empty"));
-      await settle();
-      expect(item("Clear plan").hasAttribute("data-disabled")).toBe(true);
-    });
-
-    it("asks for a day in a dialog, and plans the task for it", async () => {
-      const { actions } = await open();
-      await openAndPick("Plan: This week", "Pick a day…");
-      const dialog = document.body.querySelector<HTMLElement>(
-        '[data-slot="dialog-content"]',
-      );
-      expect(dialog?.textContent).toContain("Plan for a day");
-      const field = dialog?.querySelector<HTMLInputElement>(
-        'input[type="date"]',
-      ) as HTMLInputElement;
-      // A plan cannot start before today.
-      expect(field.min).toBe(TODAY);
-      plannerTestType(field, "2026-10-14");
-      const confirm = Array.from(dialog?.querySelectorAll("button") ?? []).find(
-        (button) => button.textContent === "Plan",
-      );
-      plannerTestClick(confirm);
-      await settle();
-      expect(actions.plan).toHaveBeenCalledWith(
-        expect.objectContaining({ id: TASK_ID }),
-        { horizon: "day", day: "2026-10-14" },
-      );
     });
   });
 

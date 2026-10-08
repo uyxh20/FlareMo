@@ -6,13 +6,14 @@ import {
   type PlannerPlanInput,
   plannerNextPeriodStart,
   plannerPeriodStart,
+  plannerTodoHorizon,
   type TaskDto,
 } from "@flaremo/contracts";
 
 // The cockpit board as plain data (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, sections 4 and 5): which column a
 // card belongs in, how a column is ordered, and what a card looks like right
-// after an edit. How the filter chips narrow To Do is in todo-filter.ts.
+// after an edit. There are no periods to filter by any more (section 13.x).
 //
 // The server decides all of this and the page refetches it after every change, so
 // nothing here is authoritative. It exists so an edit can show up the instant it
@@ -216,17 +217,17 @@ function isPastPlan(card: CardPlan, today: string): boolean {
  *
  *   to Backlog   status todo, plan cleared
  *   to To Do     status todo; from Backlog, with no plan, or from Done with a
- *                plan that is past: plan = this week; otherwise the plan stays
+ *                plan that is past: the To Do marker (today); otherwise the plan stays
  *   to Doing     status in_progress, plan kept
  *   to Done      status done (completed now), plan kept
  *
  * A move to the column the card is in, and any move of a dropped card, change
- * nothing. `week` is this week's Monday, from the board's periods.
+ * nothing.
  */
 export function plannerPredictMove(
   card: PlannerBoardCard,
   to: PlannerColumn,
-  context: { today: string; week: string; now: Date },
+  context: { today: string; now: Date },
 ): PlannerBoardCard {
   const from = plannerCardColumn(card);
   if (from === "dropped" || from === to) return card;
@@ -249,8 +250,11 @@ export function plannerPredictMove(
         !plannerHasPlan(card) ||
         (from === "done" && isPastPlan(card, context.today))
       ) {
-        next.horizon = "week";
-        next.period_start = context.week;
+        next.horizon = plannerTodoHorizon;
+        next.period_start = plannerPeriodStart(
+          plannerTodoHorizon,
+          context.today,
+        );
       }
       break;
     case "doing":
@@ -265,7 +269,7 @@ export function plannerPredictMove(
   return next;
 }
 
-/** The card after a plan change. `carry_count` is never touched here: only rollover moves it. */
+/** The card after a plan change (a retry of a plan that did not save, or a plan set by hand). */
 export function plannerPredictPlan(
   card: PlannerBoardCard,
   plan: PlannerPlanInput | null,
@@ -277,6 +281,15 @@ export function plannerPredictPlan(
     period_start: plan ? plannerPeriodStart(plan.horizon, plan.day) : null,
     updated_at: now.toISOString(),
   };
+}
+
+/** The card after its start date changes (a planner-side field: no column moves). */
+export function plannerPredictStartDate(
+  card: PlannerBoardCard,
+  startDate: string | null,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, start_date: startDate, updated_at: now.toISOString() };
 }
 
 export function plannerPredictDue(
@@ -365,6 +378,7 @@ export function plannerCardFromTask(
     period_start: plan?.period_start ?? null,
     carry_count: plan?.carry_count ?? 0,
     dropped_at: plan?.dropped_at ?? null,
+    start_date: plan?.start_date ?? null,
   };
 }
 
@@ -425,6 +439,7 @@ export function plannerPendingCard(input: {
       : null,
     carry_count: 0,
     dropped_at: null,
+    start_date: null,
   };
 }
 

@@ -33,6 +33,7 @@ function dropped(
     period_start: "2026-10-05",
     carry_count: 0,
     dropped_at: new Date(Date.now() - agoMs).toISOString(),
+    start_date: null,
     ...overrides,
   };
 }

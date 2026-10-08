@@ -11,7 +11,6 @@ import {
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { FilterPill } from "@/components/ui/filter-pill";
 import { Switch } from "@/components/ui/switch";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
@@ -24,24 +23,17 @@ import { plannerQueryKeys } from "./query-keys";
 import { PlannerQuickAdd } from "./quick-add";
 import { usePlannerStrings } from "./strings";
 import { PlannerTaskPanel } from "./task-panel";
-import {
-  type PlannerHorizonFilter,
-  plannerHorizonFilters,
-  plannerTodoCounts,
-} from "./todo-filter";
 import { usePlannerActions } from "./use-planner-actions";
 import { usePlannerToday } from "./use-planner-clock";
 import { usePlannerReveal } from "./use-planner-reveal";
-import { usePlannerRollover } from "./use-planner-rollover";
 import { usePlannerTaskParam } from "./use-task-param";
 
 // The planning cockpit at /cockpit (fork-owned add-on,
-// docs/planning-cockpit-implementation-plan.md, section 5): a quick add, filter
-// chips for To Do (All, Today, This week, This month: what is planned inside the
-// current period), a Show dropped switch whose list sits right under them, and a
-// Backlog / To Do / Doing / Done board. It opens by rolling unfinished plans
-// forward into the current period, then loads the board. The layout is the same
-// WorkspaceLayout and WorkspacePageHeader as /projects.
+// docs/planning-cockpit-implementation-plan.md, section 5 and section 13.x): a quick
+// add, a Show dropped switch whose list sits right under it, and one Backlog /
+// To Do / Doing / Done board that always shows every card. There are no period
+// chips and no carry-over (v1.2). The layout is the same WorkspaceLayout and
+// WorkspacePageHeader as /projects.
 //
 // A card opens into its task panel (task-panel.tsx), whose state lives in the
 // address as `?task=<id>`: a link opens it, the back button closes it.
@@ -75,9 +67,7 @@ function Notice({
 export function PlannerCockpitPage() {
   const strings = usePlannerStrings();
   const today = usePlannerToday();
-  const rolloverSettled = usePlannerRollover(today);
   const [includeDropped, setIncludeDropped] = useState(false);
-  const [filter, setFilter] = useState<PlannerHorizonFilter>("all");
   const quickAddRef = useRef<HTMLInputElement | null>(null);
   const showDroppedId = useId();
   const { reveal, request: requestReveal } = usePlannerReveal();
@@ -89,8 +79,6 @@ export function PlannerCockpitPage() {
   const boardQuery = useQuery({
     queryKey: plannerQueryKeys.board(today, includeDropped),
     queryFn: () => plannerFetchBoard({ today, includeDropped }),
-    // Rollover first, so a card carried into today is on the board that arrives.
-    enabled: rolloverSettled,
     staleTime: 15_000,
     // Edits made elsewhere (an agent, /projects) show up when the tab returns.
     refetchOnWindowFocus: true,
@@ -109,7 +97,6 @@ export function PlannerCockpitPage() {
     return () => window.clearTimeout(timer);
   }, [hasBoard]);
 
-  const counts = plannerTodoCounts(board?.columns.todo ?? [], today);
   const dropped = board?.columns.dropped;
 
   let content: ReactNode;
@@ -148,7 +135,6 @@ export function PlannerCockpitPage() {
         actions={actions}
         board={board}
         entering={entering}
-        filter={filter}
         reveal={reveal}
         today={today}
         onOpen={openCard}
@@ -186,22 +172,6 @@ export function PlannerCockpitPage() {
         <PlannerQuickAdd actions={actions} inputRef={quickAddRef} />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <fieldset className="m-0 flex min-w-0 flex-wrap items-center gap-2 border-0 p-0">
-            <legend className="sr-only">{strings.filter.label}</legend>
-            {plannerHorizonFilters.map((option) => (
-              <FilterPill
-                active={filter === option}
-                count={board ? counts[option] : undefined}
-                key={option}
-                label={
-                  option === "all"
-                    ? strings.filter.all
-                    : strings.horizon[option]
-                }
-                onClick={() => setFilter(option)}
-              />
-            ))}
-          </fieldset>
           <div className="ml-auto flex items-center gap-2">
             <Switch
               checked={includeDropped}
@@ -248,7 +218,6 @@ export function PlannerCockpitPage() {
         actions={actions}
         open={requests.open}
         shown={requests.shown}
-        today={today}
         onClose={requests.close}
       />
 

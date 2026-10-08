@@ -16,7 +16,6 @@ import {
   plannerTestMount,
   plannerTestType,
 } from "./test-render";
-import type { PlannerHorizonFilter } from "./todo-filter";
 import type { PlannerActions } from "./use-planner-actions";
 
 // What a person can do to the board with a pointer and a keyboard (fork-owned
@@ -48,6 +47,7 @@ function card(
     period_start: null,
     carry_count: 0,
     dropped_at: null,
+    start_date: null,
     ...overrides,
   };
 }
@@ -88,7 +88,6 @@ afterEach(() => {
 function show(
   data: PlannerBoardResponse,
   options: {
-    filter?: PlannerHorizonFilter;
     actions?: ReturnType<typeof plannerTestActions>;
     onOpen?: (card: PlannerBoardCard) => void;
   } = {},
@@ -100,7 +99,6 @@ function show(
       actions={actions as PlannerActions}
       board={data}
       entering={false}
-      filter={options.filter ?? "all"}
       reveal={null}
       today={TODAY}
       onOpen={onOpen}
@@ -476,14 +474,10 @@ describe("the + in a column's header", () => {
   });
 
   describe("what each column adds", () => {
-    async function addIn(
-      column: string,
-      label: string,
-      filter: PlannerHorizonFilter,
-    ) {
+    async function addIn(column: string, label: string) {
       const actions = plannerTestActions();
       actions.createIn.mockResolvedValue(true);
-      const { container } = show(board(), { actions, filter });
+      const { container } = show(board(), { actions });
       plannerTestClick(addButton(container, column));
       const input = inputIn(container, label);
       plannerTestType(input, "A task");
@@ -493,48 +487,29 @@ describe("the + in a column's header", () => {
       mounted = undefined;
       return actions.createIn.mock.calls[0]?.[0];
     }
-    const filters = ["all", "day", "week", "month"] as const;
 
-    it("Backlog: no plan, whatever the chip says", async () => {
-      for (const filter of filters) {
-        expect(await addIn("backlog", "Backlog", filter), filter).toEqual({
-          title: "A task",
-          column: "backlog",
-          plan: null,
-        });
-      }
+    it("Backlog: no plan", async () => {
+      expect(await addIn("backlog", "Backlog")).toEqual({
+        title: "A task",
+        column: "backlog",
+        plan: null,
+      });
     });
 
-    it("To Do: the chip's period, and today under All", async () => {
-      const plans = {
-        all: { horizon: "day", day: TODAY },
-        day: { horizon: "day", day: TODAY },
-        week: { horizon: "week", day: "2026-10-05" },
-        month: { horizon: "month", day: "2026-10-01" },
-      } as const;
-      for (const filter of filters) {
-        expect(await addIn("todo", "To Do", filter), filter).toEqual({
-          title: "A task",
-          column: "todo",
-          plan: plans[filter],
-        });
-      }
+    it("To Do: the marker for today, which nothing shows", async () => {
+      expect(await addIn("todo", "To Do")).toEqual({
+        title: "A task",
+        column: "todo",
+        plan: { horizon: "day", day: TODAY },
+      });
     });
 
-    it("Doing and Done: the chip's period, and no plan under All", async () => {
+    it("Doing and Done: no plan", async () => {
       for (const [column, label] of [
         ["doing", "Doing"],
         ["done", "Done"],
       ] as const) {
-        expect((await addIn(column, label, "all"))?.plan, column).toBeNull();
-        expect((await addIn(column, label, "week"))?.plan, column).toEqual({
-          horizon: "week",
-          day: "2026-10-05",
-        });
-        expect((await addIn(column, label, "day"))?.plan, column).toEqual({
-          horizon: "day",
-          day: TODAY,
-        });
+        expect((await addIn(column, label))?.plan, column).toBeNull();
       }
     });
   });

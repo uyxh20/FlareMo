@@ -60,7 +60,8 @@ export function plannerDetailWithCard(
     (before?.horizon ?? null) !== card.horizon ||
     (before?.period_start ?? null) !== card.period_start ||
     (before?.dropped_at ?? null) !== card.dropped_at ||
-    (before?.carry_count ?? 0) !== card.carry_count;
+    (before?.carry_count ?? 0) !== card.carry_count ||
+    (before?.start_date ?? null) !== card.start_date;
   const plan: PlannerPlanDto | null =
     before === null && !planChanged
       ? null
@@ -71,6 +72,7 @@ export function plannerDetailWithCard(
           carry_count: card.carry_count,
           dropped_at: card.dropped_at,
           effort: before?.effort ?? null,
+          start_date: card.start_date,
           created_at: before?.created_at ?? card.updated_at,
           updated_at: planChanged
             ? card.updated_at
@@ -105,6 +107,7 @@ export function plannerDetailWithEffort(
         carry_count: 0,
         dropped_at: null,
         effort,
+        start_date: null,
         created_at: at,
         updated_at: at,
       };

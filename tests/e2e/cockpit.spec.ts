@@ -61,26 +61,29 @@ test("the sidebar links to the cockpit", async ({ page }) => {
   await expect(column(page, COLUMN.todo)).toBeVisible();
 });
 
-test("quick add puts a task in To Do, planned for Today", async ({ page }) => {
+test("quick add puts a task in Backlog, and there are no period chips", async ({
+  page,
+}) => {
   await startWithCleanClientState(page);
   const title = `Cockpit quick add ${Date.now()}`;
 
   await page.goto("/cockpit");
   const input = page.getByRole("textbox", { name: /^(新任务|New task)$/ });
   await expect(input).toBeVisible();
+  // v1.2 dropped the period chips (All, Today, This week, This month).
+  await expect(
+    page.getByRole("button", { name: /^(本周|This week)$/ }),
+  ).toHaveCount(0);
   await input.fill(title);
   await input.press("Enter");
 
-  const added = card(page, COLUMN.todo, title);
-  await expect(added).toBeVisible();
-  // The chip is the plan: Today is quick add's default.
-  await expect(added.getByText(/^(今天|Today)$/)).toBeVisible();
+  await expect(card(page, COLUMN.backlog, title)).toBeVisible();
   // The field empties so the next task can be typed straight away.
   await expect(input).toHaveValue("");
 
   // It is on the server, not only on the screen.
   await page.reload();
-  await expect(card(page, COLUMN.todo, title)).toBeVisible();
+  await expect(card(page, COLUMN.backlog, title)).toBeVisible();
 });
 
 test("a card moves to Doing from its menu and stays there", async ({
@@ -134,13 +137,15 @@ const panel = (page: Page) => page.getByRole("dialog");
 const titleField = (page: Page) =>
   panel(page).getByRole("textbox", { name: /^(任务标题|Task title)$/ });
 
-/** Adds a task with the quick-add box above the board: To Do, planned for Today. */
+/** Adds a task straight into To Do with that column's "+", the way most cases need a card. */
 async function quickAdd(page: Page, title: string) {
   await page.goto("/cockpit");
-  const input = page.getByRole("textbox", { name: /^(新任务|New task)$/ });
+  await page.getByRole("button", { name: ADD_BUTTON.todo }).click();
+  const input = page.getByRole("textbox", { name: COMPOSER.todo });
   await input.fill(title);
   await input.press("Enter");
   await expect(card(page, COLUMN.todo, title)).toBeVisible();
+  await input.press("Escape");
 }
 
 /** Opens a card's panel by clicking its title, and waits for the task to load. */
@@ -167,7 +172,7 @@ test("a column's + adds a task straight into that column", async ({ page }) => {
   const stamp = Date.now();
   await page.goto("/cockpit");
 
-  // Backlog, Doing and Done take the task as it is typed: no plan chip.
+  // Backlog, Doing and Done take the task as it is typed.
   for (const [key, label] of [
     ["backlog", COLUMN.backlog],
     ["doing", COLUMN.doing],
@@ -180,9 +185,6 @@ test("a column's + adds a task straight into that column", async ({ page }) => {
     await input.fill(title);
     await input.press("Enter");
     await expect(card(page, label, title)).toBeVisible();
-    await expect(
-      card(page, label, title).getByText(/^(今天|Today)$/),
-    ).toHaveCount(0);
     // The composer stays open and empty for the next task...
     await expect(input).toHaveValue("");
     await expect(input).toBeFocused();
@@ -191,15 +193,13 @@ test("a column's + adds a task straight into that column", async ({ page }) => {
     await expect(input).toHaveCount(0);
   }
 
-  // To Do needs a plan, and the filter is All: Today.
+  // To Do takes the task with its marker plan (today), which nothing shows.
   const planned = `Cockpit plus todo ${stamp}`;
   await page.getByRole("button", { name: ADD_BUTTON.todo }).click();
   const input = page.getByRole("textbox", { name: COMPOSER.todo });
   await input.fill(planned);
   await input.press("Enter");
-  await expect(
-    card(page, COLUMN.todo, planned).getByText(/^(今天|Today)$/),
-  ).toBeVisible();
+  await expect(card(page, COLUMN.todo, planned)).toBeVisible();
   await input.press("Escape");
 
   // All of them are on the server, in the column they were added to.
@@ -258,7 +258,7 @@ test("clicking a card opens its panel, the address names the task, and Escape cl
   ).toBeFocused();
 });
 
-test("a click on a card's chip opens its panel too, but the status icon and the menu keep their own jobs", async ({
+test("a click on a card's own padding opens its panel too, but the status icon and the menu keep their own jobs", async ({
   page,
 }) => {
   const title = `Cockpit chip ${Date.now()}`;
@@ -275,10 +275,8 @@ test("a click on a card's chip opens its panel too, but the status icon and the 
   await expect(panel(page)).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // The Today chip is part of the card: a click there opens it.
-  await card(page, COLUMN.todo, title)
-    .getByText(/^(今天|Today)$/)
-    .click();
+  // The card's padding is part of the card: a click there opens it.
+  await card(page, COLUMN.todo, title).click({ position: { x: 4, y: 4 } });
   await expect(panel(page)).toBeVisible();
   await expect(titleField(page)).toHaveValue(title);
 });
@@ -475,4 +473,51 @@ test("dragging a card moves it and does not open its panel", async ({
   await expect(card(page, COLUMN.doing, title)).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
   await expect(page).toHaveURL(/\/cockpit$/);
+});
+
+test("a start date and a due date read as one range on the card, and the panel shows when the task was created", async ({
+  page,
+}) => {
+  const title = `Cockpit range ${Date.now()}`;
+  await quickAdd(page, title);
+
+  await openPanel(page, COLUMN.todo, title);
+  const link = await panelAddress(page);
+
+  // Created is read-only: the day the task was made.
+  await expect(panel(page).getByText(/^(创建|Created)$/)).toBeVisible();
+
+  // Start date: a date field, saved once a whole day is typed.
+  await panel(page)
+    .getByRole("button", { name: /^(开始日期|Start date): / })
+    .click();
+  await panel(page)
+    .getByRole("textbox", { name: /^(开始日期|Start date)$/ })
+    .fill("2026-10-08");
+  await expect(
+    panel(page).getByRole("button", { name: /^(开始日期|Start date): .*8/ }),
+  ).toBeVisible();
+
+  // Due date, the same way.
+  await panel(page)
+    .getByRole("button", { name: /^(截止日期|Due date): / })
+    .click();
+  await panel(page)
+    .getByRole("textbox", { name: /^(截止日期|Due date)$/ })
+    .fill("2026-10-12");
+  await expect(
+    panel(page).getByRole("button", { name: /^(截止日期|Due date): .*12/ }),
+  ).toBeVisible();
+
+  // Both dates on the card: one range.
+  await closePanelWithEscape(page);
+  await expect(card(page, COLUMN.todo, title).getByText(/→/)).toBeVisible();
+
+  // Everything is on the server.
+  await page.reload();
+  await expect(card(page, COLUMN.todo, title).getByText(/→/)).toBeVisible();
+  await page.goto(link);
+  await expect(
+    panel(page).getByRole("button", { name: /^(开始日期|Start date): .*8/ }),
+  ).toBeVisible();
 });

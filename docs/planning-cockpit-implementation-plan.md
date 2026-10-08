@@ -622,3 +622,27 @@ All under `apps/web/src/planner/` unless noted.
 
 - Markdown, attachments, mentions or reactions in comments; comment pagination (the detail carries all of a task's comments); restoring a deleted comment; other authors' names (there is one user, shown as "You").
 - Editing the quarter, the source memo or the sort order from the panel; a next/previous card shortcut.
+
+## 13.x v1.2 simplification
+
+The owner's feedback on the first board (2026-10-08): the Today, This week and This month split, and carry-over, are more than the owner needs. The board is one view, and dates are a start and a due date. The owner moves cards Backlog → To Do → Doing → Done by hand.
+
+What changed:
+
+- **Period chips are gone.** The All / Today / This week / This month row and the period picker in quick add are removed. The board always shows every card. `todo-filter.ts` and its test are deleted.
+- **Quick add and each column's "+" create the task straight into its column.** Quick add creates in Backlog. A To Do "+" sends the To Do marker (below); Doing and Done take no plan.
+- **Carry-over is off the web.** `use-planner-rollover.ts` is deleted and nothing calls `POST /rollover`. The route and `rollover.ts` stay, unused, under the additive-only rule. There are no "Carried ×N" badges and no carry toast. Old `carried_over` events still render with their label, and the actor reads "Automatic" as before.
+- **Plan is replaced by Start date.** `planner_task_plan.start_date` (migration `9002_planner_start_date.sql`, a nullable `YYYY-MM-DD` day) sits on the plan row, as the effort does. `PATCH /tasks/:id` takes `start_date` (a day or `null`), and the event is `start_date_changed` `{from, to}` in the same batch. The task panel sets it with the same date control as the due date. The card shows the range: "Oct 8 → Oct 12" with both dates, "Starts Oct 8" with only a start, and the due chip as before with only a due date. Priority and project stay. The plan menu and its chips are gone from the card and the panel.
+- **Created** is a read-only row in the panel, from `tasks.created_at`. The footer keeps "Updated".
+- **Quarter** is derived from the start date, or else the due date.
+- **To Do without periods.** A To Do task still needs a plan row to tell it from the backlog. Every move into To Do plans it for today with horizon `day` (`plannerTodoMarker` in `packages/contracts/src/planner.ts`). Nothing shows that horizon, and rollover is the only code that would move it, so the marker stays put. Existing tasks keep their plans and stay in To Do. Moving to To Do from To Do is not touched, Done still shows the last 14 days, and To Do → Backlog still clears the plan.
+
+Why a `day` horizon and not a new "no period" value: the planner's column rule (`plannerColumnFor`), the undrop placement and the `plannerHasPlan` check all read "has a horizon" as "in To Do", and keeping that rule avoids a migration that rebuilds planner rules (G13). The marker's date is not shown anywhere.
+
+Known edges, kept on purpose:
+
+- A `start_date` after the due date is accepted. The card then shows the range in the order typed.
+- If someone calls the rollover route by hand, it would carry To Do markers forward day by day and bump `carry_count`. Nothing in the web does that.
+- A Doing → To Do move with no plan writes two events: "Moved to Backlog" (the status change) and then "Moved to To Do" (the marker).
+
+Files: `migrations/9002_planner_start_date.sql`, `packages/db/src/schema/planner.ts`, `packages/contracts/src/planner.ts`, `packages/domain/src/planner/` (`plans.ts`, `board.ts`, `shared.ts`, `rollover.ts` comment), `apps/worker/src/routes/planner-api.ts`, and the web files under `apps/web/src/planner/` (`cockpit-page.tsx`, `board.tsx`, `board-model.ts`, `column-add.ts`, `quick-add.tsx`, `task-card.tsx`, `task-panel-properties.tsx`, `card-dialogs.tsx`, `day-dialog.tsx` (was `plan-picker.tsx`), `history-labels.ts`, `strings.ts`, `use-planner-actions.ts`, `dates.ts`, `panel-model.ts`, `api.ts`). `tests/e2e/cockpit.spec.ts` is updated and written, not run (G8).

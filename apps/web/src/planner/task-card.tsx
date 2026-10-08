@@ -46,20 +46,20 @@ import {
 import {
   plannerDayLong,
   plannerDueLabel,
-  plannerPlanLabel,
+  plannerRangeLabel,
   plannerRelativeTime,
+  plannerStartLabel,
 } from "./dates";
-import { PlannerPlanSubmenu } from "./plan-picker";
 import { usePlannerStrings } from "./strings";
 import type { PlannerActions } from "./use-planner-actions";
 
 // A task on the cockpit board (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 5).
 //
-// Upstream's TaskCard cannot carry the cockpit's extras (the plan chip, the
-// carried badge, the plan menu, history, drop), and the fork must not edit it, so
-// this card is built from the same exported pieces: the status icon, the
-// priority badge variants, the advance keys and the menu button styling.
+// Upstream's TaskCard cannot carry the cockpit's extras (the time range, history,
+// drop), and the fork must not edit it, so this card is built from the same
+// exported pieces: the status icon, the priority badge variants, the advance keys
+// and the menu button styling. A card shows its time range, never a period (v1.2).
 //
 // Clicking a card opens its task panel (section 13), and so does Enter or Space on
 // its title, which is a real button for exactly that: a keyboard reaches the card
@@ -99,7 +99,7 @@ export function plannerClickOpensCard(event: {
 
 /** What a card asks the page to open: each of these needs a dialog or a sheet. */
 export type PlannerCardRequest = {
-  kind: "edit" | "history" | "drop" | "pickDay" | "setDue";
+  kind: "edit" | "history" | "drop" | "setDue";
   card: PlannerBoardCard;
 };
 
@@ -180,18 +180,23 @@ export function PlannerTaskCard({
   const waiting = plannerIsPendingCard(card);
   const inert = overlay || waiting;
 
-  // A finished or dropped task's plan is history, not information.
-  const plan =
-    isDone || isDropped ? null : plannerPlanLabel(card, today, strings);
   const overdue = plannerIsOverdue(card, today);
   const advanceLabel = t(ADVANCE_KEY[status]);
   const hasChips =
-    plan !== null ||
-    card.carry_count > 0 ||
+    card.start_date !== null ||
     card.priority !== "none" ||
     card.due_at !== null ||
     card.project_name !== null ||
     isDropped;
+
+  // The time range: start and due together read as one range, a start alone as
+  // "Starts …", and a due date alone as the due chip it always was.
+  const rangeTitle =
+    card.start_date !== null && card.due_at !== null
+      ? `${plannerDayLong(card.start_date, locale)} → ${plannerDayLong(card.due_at, locale)}`
+      : card.start_date !== null
+        ? plannerDayLong(card.start_date, locale)
+        : "";
 
   const request = (kind: PlannerCardRequest["kind"]) =>
     onRequest({ kind, card });
@@ -305,14 +310,6 @@ export function PlannerTaskCard({
                         ))}
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
-                    {!isDone && (
-                      <PlannerPlanSubmenu
-                        actions={actions}
-                        card={card}
-                        today={today}
-                        onPickDay={() => request("pickDay")}
-                      />
-                    )}
                     <DropdownMenuItem onClick={() => request("setDue")}>
                       <CalendarDaysIcon />
                       {card.due_at
@@ -357,18 +354,25 @@ export function PlannerTaskCard({
 
         {hasChips && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6">
-            {plan && (
-              <Badge title={plan.title} variant="secondary">
-                {plan.label}
-              </Badge>
-            )}
-            {card.carry_count > 0 && (
-              <Badge
-                title={strings.card.carriedTitle(card.carry_count)}
-                variant="outline"
+            {card.start_date !== null && (
+              <Chip
+                className={cn(
+                  card.due_at !== null && overdue && "text-destructive",
+                )}
+                title={rangeTitle}
               >
-                {strings.card.carried(card.carry_count)}
-              </Badge>
+                <CalendarDaysIcon className="size-3 shrink-0" />
+                {card.due_at !== null
+                  ? plannerRangeLabel(
+                      card.start_date,
+                      card.due_at,
+                      today,
+                      strings,
+                    )
+                  : strings.card.starts(
+                      plannerStartLabel(card.start_date, today, strings),
+                    )}
+              </Chip>
             )}
             {card.priority !== "none" && (
               <Badge
@@ -384,7 +388,7 @@ export function PlannerTaskCard({
                 ] ?? card.priority}
               </Badge>
             )}
-            {card.due_at && (
+            {card.due_at && card.start_date === null && (
               <Chip
                 className={cn(overdue && "text-destructive")}
                 title={`${strings.card.due(plannerDayLong(card.due_at, locale))}${
