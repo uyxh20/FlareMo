@@ -112,6 +112,9 @@ export function MemoComposer({
     setActiveWikiToken,
     tagSuggestions,
     showTagSuggestions,
+    activeTagIndex,
+    setActiveTagIndex,
+    handleSuggestionKeyDown,
     acceptTagSuggestion,
     wikiSuggestions,
     showWikiSuggestions,
@@ -171,6 +174,7 @@ export function MemoComposer({
           onSubmitRequest={() => {
             if (!isUploadingImages && !voiceActive) void submit();
           }}
+          onSuggestionKeyDown={handleSuggestionKeyDown}
           placeholder={t("composer.placeholder")}
         />
       </Suspense>
@@ -185,6 +189,8 @@ export function MemoComposer({
       <ComposerTagSuggestions
         visible={showTagSuggestions}
         suggestions={tagSuggestions}
+        activeIndex={activeTagIndex}
+        onActiveIndexChange={setActiveTagIndex}
         onAccept={acceptTagSuggestion}
       />
       <ComposerWikiSuggestions
