@@ -1,10 +1,13 @@
 import type {
   PlannerBoardResponse,
+  PlannerCommentResponse,
   PlannerCreateTaskInput,
   PlannerCreateTaskResponse,
-  PlannerRolloverResponse,
+  PlannerDeleteCommentResponse,
+  PlannerTaskDetailResponse,
   PlannerTaskHistoryResponse,
   PlannerTaskPlanResponse,
+  PlannerTreeResponse,
   PlannerUpdateTaskInput,
 } from "@flaremo/contracts";
 import type { Task } from "@/api";
@@ -44,14 +47,6 @@ export function plannerFetchBoard(input: {
   return apiRequest<PlannerBoardResponse>(`${PLANNER_API}/board?${query}`);
 }
 
-/** Syncs the history, then carries unfinished plans into the current period. */
-export function plannerRolloverRequest(today: string) {
-  return apiRequest<PlannerRolloverResponse>(`${PLANNER_API}/rollover`, {
-    method: "POST",
-    body: JSON.stringify({ today }),
-  });
-}
-
 export function plannerCreateTaskRequest(input: PlannerCreateTaskInput) {
   return apiRequest<PlannerCreateTaskResponse>(`${PLANNER_API}/tasks`, {
     method: "POST",
@@ -60,16 +55,54 @@ export function plannerCreateTaskRequest(input: PlannerCreateTaskInput) {
 }
 
 /**
+ * The biggest body the cockpit sends with `keepalive`. That option makes the
+ * browser finish a request even if the page goes away (a tab closing), but
+ * browsers cap the bodies of all such requests in flight at 64 KB for a page and
+ * refuse one that goes over. Half of the cap leaves room for headers and for a
+ * second request in flight; a bigger body goes as an ordinary request, which is
+ * still sent when the page is only hidden.
+ */
+export const plannerKeepaliveMaxBytes = 32 * 1024;
+
+/** Whether a request body is small enough, in bytes, to send with `keepalive`. */
+export function plannerFitsKeepalive(body: string): boolean {
+  return new TextEncoder().encode(body).length <= plannerKeepaliveMaxBytes;
+}
+
+/**
  * Column moves, plans, drops and task fields in one request. `column` and
  * `plan` together are a 400: a column move sets the plan itself.
+ *
+ * `keepalive` is for a save made as the page is hidden or closed (the notes'
+ * autosave): the browser then finishes the request even if the page goes. It is
+ * passed on only when the body fits (see `plannerKeepaliveMaxBytes`).
  */
 export function plannerUpdateTaskRequest(
   taskId: string,
   input: PlannerUpdateTaskInput,
+  options: { keepalive?: boolean } = {},
 ) {
+  const body = JSON.stringify(input);
   return apiRequest<PlannerTaskPlanResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}`,
-    { method: "PATCH", body: JSON.stringify(input) },
+    {
+      method: "PATCH",
+      body,
+      ...(options.keepalive && plannerFitsKeepalive(body)
+        ? { keepalive: true }
+        : {}),
+    },
+  );
+}
+
+/**
+ * Everything the task panel shows for one task: the whole task (notes included),
+ * its plan with the effort estimate, its goal and the goal's path, and its
+ * comments. A task that is gone is a 404.
+ */
+export function plannerFetchTaskDetail(taskId: string) {
+  return apiRequest<PlannerTaskDetailResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}`,
   );
 }
 
@@ -77,6 +110,35 @@ export function plannerUpdateTaskRequest(
 export function plannerFetchTaskHistory(taskId: string) {
   return apiRequest<PlannerTaskHistoryResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/history`,
+  );
+}
+
+/** The goal tree: every live project with its parent, for the goals' paths. */
+export function plannerFetchTree() {
+  return apiRequest<PlannerTreeResponse>(`${PLANNER_API}/tree`);
+}
+
+/** Adds a comment to a task. The server trims the text and keeps 1 to 5000 characters. */
+export function plannerAddCommentRequest(taskId: string, body: string) {
+  return apiRequest<PlannerCommentResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}/comments`,
+    { method: "POST", body: JSON.stringify({ body }) },
+  );
+}
+
+// A comment id is a bare UUID, not namespaced like a task's.
+export function plannerUpdateCommentRequest(commentId: string, body: string) {
+  return apiRequest<PlannerCommentResponse>(
+    `${PLANNER_API}/comments/${encodeURIComponent(commentId)}`,
+    { method: "PATCH", body: JSON.stringify({ body }) },
+  );
+}
+
+/** A soft delete: the comment leaves the task, its row stays on the server. */
+export function plannerDeleteCommentRequest(commentId: string) {
+  return apiRequest<PlannerDeleteCommentResponse>(
+    `${PLANNER_API}/comments/${encodeURIComponent(commentId)}`,
+    { method: "DELETE" },
   );
 }
 

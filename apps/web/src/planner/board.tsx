@@ -19,15 +19,25 @@ import type {
   PlannerBoardResponse,
   PlannerColumn,
 } from "@flaremo/contracts";
+import { PlusIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   type PlannerColumnKey,
   plannerCardColumn,
   plannerColumns,
   plannerFindCard,
+  plannerIsPendingCard,
 } from "./board-model";
+import { plannerColumnAddTarget } from "./column-add";
+import { PlannerColumnComposer } from "./column-composer";
 import {
   plannerHaptic,
   plannerIsTouchActivation,
@@ -40,7 +50,6 @@ import {
   PlannerColumnIcon,
   PlannerTaskCard,
 } from "./task-card";
-import { type PlannerHorizonFilter, plannerFilterTodo } from "./todo-filter";
 import type { PlannerActions } from "./use-planner-actions";
 import {
   type PlannerReveal,
@@ -65,6 +74,12 @@ import {
 //
 // A card that was just added, moved or re-planned is scrolled into view and rings
 // in Ember for a moment (use-planner-reveal.ts); the page says which card.
+//
+// Each column's header has a "+" that opens a composer at the top of the column
+// (column-composer.tsx): the new task goes straight into that column (column-add.ts),
+// and shows on the board before the server answers. There are no period filters
+// any more (section 13.x): the board always shows every card. Clicking a card opens its task panel (task-card.tsx);
+// a card still waiting for the server can be neither opened nor dragged.
 
 /** The column under the pointer; for a keyboard or an unmoved pointer, the one the card overlaps most. */
 const collide: CollisionDetection = (args) => {
@@ -85,14 +100,19 @@ function DraggableCard({
   today: string;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
+  onOpen: (card: PlannerBoardCard) => void;
   dragging: boolean;
   /** Set only while the board first appears, to stagger the cards in. */
   enterIndex?: number;
   /** The card the person just acted on, if any; this one rings when it is its own. */
   reveal: PlannerReveal | null;
 }) {
+  // A card the server has not answered for yet cannot be picked up: it may
+  // vanish, or turn into another id, before it lands.
+  const waiting = plannerIsPendingCard(card);
   const { setNodeRef, node, listeners, isDragging } = useDraggable({
     id: card.id,
+    disabled: waiting,
   });
 
   // Scroll into view when this card is pointed out: the moment it mounts into its
@@ -106,7 +126,7 @@ function DraggableCard({
   return (
     <div
       ref={setNodeRef}
-      {...listeners}
+      {...(waiting ? undefined : listeners)}
       className={cn(
         // `relative` holds the reveal ring; `scroll-my-3` keeps a card scrolled
         // into view off the very edge of the page.
@@ -147,6 +167,8 @@ function Column({
   today,
   actions,
   onRequest,
+  onOpen,
+  onAdd,
   entering,
   dragging,
   reveal,
@@ -159,14 +181,20 @@ function Column({
   today: string;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
+  onOpen: (card: PlannerBoardCard) => void;
+  /** Adds a task to this column; left out for a column that is not a place to add to. */
+  onAdd?: (title: string) => Promise<boolean>;
   entering: boolean;
   dragging: boolean;
   reveal: PlannerReveal | null;
 }) {
+  const strings = usePlannerStrings();
   const { isOver, setNodeRef } = useDroppable({
     id: columnId(column),
     disabled: !droppable,
   });
+  const [composing, setComposing] = useState(false);
+  const addLabel = strings.columnAdd.add(label);
 
   return (
     <section
@@ -180,6 +208,29 @@ function Column({
         <span className="text-xs text-muted-foreground tabular-nums">
           {cards.length}
         </span>
+        {onAdd && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  aria-expanded={composing}
+                  aria-label={addLabel}
+                  className="ml-auto -mr-1 text-muted-foreground hover:text-foreground"
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                  // Pressing it must not take focus from an open, empty composer:
+                  // that blur would close it and the click reopen it.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => setComposing(true)}
+                >
+                  <PlusIcon />
+                </Button>
+              }
+            />
+            <TooltipContent>{addLabel}</TooltipContent>
+          </Tooltip>
+        )}
       </header>
       <div
         ref={setNodeRef}
@@ -188,24 +239,33 @@ function Column({
           droppable && isOver && "bg-accent ring-1 ring-brand-400/40",
         )}
       >
-        {cards.length === 0 ? (
-          <p className="rounded-lg px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
-            {hint}
-          </p>
-        ) : (
-          cards.map((card, index) => (
-            <DraggableCard
-              actions={actions}
-              card={card}
-              dragging={dragging}
-              enterIndex={entering ? index : undefined}
-              key={card.id}
-              reveal={reveal}
-              today={today}
-              onRequest={onRequest}
-            />
-          ))
+        {composing && onAdd && (
+          <PlannerColumnComposer
+            label={strings.columnAdd.label(label)}
+            onClose={() => setComposing(false)}
+            onSubmit={onAdd}
+          />
         )}
+        {cards.length === 0
+          ? // The composer says what to do, so the hint steps aside while it is open.
+            !composing && (
+              <p className="rounded-lg px-2 py-6 text-center text-xs leading-relaxed text-muted-foreground">
+                {hint}
+              </p>
+            )
+          : cards.map((card, index) => (
+              <DraggableCard
+                actions={actions}
+                card={card}
+                dragging={dragging}
+                enterIndex={entering ? index : undefined}
+                key={card.id}
+                reveal={reveal}
+                today={today}
+                onOpen={onOpen}
+                onRequest={onRequest}
+              />
+            ))}
       </div>
     </section>
   );
@@ -213,18 +273,19 @@ function Column({
 
 export function PlannerBoard({
   board,
-  filter,
   today,
   actions,
   onRequest,
+  onOpen,
   entering,
   reveal,
 }: {
   board: PlannerBoardResponse;
-  filter: PlannerHorizonFilter;
   today: string;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
+  /** Opens a card's task panel. */
+  onOpen: (card: PlannerBoardCard) => void;
   entering: boolean;
   /** The card to scroll to and ring, from the page; null when there is none. */
   reveal: PlannerReveal | null;
@@ -239,11 +300,6 @@ export function PlannerBoard({
   const [lifted, setLifted] = useState(false);
   const activeCard =
     activeId === null ? undefined : plannerFindCard(board, activeId);
-
-  const todo = useMemo(
-    () => plannerFilterTodo(board.columns.todo, filter, today),
-    [board.columns.todo, filter, today],
-  );
 
   // The library's own announcements read out raw task ids; say the task and the
   // column instead.
@@ -293,12 +349,22 @@ export function PlannerBoard({
     actions.move(card, target as PlannerColumn);
   };
 
+  // What a column's "+" adds: the column itself, and the plan that column needs.
+  const addTo = (column: PlannerColumn) => (title: string) => {
+    const target = plannerColumnAddTarget(column, today);
+    return actions.createIn({
+      title,
+      column: target.column,
+      plan: target.plan,
+    });
+  };
+
   const shown: {
     column: PlannerColumnKey;
     cards: readonly PlannerBoardCard[];
   }[] = [
     { column: "backlog", cards: board.columns.backlog },
-    { column: "todo", cards: todo },
+    { column: "todo", cards: board.columns.todo },
     { column: "doing", cards: board.columns.doing },
     { column: "done", cards: board.columns.done },
   ];
@@ -338,16 +404,20 @@ export function PlannerBoard({
               dragging={activeId !== null}
               entering={entering}
               hint={
-                column === "todo" && filter !== "all"
-                  ? strings.columnHint.todoFiltered[filter]
-                  : strings.columnHint[
-                      column as Exclude<PlannerColumnKey, "dropped">
-                    ]
+                strings.columnHint[
+                  column as Exclude<PlannerColumnKey, "dropped">
+                ]
               }
               key={column}
               label={strings.column[column]}
               reveal={reveal}
               today={today}
+              onAdd={
+                (plannerColumns as readonly string[]).includes(column)
+                  ? addTo(column as PlannerColumn)
+                  : undefined
+              }
+              onOpen={onOpen}
               onRequest={onRequest}
             />
           ))}
@@ -361,6 +431,7 @@ export function PlannerBoard({
             className={lifted ? plannerLiftClass : undefined}
             overlay
             today={today}
+            onOpen={onOpen}
             onRequest={onRequest}
           />
         ) : null}

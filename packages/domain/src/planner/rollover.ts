@@ -21,7 +21,8 @@ import {
 
 // Rollover (fork-owned add-on, docs/planning-cockpit-implementation-plan.md,
 // section 4 "Rollover"): unfinished planned tasks move into the current period.
-// The cockpit runs it once on open and again when the local date changes.
+// The web no longer calls it (v1.2 drops periods and carry-over, section 13.x); the
+// route and this code stay, unused, under the additive-only rule.
 
 export type PlannerRolloverResult = {
   history: PlannerHistoryStatus;

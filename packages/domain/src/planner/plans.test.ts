@@ -749,7 +749,8 @@ describe("planner plans", () => {
       periodStart,
     });
     const none = { horizon: null, periodStart: null };
-    const thisWeek = { horizon: "week" as const, periodStart: THIS_WEEK };
+    // The To Do marker (v1.2): a To Do task is planned for today, with the day horizon.
+    const todayMarker = { horizon: "day" as const, periodStart: TODAY };
 
     // The plan's column-move table, row by row, with each starting state spelled out.
     const table: Array<{
@@ -760,18 +761,18 @@ describe("planner plans", () => {
       outcome: Outcome;
     }> = [
       {
-        name: "Backlog to To Do: plan = this week",
+        name: "Backlog to To Do: plan = today",
         from: "backlog",
         start: { status: "todo" },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
         name: "Backlog (NULL horizon) to To Do: a NULL horizon counts as no plan",
         from: "backlog",
         start: { status: "todo", plan: none },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
         name: "To Do to Backlog: plan cleared",
@@ -823,18 +824,18 @@ describe("planner plans", () => {
         outcome: { status: "done", plan: week(), events: [] },
       },
       {
-        name: "Doing (no plan) to To Do: plan = this week",
+        name: "Doing (no plan) to To Do: plan = today",
         from: "doing",
         start: { status: "in_progress" },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
-        name: "Doing (NULL horizon) to To Do: plan = this week",
+        name: "Doing (NULL horizon) to To Do: plan = today",
         from: "doing",
         start: { status: "in_progress", plan: none },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
         name: "Doing (day plan) to To Do: the plan is kept",
@@ -879,25 +880,25 @@ describe("planner plans", () => {
         outcome: { status: "todo", plan: null, events: [] },
       },
       {
-        name: "Done (no plan) to To Do: reopened, plan = this week",
+        name: "Done (no plan) to To Do: reopened, plan = today",
         from: "done",
         start: { status: "done" },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
-        name: "Done (NULL horizon) to To Do: plan = this week",
+        name: "Done (NULL horizon) to To Do: plan = today",
         from: "done",
         start: { status: "done", plan: none },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["planned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["planned"] },
       },
       {
-        name: "Done (past plan) to To Do: replanned to this week",
+        name: "Done (past plan) to To Do: replanned to today",
         from: "done",
         start: { status: "done", plan: day("2026-10-01") },
         to: "todo",
-        outcome: { status: "todo", plan: thisWeek, events: ["replanned"] },
+        outcome: { status: "todo", plan: todayMarker, events: ["replanned"] },
       },
       {
         name: "Done (plan for today) to To Do: the plan is kept",
@@ -1054,7 +1055,7 @@ describe("planner plans", () => {
       });
       expect(JSON.parse(event?.data ?? "{}")).toEqual({
         from: { horizon: "day", period_start: "2026-10-01" },
-        to: { horizon: "week", period_start: THIS_WEEK },
+        to: { horizon: "day", period_start: TODAY },
       });
     });
 

@@ -15,6 +15,7 @@ import {
 import {
   plannerProjectNode,
   plannerSyncState,
+  plannerTaskComment,
   plannerTaskEvent,
   plannerTaskPlan,
   plannerTaskSeen,
@@ -34,8 +35,9 @@ type ExpectedIndex = {
   columns: string[];
 };
 
-// What migrations/9000_planner_init.sql must create, written out independently
-// of the Drizzle definitions so the parity test below compares two sources.
+// What migrations/9000_planner_init.sql, 9001_planner_task_details.sql and
+// 9002_planner_start_date.sql must create, written out independently of the Drizzle definitions so the parity
+// test below compares two sources.
 const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
   planner_task_plan: [
     {
@@ -82,6 +84,14 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "parent_project_id", "sort_order"],
     },
   ],
+  planner_task_comment: [
+    {
+      name: "planner_task_comment_task_idx",
+      unique: false,
+      partial: false,
+      columns: ["task_id", "created_at"],
+    },
+  ],
 };
 
 const PLANNER_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -92,6 +102,7 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_task_seen: plannerTaskSeen,
   planner_sync_state: plannerSyncState,
   planner_project_node: plannerProjectNode,
+  planner_task_comment: plannerTaskComment,
 };
 
 let mf: Miniflare;
@@ -203,7 +214,7 @@ describe("planner migrations", () => {
   });
 
   describe("schema", () => {
-    it("creates the five planner tables and their indexes", async () => {
+    it("creates the six planner tables and their indexes", async () => {
       const tables = await rows<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'planner%' ORDER BY name",
       );
@@ -260,6 +271,7 @@ describe("planner migrations", () => {
       expect(targets).toEqual({
         planner_project_node: ["planner_project_node"],
         planner_sync_state: [],
+        planner_task_comment: [],
         planner_task_event: [],
         planner_task_plan: [],
         planner_task_seen: [],
@@ -505,6 +517,204 @@ describe("planner migrations", () => {
     });
   });
 
+  describe("9001 task details", () => {
+    it("adds a nullable REAL effort column to the plan row, and leaves existing rows NULL", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      // 9002 added start_date after it, so effort is no longer the last column.
+      expect(columns.find((column) => column.name === "effort")).toMatchObject({
+        name: "effort",
+        type: "REAL",
+        notnull: 0,
+        dflt_value: null,
+      });
+
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, created_at, updated_at)
+         VALUES ('t1', 'u1', 'week', '2026-10-05', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{ effort: number | null }>(
+        "SELECT effort FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row?.effort).toBeNull();
+    });
+
+    it("keeps a fractional effort as a number, and lets a NULL-horizon row hold one", async () => {
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, effort, created_at, updated_at)
+         VALUES ('t1', 'u1', NULL, NULL, 3.5, ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{
+        effort: number;
+        horizon: string | null;
+        period_start: string | null;
+      }>("SELECT * FROM planner_task_plan WHERE task_id = 't1'");
+      expect(row).toMatchObject({
+        effort: 3.5,
+        horizon: null,
+        period_start: null,
+      });
+    });
+
+    it("creates the comment table with a soft-delete column and no foreign key", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        pk: number;
+      }>("PRAGMA table_info(planner_task_comment)");
+      expect(
+        columns.map((column) => ({
+          name: column.name,
+          type: column.type,
+          notNull: column.notnull === 1,
+          primaryKey: column.pk > 0,
+        })),
+      ).toEqual([
+        { name: "id", type: "TEXT", notNull: true, primaryKey: true },
+        { name: "user_id", type: "TEXT", notNull: true, primaryKey: false },
+        { name: "task_id", type: "TEXT", notNull: true, primaryKey: false },
+        { name: "body", type: "TEXT", notNull: true, primaryKey: false },
+        { name: "created_at", type: "TEXT", notNull: true, primaryKey: false },
+        { name: "updated_at", type: "TEXT", notNull: true, primaryKey: false },
+        { name: "deleted_at", type: "TEXT", notNull: false, primaryKey: false },
+      ]);
+    });
+
+    it("keeps a comment whose task does not exist: there is no foreign key to tasks", async () => {
+      await run(
+        `INSERT INTO planner_task_comment (id, user_id, task_id, body, created_at, updated_at)
+         VALUES ('c1', 'u1', 'tasks/purged', 'Still here', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      expect(await count("planner_task_comment")).toBe(1);
+      const [row] = await rows<{ deleted_at: string | null }>(
+        "SELECT deleted_at FROM planner_task_comment WHERE id = 'c1'",
+      );
+      expect(row?.deleted_at).toBeNull();
+    });
+
+    it("rejects a comment without a body", async () => {
+      await expect(
+        run(
+          `INSERT INTO planner_task_comment (id, user_id, task_id, body, created_at, updated_at)
+           VALUES ('c1', 'u1', 't1', NULL, ?, ?)`,
+          NOW,
+          NOW,
+        ),
+      ).rejects.toThrow(/NOT NULL/i);
+    });
+
+    it("applies on top of a database that already has 9000, without touching its rows", async () => {
+      // A second database, migrated up to 9000 only: what the dev deployment
+      // looks like before this migration is applied.
+      const old = new Miniflare({
+        script: "export default { fetch() { return new Response('ok') } }",
+        modules: true,
+        compatibilityDate: "2026-07-10",
+        compatibilityFlags: ["nodejs_compat"],
+        d1Databases: { DB: "flaremo-planner-migrations-9001" },
+      });
+      try {
+        const oldDatabase = await old.getD1Database("DB");
+        await applyFlaremoMigrations(oldDatabase);
+        const statementsOf = async (name: string) =>
+          (await readFile(`${migrationsDirectory}/${name}`, "utf8"))
+            .split("--> statement-breakpoint")
+            .map((statement) => statement.trim())
+            .filter(Boolean);
+        for (const statement of await statementsOf("9000_planner_init.sql")) {
+          await oldDatabase.prepare(statement).run();
+        }
+        await oldDatabase
+          .prepare(
+            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, created_at, updated_at)
+             VALUES ('t1', 'u1', 'month', '2026-10-01', 2, NULL, ?, ?)`,
+          )
+          .bind(NOW, NOW)
+          .run();
+
+        for (const statement of await statementsOf(
+          "9001_planner_task_details.sql",
+        )) {
+          await oldDatabase.prepare(statement).run();
+        }
+
+        const kept = await oldDatabase
+          .prepare("SELECT * FROM planner_task_plan WHERE task_id = 't1'")
+          .all<Record<string, unknown>>();
+        expect(kept.results).toEqual([
+          {
+            task_id: "t1",
+            user_id: "u1",
+            horizon: "month",
+            period_start: "2026-10-01",
+            carry_count: 2,
+            dropped_at: null,
+            created_at: NOW,
+            updated_at: NOW,
+            effort: null,
+          },
+        ]);
+      } finally {
+        await old.dispose();
+      }
+    });
+  });
+
+  describe("9002 start date", () => {
+    it("adds a nullable TEXT start_date column to the plan row, last, and leaves existing rows NULL", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      expect(columns.at(-1)).toMatchObject({
+        name: "start_date",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+      });
+
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, created_at, updated_at)
+         VALUES ('t1', 'u1', 'day', '2026-10-08', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{ start_date: string | null }>(
+        "SELECT start_date FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row?.start_date).toBeNull();
+    });
+
+    it("lets a NULL-horizon row hold a start day, as it holds an effort", async () => {
+      await run(
+        `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, start_date, created_at, updated_at)
+         VALUES ('t1', 'u1', NULL, NULL, '2026-10-08', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{
+        start_date: string | null;
+        horizon: string | null;
+      }>(
+        "SELECT start_date, horizon FROM planner_task_plan WHERE task_id = 't1'",
+      );
+      expect(row).toEqual({ start_date: "2026-10-08", horizon: null });
+    });
+  });
+
   describe("migration files", () => {
     it("orders planner migration files by number and ignores the rest", () => {
       expect(
@@ -532,6 +742,9 @@ describe("planner migrations", () => {
         name.startsWith("9"),
       );
       expect(files).toContain("9000_planner_init.sql");
+      expect(files).toContain("9001_planner_task_details.sql");
+      expect(files).toContain("9002_planner_start_date.sql");
+      // applyPlannerMigrations reads this list, so both reach the test databases.
       expect(plannerMigrationFiles(files)).toEqual(files.sort());
 
       const journal = JSON.parse(

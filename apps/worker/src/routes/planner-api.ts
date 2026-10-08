@@ -1,19 +1,25 @@
 import {
   type PlannerBoardResponse,
+  type PlannerCommentListResponse,
+  type PlannerCommentResponse,
   type PlannerCreateTaskResponse,
+  type PlannerDeleteCommentResponse,
   type PlannerHistoryRangeResponse,
   type PlannerRolloverResponse,
   type PlannerRollupResponse,
+  type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
   type PlannerTreeNodeResponse,
   type PlannerTreeResponse,
   plannerBoardQuerySchema,
+  plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
   plannerRolloverSchema,
   plannerRollupQuerySchema,
   plannerTodayWithinBounds,
+  plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
   plannerUpdateTreeNodeSchema,
 } from "@flaremo/contracts";
@@ -24,19 +30,26 @@ import {
   ValidationError,
 } from "@flaremo/domain";
 import {
+  plannerAddComment,
   plannerApplyColumnMove,
   plannerCreateTask,
+  plannerDeleteComment,
   plannerDropTask,
+  plannerListComments,
   plannerReadBoard,
   plannerReadHistoryRange,
   plannerReadRollup,
+  plannerReadTaskDetail,
   plannerReadTaskHistory,
   plannerReadTaskPlan,
   plannerReadTree,
   plannerRollover,
+  plannerSetEffort,
   plannerSetPlan,
+  plannerSetStartDate,
   plannerSyncHistory,
   plannerUndropTask,
+  plannerUpdateComment,
   plannerUpsertProjectNode,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
@@ -109,6 +122,10 @@ function assertToday(today: string, now: Date) {
 
 // --- Board and rollover -----------------------------------------------------
 
+// The board syncs the history archive first, as rollover did before the web stopped
+// calling it (section 13.x): loading the cockpit is what keeps the archive current.
+// The sync is debounced to 30 seconds and never throws, so a failed sync leaves the
+// board readable (its `history` field says `paused`).
 plannerApi.get(
   "/board",
   zValidator("query", plannerBoardQuerySchema),
@@ -117,6 +134,7 @@ plannerApi.get(
       const { db, user } = await getRequestContext(c);
       const query = c.req.valid("query");
       assertToday(query.today, new Date());
+      await plannerSyncHistory(db, { userId: user.id, now: new Date() });
       const board: PlannerBoardResponse = await plannerReadBoard(db, {
         userId: user.id,
         today: query.today,
@@ -177,6 +195,7 @@ plannerApi.post(
         priority: body.priority,
         dueAt: body.due_at,
         projectId: body.project_id,
+        column: body.column,
         plan: body.plan,
         today: body.today,
       });
@@ -194,15 +213,33 @@ plannerApi.post(
   },
 );
 
-// One request can change a task's status column, plan, drop state and upstream
-// fields together. The order is the contract (documented on
+// Everything the task panel shows: the whole task (notes included, which a board
+// card leaves out), its plan with the effort estimate, its goal with the path of
+// goals above it, and its comments. A task that is missing, in the recycle bin or
+// someone else's is a 404. Reads are not throttled and write nothing.
+plannerApi.get("/tasks/:id", async (c) => {
+  try {
+    const { db, user } = await getRequestContext(c);
+    const detail: PlannerTaskDetailResponse = await plannerReadTaskDetail(db, {
+      userId: user.id,
+      taskId: parseTaskId(c.req.param("id")),
+    });
+    return c.json(detail);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// One request can change a task's status column, plan, effort, start date, drop state
+// and upstream fields together. The order is the contract (documented on
 // `plannerUpdateTaskSchema`): undrop first, so a dropped task can be planned or
 // moved in the same request; then the upstream fields, through upstream's own
 // `updateTask` and only the fields given; then the column move or the plan (the
-// schema rejects both together); and drop last, so it also clears a due date set
-// a step earlier. The steps are separate writes, so a step that fails leaves the
-// earlier ones applied. No step is given a shared `now`: each reads the clock
-// when it runs, so the events of one request come out in the order they happened.
+// schema rejects both together); then the effort estimate and the start date; and
+// drop last, so it also clears a due date set a step earlier. The steps are separate
+// writes, so a step that fails leaves the earlier ones applied. No step is given a
+// shared `now`: each reads the clock when it runs, so the events of one request come
+// out in the order they happened.
 plannerApi.patch(
   "/tasks/:id",
   zValidator("json", plannerUpdateTaskSchema),
@@ -211,7 +248,8 @@ plannerApi.patch(
       const context = await getRequestContext(c);
       const throttled = await rateLimitGuard(c, "planner", context.user.id);
       if (throttled) return throttled;
-      const { today, column, plan, dropped, ...fields } = c.req.valid("json");
+      const { today, column, plan, effort, start_date, dropped, ...fields } =
+        c.req.valid("json");
       assertToday(today, new Date());
       const { db, user } = context;
       const actor = resolveActor(c, context.credential);
@@ -242,6 +280,17 @@ plannerApi.patch(
           taskId,
           plan,
           today,
+        });
+      }
+      if (effort !== undefined) {
+        result = await plannerSetEffort(db, { user, actor, taskId, effort });
+      }
+      if (start_date !== undefined) {
+        result = await plannerSetStartDate(db, {
+          user,
+          actor,
+          taskId,
+          startDate: start_date,
         });
       }
       if (dropped === true) {
@@ -278,6 +327,95 @@ plannerApi.get("/tasks/:id/history", async (c) => {
         taskId: parseTaskId(c.req.param("id")),
       }),
     };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// --- Comments ---------------------------------------------------------------
+//
+// A task's comments live in planner_task_comment and are soft-deleted. A comment
+// is the caller's own, and so is its task, so another user's comment id, a deleted
+// one and one that never existed all answer 404. Every write is one batch with its
+// history event (`commented`, `comment_edited`, `comment_deleted`), which carries
+// the comment's id and never its text. DELETE is in the API's CORS allow-list
+// (upstream's task delete uses it), so it is a real DELETE.
+
+plannerApi.get("/tasks/:id/comments", async (c) => {
+  try {
+    const { db, user } = await getRequestContext(c);
+    const response: PlannerCommentListResponse = {
+      comments: await plannerListComments(db, {
+        userId: user.id,
+        taskId: parseTaskId(c.req.param("id")),
+      }),
+    };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+plannerApi.post(
+  "/tasks/:id/comments",
+  zValidator("json", plannerCreateCommentSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const { body } = c.req.valid("json");
+      const response: PlannerCommentResponse = {
+        comment: await plannerAddComment(context.db, {
+          user: context.user,
+          actor: resolveActor(c, context.credential),
+          taskId: parseTaskId(c.req.param("id")),
+          body,
+        }),
+      };
+      return c.json(response, 201);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+plannerApi.patch(
+  "/comments/:id",
+  zValidator("json", plannerUpdateCommentSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const { body } = c.req.valid("json");
+      const response: PlannerCommentResponse = {
+        comment: await plannerUpdateComment(context.db, {
+          user: context.user,
+          actor: resolveActor(c, context.credential),
+          commentId: c.req.param("id"),
+          body,
+        }),
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+plannerApi.delete("/comments/:id", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    await plannerDeleteComment(context.db, {
+      user: context.user,
+      actor: resolveActor(c, context.credential),
+      commentId: c.req.param("id"),
+    });
+    const response: PlannerDeleteCommentResponse = { ok: true };
     return c.json(response);
   } catch (error) {
     return jsonError(c, error);

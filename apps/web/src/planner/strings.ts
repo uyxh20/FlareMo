@@ -47,8 +47,6 @@ export type PlannerStrings = {
   columnHint: {
     backlog: string;
     todo: string;
-    /** To Do when a filter chip hides every card, by chip. */
-    todoFiltered: { day: string; week: string; month: string };
     doing: string;
     done: string;
     other: string;
@@ -66,11 +64,16 @@ export type PlannerStrings = {
     label: string;
     placeholder: string;
     add: string;
-    planFor: string;
   };
-  /** The plan choices of quick add, and the names of the filter chips. */
-  horizon: { backlog: string; day: string; week: string; month: string };
-  filter: { label: string; all: string };
+  /** The "+" in a column's header and the composer card it opens. */
+  columnAdd: {
+    /** The button's name and tooltip: "Add to Doing". */
+    add: (column: string) => string;
+    /** The composer's input name: "New task in Doing". */
+    label: (column: string) => string;
+    placeholder: string;
+    hint: string;
+  };
   showDropped: string;
 
   notice: {
@@ -93,8 +96,7 @@ export type PlannerStrings = {
   };
 
   card: {
-    carried: (count: number) => string;
-    carriedTitle: (count: number) => string;
+    starts: (date: string) => string;
     due: (date: string) => string;
     overdue: string;
     dropped: (when: string) => string;
@@ -102,7 +104,6 @@ export type PlannerStrings = {
   };
   menu: {
     moveTo: string;
-    plan: string;
     setDue: string;
     changeDue: string;
     clearDue: string;
@@ -111,20 +112,7 @@ export type PlannerStrings = {
     drop: string;
     undrop: string;
   };
-  planOption: {
-    today: string;
-    tomorrow: string;
-    thisWeek: string;
-    nextWeek: string;
-    thisMonth: string;
-    nextMonth: string;
-    pickDay: string;
-    clear: string;
-  };
   dayDialog: {
-    planTitle: string;
-    planDescription: string;
-    planConfirm: string;
     dueTitle: string;
     dueDescription: string;
     dueConfirm: string;
@@ -133,8 +121,8 @@ export type PlannerStrings = {
   dropDialog: { title: string; body: string; confirm: string };
 
   toast: {
-    carried: (count: number) => string;
-    added: { backlog: string; day: string; week: string; month: string };
+    /** A task added from a column's "+": "Added to Doing". */
+    addedTo: (column: string) => string;
     addFailed: string;
     /** The edit dialog could not fetch the task it opens with. */
     openFailed: string;
@@ -146,6 +134,7 @@ export type PlannerStrings = {
     dueSet: (date: string) => string;
     dueCleared: string;
     dueFailed: string;
+    startFailed: string;
     dropped: string;
     dropFailed: string;
     undropped: string;
@@ -153,9 +142,77 @@ export type PlannerStrings = {
     rateLimited: string;
     planNotSaved: string;
     retryPlan: string;
+    /** The task panel's edits that nothing else on the page confirms. */
+    titleFailed: string;
+    priorityFailed: string;
+    goalFailed: string;
+    effortFailed: string;
+    notesFailed: string;
+    commentAddFailed: string;
+    commentEditFailed: string;
+    commentDeleteFailed: string;
   };
 
   priority: { none: string; low: string; medium: string; high: string };
+
+  /** The task panel: a card opened into its properties, notes, comments and history. */
+  panel: {
+    /** The dialog's name for a screen reader. */
+    label: string;
+    loading: string;
+    /** The task is gone (deleted, or a stale link). */
+    notFound: string;
+    titleLabel: string;
+    titlePlaceholder: string;
+    /** What a property with no value shows, as Notion does. */
+    empty: string;
+    none: string;
+    property: {
+      status: string;
+      start: string;
+      due: string;
+      priority: string;
+      goal: string;
+      effort: string;
+      quarter: string;
+      created: string;
+    };
+    quarterHint: string;
+    /** The start date's clear button. */
+    clearStart: string;
+    effortInvalid: string;
+    noGoals: string;
+    notes: {
+      title: string;
+      placeholder: string;
+      saving: string;
+      saved: string;
+      failed: string;
+      retry: string;
+    };
+    comments: {
+      title: string;
+      empty: string;
+      placeholder: string;
+      /** The new-comment box's name. */
+      label: string;
+      send: string;
+      sending: string;
+      hint: string;
+      edit: string;
+      remove: string;
+      save: string;
+      edited: string;
+      you: string;
+      deleteTitle: string;
+      deleteBody: string;
+      deleteConfirm: string;
+    };
+    footer: {
+      created: (when: string) => string;
+      updated: (when: string) => string;
+    };
+  };
 
   history: {
     title: string;
@@ -182,11 +239,20 @@ export type PlannerStrings = {
     restored: string;
     purged: string;
     edited: string;
+    /** The panel's effort estimate: "Effort set to 3". */
+    effortSet: (value: string) => string;
+    effortCleared: string;
+    startDateSet: (date: string) => string;
+    startDateCleared: string;
+    commented: string;
+    commentEdited: string;
+    commentDeleted: string;
     statusChanged: (status: string) => string;
     unknown: (type: string) => string;
     detail: {
       was: (label: string) => string;
       wasDue: (date: string) => string;
+      wasEffort: (value: string) => string;
       renamed: (title: string) => string;
       due: (date: string) => string;
       dueCleared: string;
@@ -214,12 +280,7 @@ const en: PlannerStrings = {
   },
   columnHint: {
     backlog: "Tasks you have not planned yet wait here.",
-    todo: "Plan a task for today, this week or this month.",
-    todoFiltered: {
-      day: "Nothing planned for today. Pick All to see everything.",
-      week: "Nothing planned for this week. Pick All to see everything.",
-      month: "Nothing planned for this month. Pick All to see everything.",
-    },
+    todo: "Tasks you have decided to do next.",
     doing: "Drag a card here when you start it.",
     done: "Finished tasks stay here for two weeks.",
     other: "Tasks with a status the cockpit does not know.",
@@ -236,15 +297,13 @@ const en: PlannerStrings = {
     label: "New task",
     placeholder: "Add a task…",
     add: "Add",
-    planFor: "Plan for",
   },
-  horizon: {
-    backlog: "Backlog",
-    day: "Today",
-    week: "This week",
-    month: "This month",
+  columnAdd: {
+    add: (column) => `Add to ${column}`,
+    label: (column) => `New task in ${column}`,
+    placeholder: "Add a task…",
+    hint: "Enter to add, Esc to cancel",
   },
-  filter: { label: "Filter To Do by plan", all: "All" },
   showDropped: "Show dropped",
 
   notice: {
@@ -256,7 +315,7 @@ const en: PlannerStrings = {
   },
   empty: {
     title: "Nothing here yet",
-    body: "Add your first task above, then plan it for today, this week or this month.",
+    body: "Add your first task above, then move it to To Do when you are ready.",
     action: "Add a task",
   },
 
@@ -283,11 +342,7 @@ const en: PlannerStrings = {
   },
 
   card: {
-    carried: (count) => `Carried ×${count}`,
-    carriedTitle: (count) =>
-      count === 1
-        ? "Carried over once, because it was not finished"
-        : `Carried over ${count} times, because it was not finished`,
+    starts: (date) => `Starts ${date}`,
     due: (date) => `Due ${date}`,
     overdue: "Overdue",
     dropped: (when) => `Dropped ${when}`,
@@ -295,7 +350,6 @@ const en: PlannerStrings = {
   },
   menu: {
     moveTo: "Move to",
-    plan: "Plan",
     setDue: "Set due date…",
     changeDue: "Change due date…",
     clearDue: "Clear due date",
@@ -304,20 +358,7 @@ const en: PlannerStrings = {
     drop: "Drop",
     undrop: "Undrop",
   },
-  planOption: {
-    today: "Today",
-    tomorrow: "Tomorrow",
-    thisWeek: "This week",
-    nextWeek: "Next week",
-    thisMonth: "This month",
-    nextMonth: "Next month",
-    pickDay: "Pick a day…",
-    clear: "Clear plan",
-  },
   dayDialog: {
-    planTitle: "Plan for a day",
-    planDescription: "Choose the day this task should get done.",
-    planConfirm: "Plan",
     dueTitle: "Due date",
     dueDescription:
       "The due date is separate from the plan. Overdue reminders follow it.",
@@ -331,16 +372,7 @@ const en: PlannerStrings = {
   },
 
   toast: {
-    carried: (count) =>
-      count === 1
-        ? "1 unfinished task carried forward"
-        : `${count} unfinished tasks carried forward`,
-    added: {
-      backlog: "Added to Backlog",
-      day: "Added for today",
-      week: "Added for this week",
-      month: "Added for this month",
-    },
+    addedTo: (column) => `Added to ${column}`,
     addFailed: "Couldn't add the task",
     openFailed: "Couldn't open the task",
     moved: (column) => `Moved to ${column}`,
@@ -351,6 +383,7 @@ const en: PlannerStrings = {
     dueSet: (date) => `Due date set to ${date}`,
     dueCleared: "Due date cleared",
     dueFailed: "Couldn't update the due date",
+    startFailed: "Couldn't set the start date",
     dropped: "Task dropped",
     dropFailed: "Couldn't drop the task",
     undropped: "Task undropped",
@@ -359,9 +392,71 @@ const en: PlannerStrings = {
       "Too many changes at once. Your edit was undone; try again in a moment.",
     planNotSaved: "Task added, but its plan wasn't saved.",
     retryPlan: "Retry plan",
+    titleFailed: "Couldn't rename the task",
+    priorityFailed: "Couldn't change the priority",
+    goalFailed: "Couldn't change the goal",
+    effortFailed: "Couldn't save the effort",
+    notesFailed: "Couldn't save the notes",
+    commentAddFailed: "Couldn't add the comment",
+    commentEditFailed: "Couldn't save the comment",
+    commentDeleteFailed: "Couldn't delete the comment",
   },
 
   priority: { none: "No priority", low: "Low", medium: "Medium", high: "High" },
+
+  panel: {
+    label: "Task details",
+    loading: "Loading the task",
+    notFound:
+      "This task isn't available any more. It may have been deleted. Close this panel to go back to the board.",
+    titleLabel: "Task title",
+    titlePlaceholder: "Untitled",
+    empty: "Empty",
+    none: "None",
+    property: {
+      status: "Status",
+      start: "Start date",
+      due: "Due date",
+      priority: "Priority",
+      goal: "Goal",
+      effort: "Effort",
+      quarter: "Quarter",
+      created: "Created",
+    },
+    quarterHint: "from start or due date",
+    clearStart: "Clear start date",
+    effortInvalid: "Use a number from 0 to 999, with one decimal at most.",
+    noGoals: "No projects yet. Create one under Projects.",
+    notes: {
+      title: "Notes",
+      placeholder: "Add notes…",
+      saving: "Saving…",
+      saved: "Saved",
+      failed: "Couldn't save",
+      retry: "Retry",
+    },
+    comments: {
+      title: "Comments",
+      empty: "No comments yet.",
+      placeholder: "Add a comment…",
+      label: "Write a comment",
+      send: "Send",
+      sending: "Sending…",
+      hint: "Enter to send, Shift+Enter for a new line",
+      edit: "Edit comment",
+      remove: "Delete comment",
+      save: "Save",
+      edited: "edited",
+      you: "You",
+      deleteTitle: "Delete this comment?",
+      deleteBody: "It is removed from this task. This can't be undone.",
+      deleteConfirm: "Delete",
+    },
+    footer: {
+      created: (when) => `Created ${when}`,
+      updated: (when) => `Updated ${when}`,
+    },
+  },
 
   history: {
     title: "History",
@@ -387,11 +482,19 @@ const en: PlannerStrings = {
     restored: "Restored",
     purged: "Purged",
     edited: "Edited",
+    effortSet: (value) => `Effort set to ${value}`,
+    effortCleared: "Effort cleared",
+    startDateSet: (date) => `Start date set to ${date}`,
+    startDateCleared: "Start date cleared",
+    commented: "Comment added",
+    commentEdited: "Comment edited",
+    commentDeleted: "Comment deleted",
     statusChanged: (status) => `Status changed to ${status}`,
     unknown: (type) => type,
     detail: {
       was: (label) => `Was ${label}`,
       wasDue: (date) => `Was due ${date}`,
+      wasEffort: (value) => `Was ${value}`,
       renamed: (title) => `Renamed to “${title}”`,
       due: (date) => `Due ${date}`,
       dueCleared: "Due date cleared",
@@ -419,12 +522,7 @@ const zhCN: PlannerStrings = {
   },
   columnHint: {
     backlog: "还没安排的任务先放在这里。",
-    todo: "把任务安排到今天、本周或本月。",
-    todoFiltered: {
-      day: "今天还没有计划。选“全部”可查看所有待办。",
-      week: "本周还没有计划。选“全部”可查看所有待办。",
-      month: "本月还没有计划。选“全部”可查看所有待办。",
-    },
+    todo: "已决定接下来要做的任务。",
     doing: "开始做某件事时，把卡片拖到这里。",
     done: "完成的任务会在这里保留两周。",
     other: "状态未知的任务会出现在这里。",
@@ -441,10 +539,13 @@ const zhCN: PlannerStrings = {
     label: "新任务",
     placeholder: "添加任务…",
     add: "添加",
-    planFor: "安排到",
   },
-  horizon: { backlog: "待规划", day: "今天", week: "本周", month: "本月" },
-  filter: { label: "按计划筛选待办", all: "全部" },
+  columnAdd: {
+    add: (column) => `添加到${column}`,
+    label: (column) => `在${column}中新建任务`,
+    placeholder: "添加任务…",
+    hint: "回车添加，Esc 取消",
+  },
   showDropped: "显示已放弃",
 
   notice: {
@@ -481,8 +582,7 @@ const zhCN: PlannerStrings = {
   },
 
   card: {
-    carried: (count) => `顺延 ×${count}`,
-    carriedTitle: (count) => `因未完成已顺延 ${count} 次`,
+    starts: (date) => `${date} 开始`,
     due: (date) => `截止 ${date}`,
     overdue: "已逾期",
     dropped: (when) => `${when}放弃`,
@@ -490,7 +590,6 @@ const zhCN: PlannerStrings = {
   },
   menu: {
     moveTo: "移动到",
-    plan: "安排计划",
     setDue: "设置截止日期…",
     changeDue: "修改截止日期…",
     clearDue: "清除截止日期",
@@ -499,20 +598,7 @@ const zhCN: PlannerStrings = {
     drop: "放弃",
     undrop: "撤销放弃",
   },
-  planOption: {
-    today: "今天",
-    tomorrow: "明天",
-    thisWeek: "本周",
-    nextWeek: "下周",
-    thisMonth: "本月",
-    nextMonth: "下月",
-    pickDay: "选择日期…",
-    clear: "清除计划",
-  },
   dayDialog: {
-    planTitle: "安排到某一天",
-    planDescription: "选择这项任务要完成的日期。",
-    planConfirm: "安排",
     dueTitle: "截止日期",
     dueDescription: "截止日期和计划是两回事，逾期提醒按截止日期发送。",
     dueConfirm: "保存",
@@ -525,13 +611,7 @@ const zhCN: PlannerStrings = {
   },
 
   toast: {
-    carried: (count) => `${count} 项未完成任务已顺延`,
-    added: {
-      backlog: "已添加到待规划",
-      day: "已安排到今天",
-      week: "已安排到本周",
-      month: "已安排到本月",
-    },
+    addedTo: (column) => `已添加到${column}`,
     addFailed: "添加任务失败",
     openFailed: "无法打开任务",
     moved: (column) => `已移到${column}`,
@@ -542,6 +622,7 @@ const zhCN: PlannerStrings = {
     dueSet: (date) => `截止日期已设为 ${date}`,
     dueCleared: "已清除截止日期",
     dueFailed: "更新截止日期失败",
+    startFailed: "设置开始日期失败",
     dropped: "已放弃任务",
     dropFailed: "放弃任务失败",
     undropped: "已撤销放弃",
@@ -549,9 +630,70 @@ const zhCN: PlannerStrings = {
     rateLimited: "改动太频繁，刚才的操作已撤回，请稍后再试。",
     planNotSaved: "任务已添加，但计划没有保存成功。",
     retryPlan: "重试计划",
+    titleFailed: "重命名任务失败",
+    priorityFailed: "修改优先级失败",
+    goalFailed: "修改目标失败",
+    effortFailed: "保存工作量失败",
+    notesFailed: "保存备注失败",
+    commentAddFailed: "添加评论失败",
+    commentEditFailed: "保存评论失败",
+    commentDeleteFailed: "删除评论失败",
   },
 
   priority: { none: "无优先级", low: "低", medium: "中", high: "高" },
+
+  panel: {
+    label: "任务详情",
+    loading: "正在加载任务",
+    notFound: "这项任务已不存在，可能已被删除。关闭此面板即可回到看板。",
+    titleLabel: "任务标题",
+    titlePlaceholder: "无标题",
+    empty: "空",
+    none: "无",
+    property: {
+      status: "状态",
+      start: "开始日期",
+      due: "截止日期",
+      priority: "优先级",
+      goal: "目标",
+      effort: "工作量",
+      quarter: "季度",
+      created: "创建时间",
+    },
+    quarterHint: "由开始或截止日期得出",
+    clearStart: "清除开始日期",
+    effortInvalid: "请输入 0 到 999 的数字，最多一位小数。",
+    noGoals: "还没有项目，请先在“项目”里创建。",
+    notes: {
+      title: "备注",
+      placeholder: "添加备注…",
+      saving: "正在保存…",
+      saved: "已保存",
+      failed: "保存失败",
+      retry: "重试",
+    },
+    comments: {
+      title: "评论",
+      empty: "还没有评论。",
+      placeholder: "添加评论…",
+      label: "写评论",
+      send: "发送",
+      sending: "正在发送…",
+      hint: "回车发送，Shift+回车换行",
+      edit: "编辑评论",
+      remove: "删除评论",
+      save: "保存",
+      edited: "已编辑",
+      you: "你",
+      deleteTitle: "删除这条评论？",
+      deleteBody: "评论会从这项任务中移除，无法撤销。",
+      deleteConfirm: "删除",
+    },
+    footer: {
+      created: (when) => `创建于 ${when}`,
+      updated: (when) => `更新于 ${when}`,
+    },
+  },
 
   history: {
     title: "历史记录",
@@ -577,11 +719,19 @@ const zhCN: PlannerStrings = {
     restored: "恢复",
     purged: "彻底删除",
     edited: "编辑",
+    effortSet: (value) => `工作量设为 ${value}`,
+    effortCleared: "已清除工作量",
+    startDateSet: (date) => `开始日期设为 ${date}`,
+    startDateCleared: "已清除开始日期",
+    commented: "添加了评论",
+    commentEdited: "编辑了评论",
+    commentDeleted: "删除了评论",
     statusChanged: (status) => `状态改为 ${status}`,
     unknown: (type) => type,
     detail: {
       was: (label) => `原为 ${label}`,
       wasDue: (date) => `原截止 ${date}`,
+      wasEffort: (value) => `原为 ${value}`,
       renamed: (title) => `改名为“${title}”`,
       due: (date) => `截止 ${date}`,
       dueCleared: "已清除截止日期",

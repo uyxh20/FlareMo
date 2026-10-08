@@ -1,7 +1,13 @@
 import { plannerIsValidDayKey } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { plannerTaskEvent } from "@flaremo/db/src/schema/planner";
-import { ValidationError } from "../errors";
+import { tasks } from "@flaremo/db";
+import {
+  type PlannerTaskPlanRow,
+  plannerTaskEvent,
+  plannerTaskPlan,
+} from "@flaremo/db/src/schema/planner";
+import { and, eq, isNull } from "drizzle-orm";
+import { NotFoundError, ValidationError } from "../errors";
 import { parseResourceName } from "../ids";
 import type { TaskActor } from "../tasks";
 
@@ -98,6 +104,23 @@ export function plannerShiftDay(dayKey: string, days: number): string {
 }
 
 /**
+ * The planner-sourced event types: the plan events, then the task panel's
+ * (migrations 9001 and 9002). Comment events carry only `{comment_id}`, never the
+ * text.
+ */
+export type PlannerEventType =
+  | "planned"
+  | "replanned"
+  | "unplanned"
+  | "dropped"
+  | "undropped"
+  | "effort_changed"
+  | "start_date_changed"
+  | "commented"
+  | "comment_edited"
+  | "comment_deleted";
+
+/**
  * One planner-sourced event row, for a statement that runs in the same batch as
  * the planner-table change it describes (M3). `created_at` equals `occurred_at`
  * because a planner event is archived the moment it happens.
@@ -108,7 +131,7 @@ export function plannerEventStatement(
     userId: string;
     taskId: string;
     taskTitle: string | null;
-    type: "planned" | "replanned" | "unplanned" | "dropped" | "undropped";
+    type: PlannerEventType;
     data: Record<string, unknown>;
     actor: PlannerActor;
     occurredAt: string;
@@ -126,4 +149,51 @@ export function plannerEventStatement(
     occurredAt: event.occurredAt,
     createdAt: event.occurredAt,
   });
+}
+
+/**
+ * One of the caller's live tasks, or a 404 like upstream's `requireTask`. A task
+ * that is missing, in the recycle bin or someone else's looks exactly the same.
+ */
+export async function plannerLoadLiveTask(
+  db: FlareMoDb,
+  userId: string,
+  taskId: string,
+) {
+  const row = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      status: tasks.status,
+      dueAt: tasks.dueAt,
+    })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.id, taskId),
+        eq(tasks.userId, userId),
+        isNull(tasks.deletedAt),
+      ),
+    )
+    .get();
+  if (!row) throw new NotFoundError(`Task not found: ${taskId}`);
+  return row;
+}
+
+/** A task's plan row, or undefined. A row can exist with a NULL horizon (effort only). */
+export async function plannerLoadPlan(
+  db: FlareMoDb,
+  userId: string,
+  taskId: string,
+): Promise<PlannerTaskPlanRow | undefined> {
+  return db
+    .select()
+    .from(plannerTaskPlan)
+    .where(
+      and(
+        eq(plannerTaskPlan.taskId, taskId),
+        eq(plannerTaskPlan.userId, userId),
+      ),
+    )
+    .get();
 }

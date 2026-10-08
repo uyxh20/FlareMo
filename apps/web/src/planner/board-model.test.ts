@@ -13,12 +13,19 @@ import {
   plannerFindCard,
   plannerHasPlan,
   plannerIsOverdue,
+  plannerIsPendingCard,
+  plannerPendingCard,
+  plannerPendingCardId,
   plannerPlaceCard,
   plannerPredictDrop,
   plannerPredictDue,
   plannerPredictMove,
   plannerPredictPlan,
+  plannerPredictPriority,
+  plannerPredictProject,
+  plannerPredictTitle,
   plannerPredictUndrop,
+  plannerRemoveCard,
   plannerSortCards,
   plannerUpdateCard,
 } from "./board-model";
@@ -27,7 +34,7 @@ import {
 const TODAY = "2026-10-07";
 const WEEK = "2026-10-05";
 const NOW = new Date("2026-10-07T09:00:00.000Z");
-const CONTEXT = { today: TODAY, week: WEEK, now: NOW };
+const CONTEXT = { today: TODAY, now: NOW };
 
 let sequence = 0;
 
@@ -50,6 +57,7 @@ function card(overrides: Partial<PlannerBoardCard> = {}): PlannerBoardCard {
     period_start: null,
     carry_count: 0,
     dropped_at: null,
+    start_date: null,
     ...overrides,
   };
 }
@@ -359,12 +367,12 @@ describe("plannerPredictMove", () => {
     expect(move(dropped, "doing")).toBe(dropped);
   });
 
-  it("Backlog to To Do plans this week", () => {
+  it("Backlog to To Do takes the To Do marker for today", () => {
     const next = move(card(), "todo");
     expect(next).toMatchObject({
       status: "todo",
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
     expect(plannerCardColumn(next)).toBe("todo");
   });
@@ -409,7 +417,7 @@ describe("plannerPredictMove", () => {
     }
   });
 
-  it("Doing to To Do keeps a plan and gives a planless card this week", () => {
+  it("Doing to To Do keeps a plan and gives a planless card the To Do marker", () => {
     const day = planned({
       status: "in_progress",
       horizon: "day",
@@ -422,8 +430,8 @@ describe("plannerPredictMove", () => {
     });
     expect(move(card({ status: "in_progress" }), "todo")).toMatchObject({
       status: "todo",
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
   });
 
@@ -460,18 +468,18 @@ describe("plannerPredictMove", () => {
       horizon: "day",
       period_start: "2026-10-09",
     });
-    // The plan is past: this week.
+    // The plan is past: the To Do marker for today.
     expect(
       move(finished({ horizon: "day", period_start: "2026-10-02" }), "todo"),
-    ).toMatchObject({ horizon: "week", period_start: WEEK });
+    ).toMatchObject({ horizon: "day", period_start: TODAY });
     // A week plan that started last week is past too.
     expect(
       move(finished({ horizon: "week", period_start: "2026-09-28" }), "todo"),
-    ).toMatchObject({ horizon: "week", period_start: WEEK });
+    ).toMatchObject({ horizon: "day", period_start: TODAY });
     // No plan at all.
     expect(move(finished({}), "todo")).toMatchObject({
-      horizon: "week",
-      period_start: WEEK,
+      horizon: "day",
+      period_start: TODAY,
     });
   });
 
@@ -492,6 +500,7 @@ describe("plannerPredictMove", () => {
     expect(move(card({ status: "blocked" }), "doing").status).toBe(
       "in_progress",
     );
+    // Its plan is kept: only a card with no plan gets the To Do marker.
     expect(move(planned({ status: "blocked" }), "todo")).toMatchObject({
       status: "todo",
       horizon: "week",
@@ -556,6 +565,7 @@ describe("the other predictions", () => {
     );
     expect(next).toMatchObject({
       dropped_at: NOW.toISOString(),
+      start_date: null,
       due_at: null,
       horizon: "day",
     });
@@ -602,6 +612,8 @@ describe("plannerCardFromTask", () => {
           period_start: TODAY,
           carry_count: 2,
           dropped_at: null,
+          start_date: null,
+          effort: null,
           created_at: "2026-10-07T09:00:00.000Z",
           updated_at: "2026-10-07T09:00:00.000Z",
         },
@@ -623,6 +635,7 @@ describe("plannerCardFromTask", () => {
       period_start: TODAY,
       carry_count: 2,
       dropped_at: null,
+      start_date: null,
     });
   });
 
@@ -637,6 +650,7 @@ describe("plannerCardFromTask", () => {
       period_start: null,
       carry_count: 0,
       dropped_at: null,
+      start_date: null,
       project_id: null,
       project_name: null,
     });
@@ -661,5 +675,141 @@ describe("plannerIsOverdue", () => {
         TODAY,
       ),
     ).toBe(false);
+  });
+});
+
+describe("the panel's predictions", () => {
+  it("trims a new title like upstream does, and stamps the edit", () => {
+    const before = card({ title: "Old" });
+    const after = plannerPredictTitle(before, "  New title \n", NOW);
+    expect(after).toEqual({
+      ...before,
+      title: "New title",
+      updated_at: NOW.toISOString(),
+    });
+    expect(before.title).toBe("Old");
+  });
+
+  it("sets a priority", () => {
+    const before = card();
+    expect(plannerPredictPriority(before, "high", NOW)).toEqual({
+      ...before,
+      priority: "high",
+      updated_at: NOW.toISOString(),
+    });
+    expect(
+      plannerPredictPriority(card({ priority: "low" }), "none", NOW),
+    ).toMatchObject({ priority: "none" });
+  });
+
+  it("moves a task to a goal, and takes it out of one", () => {
+    const before = card();
+    const moved = plannerPredictProject(
+      before,
+      { id: "projects/p1", name: "Run a marathon" },
+      NOW,
+    );
+    expect(moved).toMatchObject({
+      project_id: "projects/p1",
+      project_name: "Run a marathon",
+      updated_at: NOW.toISOString(),
+    });
+    expect(plannerPredictProject(moved, null, NOW)).toMatchObject({
+      project_id: null,
+      project_name: null,
+    });
+  });
+});
+
+describe("cards that wait for the server", () => {
+  const pending = (
+    column: PlannerColumn,
+    plan: Parameters<typeof plannerPendingCard>[0]["plan"] = null,
+  ) =>
+    plannerPendingCard({
+      id: plannerPendingCardId(1),
+      title: "  Write it up ",
+      column,
+      plan,
+      now: NOW,
+    });
+
+  it("gives a pending card an id no server task has", () => {
+    const id = plannerPendingCardId(7);
+    expect(id).toBe("tasks/pending-7");
+    expect(plannerIsPendingCard({ id })).toBe(true);
+    expect(
+      plannerIsPendingCard({
+        id: "tasks/0b2e5f6a-1111-4222-8333-444455556666",
+      }),
+    ).toBe(false);
+    expect(plannerIsPendingCard({ id: "tasks/t001" })).toBe(false);
+  });
+
+  it("makes the card the server will make, column by column", () => {
+    expect(pending("backlog")).toMatchObject({
+      title: "Write it up",
+      status: "todo",
+      horizon: null,
+      period_start: null,
+      completed_at: null,
+      created_at: NOW.toISOString(),
+    });
+    expect(
+      pending("todo", { horizon: "week", day: "2026-10-07" }),
+    ).toMatchObject({
+      status: "todo",
+      horizon: "week",
+      // Any day inside the period counts: the card holds the period's start.
+      period_start: WEEK,
+    });
+    expect(pending("doing")).toMatchObject({
+      status: "in_progress",
+      completed_at: null,
+    });
+    expect(pending("done")).toMatchObject({
+      status: "done",
+      completed_at: NOW.toISOString(),
+    });
+  });
+
+  it("lands each pending card in the column it was made for", () => {
+    const week = { horizon: "week", day: WEEK } as const;
+    for (const [column, plan] of [
+      ["backlog", null],
+      ["todo", week],
+      ["doing", null],
+      ["done", null],
+    ] as const) {
+      const placed = plannerPlaceCard(board(), pending(column, plan));
+      expect(plannerCardColumn(pending(column, plan)), column).toBe(column);
+      expect(ids(placed.columns[column]), column).toEqual([
+        plannerPendingCardId(1),
+      ]);
+    }
+  });
+
+  it("removes a card wherever it is, and leaves the board alone when it is not there", () => {
+    const keep = card({ id: "tasks/keep" });
+    const gone = pending("doing");
+    const withBoth = plannerPlaceCard(board({ backlog: [keep] }), gone);
+    expect(ids(withBoth.columns.doing)).toEqual([gone.id]);
+
+    const removed = plannerRemoveCard(withBoth, gone.id);
+    expect(ids(removed.columns.doing)).toEqual([]);
+    expect(ids(removed.columns.backlog)).toEqual(["tasks/keep"]);
+    // Columns it was not in keep their array.
+    expect(removed.columns.backlog).toBe(withBoth.columns.backlog);
+    expect(plannerRemoveCard(removed, "tasks/not-there")).toEqual(removed);
+  });
+
+  it("swaps the pending card for the real one in a single place", () => {
+    const temp = pending("backlog");
+    const real = card({ id: "tasks/real", title: "Write it up" });
+    const swapped = plannerPlaceCard(
+      plannerRemoveCard(plannerPlaceCard(board(), temp), temp.id),
+      real,
+    );
+    expect(ids(swapped.columns.backlog)).toEqual(["tasks/real"]);
   });
 });

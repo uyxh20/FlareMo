@@ -6,13 +6,14 @@ import {
   type PlannerPlanInput,
   plannerNextPeriodStart,
   plannerPeriodStart,
+  plannerTodoHorizon,
   type TaskDto,
 } from "@flaremo/contracts";
 
 // The cockpit board as plain data (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, sections 4 and 5): which column a
 // card belongs in, how a column is ordered, and what a card looks like right
-// after an edit. How the filter chips narrow To Do is in todo-filter.ts.
+// after an edit. There are no periods to filter by any more (section 13.x).
 //
 // The server decides all of this and the page refetches it after every change, so
 // nothing here is authoritative. It exists so an edit can show up the instant it
@@ -216,17 +217,17 @@ function isPastPlan(card: CardPlan, today: string): boolean {
  *
  *   to Backlog   status todo, plan cleared
  *   to To Do     status todo; from Backlog, with no plan, or from Done with a
- *                plan that is past: plan = this week; otherwise the plan stays
+ *                plan that is past: the To Do marker (today); otherwise the plan stays
  *   to Doing     status in_progress, plan kept
  *   to Done      status done (completed now), plan kept
  *
  * A move to the column the card is in, and any move of a dropped card, change
- * nothing. `week` is this week's Monday, from the board's periods.
+ * nothing.
  */
 export function plannerPredictMove(
   card: PlannerBoardCard,
   to: PlannerColumn,
-  context: { today: string; week: string; now: Date },
+  context: { today: string; now: Date },
 ): PlannerBoardCard {
   const from = plannerCardColumn(card);
   if (from === "dropped" || from === to) return card;
@@ -249,8 +250,11 @@ export function plannerPredictMove(
         !plannerHasPlan(card) ||
         (from === "done" && isPastPlan(card, context.today))
       ) {
-        next.horizon = "week";
-        next.period_start = context.week;
+        next.horizon = plannerTodoHorizon;
+        next.period_start = plannerPeriodStart(
+          plannerTodoHorizon,
+          context.today,
+        );
       }
       break;
     case "doing":
@@ -265,7 +269,7 @@ export function plannerPredictMove(
   return next;
 }
 
-/** The card after a plan change. `carry_count` is never touched here: only rollover moves it. */
+/** The card after a plan change (a retry of a plan that did not save, or a plan set by hand). */
 export function plannerPredictPlan(
   card: PlannerBoardCard,
   plan: PlannerPlanInput | null,
@@ -279,12 +283,52 @@ export function plannerPredictPlan(
   };
 }
 
+/** The card after its start date changes (a planner-side field: no column moves). */
+export function plannerPredictStartDate(
+  card: PlannerBoardCard,
+  startDate: string | null,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, start_date: startDate, updated_at: now.toISOString() };
+}
+
 export function plannerPredictDue(
   card: PlannerBoardCard,
   due: string | null,
   now: Date,
 ): PlannerBoardCard {
   return { ...card, due_at: due, updated_at: now.toISOString() };
+}
+
+/** A new title, as upstream stores it (trimmed). */
+export function plannerPredictTitle(
+  card: PlannerBoardCard,
+  title: string,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, title: title.trim(), updated_at: now.toISOString() };
+}
+
+export function plannerPredictPriority(
+  card: PlannerBoardCard,
+  priority: string,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, priority, updated_at: now.toISOString() };
+}
+
+/** Moving a task to another goal (or to none): its project and the name the card shows. */
+export function plannerPredictProject(
+  card: PlannerBoardCard,
+  project: { id: string; name: string } | null,
+  now: Date,
+): PlannerBoardCard {
+  return {
+    ...card,
+    project_id: project?.id ?? null,
+    project_name: project?.name ?? null,
+    updated_at: now.toISOString(),
+  };
 }
 
 /** Dropping keeps the plan and clears the due date (decision D1). */
@@ -334,7 +378,84 @@ export function plannerCardFromTask(
     period_start: plan?.period_start ?? null,
     carry_count: plan?.carry_count ?? 0,
     dropped_at: plan?.dropped_at ?? null,
+    start_date: plan?.start_date ?? null,
   };
+}
+
+// --- Cards the server has not answered for yet --------------------------------
+
+// A column's "+" button puts the new card on the board the instant Enter is
+// pressed (an optimistic insert), under an id no server task can have: real ids are
+// `tasks/<uuid>`. The card is swapped for the real one when the response lands, or
+// taken away when it fails. Until then it can be neither opened nor dragged.
+
+const PENDING_PREFIX = "tasks/pending-";
+
+/** The id of the `serial`th card that is still waiting for its server answer. */
+export function plannerPendingCardId(serial: number): string {
+  return `${PENDING_PREFIX}${serial}`;
+}
+
+export function plannerIsPendingCard(card: Pick<PlannerBoardCard, "id">) {
+  return card.id.startsWith(PENDING_PREFIX);
+}
+
+/** The upstream status of a task created in a column. */
+const COLUMN_STATUS: Record<PlannerColumn, string> = {
+  backlog: "todo",
+  todo: "todo",
+  doing: "in_progress",
+  done: "done",
+};
+
+/**
+ * The card a created task will be, by the server's create rules (the status of
+ * its column, a plan only as asked, a Done task completed now), for the moment
+ * before the response arrives.
+ */
+export function plannerPendingCard(input: {
+  id: string;
+  title: string;
+  column: PlannerColumn;
+  plan: PlannerPlanInput | null;
+  now: Date;
+}): PlannerBoardCard {
+  const at = input.now.toISOString();
+  return {
+    id: input.id,
+    project_id: null,
+    project_name: null,
+    title: input.title.trim(),
+    status: COLUMN_STATUS[input.column],
+    priority: "none",
+    due_at: null,
+    sort_order: 0,
+    completed_at: input.column === "done" ? at : null,
+    created_at: at,
+    updated_at: at,
+    horizon: input.plan ? input.plan.horizon : null,
+    period_start: input.plan
+      ? plannerPeriodStart(input.plan.horizon, input.plan.day)
+      : null,
+    carry_count: 0,
+    dropped_at: null,
+    start_date: null,
+  };
+}
+
+/** The board without a task, wherever it is; unchanged when it is not on it. */
+export function plannerRemoveCard(
+  board: PlannerBoardResponse,
+  taskId: string,
+): PlannerBoardResponse {
+  const columns: Columns = { ...board.columns };
+  for (const name of COLUMN_NAMES) {
+    const list = columns[name];
+    if (list?.some((entry) => entry.id === taskId)) {
+      columns[name] = list.filter((entry) => entry.id !== taskId);
+    }
+  }
+  return { ...board, columns };
 }
 
 // --- Reading the board --------------------------------------------------------

@@ -16,16 +16,19 @@ import type { PlannerActions } from "./use-planner-actions";
 // second board: a dropped task is parked, not planned, so each one is a single
 // line (title, when it was dropped) with its Undrop button and a way to read its
 // history. It scrolls inside itself when long, so the columns stay in reach.
+// A title opens the task's panel, like a card on the board.
 
 /** One dropped task: its title and when, then History and Undrop. */
 function DroppedRow({
   card,
   actions,
   onRequest,
+  onOpen,
 }: {
   card: PlannerBoardCard;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
+  onOpen: (card: PlannerBoardCard) => void;
 }) {
   const strings = usePlannerStrings();
   return (
@@ -34,12 +37,15 @@ function DroppedRow({
       data-testid="planner-dropped-item"
     >
       <div className="min-w-0 flex-1">
-        <p
-          className="truncate text-sm leading-snug text-muted-foreground"
+        <button
+          aria-haspopup="dialog"
+          className="block w-full cursor-pointer truncate rounded-sm text-left text-sm leading-snug text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
           title={card.title}
+          type="button"
+          onClick={() => onOpen(card)}
         >
           {card.title}
-        </p>
+        </button>
         {card.dropped_at && (
           <p className="truncate text-xs leading-snug text-muted-foreground">
             {strings.card.dropped(
@@ -83,6 +89,7 @@ export function PlannerDroppedList({
   onRetry,
   actions,
   onRequest,
+  onOpen,
 }: {
   /** The dropped tasks, newest first; undefined until the board has brought them. */
   cards: readonly PlannerBoardCard[] | undefined;
@@ -92,6 +99,8 @@ export function PlannerDroppedList({
   onRetry: () => void;
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
+  /** Opens a dropped task's panel. */
+  onOpen: (card: PlannerBoardCard) => void;
 }) {
   const strings = usePlannerStrings();
 
@@ -130,6 +139,7 @@ export function PlannerDroppedList({
             actions={actions}
             card={card}
             key={card.id}
+            onOpen={onOpen}
             onRequest={onRequest}
           />
         ))}

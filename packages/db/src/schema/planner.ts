@@ -3,6 +3,7 @@ import {
   type AnySQLiteColumn,
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -30,6 +31,12 @@ import {
 // One plan per task: which period it is planned in, how often it carried over,
 // and whether it was dropped. A task with no row, or a NULL horizon, is in the
 // backlog. `task_id` is upstream tasks.id by value, with no foreign key.
+//
+// `effort` (migration 9001) is the task's effort estimate, 0 to 999 with at most
+// one decimal. It lives here because the row already is the task's planner-side
+// record. A backlog task can get a row with a NULL horizon only to hold it, which
+// plans nothing: the board reads a NULL horizon as the backlog. `start_date`
+// (migration 9002) is the start day, held the same way.
 export const plannerTaskPlan = sqliteTable(
   "planner_task_plan",
   {
@@ -44,6 +51,11 @@ export const plannerTaskPlan = sqliteTable(
     droppedAt: text("dropped_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    // Added by 9001, so it is the last column, where ALTER TABLE puts it.
+    effort: real("effort"),
+    // Added by 9002: the task's start day, YYYY-MM-DD, or NULL. Together with the
+    // due date it is the task's time range on the board.
+    startDate: text("start_date"),
   },
   (table) => [
     index("planner_task_plan_user_period_idx").on(
@@ -156,8 +168,32 @@ export const plannerProjectNode = sqliteTable(
   ],
 );
 
+// A task's comment thread (migration 9001). Comments are soft-deleted and kept
+// after the task is purged, like the history archive, so `task_id` is upstream
+// tasks.id by value with no foreign key. The body never goes into a history
+// event: the events `commented`, `comment_edited` and `comment_deleted` carry
+// only the comment's id.
+export const plannerTaskComment = sqliteTable(
+  "planner_task_comment",
+  {
+    // A random UUID, not namespaced.
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    taskId: text("task_id").notNull(),
+    // Trimmed, 1 to 5000 characters.
+    body: text("body").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    index("planner_task_comment_task_idx").on(table.taskId, table.createdAt),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerTaskEventRow = typeof plannerTaskEvent.$inferSelect;
 export type PlannerTaskSeenRow = typeof plannerTaskSeen.$inferSelect;
 export type PlannerSyncStateRow = typeof plannerSyncState.$inferSelect;
 export type PlannerProjectNodeRow = typeof plannerProjectNode.$inferSelect;
+export type PlannerTaskCommentRow = typeof plannerTaskComment.$inferSelect;

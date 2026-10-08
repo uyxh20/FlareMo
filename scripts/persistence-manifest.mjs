@@ -51,14 +51,16 @@ export const RESTORE_TABLES = [
   "projects",
   "tasks",
   "task_activity",
-  // Fork-owned planning cockpit tables (migrations/9000_planner_init.sql). They
-  // hold ids of the tasks and projects above with no foreign key, so any order
-  // restores; the node table's own parent key is deferred like the rest.
+  // Fork-owned planning cockpit tables (migrations/9000_planner_init.sql, and
+  // 9001_planner_task_details.sql for the comments). They hold ids of the tasks
+  // and projects above with no foreign key, so any order restores; the node
+  // table's own parent key is deferred like the rest.
   "planner_task_plan",
   "planner_task_event",
   "planner_task_seen",
   "planner_sync_state",
   "planner_project_node",
+  "planner_task_comment",
 ];
 
 // Derived tables that must not be restored verbatim, because a stale copy
