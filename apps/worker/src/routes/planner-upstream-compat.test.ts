@@ -444,6 +444,10 @@ describe("planner and upstream flows", () => {
           "deleted",
           "restored",
           "deleted",
+          // This test back-dates `deleted_at` by hand; the nightly sync before
+          // the purge reads that as a restore and a new delete.
+          "restored",
+          "deleted",
           "purged",
         ]);
         expect(events.at(-1)).toMatchObject({
@@ -475,8 +479,12 @@ describe("planner and upstream flows", () => {
       expect(await count("tasks")).toBe(0);
       expect(await count("task_activity")).toBe(0);
       await sync(2);
+      // `deleted_at` was back-dated by hand above, so the nightly sync before
+      // the purge records it as a restore and a new delete.
       expect(await archiveTypes(task.id)).toEqual([
         "created",
+        "deleted",
+        "restored",
         "deleted",
         "purged",
       ]);
@@ -485,6 +493,8 @@ describe("planner and upstream flows", () => {
         taskId: task.id,
       });
       expect(history.map((event) => event.task_title)).toEqual([
+        "Long gone",
+        "Long gone",
         "Long gone",
         "Long gone",
         "Long gone",

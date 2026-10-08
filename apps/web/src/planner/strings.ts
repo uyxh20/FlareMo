@@ -56,6 +56,13 @@ export type PlannerStrings = {
   drag: {
     picked: (title: string) => string;
     over: (title: string, column: string) => string;
+    /** Over a card: the place in the column the card would take (1-based). */
+    position: (
+      title: string,
+      column: string,
+      place: number,
+      total: number,
+    ) => string;
     dropped: (title: string, column: string) => string;
     cancelled: (title: string) => string;
   };
@@ -128,6 +135,7 @@ export type PlannerStrings = {
     openFailed: string;
     moved: (column: string) => string;
     moveFailed: string;
+    reorderFailed: string;
     planned: (label: string) => string;
     planCleared: string;
     planFailed: string;
@@ -289,6 +297,8 @@ const en: PlannerStrings = {
   drag: {
     picked: (title) => `Picked up ${title}.`,
     over: (title, column) => `${title} is over ${column}.`,
+    position: (title, column, place, total) =>
+      `${title} is in ${column}, position ${place} of ${total}.`,
     dropped: (title, column) => `${title} was dropped in ${column}.`,
     cancelled: (title) => `Moving ${title} was cancelled.`,
   },
@@ -377,6 +387,7 @@ const en: PlannerStrings = {
     openFailed: "Couldn't open the task",
     moved: (column) => `Moved to ${column}`,
     moveFailed: "Couldn't move the task",
+    reorderFailed: "Couldn't save the new order",
     planned: (label) => `Planned for ${label}`,
     planCleared: "Plan cleared",
     planFailed: "Couldn't update the plan",
@@ -531,6 +542,8 @@ const zhCN: PlannerStrings = {
   drag: {
     picked: (title) => `已拿起“${title}”。`,
     over: (title, column) => `“${title}”在${column}上方。`,
+    position: (title, column, place, total) =>
+      `“${title}”在${column}，第 ${place} 位，共 ${total} 项。`,
     dropped: (title, column) => `“${title}”已放入${column}。`,
     cancelled: (title) => `已取消移动“${title}”。`,
   },
@@ -616,6 +629,7 @@ const zhCN: PlannerStrings = {
     openFailed: "无法打开任务",
     moved: (column) => `已移到${column}`,
     moveFailed: "移动任务失败",
+    reorderFailed: "保存新顺序失败",
     planned: (label) => `已安排到${label}`,
     planCleared: "已清除计划",
     planFailed: "更新计划失败",

@@ -48,6 +48,7 @@ function card(
     carry_count: 0,
     dropped_at: null,
     start_date: null,
+    board_rank: null,
     ...overrides,
   };
 }
@@ -278,6 +279,62 @@ describe("clicking a card and dragging it", () => {
     expect(body.getAttribute("aria-busy")).toBe("true");
     gesture(body, 0);
     gesture(body, 40);
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("lifting a card with the keyboard", () => {
+  // A card is a focusable group. Space or Enter pressed ON the card lifts it (the
+  // keyboard sensor with sortable coordinates then moves it with the arrows);
+  // the same keys pressed on the buttons inside it keep their own meaning.
+  const key = (target: Element | Document, code: string) =>
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", { code, key: code, bubbles: true }),
+      );
+    });
+
+  it("makes every card a labelled, focusable group, and leaves a waiting card out of the tab order", () => {
+    const waiting = plannerPendingCard({
+      id: plannerPendingCardId(1),
+      title: "Just added",
+      column: "doing",
+      plan: null,
+      now: new Date("2026-10-07T09:00:00.000Z"),
+    });
+    const { container } = show(board({ doing: [waiting] }));
+    const migrate = cardElement(container, "Reply to design feedback");
+    expect(migrate.getAttribute("role")).toBe("group");
+    expect(migrate.getAttribute("aria-label")).toBe("Reply to design feedback");
+    expect(migrate.tabIndex).toBe(0);
+    expect(migrate.getAttribute("aria-roledescription")).toBe("sortable");
+    const justAdded = cardElement(container, "Just added");
+    expect(justAdded.getAttribute("tabindex")).toBeNull();
+    expect(justAdded.getAttribute("aria-roledescription")).toBeNull();
+  });
+
+  it("lifts a card on Space and puts it down again on Escape, saying so", async () => {
+    const { container } = show(board());
+    const migrate = cardElement(container, "Migrate comments");
+    key(migrate, "Space");
+    expect(document.body.textContent).toContain("Picked up Migrate comments.");
+    // The sensor starts listening for the next key one tick after it lifts.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    key(document, "Escape");
+    expect(document.body.textContent).toContain(
+      "Moving Migrate comments was cancelled.",
+    );
+  });
+
+  it("does not lift a card for a key pressed on the buttons inside it", () => {
+    const { container, onOpen } = show(board());
+    key(titleButtonOf(container, "Migrate comments"), "Enter");
+    key(titleButtonOf(container, "Migrate comments"), "Space");
+    expect(document.body.textContent).not.toContain("Picked up");
     expect(onOpen).not.toHaveBeenCalled();
   });
 });

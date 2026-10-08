@@ -29,6 +29,10 @@ import {
   updateTaskSchema,
 } from "./projects";
 
+// The board's manual order helpers live in their own file and are exported from
+// here, so the package index (an upstream file) stays untouched.
+export * from "./planner-rank";
+
 export const plannerHorizons = ["day", "week", "month"] as const;
 
 export type PlannerHorizon = (typeof plannerHorizons)[number];
@@ -354,6 +358,8 @@ export const plannerCreateTaskSchema = z.strictObject({
  * `effort` and `start_date` are planner-side fields that are not a plan: setting
  * them never moves the task, and they are allowed on a dropped task.
  */
+const plannerTaskIdSchema = z.string().trim().min(1).max(256);
+
 export const plannerUpdateTaskSchema = z
   .strictObject({
     today: plannerDaySchema,
@@ -362,6 +368,14 @@ export const plannerUpdateTaskSchema = z
     effort: plannerEffortSchema.nullable().optional(),
     // The start day, YYYY-MM-DD, or null to clear it (v1.2, migration 9002).
     start_date: plannerDaySchema.nullable().optional(),
+    // Where in `column` the card goes (migration 9004): between two cards of that
+    // column. `before_id` is the card that will sit directly BELOW it, `after_id`
+    // the one directly ABOVE it (ids of cards in the target column, as the board
+    // lists them). With neither, a move keeps today's behaviour and writes no
+    // order. Both need `column`. This is a column move's second half and never
+    // writes a history event of its own.
+    before_id: plannerTaskIdSchema.optional(),
+    after_id: plannerTaskIdSchema.optional(),
     dropped: z.boolean().optional(),
     title: updateTaskSchema.shape.title,
     notes: updateTaskSchema.shape.notes,
@@ -374,6 +388,25 @@ export const plannerUpdateTaskSchema = z
       "Send either column or plan, not both: a column move sets the plan itself.",
     path: ["column"],
   })
+  .refine(
+    (value) =>
+      (value.before_id === undefined && value.after_id === undefined) ||
+      value.column !== undefined,
+    {
+      message: "before_id and after_id need column: they place a card in it.",
+      path: ["column"],
+    },
+  )
+  .refine(
+    (value) =>
+      value.before_id === undefined ||
+      value.after_id === undefined ||
+      value.before_id !== value.after_id,
+    {
+      message: "before_id and after_id must be different cards.",
+      path: ["after_id"],
+    },
+  )
   .refine(
     (value) =>
       Object.entries(value).some(
@@ -442,6 +475,9 @@ export const plannerPlanDtoSchema = z.object({
   effort: z.number().nullable(),
   // The start day, YYYY-MM-DD, or null. Held the same way as the effort.
   start_date: z.string().nullable(),
+  // The stored board order, `<column>|<key>`, or null (migration 9004). Read it
+  // with `plannerParseBoardRank`, which drops a rank left over from another column.
+  board_rank: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -471,6 +507,10 @@ export const plannerBoardCardSchema = z.object({
   dropped_at: z.string().nullable(),
   // The start day, YYYY-MM-DD, or null. The card shows it with the due date.
   start_date: z.string().nullable(),
+  // The card's manual place in its column as a bare key (see plannerRankBetween),
+  // or null when it was never ranked or the rank belongs to another column.
+  // Ranked cards come first, in key order; the rest follow in the column's old order.
+  board_rank: z.string().nullable(),
 });
 
 export const plannerBoardResponseSchema = z.object({

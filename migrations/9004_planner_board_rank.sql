@@ -1,0 +1,20 @@
+-- migrations/9004_planner_board_rank.sql: fork-owned, hand-written. Never edit once applied (add 9005_planner_...).
+--
+-- The cockpit board's manual order (docs/planning-cockpit-implementation-plan.md, section 14,
+-- "Drag to re-rank"): a nullable text key, `<column>|<fractional key>`, that places a card among
+-- the others in its column. Upstream `tasks.sort_order` is scoped per project and status, but a
+-- cockpit column mixes projects, so the order lives on the task's plan row instead. The column
+-- prefix makes a key from another column read as "no rank" once a task changes column through
+-- /projects or the API, so nothing has to clear it. NULL means "never ranked": the card sorts
+-- after the ranked ones in the column's old order.
+-- Number 9003 is deliberately skipped (it belongs to a parallel branch). Wrangler orders
+-- migration files by leading number, so this one is applied after 9002.
+-- Hand-written and not listed in migrations/meta/_journal.json, like 9000 to 9002: never run
+-- pnpm db:generate for these (G3, the fork exception to AGENTS.md).
+--
+-- Rules for this file, the same as for every 9NNN_planner_ file:
+--   G10  no foreign key to an upstream table (planner-internal keys are fine)
+--   G11  no triggers
+--   G12  never edit a file once it is applied to a real database (dev or live)
+--   G13  additive only: never rebuild a planner table here
+ALTER TABLE `planner_task_plan` ADD COLUMN `board_rank` text;

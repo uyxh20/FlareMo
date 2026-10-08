@@ -18,10 +18,13 @@ import {
   plannerUpdateTaskRequest,
 } from "./api";
 import {
+  plannerCardColumn,
   plannerCardFromTask,
+  plannerFindCard,
   plannerPendingCard,
   plannerPendingCardId,
   plannerPlaceCard,
+  plannerPlaceCardAt,
   plannerPredictDrop,
   plannerPredictDue,
   plannerPredictMove,
@@ -71,8 +74,21 @@ import { usePlannerStrings } from "./strings";
 // where it was edited, and loud when they do not: the value goes back and a toast
 // says why.
 
+/**
+ * Where in a column a moved card goes: directly above `beforeId`, or directly
+ * below `afterId` (ids of cards in the target column). Left out, the card lands
+ * where the column's natural order puts it.
+ */
+export type PlannerMovePosition = { beforeId?: string; afterId?: string };
+
 export type PlannerActions = {
-  move: (card: PlannerBoardCard, to: PlannerColumn) => void;
+  move: (
+    card: PlannerBoardCard,
+    to: PlannerColumn,
+    position?: PlannerMovePosition,
+  ) => void;
+  /** A reorder inside the column the card is already in. */
+  reorder: (card: PlannerBoardCard, position: PlannerMovePosition) => void;
   plan: (card: PlannerBoardCard, plan: PlannerPlanInput | null) => void;
   setDue: (card: PlannerBoardCard, due: string | null) => void;
   drop: (card: PlannerBoardCard) => void;
@@ -178,6 +194,8 @@ export function usePlannerActions(input: {
         reveal?: boolean;
         /** The project name the card shows after the edit; default: the one it had. */
         projectName?: string | null;
+        /** Place the predicted card here in its column (a drag-and-drop move). */
+        position?: PlannerMovePosition;
       },
     ) => {
       // Counted before the first await, so a change that settles meanwhile
@@ -186,14 +204,27 @@ export function usePlannerActions(input: {
       const detailKey = plannerQueryKeys.detail(card.id);
       const detailBefore =
         queryClient.getQueryData<PlannerTaskDetailResponse>(detailKey);
+      let boardsBefore: [
+        readonly unknown[],
+        PlannerBoardResponse | undefined,
+      ][] = [];
       try {
         await queryClient.cancelQueries({ queryKey: plannerQueryKeys.boards });
         await queryClient.cancelQueries({ queryKey: detailKey });
-        patchBoards((board) =>
-          plannerUpdateCard(board, card.id, (current) =>
-            options.predict(current),
-          ),
-        );
+        // A positioned move can re-rank its neighbours too, so a rollback
+        // restores whole columns from here instead of only putting the card back.
+        boardsBefore = queryClient.getQueriesData<PlannerBoardResponse>({
+          queryKey: plannerQueryKeys.boards,
+        });
+        const position = options.position;
+        patchBoards((board) => {
+          const current = plannerFindCard(board, card.id);
+          if (!current) return board;
+          const predicted = options.predict(current);
+          return position
+            ? plannerPlaceCardAt(board, predicted, position)
+            : plannerPlaceCard(board, predicted);
+        });
         patchDetail(card.id, (detail) => {
           const predicted = options.predict(plannerCardFromDetail(detail));
           const shown = plannerDetailWithCard(detail, predicted);
@@ -202,15 +233,21 @@ export function usePlannerActions(input: {
         if (options.reveal !== false) revealRef.current?.(card.id);
         const response = await options.request();
         patchBoards((board) =>
-          plannerUpdateCard(board, card.id, () =>
-            plannerCardFromTask(
+          plannerUpdateCard(board, card.id, (current) => {
+            const answered = plannerCardFromTask(
               response.task,
               response.plan,
               options.projectName === undefined
                 ? card.project_name
                 : options.projectName,
-            ),
-          ),
+            );
+            // The neighbours still hold the keys the prediction gave them, which
+            // the server's key for this card does not fit; keep the predicted one
+            // until the refresh brings every key from the server.
+            return options.position
+              ? { ...answered, board_rank: current.board_rank }
+              : answered;
+          }),
         );
         patchDetail(card.id, (detail) =>
           plannerDetailWithAnswer(detail, response),
@@ -224,7 +261,36 @@ export function usePlannerActions(input: {
           );
         }
       } catch (error) {
-        patchBoards((board) => plannerPlaceCard(board, card));
+        if (options.position) {
+          // Put the columns the move touched back exactly as they were.
+          const columns = new Set<string>([
+            plannerCardColumn(card),
+            plannerCardColumn(options.predict(card)),
+          ]);
+          for (const [key, before] of boardsBefore) {
+            if (!before) continue;
+            queryClient.setQueryData<PlannerBoardResponse>(key, (board) =>
+              board
+                ? {
+                    ...board,
+                    columns: {
+                      ...board.columns,
+                      ...Object.fromEntries(
+                        [...columns]
+                          .filter((name) => name in before.columns)
+                          .map((name) => [
+                            name,
+                            before.columns[name as keyof typeof before.columns],
+                          ]),
+                      ),
+                    },
+                  }
+                : board,
+            );
+          }
+        } else {
+          patchBoards((board) => plannerPlaceCard(board, card));
+        }
         if (detailBefore) queryClient.setQueryData(detailKey, detailBefore);
         toast.error(
           plannerErrorMessage(error, options.failure, text().toast.rateLimited),
@@ -236,14 +302,49 @@ export function usePlannerActions(input: {
     };
 
     const actions: PlannerActions = {
-      move: (card, to) => {
+      move: (card, to, position) => {
+        const placed = position?.beforeId ?? position?.afterId;
         void edit(card, {
           predict: (current) =>
             plannerPredictMove(current, to, { today, now: new Date() }),
           request: () =>
-            plannerUpdateTaskRequest(card.id, { today, column: to }),
+            plannerUpdateTaskRequest(card.id, {
+              today,
+              column: to,
+              ...(position?.beforeId ? { before_id: position.beforeId } : {}),
+              ...(!position?.beforeId && position?.afterId
+                ? { after_id: position.afterId }
+                : {}),
+            }),
+          // A card dropped at a place is on the board where it was put, so the
+          // toast only names the column when it went to another one.
           success: () => text().toast.moved(text().column[to]),
           failure: text().toast.moveFailed,
+          // Dropped at a place, the card is right under the pointer already.
+          reveal: placed ? false : undefined,
+          position: placed ? position : undefined,
+        });
+      },
+
+      reorder: (card, position) => {
+        const column = plannerCardColumn(card);
+        if (column === "dropped" || column === "other") return;
+        void edit(card, {
+          // Same column, so only the card's place changes.
+          predict: (current) => current,
+          request: () =>
+            plannerUpdateTaskRequest(card.id, {
+              today,
+              column,
+              ...(position.beforeId
+                ? { before_id: position.beforeId }
+                : position.afterId
+                  ? { after_id: position.afterId }
+                  : {}),
+            }),
+          failure: text().toast.reorderFailed,
+          reveal: false,
+          position,
         });
       },
 
@@ -372,18 +473,21 @@ export function usePlannerActions(input: {
           });
           // On the board before the server has heard of it, in the column it was
           // made for and pointed out, so the person sees where it went at once.
-          patchBoards((board) =>
-            plannerPlaceCard(
-              board,
-              plannerPendingCard({
-                id: pendingId,
-                title,
-                column,
-                plan,
-                now: new Date(),
-              }),
-            ),
-          );
+          patchBoards((board) => {
+            const waiting = plannerPendingCard({
+              id: pendingId,
+              title,
+              column,
+              plan,
+              now: new Date(),
+            });
+            // A column with a manual order puts the new card on top of it, as the
+            // server does; any other column keeps its natural order.
+            const first = board.columns[column][0];
+            return first?.board_rank
+              ? plannerPlaceCardAt(board, waiting, { beforeId: first.id })
+              : plannerPlaceCard(board, waiting);
+          });
           revealRef.current?.(pendingId);
 
           const response = await plannerCreateTaskRequest({

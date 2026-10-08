@@ -90,6 +90,7 @@ These are the only upstream files changed (`git diff --numstat`, added / removed
 | `apps/worker/src/routes/share-page.ts` | Imports the constant; the unavailable page's fallback name. | +2 / -1 |
 | `apps/worker/src/routes/article-page.ts` | Imports the constant; the unavailable page, the page title and the feed title fallbacks. The `generator` meta stays. | +6 / -3 |
 | `apps/worker/src/scheduled-tasks.ts` | Imports `resolveProductName`; the two push titles use the live name (only when push is configured). | +4 / -2 |
+| `apps/worker/src/scheduled-tasks.ts` (planner) | Imports `plannerSyncAllUsers` and calls it twice inside the trash-retention block, right before `hardDeleteExpiredProjects` and right after `hardDeleteExpiredTasks`. The first call copies activity that the purge is about to cascade away; the second makes the snapshot diff record `purged`. The loop, the user list and the error handling live in `packages/domain/src/planner/history-sync-nightly.ts`. Undo: delete the import and the two lines. | +3 |
 | `apps/worker/src/email-templates.ts` | `emailCopy` returns `brandCopy(COPY[locale])`, and imports it. | +3 / -1 |
 | `apps/worker/src/email.ts` | Imports the constant; the test email's subject and text. | +3 / -2 |
 | `apps/web/src/i18n.tsx` | `I18nProvider` reads `useBranding()` and runs `brandTemplate` on each template in `t()` before interpolation. | +7 / -2 |
@@ -159,3 +160,9 @@ The Playwright spec is registered in the opt-in `memo-ui` project and, like ever
 ```sh
 pnpm exec playwright test --project=memo-ui tests/e2e/fork-ui.spec.ts
 ```
+
+## Planner history archive: durability notes
+
+- **Nightly sync around the purge.** `plannerSyncAllUsers` (fork-owned, `packages/domain/src/planner/history-sync-nightly.ts`) syncs every user in `tasks` or `planner_sync_state` with the debounce skipped (`force: true`), before and after upstream's trash purge. A task created and deleted without the cockpit ever opening now leaves created, its activity, deleted and purged in `planner_task_event`. It never throws and never blocks the purge. If the purge itself throws, the second sync is skipped and the next night (or the next cockpit open) records the purge. Cost: a few indexed reads and one small batch per user per night; no new cron, binding or migration. The sync only runs when `FLAREMO_TRASH_RETENTION_DAYS` is above 0, because the purge sits in that block.
+- **Project name.** Events carry `project_name` in `data` (no schema change). It is the name of the project the task was in at the event, looked up when the event is archived. The `project_id` key is not added, because the history labels read it as "project changed". Limit: a project renamed after the event was archived keeps the older name, and an event first archived after its project was purged has no name (the purged event reuses the latest name an earlier event of the task recorded).
+- **Title at the time.** An upstream-copied event takes the title of the latest `task_activity` row up to that event that names one (`created` and every rename put `title` in `changes`). With none, the snapshot title (the title at the last sync) applies, then the live title. Limit: a rename made without an activity row (a bundle import, an upstream rebuild) is invisible, so events before it may show the later title. Sync-detected events (`deleted`, `restored`, baseline `created`) use the live title.

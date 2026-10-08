@@ -4,8 +4,11 @@ import {
   type PlannerColumn,
   type PlannerPlanDto,
   type PlannerPlanInput,
+  plannerCompareRanked,
   plannerNextPeriodStart,
+  plannerParseBoardRank,
   plannerPeriodStart,
+  plannerPlaceRank,
   plannerTodoHorizon,
   type TaskDto,
 } from "@flaremo/contracts";
@@ -115,6 +118,10 @@ const byPlan: Compare = (left, right) =>
 
 const doneAt = (card: PlannerBoardCard) => card.completed_at ?? card.updated_at;
 
+/** Manually ranked cards first, in key order; the rest in the column's own order. */
+const ranked = (fallback: Compare): Compare =>
+  plannerCompareRanked<PlannerBoardCard>((card) => card.board_rank, fallback);
+
 /** A column's cards in the order the server returns them. */
 export function plannerSortCards(
   column: PlannerColumnKey,
@@ -123,14 +130,15 @@ export function plannerSortCards(
   const copy = [...cards];
   switch (column) {
     case "backlog":
+      return copy.sort(ranked(newestFirst((card) => card.created_at)));
     case "other":
       return copy.sort(newestFirst((card) => card.created_at));
     case "todo":
-      return copy.sort(byPlan);
+      return copy.sort(ranked(byPlan));
     case "doing":
-      return copy.sort(byUpstreamOrder);
+      return copy.sort(ranked(byUpstreamOrder));
     case "done":
-      return copy.sort(newestFirst(doneAt));
+      return copy.sort(ranked(newestFirst(doneAt)));
     case "dropped":
       return copy.sort(newestFirst((card) => card.dropped_at ?? ""));
   }
@@ -231,8 +239,10 @@ export function plannerPredictMove(
 ): PlannerBoardCard {
   const from = plannerCardColumn(card);
   if (from === "dropped" || from === to) return card;
+  // A rank only counts in the column it was made in.
   const next: PlannerBoardCard = {
     ...card,
+    board_rank: null,
     updated_at: context.now.toISOString(),
   };
   switch (to) {
@@ -379,7 +389,19 @@ export function plannerCardFromTask(
     carry_count: plan?.carry_count ?? 0,
     dropped_at: plan?.dropped_at ?? null,
     start_date: plan?.start_date ?? null,
+    board_rank: boardRankOf(task, plan),
   };
+}
+
+/** The bare rank key of a task's plan row, if it is for the column the task is in. */
+function boardRankOf(task: TaskDto, plan: PlannerPlanDto | null) {
+  const column = plannerCardColumn({
+    status: task.status,
+    horizon: plan?.horizon ?? null,
+    period_start: plan?.period_start ?? null,
+    dropped_at: plan?.dropped_at ?? null,
+  });
+  return plannerParseBoardRank(plan?.board_rank, column);
 }
 
 // --- Cards the server has not answered for yet --------------------------------
@@ -440,6 +462,108 @@ export function plannerPendingCard(input: {
     carry_count: 0,
     dropped_at: null,
     start_date: null,
+    board_rank: null,
+  };
+}
+
+/**
+ * The board with `card` (already predicted into `column`) placed directly above
+ * `beforeId` or below `afterId`, by the server's rank rules: a key between its
+ * neighbours when they have keys, else every card of the column gets a fresh key
+ * (the server does the same, with other keys and the same order). An anchor that
+ * is not in the column puts the card at the natural place instead.
+ */
+export function plannerPlaceCardAt(
+  board: PlannerBoardResponse,
+  card: PlannerBoardCard,
+  anchors: { beforeId?: string; afterId?: string },
+): PlannerBoardResponse {
+  const column = plannerCardColumn(card);
+  if (column === "dropped" || column === "other") {
+    return plannerPlaceCard(board, card);
+  }
+  const without = plannerRemoveCard(board, card.id);
+  const others = without.columns[column];
+  const anchor = anchors.beforeId ?? anchors.afterId;
+  const position = others.findIndex((entry) => entry.id === anchor);
+  if (anchor === undefined || position === -1) {
+    return plannerPlaceCard(board, card);
+  }
+  const index = anchors.beforeId === undefined ? position + 1 : position;
+  const placement = plannerPlaceRank(
+    others.map((entry) => entry.board_rank),
+    index,
+  );
+  const key = (place: number) =>
+    placement.kind === "respread" ? (placement.keys[place] as string) : null;
+  const order: PlannerBoardCard[] = [
+    ...others.slice(0, index),
+    card,
+    ...others.slice(index),
+  ].map((entry, place) =>
+    placement.kind === "respread"
+      ? { ...entry, board_rank: key(place) }
+      : entry === card
+        ? { ...entry, board_rank: placement.key }
+        : entry,
+  );
+  return { ...without, columns: { ...without.columns, [column]: order } };
+}
+
+// --- Dropping a card ----------------------------------------------------------
+
+export type PlannerDrop = {
+  to: PlannerColumn;
+  /** Where in `to`; left out for a plain move (an empty column, or nothing to order against). */
+  position?: { beforeId?: string; afterId?: string };
+  /** Whether the card changes column. */
+  crossColumn: boolean;
+};
+
+/**
+ * What dropping `activeId` on `overId` means. `overId` is a card, or a column as
+ * `column:<name>`. `below` says whether the dragged card's centre is under the
+ * centre of the card it is over, which decides above or below it when it comes
+ * from another column; inside one column the direction of travel decides, like
+ * dnd-kit's own `arrayMove`. Null means nothing to do: the card is over itself,
+ * over a place that is not a column, or dropped back where it was.
+ */
+export function plannerResolveDrop(
+  board: PlannerBoardResponse,
+  activeId: string,
+  overId: string,
+  below: boolean,
+): PlannerDrop | null {
+  const card = plannerFindCard(board, activeId);
+  if (!card || card.dropped_at !== null || activeId === overId) return null;
+  const from = plannerCardColumn(card);
+  if (overId.startsWith("column:")) {
+    const to = overId.slice("column:".length);
+    if (!(plannerColumns as readonly string[]).includes(to) || to === from) {
+      return null;
+    }
+    return { to: to as PlannerColumn, crossColumn: true };
+  }
+  const over = plannerFindCard(board, overId);
+  if (!over || plannerIsPendingCard(over)) return null;
+  const to = plannerCardColumn(over);
+  if (!(plannerColumns as readonly string[]).includes(to)) return null;
+  const list = board.columns[to as PlannerColumn];
+  if (to === from) {
+    const oldIndex = list.findIndex((entry) => entry.id === activeId);
+    const newIndex = list.findIndex((entry) => entry.id === overId);
+    if (oldIndex === -1 || oldIndex === newIndex) return null;
+    return {
+      to: to as PlannerColumn,
+      position:
+        newIndex > oldIndex ? { afterId: overId } : { beforeId: overId },
+      crossColumn: false,
+    };
+  }
+  return {
+    to: to as PlannerColumn,
+    position: below ? { afterId: overId } : { beforeId: overId },
+    crossColumn: true,
   };
 }
 

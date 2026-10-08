@@ -34,6 +34,7 @@ function dropped(
     carry_count: 0,
     dropped_at: new Date(Date.now() - agoMs).toISOString(),
     start_date: null,
+    board_rank: null,
     ...overrides,
   };
 }

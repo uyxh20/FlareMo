@@ -333,14 +333,15 @@ export async function plannerTestInsertPlan(
     carryCount?: number;
     droppedAt?: string | null;
     effort?: number | null;
+    boardRank?: string | null;
     at?: string;
   },
 ): Promise<void> {
   const at = plan.at ?? "2026-10-01T00:00:00.000Z";
   await plannerTestRun(
     database,
-    `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, board_rank, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     plan.taskId,
     plan.userId,
     plan.horizon ?? null,
@@ -348,6 +349,7 @@ export async function plannerTestInsertPlan(
     plan.carryCount ?? 0,
     plan.droppedAt ?? null,
     plan.effort ?? null,
+    plan.boardRank ?? null,
     at,
     at,
   );
@@ -365,8 +367,8 @@ export async function plannerTestInsertPlans(
         const at = plan.at ?? "2026-10-01T00:00:00.000Z";
         return database
           .prepare(
-            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO planner_task_plan (task_id, user_id, horizon, period_start, carry_count, dropped_at, effort, board_rank, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             plan.taskId,
@@ -376,6 +378,7 @@ export async function plannerTestInsertPlans(
             plan.carryCount ?? 0,
             plan.droppedAt ?? null,
             plan.effort ?? null,
+            plan.boardRank ?? null,
             at,
             at,
           );
@@ -393,6 +396,7 @@ export type PlannerTestPlan = {
   dropped_at: string | null;
   effort: number | null;
   start_date: string | null;
+  board_rank: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -166,6 +166,7 @@ export function plannerTestPageHide(): void {
 export function plannerTestActions() {
   return {
     move: vi.fn(),
+    reorder: vi.fn(),
     plan: vi.fn(),
     setDue: vi.fn(),
     drop: vi.fn(),

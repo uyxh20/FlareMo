@@ -308,6 +308,29 @@ describe("planner API request schemas", () => {
       }
     });
 
+    it("takes a place in a column as before_id or after_id, and only with a column", () => {
+      for (const change of [
+        { column: "todo", before_id: "tasks/a" },
+        { column: "todo", after_id: "tasks/a" },
+        { column: "doing", before_id: "tasks/a", after_id: "tasks/b" },
+      ]) {
+        expect(
+          plannerUpdateTaskSchema.safeParse({ ...base, ...change }).success,
+        ).toBe(true);
+      }
+      for (const bad of [
+        { before_id: "tasks/a" },
+        { after_id: "tasks/a" },
+        { column: "todo", before_id: "" },
+        { column: "todo", before_id: "tasks/a", after_id: "tasks/a" },
+        { plan: { horizon: "week", day: "2026-10-09" }, before_id: "tasks/a" },
+      ]) {
+        expect(
+          plannerUpdateTaskSchema.safeParse({ ...base, ...bad }).success,
+        ).toBe(false);
+      }
+    });
+
     it("counts an effort, even null, as the change a request needs", () => {
       expect(plannerUpdateTaskSchema.parse({ ...base, effort: null })).toEqual({
         ...base,
@@ -633,6 +656,7 @@ const PLAN = {
   dropped_at: null,
   effort: null,
   start_date: null,
+  board_rank: null,
   created_at: "2026-10-07T09:00:00.000Z",
   updated_at: "2026-10-07T09:00:00.000Z",
 } as const;
@@ -654,6 +678,7 @@ const CARD: PlannerBoardCard = {
   carry_count: 0,
   dropped_at: null,
   start_date: null,
+  board_rank: null,
 };
 
 const EVENT = {

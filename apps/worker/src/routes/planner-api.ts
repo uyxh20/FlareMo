@@ -36,6 +36,7 @@ import {
   plannerDeleteComment,
   plannerDropTask,
   plannerListComments,
+  plannerRankNewTaskOnTop,
   plannerReadBoard,
   plannerReadHistoryRange,
   plannerReadRollup,
@@ -44,6 +45,7 @@ import {
   plannerReadTaskPlan,
   plannerReadTree,
   plannerRollover,
+  plannerSetBoardRank,
   plannerSetEffort,
   plannerSetPlan,
   plannerSetStartDate,
@@ -187,7 +189,7 @@ plannerApi.post(
       if (throttled) return throttled;
       const body = c.req.valid("json");
       assertToday(body.today, new Date());
-      const { task, plan, planError } = await plannerCreateTask(context.db, {
+      const created = await plannerCreateTask(context.db, {
         user: context.user,
         actor: resolveActor(c, context.credential),
         title: body.title,
@@ -199,6 +201,25 @@ plannerApi.post(
         plan: body.plan,
         today: body.today,
       });
+      const { task, planError } = created;
+      let plan = created.plan;
+      // A column with a manual order puts the new card on top of it (migration
+      // 9004); an unranked column keeps its natural order and nothing is written.
+      if (
+        body.column !== undefined &&
+        (await plannerRankNewTaskOnTop(context.db, {
+          userId: context.user.id,
+          taskId: task.id,
+          column: body.column,
+        }))
+      ) {
+        plan = (
+          await plannerReadTaskPlan(context.db, {
+            user: context.user,
+            taskId: task.id,
+          })
+        ).plan;
+      }
       // The task exists either way. When only its plan could not be saved,
       // `plan` is null and `plan_error` tells the client to offer a retry.
       const response: PlannerCreateTaskResponse = {
@@ -234,8 +255,9 @@ plannerApi.get("/tasks/:id", async (c) => {
 // and upstream fields together. The order is the contract (documented on
 // `plannerUpdateTaskSchema`): undrop first, so a dropped task can be planned or
 // moved in the same request; then the upstream fields, through upstream's own
-// `updateTask` and only the fields given; then the column move or the plan (the
-// schema rejects both together); then the effort estimate and the start date; and
+// `updateTask` and only the fields given; then the column move (and, with `before_id` or
+// `after_id`, its place in the column) or the plan (the schema rejects column
+// and plan together); then the effort estimate and the start date; and
 // drop last, so it also clears a due date set a step earlier. The steps are separate
 // writes, so a step that fails leaves the earlier ones applied. No step is given a
 // shared `now`: each reads the clock when it runs, so the events of one request come
@@ -248,8 +270,17 @@ plannerApi.patch(
       const context = await getRequestContext(c);
       const throttled = await rateLimitGuard(c, "planner", context.user.id);
       if (throttled) return throttled;
-      const { today, column, plan, effort, start_date, dropped, ...fields } =
-        c.req.valid("json");
+      const {
+        today,
+        column,
+        plan,
+        effort,
+        start_date,
+        before_id,
+        after_id,
+        dropped,
+        ...fields
+      } = c.req.valid("json");
       assertToday(today, new Date());
       const { db, user } = context;
       const actor = resolveActor(c, context.credential);
@@ -273,6 +304,18 @@ plannerApi.patch(
           to: column,
           today,
         });
+        // Dropped between two cards: the column's order, one row, no event. The
+        // schema guarantees `column` is set whenever an anchor is.
+        if (before_id !== undefined || after_id !== undefined) {
+          result = await plannerSetBoardRank(db, {
+            user,
+            taskId,
+            column,
+            beforeId: before_id,
+            afterId: after_id,
+            today,
+          });
+        }
       } else if (plan !== undefined) {
         result = await plannerSetPlan(db, {
           user,

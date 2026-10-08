@@ -37,6 +37,7 @@ function card(
     carry_count: 0,
     dropped_at: null,
     start_date: null,
+    board_rank: null,
     ...overrides,
   };
 }
