@@ -1064,6 +1064,41 @@ describe("planner API", () => {
       expect(titles(theirs.columns.backlog)).toEqual(["Member's"]);
       expect(titles((await boardOk()).columns.backlog)).toEqual(["Owner's"]);
     });
+
+    it("archives an upstream change when the board loads, with no history read", async () => {
+      const task = await createUpstreamTask("Finished in /projects");
+      // The first board load archives the creation.
+      expect((await boardOk()).history).toBe("ok");
+
+      // Upstream's own route marks it done; the board load alone archives it.
+      await body(
+        send("PATCH", `/api/app/tasks/${bare(task.id)}`, { status: "done" }),
+      );
+      await expireSyncDebounce();
+      const result = await boardOk();
+      expect(titles(result.columns.done)).toEqual(["Finished in /projects"]);
+
+      const archived = await rows<{ type: string; source: string }>(
+        "SELECT type, source FROM planner_task_event WHERE task_id = ? AND type = 'status_changed'",
+        task.id,
+      );
+      expect(archived).toEqual([
+        { type: "status_changed", source: "activity" },
+      ]);
+    });
+
+    it("still answers 200 when the history sync fails, and says the archive is paused", async () => {
+      await createUpstreamTask("Board still loads");
+      // Make the sync's batch fail for real: the snapshot table is renamed away
+      // for the duration of the board read. The sync never throws; it records a
+      // pause, and the board reads on without it.
+      await expireSyncDebounce();
+      await withTableRenamedAway("planner_task_seen", async () => {
+        const result = await boardOk();
+        expect(result.history).toBe("paused");
+        expect(titles(result.columns.backlog)).toEqual(["Board still loads"]);
+      });
+    });
   });
 
   // ===========================================================================
@@ -1464,9 +1499,11 @@ describe("planner API", () => {
         task.id,
       ]);
 
+      // The board read above also archives upstream's `created` activity, so only
+      // the planner's own events are compared here.
       const types = (
         await rows<{ type: string }>(
-          "SELECT type FROM planner_task_event WHERE task_id = ? ORDER BY id",
+          "SELECT type FROM planner_task_event WHERE task_id = ? AND source = 'planner' ORDER BY id",
           task.id,
         )
       ).map((row) => row.type);

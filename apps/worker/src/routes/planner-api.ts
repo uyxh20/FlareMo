@@ -122,6 +122,10 @@ function assertToday(today: string, now: Date) {
 
 // --- Board and rollover -----------------------------------------------------
 
+// The board syncs the history archive first, as rollover did before the web stopped
+// calling it (section 13.x): loading the cockpit is what keeps the archive current.
+// The sync is debounced to 30 seconds and never throws, so a failed sync leaves the
+// board readable (its `history` field says `paused`).
 plannerApi.get(
   "/board",
   zValidator("query", plannerBoardQuerySchema),
@@ -130,6 +134,7 @@ plannerApi.get(
       const { db, user } = await getRequestContext(c);
       const query = c.req.valid("query");
       assertToday(query.today, new Date());
+      await plannerSyncHistory(db, { userId: user.id, now: new Date() });
       const board: PlannerBoardResponse = await plannerReadBoard(db, {
         userId: user.id,
         today: query.today,
