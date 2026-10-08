@@ -1,6 +1,8 @@
 import {
   type PlannerHorizon,
+  plannerCompareRanked,
   plannerNextPeriodStart,
+  plannerParseBoardRank,
   plannerPeriodStart,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -52,6 +54,11 @@ export type PlannerBoardCard = {
   dropped_at: string | null;
   /** The start day, YYYY-MM-DD, or null. Shown on the card with the due date. */
   start_date: string | null;
+  /**
+   * The card's manual place in its column as a bare key, or null when it was
+   * never ranked or the stored rank belongs to another column (migration 9004).
+   */
+  board_rank: string | null;
 };
 
 export type PlannerBoard = {
@@ -189,6 +196,7 @@ export async function plannerReadBoard(
         carryCount: plannerTaskPlan.carryCount,
         droppedAt: plannerTaskPlan.droppedAt,
         startDate: plannerTaskPlan.startDate,
+        boardRank: plannerTaskPlan.boardRank,
       })
       .from(tasks)
       .leftJoin(plannerTaskPlan, eq(plannerTaskPlan.taskId, tasks.id))
@@ -235,21 +243,29 @@ export async function plannerReadBoard(
       carry_count: row.carryCount ?? 0,
       dropped_at: row.droppedAt ?? null,
       start_date: row.startDate ?? null,
+      board_rank: null,
     };
-    groups[
-      plannerColumnFor({
-        status: card.status,
-        horizon: card.horizon,
-        periodStart: card.period_start,
-        droppedAt: card.dropped_at,
-      })
-    ].push(card);
+    const column = plannerColumnFor({
+      status: card.status,
+      horizon: card.horizon,
+      periodStart: card.period_start,
+      droppedAt: card.dropped_at,
+    });
+    // A rank counts only in the column it was made in.
+    card.board_rank = plannerParseBoardRank(row.boardRank, column);
+    groups[column].push(card);
   }
 
-  groups.backlog.sort(newestFirst((card) => card.created_at));
-  groups.todo.sort(byPlan);
-  groups.doing.sort(byUpstreamOrder);
-  groups.done.sort(newestFirst(doneAt));
+  // Manually ranked cards first, in rank order; the rest follow in the column's
+  // own order (migration 9004).
+  const ranked = (
+    fallback: (l: PlannerBoardCard, r: PlannerBoardCard) => number,
+  ) =>
+    plannerCompareRanked<PlannerBoardCard>((card) => card.board_rank, fallback);
+  groups.backlog.sort(ranked(newestFirst((card) => card.created_at)));
+  groups.todo.sort(ranked(byPlan));
+  groups.doing.sort(ranked(byUpstreamOrder));
+  groups.done.sort(ranked(newestFirst(doneAt)));
   groups.other.sort(newestFirst((card) => card.created_at));
   groups.dropped.sort(newestFirst((card) => card.dropped_at ?? ""));
 

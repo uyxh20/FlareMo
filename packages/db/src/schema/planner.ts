@@ -56,6 +56,11 @@ export const plannerTaskPlan = sqliteTable(
     // Added by 9002: the task's start day, YYYY-MM-DD, or NULL. Together with the
     // due date it is the task's time range on the board.
     startDate: text("start_date"),
+    // Added by 9004: the card's manual place in its board column,
+    // `<column>|<fractional key>`, or NULL when it was never ranked. Keys compare
+    // as plain strings; a key whose column prefix is not the card's column is
+    // stale and counts as NULL.
+    boardRank: text("board_rank"),
   },
   (table) => [
     index("planner_task_plan_user_period_idx").on(

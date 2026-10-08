@@ -65,6 +65,8 @@ export type PlannerPlanDto = {
   effort: number | null;
   /** The start day, YYYY-MM-DD, or NULL. Held on the row like the effort (v1.2). */
   start_date: string | null;
+  /** The stored board order `<column>|<key>`, or NULL (migration 9004). */
+  board_rank: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -78,6 +80,7 @@ export function plannerPlanToDto(row: PlannerTaskPlanRow): PlannerPlanDto {
     dropped_at: row.droppedAt,
     effort: row.effort ?? null,
     start_date: row.startDate ?? null,
+    board_rank: row.boardRank ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };

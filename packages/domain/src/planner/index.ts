@@ -10,6 +10,7 @@
 // writes planner tables only, and reads `tasks`, `task_activity` and `projects`.
 
 export * from "./board";
+export * from "./board-rank";
 export * from "./columns";
 export * from "./comments";
 export * from "./history-read";
