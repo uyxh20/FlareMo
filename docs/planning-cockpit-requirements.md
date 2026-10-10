@@ -54,6 +54,8 @@ The implementation plan is `docs/planning-cockpit-implementation-plan.md`, audit
 - **N2 Weekly and monthly review**: planned versus done versus carried over, per goal, with a written reflection saved as a memo. The capture pilot's cutover criteria include one weekly-review loop end to end.
 - **N3 Goal UI** on top of R6.
 
+N2's weekly review and N3 were built on 2026-10-10 as Goals and the weekly review: [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md). The monthly review is not built yet.
+
 ### Backlog
 
 Calendar sync (start with a read-only iCal feed), MCP tools for tasks, goals and history, a command bar, note checkboxes to tasks, times of day and timed reminders, and recurring tasks.

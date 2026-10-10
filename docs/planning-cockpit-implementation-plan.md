@@ -403,6 +403,7 @@ New files live under `apps/web/src/planner/`.
 6. **`apps/web/src/components/flaremo-explorer.tsx`**: an import plus `<PlannerNavLink/>` after the team-projects link.
 7. **`playwright.config.ts`**: append `cockpit` to the `memo-ui` `testMatch` regex.
 8. **`apps/web/public/sw.js`**: add `cockpit` to `privateRoutes`.
+9. **Goals and the weekly review** extend items 3, 4, 5, 7 and 8, and add four optional settings to `apps/worker/src/env.ts`. Each one is listed in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
 
 New fork-owned files:
 
@@ -451,7 +452,7 @@ Live is deployed by hand only after the owner's QA.
 Guard command (run before every commit). It must print only section 7 hook-in files:
 
 ```sh
-git diff --name-only planner-base..HEAD | grep -v -E '^(docs/planning-cockpit|docs/fork-|scripts/fork/|packages/db/src/schema/planner\.ts|packages/db/src/planner-|migrations/9[0-9]{3}_planner_|packages/contracts/src/planner|packages/domain/src/planner/|apps/worker/src/routes/planner-|apps/web/src/planner/|tests/e2e/cockpit\.spec\.ts)'
+git diff --name-only planner-base..HEAD | grep -v -E '^(docs/planning-cockpit|docs/fork-|scripts/fork/|packages/db/src/schema/planner\.ts|packages/db/src/planner-|migrations/9[0-9]{3}_planner_|packages/contracts/src/planner|packages/domain/src/planner/|apps/worker/src/routes/planner-|apps/web/src/planner/|tests/e2e/(cockpit|goals-review)\.spec\.ts)'
 ```
 
 Conformance:
@@ -490,6 +491,7 @@ Acceptance:
 
 - planner-base: 80287b09aba4003b977bbcbdb6d19d8a1b41f12e (2026-10-04)
 - v1.1 task panel (section 13): built 2026-10-06 on `main` at `cd24c41980892a13edb6dab96121b41da2116e3e`, as one branch of commits (data, contracts and API, web, e2e and docs, then the dev-env test fixture and a polish pass). The guard still prints only the eight hook-in files.
+- Goals and the weekly review (migration 9005): built 2026-10-10 on `feat/goals-weekly-review`. See [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
 
 ## 12. Audit resolution
 
