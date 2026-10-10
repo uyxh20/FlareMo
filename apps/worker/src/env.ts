@@ -106,6 +106,16 @@ export type FlareMoEnv = Env & {
   FLAREMO_MEMORY_DREAMING?: string;
   FLAREMO_MEMORY_DREAMING_MODEL?: string;
   FLAREMO_MEMORY_PROPOSAL_DAILY_LIMIT?: string;
+  // The weekly review's model (fork-owned planner add-on; see
+  // src/routes/planner-review-ai.ts). Workers AI through the AI binding by
+  // default, and FLAREMO_REVIEW_MODEL picks another Workers AI text model. The
+  // Worker secret ANTHROPIC_API_KEY switches to Anthropic's API instead, with
+  // FLAREMO_REVIEW_ANTHROPIC_MODEL. FLAREMO_REVIEW_AI=off turns the model off;
+  // the review then works from its own drafts.
+  FLAREMO_REVIEW_AI?: string;
+  FLAREMO_REVIEW_MODEL?: string;
+  FLAREMO_REVIEW_ANTHROPIC_MODEL?: string;
+  ANTHROPIC_API_KEY?: string;
   // Optional Cloudflare account analytics for the owner usage panel (see
   // src/cf-analytics.ts). Written by `pnpm setup:usage`; token needs only the
   // "Account Analytics: Read" permission. Queries are filtered down to this

@@ -18,17 +18,11 @@ import {
   plannerHistoryRangeQuerySchema,
   plannerRolloverSchema,
   plannerRollupQuerySchema,
-  plannerTodayWithinBounds,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
   plannerUpdateTreeNodeSchema,
 } from "@flaremo/contracts";
-import {
-  parseResourceName,
-  type TaskActor,
-  updateTask,
-  ValidationError,
-} from "@flaremo/domain";
+import { parseResourceName, updateTask } from "@flaremo/domain";
 import {
   plannerAddComment,
   plannerApplyColumnMove,
@@ -38,6 +32,7 @@ import {
   plannerListComments,
   plannerRankNewTaskOnTop,
   plannerReadBoard,
+  plannerReadCockpitWeek,
   plannerReadHistoryRange,
   plannerReadRollup,
   plannerReadTaskDetail,
@@ -55,15 +50,15 @@ import {
   plannerUpsertProjectNode,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
-import type { Context } from "hono";
 import { Hono } from "hono";
-import {
-  getRequestContext,
-  type HonoBindings,
-  type ReturnTypeOfRequestContext,
-} from "../context";
+import { getRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
+import { plannerGoalsApi } from "./planner-goals-api";
+import {
+  plannerAssertToday,
+  plannerResolveActor,
+} from "./planner-route-helpers";
 
 // The planning cockpit's HTTP API (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 4), mounted lazily at
@@ -89,41 +84,11 @@ function parseTaskId(value: string) {
   return parseResourceName(value, "tasks");
 }
 
-// A copy of tasks-api.ts's `resolveActor`, which is not exported. Agents write
-// through the same route as the browser, so the actor is derived from the
-// credential: a PAT is an agent (labelled with a short token hint so the
-// activity trail stays attributable), a cookie session is the owner.
-//
-// Kept identical on purpose, bug included: it tests the `memos_pat_` prefix on
-// the whole Authorization header, which starts with "Bearer ", so the hint is
-// never produced and a PAT is an agent with no name. Fixing it here alone would
-// label one token differently through the two APIs; fix both, or export one.
-function resolveActor(
-  c: Context<HonoBindings>,
-  credential: ReturnTypeOfRequestContext["credential"],
-): TaskActor {
-  if (credential !== "pat") return { type: "user" };
-  const token = c.req.raw.headers.get("authorization")?.trim() ?? "";
-  const hint = token.startsWith("memos_pat_")
-    ? token.slice("memos_pat_".length, "memos_pat_".length + 8)
-    : null;
-  return { type: "agent", name: hint ? `pat:${hint}` : undefined };
-}
-
-// `today` is the client's local date. Local dates around the world span UTC-12
-// to UTC+14, so a plausible one is within a day of the server's UTC date;
-// anything else is a wrong clock or a bad request. The bound needs the server's
-// clock, so it is checked here and not in the contract schemas.
-function assertToday(today: string, now: Date) {
-  if (!plannerTodayWithinBounds(today, now)) {
-    throw new ValidationError(
-      "today must be within one day of the server's date.",
-    );
-  }
-}
-
 // --- Board and rollover -----------------------------------------------------
 
+// The board also carries the week the cockpit's goal cards show and that week's
+// goals (migration 9005), so the cockpit draws both from one request.
+//
 // The board syncs the history archive first, as rollover did before the web stopped
 // calling it (section 13.x): loading the cockpit is what keeps the archive current.
 // The sync is debounced to 30 seconds and never throws, so a failed sync leaves the
@@ -135,15 +100,19 @@ plannerApi.get(
     try {
       const { db, user } = await getRequestContext(c);
       const query = c.req.valid("query");
-      assertToday(query.today, new Date());
+      plannerAssertToday(query.today, new Date());
       await plannerSyncHistory(db, { userId: user.id, now: new Date() });
-      const board: PlannerBoardResponse = await plannerReadBoard(db, {
-        userId: user.id,
-        today: query.today,
-        doneDays: query.done_days,
-        includeDropped: query.include_dropped,
-      });
-      return c.json(board);
+      const [board, week] = await Promise.all([
+        plannerReadBoard(db, {
+          userId: user.id,
+          today: query.today,
+          doneDays: query.done_days,
+          includeDropped: query.include_dropped,
+        }),
+        plannerReadCockpitWeek(db, { userId: user.id, today: query.today }),
+      ]);
+      const response: PlannerBoardResponse = { ...board, week };
+      return c.json(response);
     } catch (error) {
       return jsonError(c, error);
     }
@@ -160,12 +129,12 @@ plannerApi.post(
       if (throttled) return throttled;
       const { today } = c.req.valid("json");
       const now = new Date();
-      assertToday(today, now);
+      plannerAssertToday(today, now);
       const result: PlannerRolloverResponse = await plannerRollover(
         context.db,
         {
           userId: context.user.id,
-          actor: resolveActor(c, context.credential),
+          actor: plannerResolveActor(c, context.credential),
           today,
           now,
         },
@@ -188,10 +157,10 @@ plannerApi.post(
       const throttled = await rateLimitGuard(c, "planner", context.user.id);
       if (throttled) return throttled;
       const body = c.req.valid("json");
-      assertToday(body.today, new Date());
+      plannerAssertToday(body.today, new Date());
       const created = await plannerCreateTask(context.db, {
         user: context.user,
-        actor: resolveActor(c, context.credential),
+        actor: plannerResolveActor(c, context.credential),
         title: body.title,
         notes: body.notes,
         priority: body.priority,
@@ -281,9 +250,9 @@ plannerApi.patch(
         dropped,
         ...fields
       } = c.req.valid("json");
-      assertToday(today, new Date());
+      plannerAssertToday(today, new Date());
       const { db, user } = context;
-      const actor = resolveActor(c, context.credential);
+      const actor = plannerResolveActor(c, context.credential);
       const taskId = parseTaskId(c.req.param("id"));
 
       // The last planner step that ran holds the final task and plan, unless an
@@ -412,7 +381,7 @@ plannerApi.post(
       const response: PlannerCommentResponse = {
         comment: await plannerAddComment(context.db, {
           user: context.user,
-          actor: resolveActor(c, context.credential),
+          actor: plannerResolveActor(c, context.credential),
           taskId: parseTaskId(c.req.param("id")),
           body,
         }),
@@ -436,7 +405,7 @@ plannerApi.patch(
       const response: PlannerCommentResponse = {
         comment: await plannerUpdateComment(context.db, {
           user: context.user,
-          actor: resolveActor(c, context.credential),
+          actor: plannerResolveActor(c, context.credential),
           commentId: c.req.param("id"),
           body,
         }),
@@ -455,7 +424,7 @@ plannerApi.delete("/comments/:id", async (c) => {
     if (throttled) return throttled;
     await plannerDeleteComment(context.db, {
       user: context.user,
-      actor: resolveActor(c, context.credential),
+      actor: plannerResolveActor(c, context.credential),
       commentId: c.req.param("id"),
     });
     const response: PlannerDeleteCommentResponse = { ok: true };
@@ -544,3 +513,9 @@ plannerApi.get(
     }
   },
 );
+
+// --- Goals and the weekly review --------------------------------------------
+
+// Registered last, on the same sub-app, so the lazy mount and the JSON 404 above
+// cover them too (planner-goals-api.ts).
+plannerApi.route("/", plannerGoalsApi);
