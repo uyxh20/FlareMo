@@ -3,6 +3,7 @@ import {
   type AnySQLiteColumn,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -61,6 +62,9 @@ export const plannerTaskPlan = sqliteTable(
     // as plain strings; a key whose column prefix is not the card's column is
     // stale and counts as NULL.
     boardRank: text("board_rank"),
+    // Added by 9005: the goal this task serves (planner_goal.id by value), or NULL.
+    // Held on the plan row like the effort, so a backlog task can carry one too.
+    goalId: text("goal_id"),
   },
   (table) => [
     index("planner_task_plan_user_period_idx").on(
@@ -196,7 +200,134 @@ export const plannerTaskComment = sqliteTable(
   ],
 );
 
+/** One line under a goal's title: a key result, a part, a parked idea. */
+export type PlannerGoalLine = { text: string; note?: string; struck?: boolean };
+
+// Goals in the owner's words, from the north star down to a week (migration
+// 9005, docs/planning-cockpit-goals-review.md). `period_start` is the first day
+// of the goal's period and NULL for the north star; `pillar` is one of the four
+// objectives, or NULL for the north star, a period's theme line and imported
+// week goals that had none. Soft-deleted: a task's `goal_id` and a flag can
+// still name a removed goal.
+export const plannerGoal = sqliteTable(
+  "planner_goal",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    level: text("level", {
+      enum: ["north_star", "year", "quarter", "month", "week"],
+    }).notNull(),
+    periodStart: text("period_start"),
+    pillar: text("pillar", { enum: ["of", "work", "ai", "health"] }),
+    // May be empty when the lines carry the goal.
+    title: text("title").notNull(),
+    lines: text("lines", { mode: "json" })
+      .$type<PlannerGoalLine[]>()
+      .notNull()
+      .default([]),
+    status: text("status", {
+      enum: ["active", "draft", "contested", "closed"],
+    })
+      .notNull()
+      .default("active"),
+    note: text("note"),
+    result: text("result", { enum: ["met", "partial", "missed"] }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    index("planner_goal_user_level_idx").on(
+      table.userId,
+      table.level,
+      table.periodStart,
+    ),
+  ],
+);
+
+// One row per reviewed or imported week (migration 9005): the two scores, the
+// key question for the next review, the verdict and the summary memo.
+export const plannerWeek = sqliteTable(
+  "planner_week",
+  {
+    userId: text("user_id").notNull(),
+    // The Monday, YYYY-MM-DD.
+    weekStart: text("week_start").notNull(),
+    auth: real("auth"),
+    ach: real("ach"),
+    note: text("note"),
+    question: text("question"),
+    verdict: text("verdict"),
+    // Upstream memos.id by value, with no foreign key.
+    memoId: text("memo_id"),
+    source: text("source", { enum: ["review", "import"] })
+      .notNull()
+      .default("review"),
+    reviewedAt: text("reviewed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.weekStart] })],
+);
+
+// A week's review while it is in progress (migration 9005): one JSON document
+// the page saves as it goes, and when each part was finished.
+export const plannerReview = sqliteTable(
+  "planner_review",
+  {
+    userId: text("user_id").notNull(),
+    // The Monday of the week looked back on.
+    weekStart: text("week_start").notNull(),
+    state: text("state", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    // What saving the plan already did, written by the server only: each new
+    // task's ref and the task it made, so a retried save never makes it twice.
+    commitLog: text("commit_log", { mode: "json" })
+      .$type<{ tasks?: Record<string, string> }>()
+      .notNull()
+      .default({}),
+    lookBackDoneAt: text("look_back_done_at"),
+    lookForwardDoneAt: text("look_forward_done_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.weekStart] })],
+);
+
+// What the conflict check flagged when a week was planned (migration 9005).
+// The next review's "Check goals" shows the open ones; the owner settles each
+// by rewriting a goal or keeping it for now.
+export const plannerGoalFlag = sqliteTable(
+  "planner_goal_flag",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // The Monday of the week that was planned.
+    weekStart: text("week_start").notNull(),
+    goalId: text("goal_id"),
+    pillar: text("pillar", { enum: ["of", "work", "ai", "health"] }),
+    withGoalId: text("with_goal_id"),
+    withLabel: text("with_label").notNull(),
+    why: text("why").notNull(),
+    state: text("state", { enum: ["open", "kept", "rewritten"] })
+      .notNull()
+      .default("open"),
+    createdAt: text("created_at").notNull(),
+    settledAt: text("settled_at"),
+  },
+  (table) => [
+    index("planner_goal_flag_user_state_idx").on(table.userId, table.state),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
+export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
+export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
+export type PlannerReviewRow = typeof plannerReview.$inferSelect;
+export type PlannerGoalFlagRow = typeof plannerGoalFlag.$inferSelect;
 export type PlannerTaskEventRow = typeof plannerTaskEvent.$inferSelect;
 export type PlannerTaskSeenRow = typeof plannerTaskSeen.$inferSelect;
 export type PlannerSyncStateRow = typeof plannerSyncState.$inferSelect;

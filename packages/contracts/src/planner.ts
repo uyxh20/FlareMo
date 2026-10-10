@@ -20,6 +20,7 @@
 // Every export is prefixed planner/Planner.
 
 import { z } from "zod";
+import { plannerCockpitWeekSchema } from "./planner-goals";
 import {
   createTaskSchema,
   projectStatusSchema,
@@ -30,8 +31,12 @@ import {
 } from "./projects";
 
 // The board's manual order helpers live in their own file and are exported from
-// here, so the package index (an upstream file) stays untouched.
+// here, so the package index (an upstream file) stays untouched. So do goals and
+// the weekly review (migration 9005) and the weekly summary memo's format. None
+// of these files imports this one back.
+export * from "./planner-goals";
 export * from "./planner-rank";
+export * from "./planner-review-memo";
 
 export const plannerHorizons = ["day", "week", "month"] as const;
 
@@ -478,6 +483,8 @@ export const plannerPlanDtoSchema = z.object({
   // The stored board order, `<column>|<key>`, or null (migration 9004). Read it
   // with `plannerParseBoardRank`, which drops a rank left over from another column.
   board_rank: z.string().nullable(),
+  // The weekly goal the task serves, or null (migration 9005).
+  goal_id: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -511,6 +518,9 @@ export const plannerBoardCardSchema = z.object({
   // or null when it was never ranked or the rank belongs to another column.
   // Ranked cards come first, in key order; the rest follow in the column's old order.
   board_rank: z.string().nullable(),
+  // The weekly goal the task serves (migration 9005), or null. The id may name a
+  // goal of another week, or a removed one: only this week's goals colour a card.
+  goal_id: z.string().nullable(),
 });
 
 export const plannerBoardResponseSchema = z.object({
@@ -530,6 +540,9 @@ export const plannerBoardResponseSchema = z.object({
   history: plannerHistoryStatusSchema,
   // True when the 500 card cap cut Backlog, Done or Dropped cards.
   truncated: z.boolean(),
+  // The week the goal cards show, with its weekly goals (migration 9005). Always
+  // sent; optional so a board cached before it reads as a week with no goals.
+  week: plannerCockpitWeekSchema.optional(),
 });
 
 export const plannerRolloverResponseSchema = z.object({
