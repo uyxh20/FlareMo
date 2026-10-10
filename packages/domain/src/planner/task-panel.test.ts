@@ -812,6 +812,7 @@ describe("planner task panel", () => {
         effort: 4.5,
         start_date: null,
         board_rank: null,
+        goal_id: null,
         created_at: NOW.toISOString(),
         updated_at: NOW.toISOString(),
       });

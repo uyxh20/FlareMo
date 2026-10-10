@@ -39,6 +39,10 @@ const RESET_TABLES = [
   "planner_sync_state",
   "planner_project_node",
   "planner_task_comment",
+  "planner_goal",
+  "planner_week",
+  "planner_review",
+  "planner_goal_flag",
   "task_activity",
   "tasks",
   "projects",
@@ -397,6 +401,7 @@ export type PlannerTestPlan = {
   effort: number | null;
   start_date: string | null;
   board_rank: string | null;
+  goal_id: string | null;
   created_at: string;
   updated_at: string;
 };

@@ -164,6 +164,7 @@ describe("plannerReadBoard", () => {
       dropped_at: null,
       start_date: null,
       board_rank: null,
+      goal_id: null,
     });
     expect(JSON.stringify(result)).not.toContain("Secret details");
     expect(card).not.toHaveProperty("notes");
