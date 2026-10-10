@@ -255,6 +255,10 @@ export type PlannerStrings = {
     commented: string;
     commentEdited: string;
     commentDeleted: string;
+    /** A task linked to a weekly goal, moved to another, or unlinked. */
+    goalLinked: string;
+    goalRelinked: string;
+    goalUnlinked: string;
     statusChanged: (status: string) => string;
     unknown: (type: string) => string;
     detail: {
@@ -500,6 +504,9 @@ const en: PlannerStrings = {
     commented: "Comment added",
     commentEdited: "Comment edited",
     commentDeleted: "Comment deleted",
+    goalLinked: "Linked to a weekly goal",
+    goalRelinked: "Moved to another weekly goal",
+    goalUnlinked: "Unlinked from its weekly goal",
     statusChanged: (status) => `Status changed to ${status}`,
     unknown: (type) => type,
     detail: {
@@ -740,6 +747,9 @@ const zhCN: PlannerStrings = {
     commented: "添加了评论",
     commentEdited: "编辑了评论",
     commentDeleted: "删除了评论",
+    goalLinked: "关联到本周目标",
+    goalRelinked: "改到另一个本周目标",
+    goalUnlinked: "取消了本周目标关联",
     statusChanged: (status) => `状态改为 ${status}`,
     unknown: (type) => type,
     detail: {

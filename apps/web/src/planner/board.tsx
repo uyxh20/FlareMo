@@ -25,10 +25,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type {
-  PlannerBoardCard,
-  PlannerBoardResponse,
-  PlannerColumn,
+import {
+  type PlannerBoardCard,
+  type PlannerBoardResponse,
+  type PlannerColumn,
+  type PlannerGoalDto,
+  plannerTodoCap,
 } from "@flaremo/contracts";
 import { PlusIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -92,6 +94,11 @@ import {
 // and shows on the board before the server answers. There are no period filters
 // any more (section 13.x): the board always shows every card. Clicking a card opens its task panel (task-card.tsx);
 // a card still waiting for the server can be neither opened nor dragged.
+//
+// To Do counts against the cap the weekly review plans to (N/7, amber when full),
+// and a task that serves one of the week's goals is tinted in its objective's
+// colour (docs/planning-cockpit-goals-review.md); while a goal is in focus the
+// other tasks fade back.
 
 const columnId = (column: PlannerColumnKey) => `column:${column}`;
 const isColumnId = (id: string | number) => String(id).startsWith("column:");
@@ -132,6 +139,31 @@ function isBelow(active: Active, over: Over): boolean {
   return moved.top + moved.height / 2 > over.rect.top + over.rect.height / 2;
 }
 
+/** What the week's goals do to the board: which tint a card wears, which fade. */
+export type PlannerBoardGoals = {
+  /** The week's goals by id; a card whose goal is not here is not tinted. */
+  byId: ReadonlyMap<string, PlannerGoalDto>;
+  /** The goal in focus, or null. */
+  focus: string | null;
+  /** The week was just saved: its tasks glow once. */
+  fresh: boolean;
+};
+
+const NO_GOALS: PlannerBoardGoals = {
+  byId: new Map(),
+  focus: null,
+  fresh: false,
+};
+
+function goalProps(card: PlannerBoardCard, goals: PlannerBoardGoals) {
+  const goal = card.goal_id ? (goals.byId.get(card.goal_id) ?? null) : null;
+  return {
+    goal,
+    dimmed: goals.focus !== null && goal?.id !== goals.focus,
+    fresh: goals.fresh,
+  };
+}
+
 function DraggableCard({
   card,
   dragging,
@@ -139,6 +171,7 @@ function DraggableCard({
   enterIndex,
   hintSide,
   reveal,
+  goals,
   ...rest
 }: {
   card: PlannerBoardCard;
@@ -146,6 +179,7 @@ function DraggableCard({
   actions: PlannerActions;
   onRequest: (request: PlannerCardRequest) => void;
   onOpen: (card: PlannerBoardCard) => void;
+  goals: PlannerBoardGoals;
   dragging: boolean;
   /** Whether other cards can be dropped next to this one (not in Other). */
   droppable: boolean;
@@ -234,7 +268,7 @@ function DraggableCard({
           data-testid="planner-drop-hint"
         />
       )}
-      <PlannerTaskCard card={card} {...rest} />
+      <PlannerTaskCard card={card} {...goalProps(card, goals)} {...rest} />
       {revealStamp !== null && (
         <span
           aria-hidden="true"
@@ -264,6 +298,7 @@ function Column({
   highlighted,
   dropHint,
   reveal,
+  goals,
 }: {
   column: PlannerColumnKey;
   label: string;
@@ -283,6 +318,7 @@ function Column({
   /** The card a dragged one from another column would land next to, and on which side. */
   dropHint: { id: string; side: "before" | "after" } | null;
   reveal: PlannerReveal | null;
+  goals: PlannerBoardGoals;
 }) {
   const strings = usePlannerStrings();
   const { setNodeRef } = useDroppable({
@@ -301,9 +337,21 @@ function Column({
       <header className="flex items-center gap-2 px-1">
         <PlannerColumnIcon column={column} />
         <h2 className="text-sm font-medium">{label}</h2>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {cards.length}
-        </span>
+        {column === "todo" ? (
+          <span
+            className={cn(
+              "text-xs text-muted-foreground tabular-nums",
+              cards.length >= plannerTodoCap && "text-warning",
+            )}
+            data-testid="planner-todo-count"
+          >
+            {cards.length}/{plannerTodoCap}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {cards.length}
+          </span>
+        )}
         {onAdd && (
           <Tooltip>
             <TooltipTrigger
@@ -361,6 +409,7 @@ function Column({
                 dragging={dragging}
                 droppable={droppable}
                 enterIndex={entering ? index : undefined}
+                goals={goals}
                 hintSide={dropHint?.id === card.id ? dropHint.side : null}
                 key={card.id}
                 reveal={reveal}
@@ -384,6 +433,7 @@ export function PlannerBoard({
   onOpen,
   entering,
   reveal,
+  goals = NO_GOALS,
 }: {
   board: PlannerBoardResponse;
   today: string;
@@ -394,6 +444,8 @@ export function PlannerBoard({
   entering: boolean;
   /** The card to scroll to and ring, from the page; null when there is none. */
   reveal: PlannerReveal | null;
+  /** The week's goals, the one in focus and whether they were just saved. */
+  goals?: PlannerBoardGoals;
 }) {
   const strings = usePlannerStrings();
   const sensors = useSensors(
@@ -615,6 +667,7 @@ export function PlannerBoard({
               dragging={activeId !== null}
               dropHint={target?.column === column ? target.hint : null}
               entering={entering}
+              goals={goals}
               highlighted={target?.column === column}
               hint={
                 strings.columnHint[
@@ -642,6 +695,7 @@ export function PlannerBoard({
             actions={actions}
             card={activeCard}
             className={lifted ? plannerLiftClass : undefined}
+            goal={goalProps(activeCard, goals).goal}
             overlay
             today={today}
             onOpen={onOpen}

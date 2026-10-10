@@ -61,7 +61,8 @@ export function plannerDetailWithCard(
     (before?.period_start ?? null) !== card.period_start ||
     (before?.dropped_at ?? null) !== card.dropped_at ||
     (before?.carry_count ?? 0) !== card.carry_count ||
-    (before?.start_date ?? null) !== card.start_date;
+    (before?.start_date ?? null) !== card.start_date ||
+    (before?.goal_id ?? null) !== card.goal_id;
   const plan: PlannerPlanDto | null =
     before === null && !planChanged
       ? null
@@ -74,6 +75,7 @@ export function plannerDetailWithCard(
           effort: before?.effort ?? null,
           start_date: card.start_date,
           board_rank: before?.board_rank ?? null,
+          goal_id: card.goal_id,
           created_at: before?.created_at ?? card.updated_at,
           updated_at: planChanged
             ? card.updated_at
@@ -110,6 +112,7 @@ export function plannerDetailWithEffort(
         effort,
         start_date: null,
         board_rank: null,
+        goal_id: null,
         created_at: at,
         updated_at: at,
       };

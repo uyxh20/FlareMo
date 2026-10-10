@@ -29,6 +29,8 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/projects",
   "/team-projects",
   "/cockpit",
+  "/goals",
+  "/weekly-review",
   "/capture",
   "/articles",
   "/review/daily",

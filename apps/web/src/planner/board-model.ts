@@ -390,6 +390,7 @@ export function plannerCardFromTask(
     dropped_at: plan?.dropped_at ?? null,
     start_date: plan?.start_date ?? null,
     board_rank: boardRankOf(task, plan),
+    goal_id: plan?.goal_id ?? null,
   };
 }
 
@@ -463,6 +464,7 @@ export function plannerPendingCard(input: {
     dropped_at: null,
     start_date: null,
     board_rank: null,
+    goal_id: null,
   };
 }
 

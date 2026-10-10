@@ -61,6 +61,7 @@ function card(overrides: Partial<PlannerBoardCard> = {}): PlannerBoardCard {
     dropped_at: null,
     start_date: null,
     board_rank: null,
+    goal_id: null,
     ...overrides,
   };
 }
@@ -617,6 +618,7 @@ describe("plannerCardFromTask", () => {
           dropped_at: null,
           start_date: null,
           board_rank: null,
+          goal_id: null,
           effort: null,
           created_at: "2026-10-07T09:00:00.000Z",
           updated_at: "2026-10-07T09:00:00.000Z",
@@ -641,6 +643,7 @@ describe("plannerCardFromTask", () => {
       dropped_at: null,
       start_date: null,
       board_rank: null,
+      goal_id: null,
     });
   });
 
@@ -847,11 +850,13 @@ describe("manual order", () => {
       card({
         id: "tasks/x",
         board_rank: "z",
+        goal_id: null,
         created_at: "2026-10-09T00:00:00.000Z",
       }),
       card({
         id: "tasks/y",
         board_rank: "a",
+        goal_id: null,
         created_at: "2026-10-01T00:00:00.000Z",
       }),
     ];
@@ -881,6 +886,7 @@ describe("manual order", () => {
       effort: null,
       start_date: null,
       board_rank: "todo|aV",
+      goal_id: null,
       created_at: "x",
       updated_at: "x",
     };

@@ -21,6 +21,10 @@ import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { queryKeys } from "@/lib/query-keys";
 import { plannerCockpitSearch } from "@/planner/cockpit-search";
+import {
+  plannerGoalsSearch,
+  plannerReviewSearch,
+} from "@/planner/goals-search";
 import { AuthenticatedRoute } from "@/routes/authenticated-route";
 import { indexRoute } from "@/routes/index-route";
 import { rootRoute } from "@/routes/root-route";
@@ -113,6 +117,16 @@ const TeamProjectsPage = lazy(() =>
 const CockpitPage = lazy(() =>
   import("@/planner/cockpit-page").then((module) => ({
     default: module.PlannerCockpitPage,
+  })),
+);
+const GoalsPage = lazy(() =>
+  import("@/planner/goals-page").then((module) => ({
+    default: module.PlannerGoalsPage,
+  })),
+);
+const WeeklyReviewPage = lazy(() =>
+  import("@/planner/review-page").then((module) => ({
+    default: module.PlannerReviewPage,
   })),
 );
 const ProjectsPage = lazy(() =>
@@ -514,6 +528,41 @@ const cockpitRoute = createRoute({
   component: CockpitRoutePage,
 });
 
+function GoalsRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <GoalsPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+const goalsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/goals",
+  // The year, quarter, month or week shown (see planner/goals-search.ts).
+  validateSearch: plannerGoalsSearch,
+  component: GoalsRoutePage,
+});
+
+function WeeklyReviewRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <WeeklyReviewPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+const weeklyReviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/weekly-review",
+  validateSearch: plannerReviewSearch,
+  component: WeeklyReviewRoutePage,
+});
+
 function CaptureRoutePage() {
   return (
     <AuthenticatedRoute>
@@ -596,6 +645,8 @@ const router = createRouter({
     projectsRoute,
     teamProjectsRoute,
     cockpitRoute,
+    goalsRoute,
+    weeklyReviewRoute,
     captureRoute,
     articlesRoute,
     articleEditRoute,

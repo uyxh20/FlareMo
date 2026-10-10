@@ -1,7 +1,14 @@
 import type { PlannerBoardCard } from "@flaremo/contracts";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { CirclePauseIcon, GaugeIcon, InfoIcon, PlusIcon } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +26,7 @@ import { PlannerBoard, PlannerBoardSkeleton } from "./board";
 import { plannerBoardCardCount } from "./board-model";
 import { PlannerCardDialogs, usePlannerCardRequests } from "./card-dialogs";
 import { PlannerDroppedList } from "./dropped-list";
+import { PlannerGoalCards, plannerTakeWeekFresh } from "./goal-cards";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerQuickAdd } from "./quick-add";
 import { usePlannerStrings } from "./strings";
@@ -37,6 +45,10 @@ import { usePlannerTaskParam } from "./use-task-param";
 //
 // A card opens into its task panel (task-panel.tsx), whose state lives in the
 // address as `?task=<id>`: a link opens it, the back button closes it.
+//
+// Above the board sit the week's goal cards (goal-cards.tsx,
+// docs/planning-cockpit-goals-review.md). Clicking one focuses its goal; Escape
+// or a second click lets go.
 
 /** Short, quiet notes above the board: history paused, cards hidden by the cap. */
 function Notice({
@@ -88,6 +100,30 @@ export function PlannerCockpitPage() {
   });
   const board = boardQuery.data;
 
+  // The goal in focus, and whether the week was just saved by the review.
+  const [focus, setFocus] = useState<string | null>(null);
+  const [fresh] = useState(() => plannerTakeWeekFresh());
+  const week = board?.week;
+  const goals = useMemo(
+    () => ({
+      byId: new Map((week?.goals ?? []).map((goal) => [goal.id, goal])),
+      focus:
+        focus !== null && week?.goals.some((goal) => goal.id === focus)
+          ? focus
+          : null,
+      fresh,
+    }),
+    [week, focus, fresh],
+  );
+  useEffect(() => {
+    if (focus === null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) setFocus(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [focus]);
+
   // Cards stagger in once, when the board first appears, and never again.
   const [entering, setEntering] = useState(true);
   const hasBoard = board !== undefined;
@@ -135,6 +171,7 @@ export function PlannerCockpitPage() {
         actions={actions}
         board={board}
         entering={entering}
+        goals={goals}
         reveal={reveal}
         today={today}
         onOpen={openCard}
@@ -169,6 +206,16 @@ export function PlannerCockpitPage() {
       )}
     >
       <div className="flex flex-col gap-4 py-2">
+        {week && board && (
+          <PlannerGoalCards
+            board={board}
+            focus={goals.focus}
+            fresh={fresh}
+            week={week}
+            onFocus={setFocus}
+          />
+        )}
+
         <PlannerQuickAdd actions={actions} inputRef={quickAddRef} />
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">

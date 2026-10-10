@@ -12,10 +12,11 @@ import type { PlannerStrings } from "./strings";
 // add-on, docs/planning-cockpit-implementation-plan.md, sections 4 and 5):
 // "Created", "Moved to To Do", "Moved to Doing", "Completed", "Reopened", "Dropped
 // (due date cleared)", and the task panel's: "Effort set to 3", "Start date set to
-// Oct 8", "Comment added", "Comment edited", "Comment deleted". Plan events from
-// before v1.2 still read as they did ("Planned for this week", "Carried over to
-// today"). The comment lines never say what the comment said: the archive keeps
-// only the comment's id.
+// Oct 8", "Comment added", "Comment edited", "Comment deleted", and the weekly
+// review's "Linked to a weekly goal" (docs/planning-cockpit-goals-review.md). Plan
+// events from before v1.2 still read as they did ("Planned for this week",
+// "Carried over to today"). The comment lines never say what the comment said:
+// the archive keeps only the comment's id.
 //
 // The archive stores upstream's own words (`status_changed` with the new status)
 // next to the planner's (`planned`, `carried_over`). Two things a reader wants are
@@ -305,6 +306,19 @@ export function plannerDescribeHistory(
       case "comment_deleted":
         label = strings.history.commentDeleted;
         break;
+
+      case "goal_changed": {
+        // `{from, to}`: the weekly goal ids before and after (migration 9005).
+        const from = asString(data.from);
+        const to = asString(data.to);
+        label =
+          to === null
+            ? strings.history.goalUnlinked
+            : from === null
+              ? strings.history.goalLinked
+              : strings.history.goalRelinked;
+        break;
+      }
 
       case "undropped":
         label = strings.history.undropped;

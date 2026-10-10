@@ -17,4 +17,12 @@ export const plannerQueryKeys = {
   detail: (taskId: string) => ["planner", "detail", taskId] as const,
   /** The goal tree, for the goal picker's paths. */
   tree: ["planner", "tree"] as const,
+  /** Every cached Goals page year (docs/planning-cockpit-goals-review.md). */
+  goals: ["planner", "goals"] as const,
+  goalsYear: (year: number, today: string) =>
+    ["planner", "goals", year, today] as const,
+  /** The weekly review as the page reads it, for the day it is opened on. */
+  review: (today: string) => ["planner", "review", today] as const,
+  /** Whether a review is due, for the sidebar's dot. */
+  reviewStatus: (today: string) => ["planner", "review-status", today] as const,
 } as const;

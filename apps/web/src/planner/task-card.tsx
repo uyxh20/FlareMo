@@ -1,4 +1,8 @@
-import type { PlannerBoardCard, PlannerColumn } from "@flaremo/contracts";
+import type {
+  PlannerBoardCard,
+  PlannerColumn,
+  PlannerGoalDto,
+} from "@flaremo/contracts";
 import {
   ArrowRightLeftIcon,
   BanIcon,
@@ -27,6 +31,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +59,9 @@ import {
   plannerRelativeTime,
   plannerStartLabel,
 } from "./dates";
+import { PlannerPillarLabel, plannerPillarClass } from "./goal-cards";
+import { plannerGoalText } from "./goals-model";
+import { usePlannerGoalsStrings } from "./goals-strings";
 import { usePlannerStrings } from "./strings";
 import type { PlannerActions } from "./use-planner-actions";
 
@@ -69,6 +81,11 @@ import type { PlannerActions } from "./use-planner-actions";
 // sensor starts a drag only after the pointer moves 6px and its touch sensor only
 // after a long press, and dnd-kit swallows the click that ends a drag, so only a
 // click that was one gets here (board.test.tsx pins this against the real library).
+//
+// A task that serves one of the week's goals (docs/planning-cockpit-goals-review.md)
+// is tinted in its objective's colour and says so under its title ("Work · weekly
+// goal", the goal itself on hover). While a goal card is in focus, the tasks that
+// do not serve it fade back.
 
 // What has a job of its own inside a card. A click that starts in one of these,
 // or in a menu opened from the card, is that control's and does not open the card.
@@ -158,6 +175,9 @@ export function PlannerTaskCard({
   onOpen,
   overlay = false,
   className,
+  goal = null,
+  dimmed = false,
+  fresh = false,
 }: {
   card: PlannerBoardCard;
   today: string;
@@ -168,8 +188,15 @@ export function PlannerTaskCard({
   /** A static copy under the pointer while dragging: no menu, nothing to click. */
   overlay?: boolean;
   className?: string;
+  /** The week's goal this task serves, if any: it tints the card. */
+  goal?: PlannerGoalDto | null;
+  /** Another goal is in focus and this task does not serve it. */
+  dimmed?: boolean;
+  /** The week was just saved: a goal's task glows once. */
+  fresh?: boolean;
 }) {
   const strings = usePlannerStrings();
+  const goalStrings = usePlannerGoalsStrings();
   const { t } = useI18n();
   const locale = strings.intlLocale;
   const column = plannerCardColumn(card);
@@ -183,6 +210,7 @@ export function PlannerTaskCard({
   const overdue = plannerIsOverdue(card, today);
   const advanceLabel = t(ADVANCE_KEY[status]);
   const hasChips =
+    goal !== null ||
     card.start_date !== null ||
     card.priority !== "none" ||
     card.due_at !== null ||
@@ -213,8 +241,13 @@ export function PlannerTaskCard({
         waiting && "opacity-70",
         overlay && "shadow-lg ring-brand-400/40",
         isDropped && "bg-card/60",
+        goal !== null && ["planner-task-goal", plannerPillarClass(goal.pillar)],
+        goal !== null && fresh && "planner-fresh",
+        dimmed && "opacity-30",
+        "motion-safe:transition-[opacity,box-shadow]",
         className,
       )}
+      data-goal={goal?.id}
       onClick={
         inert
           ? undefined
@@ -354,6 +387,28 @@ export function PlannerTaskCard({
 
         {hasChips && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-6">
+            {goal !== null && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className="inline-flex min-w-0 cursor-default"
+                      data-testid="planner-card-goal"
+                    >
+                      <PlannerPillarLabel
+                        pillar={goal.pillar}
+                        short
+                        strings={goalStrings}
+                        suffix={` · ${goalStrings.cockpit.weeklyGoal}`}
+                      />
+                    </span>
+                  }
+                />
+                <TooltipContent className="max-w-72 whitespace-pre-line">
+                  {plannerGoalText(goal)}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {card.start_date !== null && (
               <Chip
                 className={cn(
