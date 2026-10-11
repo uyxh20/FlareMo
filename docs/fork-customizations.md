@@ -119,6 +119,7 @@ All new, none in conflict with anything upstream ships.
 | `apps/web/src/fork/product-name.ts` | `brandTemplate`, plus the two key lists: `PRODUCT_NAME_EXCLUDED_KEYS` and `STOCK_BRAND_KEYS`. |
 | `apps/web/src/fork/product-name.test.ts` | Unit tests for `brandTemplate`, and a check across all eight catalogs that the key lists still match. |
 | `apps/web/src/fork/product-name-wiring.test.ts` | Fails when an upstream sync drops the `i18n.tsx`, `branding.tsx` or media-session hook-ins. |
+| `scripts/fork/review-ab/` | The weekly review A/B test (plain API vs Managed Agents), run by hand against the dev database. See `docs/fork-review-ab-test.md`. It also adds `@anthropic-ai/sdk` and `@types/node` to the root dev dependencies; the app does not use them. |
 | `docs/fork-customizations.md` | This file. |
 
 ## Undoing a change
