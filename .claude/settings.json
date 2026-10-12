@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx wrangler d1 migrations apply DB --remote --config wrangler.jsonc)",
+      "Bash(npx wrangler deploy --config wrangler.jsonc --keep-vars)"
+    ]
+  }
+}
