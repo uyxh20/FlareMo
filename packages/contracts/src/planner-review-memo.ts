@@ -353,31 +353,40 @@ export function plannerComposeSummaryMemo(
 const EMPTY_STEP = /^(see trajectory|none stated|none|n\/a|—|-|skipped)\.?$/i;
 
 /**
- * The text of a "**Next Steps:**" bullet: what follows the label on its line,
- * or, when the line ends there, the items of the list nested under it.
+ * The text of a "**Next Steps:**" bullet: what follows the label on its line
+ * and the items of any list nested under it, with wrapped lines joined. A
+ * label that only introduces the list ("For W42:") is left out.
  */
 function nextStepsText(part: string): string | null {
   const match =
-    /^([^\S\n]*)[-*][^\S\n]+\*\*Next Steps:?\*\*:?[^\S\n]*(.*)$/im.exec(part);
+    /^([^\S\n]*)([-*][^\S\n]+)?\*\*Next Steps:?\*\*:?[^\S\n]*(.*)$/im.exec(
+      part,
+    );
   if (!match) return null;
-  const sameLine = (match[2] ?? "").trim();
-  if (sameLine) return sameLine;
-  const indent = (match[1] ?? "").length;
+  const sameLine = (match[3] ?? "").trim();
+  // A bold label on its own line ("**Next Steps:**") may have its list at the
+  // same indent; under a bullet the list is nested deeper.
+  const labelDepth = (match[1] ?? "").length;
+  const indent = labelDepth - (match[2] ? 0 : 1);
   const items: string[] = [];
+  let lead = sameLine;
   const after = part
     .slice(match.index + match[0].length)
     .split("\n")
     .slice(1);
   for (const line of after) {
-    if (!line.trim()) {
-      if (items.length) break;
-      continue;
-    }
-    const item = /^([^\S\n]*)(?:[-*]|\d+[.)])[^\S\n]+(.+)$/.exec(line);
-    if (!item || (item[1] ?? "").length <= indent) break;
-    items.push((item[2] ?? "").trim().replace(/[.;]$/, ""));
+    if (!line.trim()) continue;
+    const depth = (/^[^\S\n]*/.exec(line)?.[0] ?? "").length;
+    if (depth <= indent) break;
+    const item = /^[^\S\n]*(?:[-*]|\d+[.)])[^\S\n]+(.+)$/.exec(line);
+    if (!item && depth <= labelDepth) break;
+    if (item) items.push((item[1] ?? "").trim());
+    else if (items.length) items[items.length - 1] += ` ${line.trim()}`;
+    else lead = `${lead} ${line.trim()}`.trim();
   }
-  return items.length ? items.join("; ") : null;
+  const steps = items.map((step) => step.replace(/[.;]$/, ""));
+  if (lead && !(steps.length && lead.endsWith(":"))) steps.unshift(lead);
+  return steps.length ? steps.join("; ") : null;
 }
 
 /**
@@ -391,7 +400,9 @@ export function plannerMemoNextSteps(
   max = 300,
 ): Partial<Record<PlannerPillar, string>> {
   const out: Partial<Record<PlannerPillar, string>> = {};
-  for (const part of String(markdown ?? "").split(/^(?=###\s)/m)) {
+  for (const part of String(markdown ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split(/^(?=###\s)/m)) {
     const heading = part.split("\n")[0] ?? "";
     if (!/^###\s/.test(heading)) continue;
     const pillar: PlannerPillar | null = /Objective Function/i.test(heading)

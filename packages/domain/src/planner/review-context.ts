@@ -205,13 +205,13 @@ export function plannerFitDiary(
     left -= length;
     count -= 1;
   }
-  return entries.map((entry) => ({
-    at: entry.at,
-    text:
-      entry.text.length > cap
-        ? `${entry.text.slice(0, Math.max(0, cap - 1))}…`
-        : entry.text,
-  }));
+  return entries.map((entry) => {
+    if (entry.text.length <= cap) return entry;
+    // Never split an emoji's surrogate pair.
+    let end = Math.max(0, cap - 1);
+    if (/[\uD800-\uDBFF]/.test(entry.text[end - 1] ?? "")) end -= 1;
+    return { at: entry.at, text: `${entry.text.slice(0, end)}…` };
+  });
 }
 
 /**

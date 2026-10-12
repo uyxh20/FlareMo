@@ -301,7 +301,7 @@ describe("what each call asks for", () => {
       ),
     );
     expect(check).toContain(
-      "Anon already reviewed these clashes. Don't flag them again, and don't flag the same weekly goal for the same reason against another goal or level:\n- Year · Work: The year goal says stay; the note says go. Kept for now in an earlier review.",
+      "Anon already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n- Work weekly goal against Year · Work: The year goal says stay; the note says go. Kept for now in an earlier review.",
     );
   });
 });

@@ -638,9 +638,12 @@ function ReviewSession({
             : null,
           recommended: written.trajectory.recommended ?? "continue",
           drafts: plannerMemoDrafts(written),
-          // The scores the drafts were written for: when the owner changed
-          // them, the memo rewrites the basis instead of keeping the drafts'.
-          drafted: { auth: written.scores.auth, ach: written.scores.ach },
+          // The scores the model's drafts were written for: when the owner
+          // changed them, the memo rewrites the basis instead of keeping it.
+          drafted:
+            written.scores.auth_evidence || written.scores.ach_evidence
+              ? { auth: written.scores.auth, ach: written.scores.ach }
+              : null,
         },
         {
           signal: controller.signal,

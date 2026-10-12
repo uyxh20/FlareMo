@@ -142,7 +142,7 @@ function diaryDay(at: string): string {
  */
 export function plannerReadingRules(name: string): string {
   return `How to read this material:
-- Say something happened this week only if this week's diary entries, tasks or goal results, or ${name}'s answers in this review, say so. A plan, a goal or an intention is not an event, and last week's summary is about last week.
+- Say something happened this week only if this week's diary entries, tasks, goal results or goal notes, or ${name}'s answers in this review, say so. A plan, a goal or an intention is not an event, and last week's summary is about last week.
 - When the material doesn't mention something, it isn't recorded. Don't say it didn't happen.
 - The day in brackets is when an entry was written. An entry can describe an earlier day: use the day it names, or say "this week".
 - Copy numbers exactly as written. Don't total things up (entries, sessions, days): name them, or leave the number out.
@@ -390,7 +390,7 @@ function answersBlock(
       : "There was no key question from last week.",
     "",
     goals.length
-      ? `Last week's goals, as ${context.ownerName} judged them:\n${goals.join("\n")}`
+      ? `This week's (${plannerWeekCode(context.weekStart)}) goals, as ${context.ownerName} judged them:\n${goals.join("\n")}`
       : "No weekly goals were set for this week.",
     "",
     `Reflection answers, in ${context.ownerName}'s words:`,
@@ -522,7 +522,7 @@ export function plannerCoachSystem(
 
 How to reply:
 - One to three short sentences in plain words. No headings, lists, emojis or praise.
-- Reflect one specific thing they said. When the diary or tasks hold something that bears on it, point at it: a day, an entry, a number or a name, exactly as the context has it. Then either ask one probing question (what specifically, who, which number, what got in the way) or acknowledge it.
+- Reflect one specific thing they said. When the diary or tasks hold something that bears on it, point at it: an entry, a number or a name, exactly as the context has it, and for an event the day the entry names. Then either ask one probing question (what specifically, who, which number, what got in the way) or acknowledge it.
 - Never answer a prompt for them and never summarize the whole week.
 - Last week's key question: if the answer is "partly", "no" or vague, ask once what specifically happened.
 - Prompt 6 (blindspot) is the coaching moment: don't accept the first answer; offer one candidate blindspot from the context and name the bias it looks like (confirmation, sunk cost, anchoring, complexity or recency).
@@ -677,7 +677,9 @@ Rules:
 - Be specific. In the Executive Summary, Evidence and Learnings, name the days, people and numbers the diary gives, and quote ${name}'s own words, copied exactly inside quotation marks, at least once for each objective the diary covers.
 - Write "Skipped." for a skipped prompt and "None stated." for a bullet with nothing behind it.
 - Each Next Steps bullet is one concrete step for ${next} in at most 15 words; it becomes the suggested weekly goal for that objective.
-- Pattern, Risk and Opportunity: start from the drafts below and keep their meaning.${
+- Pattern, Risk and Opportunity: start from the drafts below and keep their meaning${
+        changed ? ", unless it contradicts the scores" : ""
+      }.${
         changed
           ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
           : ""
@@ -846,7 +848,7 @@ export function plannerCheckMessages(
     ),
     ...context.keptFlags.map(
       (flag) =>
-        `- ${flag.label}: ${flag.why} Kept for now in an earlier review.`,
+        `- ${flag.pillar ? `${plannerPillarNames[flag.pillar]} weekly goal against ` : ""}${flag.label}: ${flag.why} Kept for now in an earlier review.`,
     ),
   ];
   return [
@@ -866,7 +868,7 @@ North star: ${context.northStar ? goalText(context.northStar) : "not written"}
 Year: ${goalsByPillar(context.yearGoals)}
 Quarter: ${goalsByPillar(context.quarterGoals)}
 Month: ${goalsByPillar(context.monthGoals)}
-${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again, and don't flag the same weekly goal for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
+${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
 Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}`,
     },
   ];

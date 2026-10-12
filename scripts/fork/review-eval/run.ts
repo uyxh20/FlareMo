@@ -915,7 +915,6 @@ await Promise.all(models.map((m) => runModel(m.id)));
 
 writeFileSync(join(runDir, "results.json"), JSON.stringify(results, null, 2));
 
-const letters = ["A", "B", "C", "D", "E", "F"];
 const key: Record<string, Record<string, string>> = {};
 for (const week of BLIND_WEEKS) {
   const byModel = memos.get(week);
@@ -924,9 +923,9 @@ for (const week of BLIND_WEEKS) {
   key[week] = {};
   mkdirSync(join(runDir, "blind", week), { recursive: true });
   order.forEach((model, i) => {
-    key[week]![letters[i]!] = model;
+    key[week]![String.fromCharCode(65 + i)] = model;
     writeFileSync(
-      join(runDir, "blind", week, `${letters[i]}.md`),
+      join(runDir, "blind", week, `${String.fromCharCode(65 + i)}.md`),
       byModel.get(model) || "_(no memo: this model failed)_\n",
     );
   });
@@ -961,7 +960,7 @@ const lines = models.map(({ id, name }) => {
   };
   // One review's five calls: the four per week, plus one clash check.
   const paid = (call: string) =>
-    of(call).filter((r) => Number.isFinite(r.usd));
+    of(call).filter((r) => Number.isFinite(r.usd) && !r.error);
   const mean = (rows: CallResult[], key: "usd" | "seconds") =>
     rows.length ? rows.reduce((a, r) => a + r[key], 0) / rows.length : 0;
   const perReview = (key: "usd" | "seconds") =>
@@ -969,13 +968,17 @@ const lines = models.map(({ id, name }) => {
       (a, call) => a + mean(paid(call), key),
       0,
     );
-  const anyPaid = mine.some((r) => Number.isFinite(r.usd));
-  const failed = mine.filter((r) => r.error).length;
+  const anyPaid = ["opening", "coach", "close", "memo", "check"].some(
+    (call) => paid(call).length,
+  );
+  const failed = mine.filter(
+    (r) => r.error && !r.call.startsWith("memo@"),
+  ).length;
   return `| ${name} | ${pct(of("opening").flatMap((r) => r.checks))} | ${pct(of("coach").flatMap((r) => r.checks))} | ${pct(closes.flatMap((r) => r.checks))} | ${mae} | ${pct(of("memo").flatMap((r) => r.checks))} | ${facts("opening")} | ${facts("memo")} | ${pct(of("check").flatMap((r) => r.checks))} | ${failed} | ${anyPaid ? `$${perReview("usd").toFixed(3)}` : "reused"} | ${anyPaid ? `${perReview("seconds").toFixed(0)}s` : "reused"} |`;
 });
 
 const cacheLines = results
-  .filter((r) => r.call === "coach-repeat")
+  .filter((r) => r.call === "coach-repeat" && r.provider !== "reused")
   .map(
     (r) =>
       `- ${r.model}: the repeated coach call had ${r.tokens.cached} of ${r.tokens.input} prompt tokens billed as cached.`,
@@ -989,7 +992,7 @@ const writerLines = memoModels.map((writer) => {
 
 const summary = `# Weekly review model eval: results
 
-${weeks.length} weeks × 4 calls (opening, coach, close, memo) and the ${CHECK_CASES.length} clash cases × ${CHECK_RUNS} runs on ${CHECK_WEEK}, × ${models.length} models, through OpenRouter with zero data retention required. Diary budget ${PLANNER_DIARY_CHARS.toLocaleString("en")} characters. Model spend $${(spent - spentJudge).toFixed(2)}, judge spend $${spentJudge.toFixed(2)}.
+${weeks.length} weeks × 4 calls (opening, coach, close, memo) and ${weeks.some((w) => w.week === CHECK_WEEK) ? `the ${CHECK_CASES.length} clash cases × ${CHECK_RUNS} runs on ${CHECK_WEEK}` : "no clash cases (their week was not run)"}, × ${models.length} models, through OpenRouter with zero data retention required. Diary budget ${PLANNER_DIARY_CHARS.toLocaleString("en")} characters. Model spend $${(spent - spentJudge).toFixed(2)}, judge spend $${spentJudge.toFixed(2)}.
 
 | Model | Opening checks | Coach checks | Close checks | Score error (vs your scores) | Memo checks | Invented facts per opening | Invented facts per memo | Clash cases right | Failed calls | Cost per review (5 calls) | Time per review |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -997,7 +1000,7 @@ ${lines.join("\n")}
 
 Score error is the average distance, in points, between the drafted score and the one you gave (both scores, all weeks). ${args.judge ? `Invented facts are counted by ${JUDGE}, which saw exactly what each model saw.` : "No judge model ran (--judge off): invented facts are checked separately, against the saved prompts."}
 ${cacheLines.length ? `\nPrompt cache:\n${cacheLines.join("\n")}\n` : ""}${writerLines.length ? `\nMemos by other writers, from the same drafts:\n${writerLines.join("\n")}\n` : ""}
-Blind memos for you to score: blind/<week>/A.md to E.md. The key is blind/.key.json; open it after scoring.
+Blind memos for you to score: blind/<week>/A.md, B.md and so on. The key is blind/.key.json; open it after scoring.
 `;
 writeFileSync(join(runDir, "summary.md"), summary);
 console.log(summary);

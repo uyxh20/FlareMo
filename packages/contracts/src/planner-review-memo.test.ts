@@ -206,6 +206,46 @@ describe("reading a past summary", () => {
     expect(plannerMemoNextSteps(nested, 12)).toEqual({ work: "Send Acme th" });
   });
 
+  it("reads Next Steps written as a bold label without a bullet", () => {
+    const memo = [
+      "### I. Objective Function",
+      "**Next Steps:** Compare the offers on numbers",
+      "**Blockers:** none",
+      "",
+      "### II. Work",
+      "**Next Steps:**",
+      "- Send Acme the offer",
+      "- Book Zeta",
+      "",
+      "**Learnings:** not a step",
+    ].join("\n");
+    expect(plannerMemoNextSteps(memo)).toEqual({
+      of: "Compare the offers on numbers",
+      work: "Send Acme the offer; Book Zeta",
+    });
+  });
+
+  it("reads Windows line endings, loose lists, wrapped lines and a lead-in", () => {
+    const memo = [
+      "### I. Objective Function",
+      "- **Next Steps:** For W42:",
+      "  - Compare the offers",
+      "",
+      "  - Decide by Friday",
+      "- **Blockers:** none",
+      "",
+      "### II. Work",
+      "- **Next Steps:**",
+      "  1. Send Acme the offer with",
+      "     the new terms.",
+      "  2. Book Zeta",
+    ].join("\r\n");
+    expect(plannerMemoNextSteps(memo)).toEqual({
+      of: "Compare the offers; Decide by Friday",
+      work: "Send Acme the offer with the new terms; Book Zeta",
+    });
+  });
+
   it("reads the key question and the week the summary is about", () => {
     expect(plannerMemoKeyQuestion(past)).toBe(
       "Did I compare Acme and Zeta on numbers, not feelings?",

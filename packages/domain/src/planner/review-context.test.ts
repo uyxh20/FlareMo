@@ -36,4 +36,20 @@ describe("fitting the diary to the budget", () => {
     ]);
     expect(plannerFitDiary([], 1_000)).toEqual([]);
   });
+
+  it("stays within the budget and never splits an emoji", () => {
+    const rows = Array.from({ length: 200 }, (_, index) => ({
+      at: String(index),
+      content: "w".repeat(index * 7),
+    }));
+    const fitted = plannerFitDiary(rows, 12_000);
+    expect(
+      fitted.reduce((sum, entry) => sum + entry.text.length, 0),
+    ).toBeLessThanOrEqual(12_000);
+    const [emoji] = plannerFitDiary(
+      [{ at: "mon", content: "😀".repeat(10) }],
+      4,
+    );
+    expect(emoji?.text).toBe("😀…");
+  });
 });
