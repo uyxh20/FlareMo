@@ -134,9 +134,11 @@ The full list, with each response type, is the comment block in `packages/contra
 
 - the goal cascade;
 - up to eight weeks of scores;
-- the previous summary;
+- the previous summary's first 4,000 characters, and its Next Steps on their own, since they usually come later;
 - the week's tasks;
-- the week's diary entries, without the summaries, up to 12,000 characters shared evenly between them.
+- the week's diary entries, without the summaries: up to 40,000 characters, or 12,000 with Workers AI. Entries shorter than an even share stay whole and give the rest to the longer ones, which are cut to one length.
+
+The context opens with rules for reading it, one for each kind of invented fact the model eval found: only what this week's material says happened is an event, an entry's day is when it was written and not always the day it describes, numbers are copied and never totalled, and #tags are not names. When the owner changes a drafted score, the memo is told which scores the drafts were written for and writes the basis afresh.
 
 With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes through OpenRouter to a provider that keeps nothing. With `ANTHROPIC_API_KEY` set it goes to Anthropic. Nothing is logged except the provider, the model and an error message: never a prompt, an answer or a key.
 

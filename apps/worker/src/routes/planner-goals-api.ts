@@ -28,6 +28,8 @@ import {
   plannerUpdateWeekSchema,
 } from "@flaremo/contracts";
 import {
+  PLANNER_DIARY_CHARS,
+  PLANNER_DIARY_CHARS_SMALL,
   type PlannerChatMessage,
   type PlannerCoachMode,
   type PlannerReviewAnswers,
@@ -391,6 +393,11 @@ async function aiSetup(
     ownerName: context.user.name,
     weekStart,
     today,
+    // Workers AI's model has a small context; the others read most weeks whole.
+    diaryChars:
+      model.provider === "workers-ai"
+        ? PLANNER_DIARY_CHARS_SMALL
+        : PLANNER_DIARY_CHARS,
   });
   return { model, review, context };
 }
@@ -629,6 +636,7 @@ plannerGoalsApi.post(
         ...answersOf(body),
         reviewedOn: body.today,
         scores: body.scores,
+        drafted: body.drafted ?? null,
         question: body.question,
         verdict: body.verdict,
         recommended: body.recommended,

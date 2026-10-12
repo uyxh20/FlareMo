@@ -135,6 +135,20 @@ function diaryDay(at: string): string {
   return `${WEEKDAYS[weekday]} ${date} ${SHORT_MONTHS[month]}`;
 }
 
+/**
+ * How to read the context: one rule for each kind of invented fact the model
+ * eval found (docs/fork-review-model-eval.md), so a model reading more of the
+ * diary still states only what it says.
+ */
+export function plannerReadingRules(name: string): string {
+  return `How to read this material:
+- Say something happened this week only if this week's diary entries, tasks or goal results, or ${name}'s answers in this review, say so. A plan, a goal or an intention is not an event, and last week's summary is about last week.
+- When the material doesn't mention something, it isn't recorded. Don't say it didn't happen.
+- The day in brackets is when an entry was written. An entry can describe an earlier day: use the day it names, or say "this week".
+- Copy numbers exactly as written. Don't total things up (entries, sessions, days): name them, or leave the number out.
+- #tags are labels, not people or names. Tie a person or a company to an event only the way the diary does.`;
+}
+
 /** The context block every prompt ends with. */
 export function plannerReviewContextBlock(
   context: PlannerReviewContext,
@@ -143,7 +157,13 @@ export function plannerReviewContextBlock(
     Math.floor(day(plannerAddDays(context.weekStart, 3)).month / 3) + 1;
   const month = MONTHS[day(plannerAddDays(context.weekStart, 3)).month];
   const year = day(plannerAddDays(context.weekStart, 3)).year;
+  const steps = plannerPillars.flatMap((pillar) => {
+    const step = context.previousSteps[pillar];
+    return step ? [`- ${plannerPillarNames[pillar]}: ${step}`] : [];
+  });
   const lines = [
+    plannerReadingRules(context.ownerName),
+    "",
     `North star: ${context.northStar ? goalText(context.northStar) : "not written"}`,
     `Year goals ${year}: ${goalsByPillar(context.yearGoals)}`,
     `Q${quarter} ${year} goals: ${goalsByPillar(context.quarterGoals)}`,
@@ -156,6 +176,12 @@ export function plannerReviewContextBlock(
     context.weekGoals.length
       ? `${weekName(context.weekStart)} weekly goals: ${goalsByPillar(context.weekGoals)}`
       : `${weekName(context.weekStart)}: no weekly goals were set.`,
+    ...(steps.length
+      ? [
+          `Last week's Next Steps, the plan written for ${plannerWeekCode(context.weekStart)} in last week's summary:`,
+          ...steps,
+        ]
+      : []),
     `Last week's review question: ${context.lastQuestion ? quote(context.lastQuestion) : "none"}`,
     `Tasks done this week: ${context.tasks.done.join("; ") || "none"}`,
     `Doing: ${context.tasks.doing.join("; ") || "none"}`,
@@ -171,16 +197,23 @@ export function plannerReviewContextBlock(
   if (context.previousSummary) {
     lines.push(
       "",
-      "Last week's summary, as written then:",
+      `Last week's summary (${plannerWeekCode(plannerAddDays(context.weekStart, -7))}), as written then. It is about last week, not this one${
+        context.previousSummary.endsWith("…")
+          ? ", and only its start is shown"
+          : ""
+      }:`,
       "<<<",
       context.previousSummary,
       ">>>",
     );
   }
   if (context.diary.length) {
+    const cut = context.diary.some((entry) => entry.text.endsWith("…"));
     lines.push(
       "",
-      `${context.ownerName}'s diary entries this week, oldest first, in their own words:`,
+      `${context.ownerName}'s diary entries this week, oldest first, in their own words. The day in brackets is when each was written${
+        cut ? "; an entry ending in … was cut to fit" : ""
+      }:`,
       ...context.diary.map((entry) => `[${diaryDay(entry.at)}] ${entry.text}`),
     );
   } else {
@@ -199,6 +232,11 @@ export function plannerOpeningMessages(
   const name = context.ownerName;
   const lastQuestion = context.lastQuestion
     ? `Last week's key question: ${quote(context.lastQuestion)}\n\n`
+    : "";
+  // Options for last week's question only when there was one: asked for
+  // anyway, a model offers answers to a question nobody asked.
+  const lastq = context.lastQuestion
+    ? ` "lastq": [three answer options for last week's key question],`
     : "";
   return [
     {
@@ -220,7 +258,7 @@ Context:
 ${plannerReviewContextBlock(context)}
 
 Reply with only JSON in this shape, where each string is your text:
-{"recap": string, "lastq": [three answer options for last week's key question], "prompts": [seven arrays, one per prompt in order, each with three answer options]}`,
+{"recap": string,${lastq} "prompts": [seven arrays, one per prompt in order, each with three answer options]}`,
     },
   ];
 }
@@ -377,7 +415,9 @@ export function plannerCloseMessages(
   const nextWeek = plannerWeekCode(context.planWeek);
   const judge = context.weekGoals.length
     ? `Judge Achievement against the ${thisWeek} goals and the results ${name} recorded.`
-    : `No ${thisWeek} goals were set, so judge Achievement against last week's Next Steps in the summary and the tasks done.`;
+    : Object.keys(context.previousSteps).length
+      ? `No ${thisWeek} goals were set, so judge Achievement against last week's Next Steps (listed in the context) and what the diary and tasks show was done.`
+      : `No ${thisWeek} goals or Next Steps were set, so judge Achievement against what the diary and tasks show ${name} set out to do and did.`;
   return [
     {
       role: "system",
@@ -458,7 +498,11 @@ export function plannerParseClose(raw: string): PlannerCloseDraft {
 
 export type PlannerCoachMode = "free" | "force" | "chat";
 
-/** The coach's instructions, sent before the chat so far. */
+/**
+ * The coach's instructions, sent before the chat so far. The line that changes
+ * from reply to reply comes last, so everything before it is the same on every
+ * turn of a review and a provider can bill the repeat as cached.
+ */
 export function plannerCoachSystem(
   context: PlannerReviewContext,
   mode: PlannerCoachMode,
@@ -478,16 +522,17 @@ export function plannerCoachSystem(
 
 How to reply:
 - One to three short sentences in plain words. No headings, lists, emojis or praise.
-- Reflect one specific thing they said, then either ask one probing question (what specifically, who, which number, what got in the way) or acknowledge it.
+- Reflect one specific thing they said. When the diary or tasks hold something that bears on it, point at it: a day, an entry, a number or a name, exactly as the context has it. Then either ask one probing question (what specifically, who, which number, what got in the way) or acknowledge it.
 - Never answer a prompt for them and never summarize the whole week.
 - Last week's key question: if the answer is "partly", "no" or vague, ask once what specifically happened.
 - Prompt 6 (blindspot) is the coaching moment: don't accept the first answer; offer one candidate blindspot from the context and name the bias it looks like (confirmation, sunk cost, anchoring, complexity or recency).
 - Prompt 7 (tempted to hide): probe once to confirm.
 - After your sentences, end with one last line, exactly @@ {"advance": true} when the answer is specific enough to move to the next prompt, or @@ {"advance": false} when you asked a question and want their answer.
-${tail}
 
 Context from ${name}'s goals system:
-${plannerReviewContextBlock(context)}`;
+${plannerReviewContextBlock(context)}
+
+${tail}`;
 }
 
 /**
@@ -523,7 +568,10 @@ export function plannerCoachMessages(
 
 export type PlannerMemoRequest = PlannerReviewAnswers & {
   reviewedOn: string;
+  /** The scores the owner set. */
   scores: { auth: number; ach: number };
+  /** The scores the model drafted, which the drafts below were written for. */
+  drafted?: { auth: number; ach: number } | null;
   question: string | null;
   verdict: { kind: PlannerVerdictKind; text: string } | null;
   recommended: PlannerVerdictKind;
@@ -545,7 +593,15 @@ export function plannerMemoMessages(
   const next = plannerWeekCode(context.planWeek);
   const goalsSentence = context.weekGoals.length
     ? `${code} had ${context.weekGoals.length} weekly goals, judged in the review`
-    : `no ${code} goals were set in advance, so the week is judged against last week's Next Steps`;
+    : Object.keys(context.previousSteps).length
+      ? `no ${code} goals were set in advance, so the week is judged against last week's Next Steps`
+      : `no ${code} goals or Next Steps were set in advance, so the week is judged on what the diary and tasks show`;
+  const drafted = request.drafted;
+  const changed =
+    drafted &&
+    (drafted.auth !== request.scores.auth || drafted.ach !== request.scores.ach)
+      ? drafted
+      : null;
   const pillarSections = plannerPillars
     .map((pillar) => {
       if (pillar === "of") {
@@ -618,16 +674,25 @@ ${plannerDiaryMarker(context.weekStart)}
 
 Rules:
 - Use only the material below. Don't invent events, names or numbers.
+- Be specific. In the Executive Summary, Evidence and Learnings, name the days, people and numbers the diary gives, and quote ${name}'s own words, copied exactly inside quotation marks, at least once for each objective the diary covers.
 - Write "Skipped." for a skipped prompt and "None stated." for a bullet with nothing behind it.
 - Each Next Steps bullet is one concrete step for ${next} in at most 15 words; it becomes the suggested weekly goal for that objective.
-- Pattern, Risk and Opportunity: start from the drafts below and keep their meaning.
+- Pattern, Risk and Opportunity: start from the drafts below and keep their meaning.${
+        changed
+          ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
+          : ""
+      }
 - Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.
 - No preamble: start with the H1 line. Under 900 words.
 
 Material:
 ${answersBlock(context, request)}
 
-Scores: Authenticity ${plannerFormatScore(request.scores.auth)}, Achievement ${plannerFormatScore(request.scores.ach)}, Gap ${plannerFormatScore(Math.abs(request.scores.auth - request.scores.ach))}.
+Scores ${name} set: Authenticity ${plannerFormatScore(request.scores.auth)}, Achievement ${plannerFormatScore(request.scores.ach)}, Gap ${plannerFormatScore(Math.abs(request.scores.auth - request.scores.ach))}.${
+        changed
+          ? `\nDrafted scores, which the drafts were written for: Authenticity ${plannerFormatScore(changed.auth)}, Achievement ${plannerFormatScore(changed.ach)}.`
+          : ""
+      }
 Authenticity basis (draft): ${request.drafts.auth_evidence || "none"}
 Achievement basis (draft): ${request.drafts.ach_evidence || "none"}
 Pattern (draft): ${request.drafts.pattern || "none"}
@@ -801,7 +866,7 @@ North star: ${context.northStar ? goalText(context.northStar) : "not written"}
 Year: ${goalsByPillar(context.yearGoals)}
 Quarter: ${goalsByPillar(context.quarterGoals)}
 Month: ${goalsByPillar(context.monthGoals)}
-${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again:\n${reviewed.join("\n")}\n` : ""}
+${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again, and don't flag the same weekly goal for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
 Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}`,
     },
   ];

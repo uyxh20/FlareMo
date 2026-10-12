@@ -7,6 +7,7 @@ import {
   plannerCloseMessages,
   plannerCoachMessages,
   plannerCoachStreamFilter,
+  plannerCoachSystem,
   plannerExtractJson,
   plannerFlagLabel,
   plannerMemoMessages,
@@ -78,6 +79,7 @@ const CONTEXT: PlannerReviewContext = {
   scores: [{ weekStart: "2026-09-28", auth: 4, ach: 3.5 }],
   lastQuestion: "Did I compare the offers on numbers?",
   previousSummary: null,
+  previousSteps: {},
   tasks: { done: ["Call Acme"], doing: [], todo: ["Email Zeta"] },
   openFlags: [],
   keptFlags: [],
@@ -90,6 +92,26 @@ const ANSWERS = {
   goalResults: [{ goalId: "w-work", result: "met" as const }],
   coachNotes: [],
 };
+
+const MEMO_REQUEST = {
+  ...ANSWERS,
+  reviewedOn: "2026-10-11",
+  scores: { auth: 4, ach: 3 },
+  question: "Did I get the terms on paper?",
+  verdict: { kind: "pivot" as const, text: "Pivot toward the terms. Fast." },
+  recommended: "continue" as const,
+  drafts: {
+    auth_evidence: "",
+    ach_evidence: "",
+    pattern: "",
+    risk: "",
+    opportunity: "",
+  },
+};
+
+/** Every message's text, as the model reads it. */
+const said = (messages: ReadonlyArray<{ content: string }>) =>
+  messages.map((message) => message.content).join("\n");
 
 describe("the context block", () => {
   it("writes the cascade, the scores, the week and the diary", () => {
@@ -117,21 +139,7 @@ describe("the context block", () => {
     for (const messages of [
       plannerOpeningMessages(CONTEXT),
       plannerCloseMessages(CONTEXT, ANSWERS),
-      plannerMemoMessages(CONTEXT, {
-        ...ANSWERS,
-        reviewedOn: "2026-10-11",
-        scores: { auth: 4, ach: 3 },
-        question: "Did I get the terms on paper?",
-        verdict: { kind: "pivot", text: "Pivot toward the terms. Fast." },
-        recommended: "continue",
-        drafts: {
-          auth_evidence: "",
-          ach_evidence: "",
-          pattern: "",
-          risk: "",
-          opportunity: "",
-        },
-      }),
+      plannerMemoMessages(CONTEXT, MEMO_REQUEST),
       plannerCheckMessages(
         CONTEXT,
         [{ id: "g1", pillar: "work", title: "Sign with Acme", tasks: [] }],
@@ -140,10 +148,161 @@ describe("the context block", () => {
     ]) {
       expect(messages[0]?.role).toBe("system");
       expect(messages.at(-1)?.role).toBe("user");
-      expect(messages.map((message) => message.content).join("\n")).toContain(
-        "Stay on better terms",
-      );
+      expect(said(messages)).toContain("Stay on better terms");
     }
+  });
+
+  it("starts with how to read it, and marks what is last week's or cut", () => {
+    const block = plannerReviewContextBlock({
+      ...CONTEXT,
+      weekGoals: [],
+      previousSummary: "# Week 40: September 28 - October 4, 2026…",
+      previousSteps: {
+        of: "Compare Acme and Zeta on numbers",
+        ai: "Ship the first public artifact",
+      },
+      diary: [
+        { at: "2026-10-06T08:00:00.000Z", text: "Gym." },
+        { at: "2026-10-07T20:00:00.000Z", text: "Long talk with Acme…" },
+      ],
+    });
+    expect(block.startsWith("How to read this material:\n")).toBe(true);
+    expect(block).toContain("or Anon's answers in this review, say so.");
+    expect(block).toContain(
+      [
+        "Week 41 (5–11 October 2026): no weekly goals were set.",
+        "Last week's Next Steps, the plan written for W41 in last week's summary:",
+        "- Objective Function: Compare Acme and Zeta on numbers",
+        "- AI Chops: Ship the first public artifact",
+        'Last week\'s review question: "Did I compare the offers on numbers?"',
+      ].join("\n"),
+    );
+    expect(block).toContain(
+      "Last week's summary (W40), as written then. It is about last week, not this one, and only its start is shown:",
+    );
+    expect(block).toContain(
+      "Anon's diary entries this week, oldest first, in their own words. The day in brackets is when each was written; an entry ending in … was cut to fit:\n[Tue 6 Oct] Gym.\n[Wed 7 Oct] Long talk with Acme…",
+    );
+
+    const plain = plannerReviewContextBlock(CONTEXT);
+    expect(plain).not.toContain("Last week's Next Steps");
+    expect(plain).toContain(
+      "The day in brackets is when each was written:\n[Wed 7 Oct] Long talk with Acme.",
+    );
+  });
+});
+
+describe("what each call asks for", () => {
+  it("asks for answers to last week's question only when there was one", () => {
+    expect(said(plannerOpeningMessages(CONTEXT))).toContain(
+      '{"recap": string, "lastq": [three answer options for last week\'s key question], "prompts":',
+    );
+    const none = said(
+      plannerOpeningMessages({ ...CONTEXT, lastQuestion: null }),
+    );
+    expect(none).toContain('{"recap": string, "prompts":');
+    expect(none).not.toContain("lastq");
+    expect(none).not.toContain("last week's key question");
+  });
+
+  it("judges Achievement against what the week had to go on", () => {
+    const close = (context: PlannerReviewContext) =>
+      said(plannerCloseMessages(context, ANSWERS));
+    expect(close(CONTEXT)).toContain(
+      "Judge Achievement against the W41 goals and the results Anon recorded.",
+    );
+    expect(
+      close({
+        ...CONTEXT,
+        weekGoals: [],
+        previousSteps: { work: "Ask Acme for the terms" },
+      }),
+    ).toContain(
+      "No W41 goals were set, so judge Achievement against last week's Next Steps (listed in the context) and what the diary and tasks show was done.",
+    );
+    expect(close({ ...CONTEXT, weekGoals: [] })).toContain(
+      "No W41 goals or Next Steps were set, so judge Achievement against what the diary and tasks show Anon set out to do and did.",
+    );
+  });
+
+  it("keeps the coach's changing line last, after the same instructions and context", () => {
+    const free = plannerCoachSystem(CONTEXT, "free");
+    const force = plannerCoachSystem(CONTEXT, "force");
+    expect(free).toContain(
+      "When the diary or tasks hold something that bears on it, point at it",
+    );
+    expect(
+      free.endsWith(
+        "[Wed 7 Oct] Long talk with Acme.\n\nFor this reply you may ask one probing question if the answer is vague.",
+      ),
+    ).toBe(true);
+    expect(force.endsWith('end with @@ {"advance": true}.')).toBe(true);
+    const shared = free.slice(0, free.lastIndexOf("\n\n"));
+    expect(force.startsWith(shared)).toBe(true);
+  });
+
+  it("asks the memo for specifics, and to rewrite the basis of a changed score", () => {
+    const memo = (drafted?: { auth: number; ach: number } | null) =>
+      said(plannerMemoMessages(CONTEXT, { ...MEMO_REQUEST, drafted }));
+    const kept = memo({ auth: 4, ach: 3 });
+    expect(kept).toContain(
+      "quote Anon's own words, copied exactly inside quotation marks, at least once for each objective the diary covers.",
+    );
+    expect(kept).toContain(
+      "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.\nAuthenticity basis (draft): none",
+    );
+    expect(kept).not.toContain("changed the drafted scores");
+    expect(memo(null)).not.toContain("Drafted scores");
+
+    const changed = memo({ auth: 3.5, ach: 2 });
+    expect(changed).toContain(
+      "- Anon changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts Anon's scores.",
+    );
+    expect(changed).toContain(
+      "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.\nDrafted scores, which the drafts were written for: Authenticity 3.5, Achievement 2.0.",
+    );
+  });
+
+  it("says in the memo what a week without goals is judged against", () => {
+    const memo = (context: PlannerReviewContext) =>
+      said(plannerMemoMessages(context, MEMO_REQUEST));
+    expect(memo(CONTEXT)).toContain(
+      "W41 had 1 weekly goals, judged in the review",
+    );
+    expect(
+      memo({
+        ...CONTEXT,
+        weekGoals: [],
+        previousSteps: { work: "Ask Acme for the terms" },
+      }),
+    ).toContain(
+      "no W41 goals were set in advance, so the week is judged against last week's Next Steps",
+    );
+    expect(memo({ ...CONTEXT, weekGoals: [] })).toContain(
+      "no W41 goals or Next Steps were set in advance, so the week is judged on what the diary and tasks show",
+    );
+  });
+
+  it("tells the check that a kept clash covers every level", () => {
+    const check = said(
+      plannerCheckMessages(
+        {
+          ...CONTEXT,
+          keptFlags: [
+            {
+              pillar: "work",
+              label: "Year · Work",
+              why: "The year goal says stay; the note says go.",
+            },
+          ],
+        },
+        [{ id: "g1", pillar: "work", title: "Sign with Acme", tasks: [] }],
+        [],
+      ),
+    );
+    expect(check).toContain(
+      "Anon already reviewed these clashes. Don't flag them again, and don't flag the same weekly goal for the same reason against another goal or level:\n- Year · Work: The year goal says stay; the note says go. Kept for now in an earlier review.",
+    );
   });
 });
 

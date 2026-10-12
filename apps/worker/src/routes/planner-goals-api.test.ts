@@ -604,6 +604,20 @@ describe("planner goals and weekly review API", () => {
     expect(said(memo)).toBe("# Week 41: October\n\nBody");
     expect(memo.at(-1)).toEqual({ done: true });
 
+    // Scores the owner changed reach the memo with the ones the drafts were for.
+    const calls: FakeAiCall[] = [];
+    await lines(
+      await call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/memo`,
+        { ...request, drafted: { auth: 3, ach: 2.5 } },
+        { env: withEnv({ AI: fakeAi({ calls, pieces: ["# Week"] }) }) },
+      ),
+    );
+    expect(JSON.stringify(calls[0]?.inputs.messages)).toContain(
+      "Drafted scores, which the drafts were written for: Authenticity 3.0, Achievement 2.5.",
+    );
+
     const failed = await lines(
       await call("POST", `/review/${REVIEW_WEEK}/ai/memo`, request, {
         env: withEnv({ AI: fakeAi({ fail: true }) }),

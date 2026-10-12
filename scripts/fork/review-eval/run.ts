@@ -8,6 +8,12 @@
 // Reads the DEV database only (the A/B test's read-only adapter).
 //
 //   pnpm exec tsx scripts/fork/review-eval/run.ts --out <dir> [--dry-run]
+//     [--models a,b] [--weeks w1,w2] [--memo-models c,d] [--budget-usd 9]
+//
+// --memo-models also writes each week's memo with these models, from the same
+// close drafts, to compare memo writers alone. The clash cases run on the
+// latest eval week only (its goals are the current ones), each case three
+// times, since OpenRouter ignores the temperature for some models.
 //
 // Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (dev D1 read) and, unless
 // --dry-run, OPENROUTER_API_KEY (or OPENROUTERAPI).
@@ -27,6 +33,7 @@ import {
   plannerReviewPrompts,
 } from "../../../packages/contracts/src/planner-goals";
 import {
+  PLANNER_DIARY_CHARS,
   plannerCheckMessages,
   plannerCloseMessages,
   plannerCoachMessages,
@@ -72,8 +79,13 @@ const INJECTED_QUESTION = "Did I protect three evenings for deep work?";
 
 /** The coach turn each week gets (one call per week), rotating over the five. */
 const COACH_TURNS = ["C1", "C2", "C3", "C4", "C5", "C2", "C1", "C5"] as const;
-/** The clash case each week gets, rotating over the four. */
-const CHECK_CASES = ["K1", "K2", "K3", "K4", "K1", "K2", "K3", "K4"] as const;
+/**
+ * The clash cases, all run on CHECK_WEEK: its goals are the ones in use now,
+ * where an older week would be read with goals edited after it.
+ */
+const CHECK_CASES = ["K1", "K2", "K3", "K4"] as const;
+const CHECK_WEEK = "2026-09-28";
+const CHECK_RUNS = 3;
 
 /** Extra room for hidden reasoning on top of the app's own token limits. */
 const REASONING_ROOM = 4_000;
@@ -87,6 +99,7 @@ const { values: args } = parseArgs({
     weeks: { type: "string" },
     judge: { type: "boolean", default: false },
     resume: { type: "string" },
+    "memo-models": { type: "string" },
   },
 });
 
@@ -104,6 +117,7 @@ const models = args.models
 const weeks = args.weeks
   ? WEEKS.filter((w) => args.weeks!.split(",").includes(w.week))
   : WEEKS;
+const memoModels = args["memo-models"]?.split(",").filter(Boolean) ?? [];
 
 /** The key as saved; tolerates a NAME= prefix pasted in with it. */
 function openRouterKey(): string {
@@ -131,9 +145,12 @@ type Answer = {
   usd: number;
   seconds: number;
   provider: string | null;
-  tokens: { input: number; output: number; reasoning: number };
+  /** `cached`: prompt tokens the provider billed as a cache hit. */
+  tokens: { input: number; cached: number; output: number; reasoning: number };
   error?: string;
 };
+
+const NO_TOKENS = { input: 0, cached: 0, output: 0, reasoning: 0 };
 
 async function complete(
   model: string,
@@ -175,6 +192,7 @@ async function complete(
           prompt_tokens: number;
           completion_tokens: number;
           cost?: number;
+          prompt_tokens_details?: { cached_tokens?: number };
           completion_tokens_details?: { reasoning_tokens?: number };
         };
       };
@@ -190,6 +208,7 @@ async function complete(
         provider: json.provider ?? null,
         tokens: {
           input: json.usage?.prompt_tokens ?? 0,
+          cached: json.usage?.prompt_tokens_details?.cached_tokens ?? 0,
           output: json.usage?.completion_tokens ?? 0,
           reasoning:
             json.usage?.completion_tokens_details?.reasoning_tokens ?? 0,
@@ -202,7 +221,7 @@ async function complete(
           usd: 0,
           seconds: (Date.now() - started) / 1000,
           provider: null,
-          tokens: { input: 0, output: 0, reasoning: 0 },
+          tokens: NO_TOKENS,
           error: (error as Error).message.slice(0, 300),
         };
       }
@@ -233,6 +252,8 @@ async function contextFor(weekStart: string): Promise<PlannerReviewContext> {
     ownerName,
     weekStart,
     today: plannerAddDays(weekStart, 6),
+    // As the Worker reads it for an OpenRouter or Anthropic model.
+    diaryChars: PLANNER_DIARY_CHARS,
   });
 }
 
@@ -617,9 +638,11 @@ if (dryRun) {
     const chars = plannerOpeningMessages(c)
       .map((m) => m.content.length)
       .reduce((a, b) => a + b, 0);
-    return `| ${week} | ${c.diary.length} | ${chars} | ${c.monthGoals.length} | ${c.weekGoals.length} |`;
+    const diary = c.diary.reduce((a, e) => a + e.text.length, 0);
+    const cut = c.diary.filter((e) => e.text.endsWith("…")).length;
+    return `| ${week} | ${c.diary.length} | ${diary} | ${cut} | ${Object.keys(c.previousSteps).length} | ${chars} | ${c.monthGoals.length} | ${c.weekGoals.length} |`;
   });
-  const report = `# Dry run\n\n| Week | Diary entries | Opening prompt chars | Month goals | Week goals |\n|---|---|---|---|---|\n${rows.join("\n")}\n`;
+  const report = `# Dry run\n\n| Week | Diary entries | Diary chars sent | Entries cut | Next Steps read | Opening prompt chars | Month goals | Week goals |\n|---|---|---|---|---|---|---|---|\n${rows.join("\n")}\n`;
   writeFileSync(join(runDir, "dry-run.md"), report);
   console.log(report);
   process.exit(0);
@@ -657,6 +680,7 @@ async function runModel(model: string) {
       name: string,
       messages: PlannerChatMessage[],
       options: { maxTokens: number; temperature: number },
+      by = model,
     ): Promise<Answer> => {
       const file = join(
         runDir,
@@ -673,19 +697,20 @@ async function runModel(model: string) {
             usd: Number.NaN,
             seconds: Number.NaN,
             provider: "reused",
-            tokens: { input: 0, output: 0, reasoning: 0 },
+            tokens: NO_TOKENS,
           };
         }
       }
-      return complete(model, messages, options);
+      return complete(by, messages, options);
     };
     const record = (
       call: string,
       answer: Answer,
       checks: Check[],
       extra: Partial<CallResult> = {},
+      file = call,
     ) => {
-      save(model, week, call, answer.text || `(error) ${answer.error ?? ""}`);
+      save(model, week, file, answer.text || `(error) ${answer.error ?? ""}`);
       const row: CallResult = {
         model,
         week,
@@ -730,14 +755,32 @@ async function runModel(model: string) {
       turnId === "C1" && !context.lastQuestion
         ? { ...context, lastQuestion: INJECTED_QUESTION }
         : context;
-    const coach = await call(
-      "coach",
-      plannerCoachMessages(coachContext, turn.mode, turn.chat),
-      { maxTokens: 400, temperature: 0.5 },
+    const coachMessages = plannerCoachMessages(
+      coachContext,
+      turn.mode,
+      turn.chat,
     );
+    const coach = await call("coach", coachMessages, {
+      maxTokens: 400,
+      temperature: 0.5,
+    });
     record("coach", coach, checkCoach(coach.text, turn, turnId), {
       case: turnId,
     });
+    if (index === 0) {
+      // The same call again: the prompt tokens billed as cached show whether
+      // the provider's prompt cache works with zero data retention.
+      const repeat = await call("coach-repeat", coachMessages, {
+        maxTokens: 400,
+        temperature: 0.5,
+      });
+      record(
+        "coach-repeat",
+        repeat,
+        [{ name: "repeat billed as cached", pass: repeat.tokens.cached > 0 }],
+        { case: turnId },
+      );
+    }
 
     // 3. Close
     const close = await call(
@@ -763,6 +806,11 @@ async function runModel(model: string) {
         text: draft.trajectory.verdicts[recommended] || "Continue.",
       },
       recommended,
+      // The scores the drafts were written for, as the page sends them.
+      drafted:
+        draft.scores.auth !== null && draft.scores.ach !== null
+          ? { auth: draft.scores.auth, ach: draft.scores.ach }
+          : null,
       drafts: {
         auth_evidence: draft.scores.auth_evidence,
         ach_evidence: draft.scores.ach_evidence,
@@ -785,53 +833,74 @@ async function runModel(model: string) {
       memoMessages.map((m) => `[${m.role}]\n${m.content}`).join("\n\n"),
     );
     if (memoFacts) spentJudge += memoFacts.usd;
-    record(
-      "memo",
-      memo,
-      checkMemo(
-        memo.text,
-        // The skeleton's headings alone: last week's summary is left out so
-        // its headings don't count.
-        plannerMemoMessages(
-          { ...context, previousSummary: null, diary: [] },
-          memoRequest,
-        ).at(-1)!.content,
-      ),
-      {
-        facts: memoFacts,
-      },
-    );
+    // The skeleton's headings alone: last week's summary is left out so its
+    // headings don't count.
+    const skeleton = plannerMemoMessages(
+      { ...context, previousSummary: null, diary: [] },
+      memoRequest,
+    ).at(-1)!.content;
+    record("memo", memo, checkMemo(memo.text, skeleton), {
+      facts: memoFacts,
+    });
     if (!memos.has(week)) memos.set(week, new Map());
     memos.get(week)!.set(model, memo.text);
 
-    // 5. Check: one planted case
-    const caseId = CHECK_CASES[index % CHECK_CASES.length]!;
-    const planted = checkCase(caseId, context);
-    const check = await call(
-      "check",
-      plannerCheckMessages(
-        { ...context, keptFlags: [] },
-        planted.plan,
-        planted.settled,
-      ),
-      { maxTokens: 700, temperature: 0.1 },
-    );
-    const json = plannerExtractJson(check.text) as { flags?: unknown } | null;
-    const flags = (Array.isArray(json?.flags) ? json!.flags : []) as RawFlag[];
-    const parsed = plannerParseCheck(check.text, context, planted.plan);
-    record(
-      "check",
-      check,
-      [
-        {
-          name: "valid JSON",
-          pass: json !== null && Array.isArray(json.flags),
-        },
-        { name: "≤ 3 flags", pass: parsed.length <= 3 },
-        { name: `${caseId} right answer`, pass: planted.expect(flags) },
-      ],
-      { case: caseId },
-    );
+    // 4b. The same memo by other writers, from this model's drafts
+    for (const writer of memoModels) {
+      const file = `memo@${writer.replace("/", "_")}`;
+      const other = await call(
+        file,
+        memoMessages,
+        { maxTokens: 2_600, temperature: 0.3 },
+        writer,
+      );
+      record(
+        `memo@${writer}`,
+        other,
+        checkMemo(other.text, skeleton),
+        {},
+        file,
+      );
+      memos.get(week)!.set(`${writer} (memo from ${model}'s drafts)`, other.text);
+    }
+
+    // 5. Check: every planted case, CHECK_RUNS times, on CHECK_WEEK only
+    for (const caseId of week === CHECK_WEEK ? CHECK_CASES : []) {
+      for (let run = 1; run <= CHECK_RUNS; run++) {
+        const planted = checkCase(caseId, context);
+        const file = `check-${caseId}-${run}`;
+        const check = await call(
+          file,
+          plannerCheckMessages(
+            { ...context, keptFlags: [] },
+            planted.plan,
+            planted.settled,
+          ),
+          { maxTokens: 700, temperature: 0.1 },
+        );
+        const json = plannerExtractJson(check.text) as {
+          flags?: unknown;
+        } | null;
+        const flags = (
+          Array.isArray(json?.flags) ? json!.flags : []
+        ) as RawFlag[];
+        const parsed = plannerParseCheck(check.text, context, planted.plan);
+        record(
+          "check",
+          check,
+          [
+            {
+              name: "valid JSON",
+              pass: json !== null && Array.isArray(json.flags),
+            },
+            { name: "≤ 3 flags", pass: parsed.length <= 3 },
+            { name: `${caseId} right answer`, pass: planted.expect(flags) },
+          ],
+          { case: caseId },
+          file,
+        );
+      }
+    }
     console.log(`${model} ${week} done ($${spent.toFixed(3)} so far)`);
   }
 }
@@ -890,24 +959,44 @@ const lines = models.map(({ id, name }) => {
     const bad = judged.reduce((a, r) => a + r.facts!.unsupported.length, 0);
     return (bad / judged.length).toFixed(1);
   };
-  const paid = mine.filter((r) => Number.isFinite(r.usd));
-  const usd = paid.reduce((a, r) => a + r.usd, 0);
-  const secs = paid.reduce((a, r) => a + r.seconds, 0);
-  const paidWeeks = paid.length / 5 || 1;
+  // One review's five calls: the four per week, plus one clash check.
+  const paid = (call: string) =>
+    of(call).filter((r) => Number.isFinite(r.usd));
+  const mean = (rows: CallResult[], key: "usd" | "seconds") =>
+    rows.length ? rows.reduce((a, r) => a + r[key], 0) / rows.length : 0;
+  const perReview = (key: "usd" | "seconds") =>
+    ["opening", "coach", "close", "memo", "check"].reduce(
+      (a, call) => a + mean(paid(call), key),
+      0,
+    );
+  const anyPaid = mine.some((r) => Number.isFinite(r.usd));
   const failed = mine.filter((r) => r.error).length;
-  return `| ${name} | ${pct(of("opening").flatMap((r) => r.checks))} | ${pct(of("coach").flatMap((r) => r.checks))} | ${pct(closes.flatMap((r) => r.checks))} | ${mae} | ${pct(of("memo").flatMap((r) => r.checks))} | ${facts("opening")} | ${facts("memo")} | ${pct(of("check").flatMap((r) => r.checks))} | ${failed} | ${paid.length ? `$${(usd / paidWeeks).toFixed(3)}` : "reused"} | ${paid.length ? `${(secs / paidWeeks).toFixed(0)}s` : "reused"} |`;
+  return `| ${name} | ${pct(of("opening").flatMap((r) => r.checks))} | ${pct(of("coach").flatMap((r) => r.checks))} | ${pct(closes.flatMap((r) => r.checks))} | ${mae} | ${pct(of("memo").flatMap((r) => r.checks))} | ${facts("opening")} | ${facts("memo")} | ${pct(of("check").flatMap((r) => r.checks))} | ${failed} | ${anyPaid ? `$${perReview("usd").toFixed(3)}` : "reused"} | ${anyPaid ? `${perReview("seconds").toFixed(0)}s` : "reused"} |`;
+});
+
+const cacheLines = results
+  .filter((r) => r.call === "coach-repeat")
+  .map(
+    (r) =>
+      `- ${r.model}: the repeated coach call had ${r.tokens.cached} of ${r.tokens.input} prompt tokens billed as cached.`,
+  );
+const writerLines = memoModels.map((writer) => {
+  const rows = results.filter((r) => r.call === `memo@${writer}`);
+  const paid = rows.filter((r) => Number.isFinite(r.usd));
+  const usd = paid.reduce((a, r) => a + r.usd, 0);
+  return `- ${writer}: memo checks ${pct(rows.flatMap((r) => r.checks))}, $${(usd / (paid.length || 1)).toFixed(3)} a memo, ${rows.filter((r) => r.error).length} failed.`;
 });
 
 const summary = `# Weekly review model eval: results
 
-${weeks.length} weeks × 5 calls × ${models.length} models, through OpenRouter with zero data retention required. Model spend $${(spent - spentJudge).toFixed(2)}, judge spend $${spentJudge.toFixed(2)}.
+${weeks.length} weeks × 4 calls (opening, coach, close, memo) and the ${CHECK_CASES.length} clash cases × ${CHECK_RUNS} runs on ${CHECK_WEEK}, × ${models.length} models, through OpenRouter with zero data retention required. Diary budget ${PLANNER_DIARY_CHARS.toLocaleString("en")} characters. Model spend $${(spent - spentJudge).toFixed(2)}, judge spend $${spentJudge.toFixed(2)}.
 
-| Model | Opening checks | Coach checks | Close checks | Score error (vs your scores) | Memo checks | Invented facts per opening | Invented facts per memo | Clash cases right | Failed calls | Cost per week (5 calls) | Time per week |
+| Model | Opening checks | Coach checks | Close checks | Score error (vs your scores) | Memo checks | Invented facts per opening | Invented facts per memo | Clash cases right | Failed calls | Cost per review (5 calls) | Time per review |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 ${lines.join("\n")}
 
 Score error is the average distance, in points, between the drafted score and the one you gave (both scores, all weeks). ${args.judge ? `Invented facts are counted by ${JUDGE}, which saw exactly what each model saw.` : "No judge model ran (--judge off): invented facts are checked separately, against the saved prompts."}
-
+${cacheLines.length ? `\nPrompt cache:\n${cacheLines.join("\n")}\n` : ""}${writerLines.length ? `\nMemos by other writers, from the same drafts:\n${writerLines.join("\n")}\n` : ""}
 Blind memos for you to score: blind/<week>/A.md to E.md. The key is blind/.key.json; open it after scoring.
 `;
 writeFileSync(join(runDir, "summary.md"), summary);

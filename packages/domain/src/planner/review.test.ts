@@ -17,7 +17,10 @@ import {
   plannerSaveLookBack,
   plannerSaveReviewState,
 } from "./review";
-import { plannerReadLastQuestion } from "./review-context";
+import {
+  plannerReadLastQuestion,
+  plannerReadReviewContext,
+} from "./review-context";
 import {
   type PlannerTestRuntime,
   plannerTestEvents,
@@ -279,6 +282,55 @@ describe("the weekly review", () => {
           weekStart: W41,
         }),
       ).toBe("Did I compare the offers on numbers?");
+    });
+
+    it("gives the review's model last week's Next Steps and the week's diary", async () => {
+      // The Next Steps sit past the part of the summary that is shown.
+      await createMemo(rt.db, rt.user, {
+        content: W40_SUMMARY.replace(
+          "\n\n",
+          `\n\n## Executive Summary\n\n${"A long week. ".repeat(400)}\n\n`,
+        ),
+        visibility: "private",
+        payload: { tags: ["vault-summary"] },
+        source: "vault-import",
+      });
+      const diary = [
+        "Gym.",
+        "Met Acme about the terms.",
+        "Long talk with Zeta. ".repeat(150),
+      ];
+      for (const [index, content] of diary.entries()) {
+        const memo = await createMemo(rt.db, rt.user, {
+          content,
+          visibility: "private",
+          source: "web",
+        });
+        await plannerTestRun(
+          rt.database,
+          "UPDATE memos SET created_at = ? WHERE id = ?",
+          `2026-10-0${6 + index}T20:00:00.000Z`,
+          memo.id,
+        );
+      }
+      const context = await plannerReadReviewContext(rt.db, {
+        userId: rt.user.id,
+        ownerName: "Anon Owner",
+        weekStart: W41,
+        today: SUNDAY,
+        diaryChars: 1_000,
+      });
+      expect(context.previousSummary?.endsWith("…")).toBe(true);
+      expect(context.previousSummary).not.toContain("Next Steps");
+      expect(context.previousSteps).toEqual({
+        of: "Compare Acme and Zeta on numbers",
+        ai: "Ship the first public artifact",
+      });
+      // The two short entries stay whole and the long one gets the rest.
+      expect(context.diary.map((entry) => entry.text.length)).toEqual([
+        4, 25, 971,
+      ]);
+      expect(context.diary[2]?.text).toMatch(/^Long talk with Zeta\. .*…$/);
     });
 
     it("is due from Saturday to Monday until both parts are done", async () => {

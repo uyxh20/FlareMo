@@ -4,6 +4,7 @@ import {
   plannerAddDays,
   plannerIsoWeekOf,
   plannerMemoKeyQuestion,
+  plannerMemoNextSteps,
   plannerMonthStartOf,
   plannerQuarterStartOf,
   plannerSummaryMemoClientId,
@@ -168,16 +169,60 @@ export async function plannerReadLastQuestion(
 /** One diary entry of the week, trimmed to fit the model's budget. */
 export type PlannerDiaryEntry = { at: string; text: string };
 
+/** Diary characters a large-context model reads per week (OpenRouter, Anthropic). */
+export const PLANNER_DIARY_CHARS = 40_000;
+/** Diary characters for a small-context model (Workers AI). */
+export const PLANNER_DIARY_CHARS_SMALL = 12_000;
+
+/**
+ * Fits the week's entries into `budget` characters. Entries that fit their fair
+ * share stay whole and hand what they don't use to the longer ones, which are
+ * then cut to the same length, so a long entry cannot crowd out the rest of
+ * the week and a short one wastes nothing.
+ */
+export function plannerFitDiary(
+  rows: ReadonlyArray<{ at: string; content: string }>,
+  budget: number,
+): PlannerDiaryEntry[] {
+  const entries = rows
+    .map((row) => ({
+      at: row.at,
+      text: row.content.replace(/\s+/g, " ").trim(),
+    }))
+    .filter((entry) => entry.text);
+  const lengths = entries
+    .map((entry) => entry.text.length)
+    .sort((a, b) => a - b);
+  let left = budget;
+  let count = entries.length;
+  let cap = Number.POSITIVE_INFINITY;
+  for (const length of lengths) {
+    const share = Math.floor(left / count);
+    if (length > share) {
+      cap = share;
+      break;
+    }
+    left -= length;
+    count -= 1;
+  }
+  return entries.map((entry) => ({
+    at: entry.at,
+    text:
+      entry.text.length > cap
+        ? `${entry.text.slice(0, Math.max(0, cap - 1))}…`
+        : entry.text,
+  }));
+}
+
 /**
  * The owner's diary entries written during the week, oldest first, without the
- * weekly summaries. The budget is shared evenly, so a long entry cannot crowd out
- * the rest of the week.
+ * weekly summaries, fitted to the budget by `plannerFitDiary`.
  */
 export async function plannerReadWeekDiary(
   db: FlareMoDb,
   input: { userId: string; weekStart: string; maxChars?: number },
 ): Promise<PlannerDiaryEntry[]> {
-  const budget = input.maxChars ?? 12_000;
+  const budget = input.maxChars ?? PLANNER_DIARY_CHARS_SMALL;
   const summaries = db
     .select({ id: memoTags.memoId })
     .from(memoTags)
@@ -203,19 +248,7 @@ export async function plannerReadWeekDiary(
     .orderBy(asc(memos.createdAt))
     .limit(200)
     .all();
-  if (rows.length === 0) return [];
-  const each = Math.max(240, Math.floor(budget / rows.length));
-  const out: PlannerDiaryEntry[] = [];
-  let used = 0;
-  for (const row of rows) {
-    const clean = row.content.replace(/\s+/g, " ").trim();
-    if (!clean) continue;
-    const text = clean.length > each ? `${clean.slice(0, each - 1)}…` : clean;
-    if (used + text.length > budget) break;
-    used += text.length;
-    out.push({ at: row.at, text });
-  }
-  return out;
+  return plannerFitDiary(rows, budget);
 }
 
 /** Everything the review's model reads about one week. */
@@ -236,6 +269,11 @@ export type PlannerReviewContext = {
   lastQuestion: string | null;
   /** The previous week's summary, trimmed. */
   previousSummary: string | null;
+  /**
+   * The previous summary's Next Steps per objective, read from the whole memo:
+   * they usually sit past the trimmed part, and they are last week's plan.
+   */
+  previousSteps: Partial<Record<PlannerPillar, string>>;
   tasks: { done: string[]; doing: string[]; todo: string[] };
   /** Clashes flagged by earlier checks and not settled. */
   openFlags: Array<{
@@ -253,8 +291,13 @@ export type PlannerReviewContext = {
 };
 
 const PREVIOUS_SUMMARY_MAX = 4_000;
+const PREVIOUS_STEP_MAX = 600;
 
-/** Reads the review's context for the week that starts on `weekStart`. */
+/**
+ * Reads the review's context for the week that starts on `weekStart`.
+ * `diaryChars` is the diary's budget: PLANNER_DIARY_CHARS_SMALL unless the
+ * model can read more.
+ */
 export async function plannerReadReviewContext(
   db: FlareMoDb,
   input: {
@@ -262,6 +305,7 @@ export async function plannerReadReviewContext(
     ownerName: string;
     weekStart: string;
     today: string;
+    diaryChars?: number;
   },
 ): Promise<PlannerReviewContext> {
   const { userId, weekStart } = input;
@@ -364,7 +408,11 @@ export async function plannerReadReviewContext(
       .orderBy(asc(plannerGoalFlag.createdAt))
       .limit(200)
       .all(),
-    plannerReadWeekDiary(db, { userId, weekStart }),
+    plannerReadWeekDiary(db, {
+      userId,
+      weekStart,
+      maxChars: input.diaryChars,
+    }),
   ]);
 
   const live = open.filter((row) => !row.droppedAt);
@@ -390,6 +438,9 @@ export async function plannerReadReviewContext(
         ? `${previous.content.slice(0, PREVIOUS_SUMMARY_MAX)}…`
         : previous.content
       : null,
+    previousSteps: previous
+      ? plannerMemoNextSteps(previous.content, PREVIOUS_STEP_MAX)
+      : {},
     tasks: {
       done: done.map((row) => row.title),
       doing: live

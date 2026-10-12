@@ -353,12 +353,42 @@ export function plannerComposeSummaryMemo(
 const EMPTY_STEP = /^(see trajectory|none stated|none|n\/a|—|-|skipped)\.?$/i;
 
 /**
+ * The text of a "**Next Steps:**" bullet: what follows the label on its line,
+ * or, when the line ends there, the items of the list nested under it.
+ */
+function nextStepsText(part: string): string | null {
+  const match =
+    /^([^\S\n]*)[-*][^\S\n]+\*\*Next Steps:?\*\*:?[^\S\n]*(.*)$/im.exec(part);
+  if (!match) return null;
+  const sameLine = (match[2] ?? "").trim();
+  if (sameLine) return sameLine;
+  const indent = (match[1] ?? "").length;
+  const items: string[] = [];
+  const after = part
+    .slice(match.index + match[0].length)
+    .split("\n")
+    .slice(1);
+  for (const line of after) {
+    if (!line.trim()) {
+      if (items.length) break;
+      continue;
+    }
+    const item = /^([^\S\n]*)(?:[-*]|\d+[.)])[^\S\n]+(.+)$/.exec(line);
+    if (!item || (item[1] ?? "").length <= indent) break;
+    items.push((item[2] ?? "").trim().replace(/[.;]$/, ""));
+  }
+  return items.length ? items.join("; ") : null;
+}
+
+/**
  * Next Steps per objective, read from a summary memo's Goal Progress Update. The
- * plan for the next week starts from them. A missing or empty bullet ("See
- * Trajectory.", "None stated.") is left out.
+ * plan for the next week starts from them, and the review's model reads them as
+ * last week's plan. A missing or empty bullet ("See Trajectory.", "None
+ * stated.") is left out; each step is cut to `max` characters.
  */
 export function plannerMemoNextSteps(
   markdown: string,
+  max = 300,
 ): Partial<Record<PlannerPillar, string>> {
   const out: Partial<Record<PlannerPillar, string>> = {};
   for (const part of String(markdown ?? "").split(/^(?=###\s)/m)) {
@@ -374,10 +404,10 @@ export function plannerMemoNextSteps(
             ? "health"
             : null;
     if (!pillar || out[pillar]) continue;
-    const match = /^\s*[-*]\s+\*\*Next Steps:?\*\*:?\s*(.+)$/im.exec(part);
-    if (!match?.[1]) continue;
-    const value = match[1].replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
-    if (value && !EMPTY_STEP.test(value)) out[pillar] = value.slice(0, 300);
+    const found = nextStepsText(part);
+    if (!found) continue;
+    const value = found.replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
+    if (value && !EMPTY_STEP.test(value)) out[pillar] = value.slice(0, max);
   }
   return out;
 }

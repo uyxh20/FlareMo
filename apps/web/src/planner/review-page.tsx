@@ -620,6 +620,7 @@ function ReviewSession({
         auth: drafts.scores.auth,
         ach: drafts.scores.ach,
       };
+      const written = plannerDraftsOf(current, review);
       const result = await plannerStreamMemo(
         week,
         {
@@ -635,10 +636,11 @@ function ReviewSession({
                 text: current.verdict.text.trim().slice(0, 1000),
               }
             : null,
-          recommended:
-            plannerDraftsOf(current, review).trajectory.recommended ??
-            "continue",
-          drafts: plannerMemoDrafts(plannerDraftsOf(current, review)),
+          recommended: written.trajectory.recommended ?? "continue",
+          drafts: plannerMemoDrafts(written),
+          // The scores the drafts were written for: when the owner changed
+          // them, the memo rewrites the basis instead of keeping the drafts'.
+          drafted: { auth: written.scores.auth, ach: written.scores.ach },
         },
         {
           signal: controller.signal,

@@ -186,6 +186,26 @@ describe("reading a past summary", () => {
     });
   });
 
+  it("reads Next Steps written as a nested list, and cuts them to a length", () => {
+    const nested = [
+      "### II. Work",
+      "- **Evidence:** x",
+      "- **Next Steps:**",
+      "  - Send Acme the **counter** offer.",
+      "  1. Book the call with Zeta",
+      "- **Blockers:** none",
+      "",
+      "### IV. Health & Fitness",
+      "- **Next Steps:**",
+      "",
+      "Back to prose, not a step.",
+    ].join("\n");
+    expect(plannerMemoNextSteps(nested)).toEqual({
+      work: "Send Acme the counter offer; Book the call with Zeta",
+    });
+    expect(plannerMemoNextSteps(nested, 12)).toEqual({ work: "Send Acme th" });
+  });
+
   it("reads the key question and the week the summary is about", () => {
     expect(plannerMemoKeyQuestion(past)).toBe(
       "Did I compare Acme and Zeta on numbers, not feelings?",

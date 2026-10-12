@@ -580,6 +580,11 @@ export const plannerAiMemoSchema = z.strictObject({
   today: daySchema,
   ...reviewAnswersShape,
   scores: z.strictObject({ auth: plannerScoreSchema, ach: plannerScoreSchema }),
+  /** The scores the model drafted, which `drafts` were written for. */
+  drafted: z
+    .strictObject({ auth: plannerScoreSchema, ach: plannerScoreSchema })
+    .nullable()
+    .optional(),
   question: z.string().trim().max(500).nullable(),
   verdict: verdictInputSchema.nullable(),
   recommended: plannerVerdictKindSchema,
