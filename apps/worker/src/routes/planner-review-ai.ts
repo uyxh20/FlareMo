@@ -3,7 +3,8 @@ import type { FlareMoEnv } from "../env";
 
 // The weekly review's language model (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md). Workers AI through the AI binding by
-// default; the Worker secret ANTHROPIC_API_KEY switches to Anthropic's Messages
+// default; the Worker secret OPENROUTER_API_KEY switches to OpenRouter (zero
+// data retention providers only), and ANTHROPIC_API_KEY to Anthropic's Messages
 // API. Either way the routes see one small interface: a whole answer, or the
 // answer's text as it arrives. The prompts and the parsers are in the domain
 // (review-prompts.ts); nothing here knows what is being asked.
@@ -18,6 +19,16 @@ export const plannerReviewDefaultModel =
 /** Anthropic's model when FLAREMO_REVIEW_ANTHROPIC_MODEL is unset. */
 export const plannerReviewDefaultAnthropicModel = "claude-sonnet-5-5";
 
+/**
+ * OpenRouter's model when FLAREMO_REVIEW_OPENROUTER_MODEL is unset: the most
+ * accurate in the weekly review model eval of October 2026.
+ */
+export const plannerReviewDefaultOpenRouterModel = "openai/gpt-6.1-sol";
+
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+/** Room for hidden reasoning on top of each call's own limit, as in the eval. */
+const OPENROUTER_REASONING_ROOM = 4_000;
+
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -28,7 +39,7 @@ export type PlannerModelOptions = {
 };
 
 export type PlannerReviewModel = {
-  provider: "workers-ai" | "anthropic";
+  provider: "workers-ai" | "openrouter" | "anthropic";
   model: string;
   /** The whole answer. Throws when the model cannot be reached. */
   complete(
@@ -45,6 +56,14 @@ export type PlannerReviewModel = {
 /** The configured model, or null when the review has none (it then uses its own drafts). */
 export function plannerReviewModel(env: FlareMoEnv): PlannerReviewModel | null {
   if (env.FLAREMO_REVIEW_AI?.trim().toLowerCase() === "off") return null;
+  const openRouterKey = env.OPENROUTER_API_KEY?.trim();
+  if (openRouterKey) {
+    return openRouterModel(
+      openRouterKey,
+      env.FLAREMO_REVIEW_OPENROUTER_MODEL?.trim() ||
+        plannerReviewDefaultOpenRouterModel,
+    );
+  }
   const key = env.ANTHROPIC_API_KEY?.trim();
   if (key) {
     return anthropicModel(
@@ -174,6 +193,84 @@ function workersAiModel(ai: Ai, model: string): PlannerReviewModel {
         options.signal,
       )) {
         if (payload === "[DONE]") return;
+        const text = workersAiDelta(payload);
+        if (text) yield text;
+      }
+    },
+  };
+}
+
+/** OpenAI's chat shape, kept to providers that store nothing and train on nothing. */
+function openRouterBody(
+  model: string,
+  messages: readonly PlannerChatMessage[],
+  options: PlannerModelOptions,
+  stream: boolean,
+) {
+  return JSON.stringify({
+    model,
+    messages: messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    max_tokens: options.maxTokens + OPENROUTER_REASONING_ROOM,
+    temperature: options.temperature,
+    // Some models cannot turn reasoning off; keep it short and out of the answer.
+    reasoning: { effort: "low", exclude: true },
+    provider: { zdr: true, data_collection: "deny" },
+    ...(stream ? { stream: true } : {}),
+  });
+}
+
+function openRouterModel(apiKey: string, model: string): PlannerReviewModel {
+  const send = (body: string, signal?: AbortSignal) =>
+    fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        "x-title": "Schizo Diary weekly review",
+      },
+      body,
+      signal,
+    });
+  return {
+    provider: "openrouter",
+    model,
+    async complete(messages, options) {
+      const response = await send(
+        openRouterBody(model, messages, options, false),
+        options.signal,
+      );
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new PlannerModelError("openrouter", response.status);
+      }
+      const parsed = (await response.json()) as {
+        error?: { code?: unknown };
+      };
+      if (parsed.error) {
+        throw new Error(`openrouter error: ${String(parsed.error.code)}`);
+      }
+      return workersAiText(parsed);
+    },
+    async *stream(messages, options) {
+      const response = await send(
+        openRouterBody(model, messages, options, true),
+        options.signal,
+      );
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        throw new PlannerModelError("openrouter", response.status);
+      }
+      for await (const payload of sseData(response.body, options.signal)) {
+        if (payload === "[DONE]") return;
+        // A failure after the stream has started arrives as one `error` chunk.
+        const failure = (parseJson(payload) as { error?: { code?: unknown } })
+          ?.error;
+        if (failure) {
+          throw new Error(`openrouter stream error: ${String(failure.code)}`);
+        }
         const text = workersAiDelta(payload);
         if (text) yield text;
       }

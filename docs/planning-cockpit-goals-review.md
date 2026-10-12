@@ -17,13 +17,13 @@ It delivers **N2** (the weekly review) and **N3** (the goal UI) of [planning-coc
 
 The cascade from the north star down to a week, one level per address:
 
-| Address | Shows |
-| --- | --- |
-| `/goals` | The current ISO year. |
-| `/goals?year=2026` | The north star, the year's average scores, a heatmap of every week and the year goals. |
-| `/goals?year=2026&q=4` | A quarter: its months and quarter goals. |
-| `/goals?year=2026&q=4&m=10` | A month (1 to 12): its goals and weeks. |
-| `/goals?week=2026-10-05` | One week, by its Monday: its scores and weekly goals, with a link to its summary memo. |
+| Address                     | Shows                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `/goals`                    | The current ISO year.                                                                  |
+| `/goals?year=2026`          | The north star, the year's average scores, a heatmap of every week and the year goals. |
+| `/goals?year=2026&q=4`      | A quarter: its months and quarter goals.                                               |
+| `/goals?year=2026&q=4&m=10` | A month (1 to 12): its goals and weeks.                                                |
+| `/goals?week=2026-10-05`    | One week, by its Monday: its scores and weekly goals, with a link to its summary memo. |
 
 - The heatmap legend is On target, Below, Not scored and Not yet. A week is on target when both scores meet their floors.
 - Each ISO week sits under the month of its Thursday, so no week is split between two months.
@@ -90,13 +90,13 @@ From the interview and the decision cards (2026-10-09 and 10):
 
 Additive, with no foreign key to an upstream table and no triggers (G10 to G13). The previous release keeps working on it.
 
-| Table or column | Holds |
-| --- | --- |
-| `planner_task_plan.goal_id` | The weekly goal a task serves (nullable). |
-| `planner_goal` | A goal at one level: `north_star`, `year`, `quarter`, `month` or `week`, with its period's first day, objective, title, points (`lines`, JSON), status, result and note. Soft-deleted, so a link or a flag can still name a removed goal. |
-| `planner_week` | One row per reviewed or imported week: the two scores, the key question for the next review, the verdict and the summary memo's id. |
-| `planner_review` | The review in progress, as one JSON document the page saves as it goes. Its `commit_log` is the server's record of the tasks Save week already created, so a retried save never makes a task twice. |
-| `planner_goal_flag` | What the conflict check flagged, open until it is kept or rewritten. |
+| Table or column             | Holds                                                                                                                                                                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `planner_task_plan.goal_id` | The weekly goal a task serves (nullable).                                                                                                                                                                                                 |
+| `planner_goal`              | A goal at one level: `north_star`, `year`, `quarter`, `month` or `week`, with its period's first day, objective, title, points (`lines`, JSON), status, result and note. Soft-deleted, so a link or a flag can still name a removed goal. |
+| `planner_week`              | One row per reviewed or imported week: the two scores, the key question for the next review, the verdict and the summary memo's id.                                                                                                       |
+| `planner_review`            | The review in progress, as one JSON document the page saves as it goes. Its `commit_log` is the server's record of the tasks Save week already created, so a retried save never makes a task twice.                                       |
+| `planner_goal_flag`         | What the conflict check flagged, open until it is kept or rewritten.                                                                                                                                                                      |
 
 All four tables are in `RESTORE_TABLES` (`scripts/persistence-manifest.mjs`).
 
@@ -104,15 +104,15 @@ All four tables are in `RESTORE_TABLES` (`scripts/persistence-manifest.mjs`).
 
 The full list, with each response type, is the comment block in `packages/contracts/src/planner-goals.ts`. The routes are in `apps/worker/src/routes/planner-goals-api.ts`, and `planner-api.ts` mounts them, so they share its lazy mount, authentication and JSON 404. The domain work is in `packages/domain/src/planner/goals.ts` and `review.ts`.
 
-| Routes | What they do |
-| --- | --- |
-| `GET/POST /goals`, `PATCH/DELETE /goals/:id` | Read a year of the cascade; create, edit and remove goals. |
-| `PATCH /weeks/:weekStart` | Edit a week's record. |
-| `GET /review`, `GET /review/status`, `PATCH /review/:week/state` | Read the review, read whether it is due and done (for the sidebar dot), and save its progress. |
-| `POST /review/:week/look-back` | The week's record, last week's goal results and the summary memo. Safe to send again. |
-| `POST /review/:week/look-forward` | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again. |
-| `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check` | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |
-| `POST /review/:week/ai/coach`, `/ai/memo` | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`. |
+| Routes                                                           | What they do                                                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET/POST /goals`, `PATCH/DELETE /goals/:id`                     | Read a year of the cascade; create, edit and remove goals.                                      |
+| `PATCH /weeks/:weekStart`                                        | Edit a week's record.                                                                           |
+| `GET /review`, `GET /review/status`, `PATCH /review/:week/state` | Read the review, read whether it is due and done (for the sidebar dot), and save its progress.  |
+| `POST /review/:week/look-back`                                   | The week's record, last week's goal results and the summary memo. Safe to send again.           |
+| `POST /review/:week/look-forward`                                | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again.               |
+| `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check`        | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |
+| `POST /review/:week/ai/coach`, `/ai/memo`                        | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`.      |
 
 - `GET /board` also returns the cockpit's week and its goals.
 - Writes use the `planner` rate-limit bucket, the review's autosave uses `planner-review-state`, and model calls use `planner-ai`, so a busy chat never blocks a save.
@@ -122,12 +122,13 @@ The full list, with each response type, is the comment block in `packages/contra
 
 `apps/worker/src/routes/planner-review-ai.ts`. The prompts and their parsers are in `packages/domain/src/planner/review-prompts.ts`, and what the model reads is in `review-context.ts`.
 
-| Setting | Effect |
-| --- | --- |
-| Nothing set | Workers AI through the existing `AI` binding, with `plannerReviewDefaultModel`. Workers AI runs only remotely, so a local `wrangler dev` has no model and the review uses its own drafts. |
-| `FLAREMO_REVIEW_MODEL` | Another Workers AI text model. |
-| `ANTHROPIC_API_KEY` (Worker secret) | Switches to Anthropic's Messages API, with `plannerReviewDefaultAnthropicModel` unless `FLAREMO_REVIEW_ANTHROPIC_MODEL` names another. It is optional and not set on dev or live. |
-| `FLAREMO_REVIEW_AI=off` | No model: the review uses its own drafts. |
+| Setting                              | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing set                          | Workers AI through the existing `AI` binding, with `plannerReviewDefaultModel`. Workers AI runs only remotely, so a local `wrangler dev` has no model and the review uses its own drafts.                                                                                                                                                                                                                                                                                                                                                                         |
+| `FLAREMO_REVIEW_MODEL`               | Another Workers AI text model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `OPENROUTER_API_KEY` (Worker secret) | Switches to OpenRouter with `plannerReviewDefaultOpenRouterModel` (GPT-6.1 Sol, the most accurate in the October 2026 model eval) unless `FLAREMO_REVIEW_OPENROUTER_MODEL` names another. Every call asks for zero-data-retention providers that do not train on prompts, low reasoning effort with the reasoning left out of the answer, and 4,000 tokens of reasoning room on top of the call's own limit. It wins over `ANTHROPIC_API_KEY`. It covers every call: Look back's opening, coach, close and memo, and Look forward's clash check. Set on dev only. |
+| `ANTHROPIC_API_KEY` (Worker secret)  | Switches to Anthropic's Messages API, with `plannerReviewDefaultAnthropicModel` unless `FLAREMO_REVIEW_ANTHROPIC_MODEL` names another. It is optional and not set on dev or live.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `FLAREMO_REVIEW_AI=off`              | No model: the review uses its own drafts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 **What the model reads**, each time a draft is asked for, comes from the owner's own data:
 
@@ -137,37 +138,37 @@ The full list, with each response type, is the comment block in `packages/contra
 - the week's tasks;
 - the week's diary entries, without the summaries, up to 12,000 characters shared evenly between them.
 
-With Workers AI this stays on Cloudflare. With `ANTHROPIC_API_KEY` set it goes to Anthropic. Nothing is logged except the provider, the model and an error message: never a prompt, an answer or a key.
+With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes through OpenRouter to a provider that keeps nothing. With `ANTHROPIC_API_KEY` set it goes to Anthropic. Nothing is logged except the provider, the model and an error message: never a prompt, an answer or a key.
 
 **When the model fails,** the page falls back to its drafts. After two failures in a row that were not rate limits (the opening counts), it stops calling the coach for the rest of the visit.
 
 ## Web: `apps/web/src/planner/`
 
-| File | What it holds |
-| --- | --- |
-| `goals-page.tsx`, `goal-editor.tsx`, `goals-ui.tsx` | The Goals page, the goal editor and their shared pieces. |
-| `goal-cards.tsx` | The cockpit's goal cards. `board.tsx`, `task-card.tsx` and `cockpit-page.tsx` add the tint and the focus. |
-| `review-page.tsx` | The weekly review: state, saves and model calls. |
-| `review-back.tsx`, `review-charts.tsx`, `review-sheet.tsx`, `review-markdown.tsx` | Look back's chat, the score charts, the memo sheet and a small Markdown renderer. It renders to React elements, never to HTML. |
-| `review-forward.tsx` | Look forward's four steps. |
-| `review-model.ts`, `goals-model.ts` | Pure state and helpers, with tests. |
-| `goals-api.ts` | The typed client, with an NDJSON reader for the two streams. |
-| `goals-search.ts` | The two routes' search validators. They always return every key, because TanStack Router otherwise lets the root's raw search through. |
-| `goals-strings.ts`, `nav-label.ts`, `nav-link.tsx` | Copy in English and Simplified Chinese, and the sidebar's Goals and Weekly review links. They sit beside Cockpit through `PlannerNavLink`, which the explorer already renders. |
-| `goals.css` | The objectives' colours and tints, the heatmap cells, the charts and the memo's typography, in light and dark. |
+| File                                                                              | What it holds                                                                                                                                                                  |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `goals-page.tsx`, `goal-editor.tsx`, `goals-ui.tsx`                               | The Goals page, the goal editor and their shared pieces.                                                                                                                       |
+| `goal-cards.tsx`                                                                  | The cockpit's goal cards. `board.tsx`, `task-card.tsx` and `cockpit-page.tsx` add the tint and the focus.                                                                      |
+| `review-page.tsx`                                                                 | The weekly review: state, saves and model calls.                                                                                                                               |
+| `review-back.tsx`, `review-charts.tsx`, `review-sheet.tsx`, `review-markdown.tsx` | Look back's chat, the score charts, the memo sheet and a small Markdown renderer. It renders to React elements, never to HTML.                                                 |
+| `review-forward.tsx`                                                              | Look forward's four steps.                                                                                                                                                     |
+| `review-model.ts`, `goals-model.ts`                                               | Pure state and helpers, with tests.                                                                                                                                            |
+| `goals-api.ts`                                                                    | The typed client, with an NDJSON reader for the two streams.                                                                                                                   |
+| `goals-search.ts`                                                                 | The two routes' search validators. They always return every key, because TanStack Router otherwise lets the root's raw search through.                                         |
+| `goals-strings.ts`, `nav-label.ts`, `nav-link.tsx`                                | Copy in English and Simplified Chinese, and the sidebar's Goals and Weekly review links. They sit beside Cockpit through `PlannerNavLink`, which the explorer already renders. |
+| `goals.css`                                                                       | The objectives' colours and tints, the heatmap cells, the charts and the memo's typography, in light and dark.                                                                 |
 
 ## Upstream files with a hook-in
 
 These are this feature's only edits outside planner paths:
 
-| File | Hook-in | Lines |
-| --- | --- | --- |
-| `apps/web/src/router-tree.tsx` | Imports the two validators, adds two lazy pages and the `/goals` and `/weekly-review` routes, and registers them after `cockpitRoute`. | +51 |
-| `apps/worker/src/spa-routes.ts` | `"/goals"` and `"/weekly-review"`. | +2 |
-| `apps/web/public/sw.js` | The same two paths in the private navigations. | +2 |
-| `apps/worker/src/env.ts` | The four optional review settings above. | +10 |
-| `scripts/persistence-manifest.mjs` | The four new tables in `RESTORE_TABLES`. | +9 / -4 |
-| `playwright.config.ts` | `goals-review` in the `memo-ui` project's `testMatch`. | +1 / -1 |
+| File                               | Hook-in                                                                                                                                | Lines   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `apps/web/src/router-tree.tsx`     | Imports the two validators, adds two lazy pages and the `/goals` and `/weekly-review` routes, and registers them after `cockpitRoute`. | +51     |
+| `apps/worker/src/spa-routes.ts`    | `"/goals"` and `"/weekly-review"`.                                                                                                     | +2      |
+| `apps/web/public/sw.js`            | The same two paths in the private navigations.                                                                                         | +2      |
+| `apps/worker/src/env.ts`           | The six optional review settings above.                                                                                                | +14     |
+| `scripts/persistence-manifest.mjs` | The four new tables in `RESTORE_TABLES`.                                                                                               | +9 / -4 |
+| `playwright.config.ts`             | `goals-review` in the `memo-ui` project's `testMatch`.                                                                                 | +1 / -1 |
 
 The guard command in section 10 of the implementation plan allows `tests/e2e/goals-review.spec.ts` alongside the cockpit spec.
 

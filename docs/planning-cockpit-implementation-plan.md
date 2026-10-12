@@ -196,11 +196,11 @@ They live in `packages/contracts/src/planner.ts`, shared by the worker and the w
 
 ### Event types
 
-| Source | Types | Actor |
-|---|---|---|
-| `activity`: copied from `task_activity` | upstream `action` values as they are (e.g. `created`, `updated`, `status_changed`, …), with `changes` JSON in `data` | yes, from the activity row |
-| `sync`: detected by snapshot diff | `deleted`, `restored`, `purged`, and `created` for a task first seen with no activity `created` event (e.g. bundle import) | none |
-| `planner`: written by planner code | `planned`, `replanned`, `unplanned`, `carried_over`, `dropped`, `undropped` | yes, from the request |
+| Source                                  | Types                                                                                                                      | Actor                      |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `activity`: copied from `task_activity` | upstream `action` values as they are (e.g. `created`, `updated`, `status_changed`, …), with `changes` JSON in `data`       | yes, from the activity row |
+| `sync`: detected by snapshot diff       | `deleted`, `restored`, `purged`, and `created` for a task first seen with no activity `created` event (e.g. bundle import) | none                       |
+| `planner`: written by planner code      | `planned`, `replanned`, `unplanned`, `carried_over`, `dropped`, `undropped`                                                | yes, from the request      |
 
 "Completed" means a `status_changed` to `done`. Upstream `changes` holds only the new status (`packages/domain/src/tasks.ts`), so "reopened" (a change away from `done`) is derived later over the archived events with `LAG`. The executor must read upstream's real `action` enum and `changes` shape before mapping.
 
@@ -283,16 +283,16 @@ The response is `{ history, carried }`.
 
 ### Column moves (v2 audit m10)
 
-| From → To | Effect |
-|---|---|
-| Backlog → To Do | Plan = this week (default); `planned` event |
-| To Do → Backlog | Plan cleared; `unplanned` event |
-| Backlog or To Do → Doing | Status `in_progress`; plan kept |
-| any → Done | Status `done`; plan kept for history |
-| Doing → To Do | Status `todo`; with no plan (or a NULL horizon), plan = this week |
-| Doing or Done → Backlog | Status `todo`; plan cleared |
-| Done → To Do | Status `todo` (reopened); if the plan is missing, has a NULL horizon or is past, plan = this week |
-| Done → Doing | Status `in_progress` |
+| From → To                | Effect                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| Backlog → To Do          | Plan = this week (default); `planned` event                                                       |
+| To Do → Backlog          | Plan cleared; `unplanned` event                                                                   |
+| Backlog or To Do → Doing | Status `in_progress`; plan kept                                                                   |
+| any → Done               | Status `done`; plan kept for history                                                              |
+| Doing → To Do            | Status `todo`; with no plan (or a NULL horizon), plan = this week                                 |
+| Doing or Done → Backlog  | Status `todo`; plan cleared                                                                       |
+| Done → To Do             | Status `todo` (reopened); if the plan is missing, has a NULL horizon or is past, plan = this week |
+| Done → Doing             | Status `in_progress`                                                                              |
 
 - **Status changes** go through upstream `updateTask`, which logs its own activity.
 - **The card menu** offers "Move to…" plus plan choices: Today, Tomorrow, This week, Next week, This month, Next month, or a picked day.
@@ -403,7 +403,7 @@ New files live under `apps/web/src/planner/`.
 6. **`apps/web/src/components/flaremo-explorer.tsx`**: an import plus `<PlannerNavLink/>` after the team-projects link.
 7. **`playwright.config.ts`**: append `cockpit` to the `memo-ui` `testMatch` regex.
 8. **`apps/web/public/sw.js`**: add `cockpit` to `privateRoutes`.
-9. **Goals and the weekly review** extend items 3, 4, 5, 7 and 8, and add four optional settings to `apps/worker/src/env.ts`. Each one is listed in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
+9. **Goals and the weekly review** extend items 3, 4, 5, 7 and 8, and add six optional settings to `apps/worker/src/env.ts`. Each one is listed in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
 
 New fork-owned files:
 
@@ -532,13 +532,14 @@ Built 2026-10-06. The owner asked for the Notion-style task experience: a "+" in
 
 - **Column "+"**: Backlog, To Do, Doing and Done have a "+" in the header (the Other bucket has none). It opens an inline composer at the top of the column. Enter adds and keeps the composer open and focused for rapid entry, Esc closes, leaving it empty closes it, leaving it with text keeps it, an IME Enter does not send, and a failed add puts the text back. Where the task lands follows the column and the filter chip:
 
-  | Column | Plan |
-  |---|---|
-  | Backlog | none, whatever the chip says |
-  | To Do | the chip's period; All means today |
+  | Column      | Plan                                 |
+  | ----------- | ------------------------------------ |
+  | Backlog     | none, whatever the chip says         |
+  | To Do       | the chip's period; All means today   |
   | Doing, Done | the chip's period; All means no plan |
 
   The card shows at once as a pending card (dimmed, inert, not draggable), then is swapped for the server's card or removed with a toast.
+
 - **Click to open**: a click anywhere on a card opens it; the title is a real `<button>` (Enter and Space work, focus returns to it on close). The status icon and the ⋯ menu keep their own jobs, and a drag never opens the card: dnd-kit swallows the click that ends a drag, and a test with the real library proves it. The Dropped list opens a task the same way.
 - **Task panel**: a right-hand sheet, 34rem wide and the whole screen under the `sm` breakpoint.
   - An editable title (Enter or blur saves, Esc puts the saved one back; an empty title is never saved).
@@ -574,15 +575,15 @@ CREATE INDEX `planner_task_comment_task_idx` ON `planner_task_comment` (`task_id
 
 ### API changes, under `/api/app/planner`
 
-| Route | Change |
-|---|---|
-| `GET /tasks/:id` | New. `{ task, plan, project, comments }`: the whole upstream task (notes included), its plan with `effort` (`null` when there is no plan row; a row with a null horizon only holds an effort), its goal as `{ id, name, ancestors }` with the live ancestors from the goal tree, root first, and its comments oldest first without the deleted ones. 404 for a missing, binned or another user's task. |
-| `PATCH /tasks/:id` | Gains `effort`: a number from 0 to 999 with at most one decimal, or `null` to clear. Applied after `column` or `plan` and before a drop. It never moves the task and is allowed on a dropped one. |
-| `POST /tasks` | Gains `column`. `backlog` refuses a plan (400), `todo` requires one (400), `doing` and `done` take an optional plan. Without `column` it behaves as before. |
-| `GET /tasks/:id/comments` | New. `{ comments }`, oldest first. |
-| `POST /tasks/:id/comments` | New. `{ body }`, answering 201 `{ comment }`. |
-| `PATCH /comments/:id` | New. `{ body }`, answering `{ comment }` with a later `updated_at`. |
-| `DELETE /comments/:id` | New. A soft delete, answering `{ ok: true }`. It is a real DELETE: the API's CORS allow-list already has it. |
+| Route                      | Change                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /tasks/:id`           | New. `{ task, plan, project, comments }`: the whole upstream task (notes included), its plan with `effort` (`null` when there is no plan row; a row with a null horizon only holds an effort), its goal as `{ id, name, ancestors }` with the live ancestors from the goal tree, root first, and its comments oldest first without the deleted ones. 404 for a missing, binned or another user's task. |
+| `PATCH /tasks/:id`         | Gains `effort`: a number from 0 to 999 with at most one decimal, or `null` to clear. Applied after `column` or `plan` and before a drop. It never moves the task and is allowed on a dropped one.                                                                                                                                                                                                      |
+| `POST /tasks`              | Gains `column`. `backlog` refuses a plan (400), `todo` requires one (400), `doing` and `done` take an optional plan. Without `column` it behaves as before.                                                                                                                                                                                                                                            |
+| `GET /tasks/:id/comments`  | New. `{ comments }`, oldest first.                                                                                                                                                                                                                                                                                                                                                                     |
+| `POST /tasks/:id/comments` | New. `{ body }`, answering 201 `{ comment }`.                                                                                                                                                                                                                                                                                                                                                          |
+| `PATCH /comments/:id`      | New. `{ body }`, answering `{ comment }` with a later `updated_at`.                                                                                                                                                                                                                                                                                                                                    |
+| `DELETE /comments/:id`     | New. A soft delete, answering `{ ok: true }`. It is a real DELETE: the API's CORS allow-list already has it.                                                                                                                                                                                                                                                                                           |
 
 - **Comment rules**: the text is trimmed and must be 1 to 5000 characters. Another user's task or comment is a 404. Comment writes use the same `planner` rate-limit bucket as every other mutation, and the same Origin rules.
 - **New event types** (source `planner`, written in the same batch as the change, M3): `effort_changed` with `{ from, to }`, and `commented`, `comment_edited` and `comment_deleted`, which carry only `{ comment_id }`. A comment's text never enters the history archive. The history labels read "Effort set to 3.5", "Effort cleared" (with "Was 2"), "Comment added", "Comment edited" and "Comment deleted".

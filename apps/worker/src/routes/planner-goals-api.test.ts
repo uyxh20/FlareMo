@@ -711,6 +711,116 @@ describe("planner goals and weekly review API", () => {
     }
   });
 
+  it("uses OpenRouter when its key is set, zero retention only", async () => {
+    const realFetch = globalThis.fetch;
+    const sent: Array<{
+      url: string;
+      headers: Headers;
+      body: Record<string, unknown>;
+    }> = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://openrouter.ai/")) {
+        return realFetch(input, init);
+      }
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      sent.push({ url, headers: new Headers(init?.headers), body: payload });
+      if (payload.stream) {
+        const chunks = [
+          ": OPENROUTER PROCESSING",
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Who " } }] })}`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "decided?" } }] })}`,
+          "data: [DONE]",
+        ];
+        return new Response(chunks.join("\n\n") + "\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+      const answer =
+        payload.max_tokens === 4700
+          ? '{"flags":[]}'
+          : '{"recap":"From GPT.","lastq":[],"prompts":[]}';
+      return Response.json({
+        choices: [{ message: { role: "assistant", content: answer } }],
+      });
+    });
+    // OpenRouter wins over Anthropic and Workers AI when both are set.
+    const openRouter = withEnv({
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      ANTHROPIC_API_KEY: "test-anthropic-key",
+    });
+
+    const opening = await body<{ recap: string }>(
+      call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/opening`,
+        { today: TODAY },
+        { env: openRouter },
+      ),
+    );
+    expect(opening.recap).toBe("From GPT.");
+    expect(sent[0]?.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(sent[0]?.headers.get("authorization")).toBe(
+      "Bearer test-openrouter-key",
+    );
+    expect(sent[0]?.body).toMatchObject({
+      model: "openai/gpt-6.1-sol",
+      max_tokens: 5600,
+      temperature: 0.4,
+      reasoning: { effort: "low", exclude: true },
+      provider: { zdr: true, data_collection: "deny" },
+    });
+
+    const coach = await lines(
+      await call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/coach`,
+        {
+          today: TODAY,
+          mode: "free",
+          messages: [
+            { role: "assistant", content: "What did you accomplish?" },
+            { role: "user", content: "Signed." },
+          ],
+        },
+        { env: openRouter },
+      ),
+    );
+    expect(said(coach)).toBe("Who decided?");
+    expect(coach.at(-1)).toEqual({ done: true, advance: false });
+    expect(sent[1]?.body.stream).toBe(true);
+
+    // Look forward's clash check goes the same way.
+    await body(
+      call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/check`,
+        {
+          today: TODAY,
+          goals: [
+            {
+              id: crypto.randomUUID(),
+              pillar: "work",
+              title: "Sign with Acme",
+              tasks: [],
+            },
+          ],
+          settled: [],
+        },
+        { env: openRouter },
+      ),
+    );
+    expect(sent).toHaveLength(3);
+    expect(sent[2]?.body).toMatchObject({
+      model: "openai/gpt-6.1-sol",
+      max_tokens: 4700,
+    });
+
+    for (const call of vi.mocked(console.error).mock.calls) {
+      expect(JSON.stringify(call)).not.toContain("test-openrouter-key");
+    }
+  });
+
   it("keeps other people out", async () => {
     const goal = (
       await body<{ goal: { id: string } }>(
