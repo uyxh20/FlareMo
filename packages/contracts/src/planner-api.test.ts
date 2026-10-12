@@ -657,6 +657,7 @@ const PLAN = {
   effort: null,
   start_date: null,
   board_rank: null,
+  goal_id: null,
   created_at: "2026-10-07T09:00:00.000Z",
   updated_at: "2026-10-07T09:00:00.000Z",
 } as const;
@@ -679,6 +680,7 @@ const CARD: PlannerBoardCard = {
   dropped_at: null,
   start_date: null,
   board_rank: null,
+  goal_id: null,
 };
 
 const EVENT = {

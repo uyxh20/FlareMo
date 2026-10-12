@@ -73,6 +73,7 @@ const PLAN = {
   dropped_at: null,
   start_date: null,
   board_rank: null,
+  goal_id: null,
   effort: null,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -691,6 +692,7 @@ describe("placing a card in a column", () => {
       plan: { ...PLAN, task_id: id },
     }),
     board_rank: rank,
+    goal_id: null,
     ...over,
   });
   const todoIds = () =>

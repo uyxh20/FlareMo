@@ -13,12 +13,16 @@ import {
   plannerMigrationFiles,
 } from "./planner-migrations";
 import {
+  plannerGoal,
+  plannerGoalFlag,
   plannerProjectNode,
+  plannerReview,
   plannerSyncState,
   plannerTaskComment,
   plannerTaskEvent,
   plannerTaskPlan,
   plannerTaskSeen,
+  plannerWeek,
 } from "./schema/planner";
 import { applyFlaremoMigrations } from "./test-migrations";
 
@@ -92,6 +96,24 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["task_id", "created_at"],
     },
   ],
+  planner_goal: [
+    {
+      name: "planner_goal_user_level_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "level", "period_start"],
+    },
+  ],
+  planner_week: [],
+  planner_review: [],
+  planner_goal_flag: [
+    {
+      name: "planner_goal_flag_user_state_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "state"],
+    },
+  ],
 };
 
 const PLANNER_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -103,6 +125,10 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_sync_state: plannerSyncState,
   planner_project_node: plannerProjectNode,
   planner_task_comment: plannerTaskComment,
+  planner_goal: plannerGoal,
+  planner_week: plannerWeek,
+  planner_review: plannerReview,
+  planner_goal_flag: plannerGoalFlag,
 };
 
 let mf: Miniflare;
@@ -214,7 +240,7 @@ describe("planner migrations", () => {
   });
 
   describe("schema", () => {
-    it("creates the six planner tables and their indexes", async () => {
+    it("creates the ten planner tables and their indexes", async () => {
       const tables = await rows<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'planner%' ORDER BY name",
       );
@@ -269,12 +295,16 @@ describe("planner migrations", () => {
         targets[table] = keys.map((key) => key.table);
       }
       expect(targets).toEqual({
+        planner_goal: [],
+        planner_goal_flag: [],
         planner_project_node: ["planner_project_node"],
+        planner_review: [],
         planner_sync_state: [],
         planner_task_comment: [],
         planner_task_event: [],
         planner_task_plan: [],
         planner_task_seen: [],
+        planner_week: [],
       });
     });
 
@@ -302,7 +332,13 @@ describe("planner migrations", () => {
             name: column.name,
             type: column.getSQLType(),
             notNull: column.notNull,
-            primaryKey: column.primary,
+            // A composite key (planner_week, planner_review) is declared on the
+            // table, not on its columns; SQLite reports each of its columns.
+            primaryKey:
+              column.primary ||
+              config.primaryKeys.some((key) =>
+                key.columns.some((part) => part.name === column.name),
+              ),
             default:
               column.default === undefined
                 ? null
@@ -719,14 +755,16 @@ describe("planner migrations", () => {
   });
 
   describe("9004 board rank", () => {
-    it("adds a nullable TEXT board_rank column to the plan row, last, and leaves existing rows NULL", async () => {
+    it("adds a nullable TEXT board_rank column to the plan row, after start_date, and leaves existing rows NULL", async () => {
       const columns = await rows<{
         name: string;
         type: string;
         notnull: number;
         dflt_value: string | null;
       }>("PRAGMA table_info(planner_task_plan)");
-      expect(columns.at(-1)).toMatchObject({
+      const at = columns.findIndex((column) => column.name === "board_rank");
+      expect(columns[at - 1]?.name).toBe("start_date");
+      expect(columns[at]).toMatchObject({
         name: "board_rank",
         type: "TEXT",
         notnull: 0,
@@ -768,6 +806,83 @@ describe("planner migrations", () => {
     });
   });
 
+  describe("9005 goals and the weekly review", () => {
+    it("adds a nullable TEXT goal_id column to the plan row, last", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      expect(columns.at(-1)).toMatchObject({
+        name: "goal_id",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+      });
+    });
+
+    it("keeps a goal with its JSON lines, and defaults the status to active", async () => {
+      await run(
+        `INSERT INTO planner_goal (id, user_id, level, period_start, pillar, title, lines, created_at, updated_at)
+         VALUES ('g1', 'u1', 'year', '2026-01-01', 'work', 'Stay on better terms', '[{"text":"Own budget"}]', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [row] = await rows<{
+        status: string;
+        lines: string;
+        result: string | null;
+        sort_order: number;
+      }>("SELECT status, lines, result, sort_order FROM planner_goal");
+      expect(row).toEqual({
+        status: "active",
+        lines: '[{"text":"Own budget"}]',
+        result: null,
+        sort_order: 0,
+      });
+    });
+
+    it("keys a week and a review by user and Monday, once each", async () => {
+      const insertWeek = () =>
+        run(
+          `INSERT INTO planner_week (user_id, week_start, auth, ach, created_at, updated_at)
+           VALUES ('u1', '2026-10-05', 4, 3.5, ?, ?)`,
+          NOW,
+          NOW,
+        );
+      await insertWeek();
+      await expect(insertWeek()).rejects.toThrow(/UNIQUE|PRIMARY/i);
+      const [week] = await rows<{ source: string; auth: number; ach: number }>(
+        "SELECT source, auth, ach FROM planner_week",
+      );
+      expect(week).toEqual({ source: "review", auth: 4, ach: 3.5 });
+
+      await run(
+        `INSERT INTO planner_review (user_id, week_start, created_at, updated_at)
+         VALUES ('u1', '2026-10-05', ?, ?)`,
+        NOW,
+        NOW,
+      );
+      const [review] = await rows<{ state: string; commit_log: string }>(
+        "SELECT state, commit_log FROM planner_review",
+      );
+      expect(review).toEqual({ state: "{}", commit_log: "{}" });
+    });
+
+    it("keeps a flag open until it is settled, with no foreign key to its goal", async () => {
+      await run(
+        `INSERT INTO planner_goal_flag (id, user_id, week_start, goal_id, with_label, why, created_at)
+         VALUES ('f1', 'u1', '2026-10-12', 'gone', 'Q4 · Work', 'Pulls the other way.', ?)`,
+        NOW,
+      );
+      const [flag] = await rows<{ state: string; settled_at: string | null }>(
+        "SELECT state, settled_at FROM planner_goal_flag",
+      );
+      expect(flag).toEqual({ state: "open", settled_at: null });
+    });
+  });
+
   describe("migration files", () => {
     it("orders planner migration files by number and ignores the rest", () => {
       expect(
@@ -798,6 +913,7 @@ describe("planner migrations", () => {
       expect(files).toContain("9001_planner_task_details.sql");
       expect(files).toContain("9002_planner_start_date.sql");
       expect(files).toContain("9004_planner_board_rank.sql");
+      expect(files).toContain("9005_planner_goals_review.sql");
       // applyPlannerMigrations reads this list, so both reach the test databases.
       expect(plannerMigrationFiles(files)).toEqual(files.sort());
 

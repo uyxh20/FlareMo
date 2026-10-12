@@ -49,6 +49,7 @@ function card(
     dropped_at: null,
     start_date: null,
     board_rank: null,
+    goal_id: null,
     ...overrides,
   };
 }

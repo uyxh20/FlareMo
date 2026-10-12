@@ -67,6 +67,8 @@ export type PlannerPlanDto = {
   start_date: string | null;
   /** The stored board order `<column>|<key>`, or NULL (migration 9004). */
   board_rank: string | null;
+  /** The weekly goal the task serves, or NULL (migration 9005). */
+  goal_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -81,6 +83,7 @@ export function plannerPlanToDto(row: PlannerTaskPlanRow): PlannerPlanDto {
     effort: row.effort ?? null,
     start_date: row.startDate ?? null,
     board_rank: row.boardRank ?? null,
+    goal_id: row.goalId ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
   };

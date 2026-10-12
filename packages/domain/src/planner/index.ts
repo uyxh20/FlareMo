@@ -13,10 +13,14 @@ export * from "./board";
 export * from "./board-rank";
 export * from "./columns";
 export * from "./comments";
+export * from "./goals";
 export * from "./history-read";
 export * from "./history-sync";
 export * from "./history-sync-nightly";
 export * from "./plans";
+export * from "./review";
+export * from "./review-context";
+export * from "./review-prompts";
 export * from "./rollover";
 export type {
   PlannerActor,

@@ -305,6 +305,32 @@ describe("plannerDescribeHistory", () => {
     ).toEqual(["Undropped", "Purged", "Restored", "Deleted"]);
   });
 
+  it("words a task linked to a weekly goal, moved to another and unlinked", () => {
+    const linked = [
+      event(
+        "goal_changed",
+        { from: null, to: "goal-a" },
+        { source: "planner" },
+      ),
+      event(
+        "goal_changed",
+        { from: "goal-a", to: "goal-b" },
+        { source: "planner" },
+      ),
+      event(
+        "goal_changed",
+        { from: "goal-b", to: null },
+        { source: "planner" },
+      ),
+    ];
+    expect(labels(linked)).toEqual([
+      "Unlinked from its weekly goal",
+      "Moved to another weekly goal",
+      "Linked to a weekly goal",
+    ]);
+    expect(labels(linked, zh)[2]).toBe("关联到本周目标");
+  });
+
   it("describes what an edit changed", () => {
     const detail = (data: Record<string, unknown>) =>
       plannerDescribeHistory([event("updated", data)], en)[0]?.detail;

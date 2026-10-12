@@ -109,6 +109,8 @@ function isPrivateAppNavigation(url) {
     `${scopePath}account`,
     `${scopePath}capture`,
     `${scopePath}cockpit`,
+    `${scopePath}goals`,
+    `${scopePath}weekly-review`,
     `${scopePath}forgot-password`,
     `${scopePath}login`,
     `${scopePath}memory`,

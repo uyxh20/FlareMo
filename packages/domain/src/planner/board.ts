@@ -59,6 +59,11 @@ export type PlannerBoardCard = {
    * never ranked or the stored rank belongs to another column (migration 9004).
    */
   board_rank: string | null;
+  /**
+   * The weekly goal the task serves, or null (migration 9005). It may name a goal
+   * of another week or a removed one; the cockpit colours only this week's.
+   */
+  goal_id: string | null;
 };
 
 export type PlannerBoard = {
@@ -197,6 +202,7 @@ export async function plannerReadBoard(
         droppedAt: plannerTaskPlan.droppedAt,
         startDate: plannerTaskPlan.startDate,
         boardRank: plannerTaskPlan.boardRank,
+        goalId: plannerTaskPlan.goalId,
       })
       .from(tasks)
       .leftJoin(plannerTaskPlan, eq(plannerTaskPlan.taskId, tasks.id))
@@ -244,6 +250,7 @@ export async function plannerReadBoard(
       dropped_at: row.droppedAt ?? null,
       start_date: row.startDate ?? null,
       board_rank: null,
+      goal_id: row.goalId ?? null,
     };
     const column = plannerColumnFor({
       status: card.status,

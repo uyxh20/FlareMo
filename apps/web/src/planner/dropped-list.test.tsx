@@ -35,6 +35,7 @@ function dropped(
     dropped_at: new Date(Date.now() - agoMs).toISOString(),
     start_date: null,
     board_rank: null,
+    goal_id: null,
     ...overrides,
   };
 }

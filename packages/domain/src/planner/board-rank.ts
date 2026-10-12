@@ -4,6 +4,7 @@ import {
   plannerPlaceRank,
   plannerRankBetween,
   plannerRankMaxLength,
+  plannerRankSpread,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { plannerTaskPlan } from "@flaremo/db/src/schema/planner";
@@ -218,4 +219,37 @@ export async function plannerRankNewTaskOnTop(
     );
     return false;
   }
+}
+
+/**
+ * Gives every card of a column a fresh key in the order given, in one batch:
+ * `order` is the column's task ids top to bottom. Saving a week's plan uses it to
+ * put the weekly goals' tasks on top of To Do. Like any rank change it writes no
+ * event.
+ */
+export async function plannerRespreadColumn(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    column: PlannerColumn;
+    order: readonly string[];
+    now?: Date;
+  },
+): Promise<void> {
+  if (!plannerIsColumn(input.column)) {
+    throw new ValidationError("column must be backlog, todo, doing or done.");
+  }
+  const keys = plannerRankSpread(input.order.length);
+  const nowIso = plannerNow(input.now).toISOString();
+  await plannerRunBatch(
+    db,
+    input.order.map((taskId, place) =>
+      rankUpsert(db, {
+        userId: input.userId,
+        taskId,
+        stored: plannerFormatBoardRank(input.column, keys[place] as string),
+        nowIso,
+      }),
+    ),
+  );
 }

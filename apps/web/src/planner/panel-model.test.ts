@@ -63,6 +63,7 @@ const PLAN = {
   dropped_at: null,
   start_date: null,
   board_rank: null,
+  goal_id: null,
   effort: 3,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -99,6 +100,7 @@ describe("plannerCardFromDetail", () => {
       dropped_at: null,
       start_date: null,
       board_rank: null,
+      goal_id: null,
     });
     // A card never carries notes or an effort.
     expect(card).not.toHaveProperty("notes");
@@ -171,6 +173,7 @@ describe("plannerDetailWithCard", () => {
       dropped_at: null,
       start_date: null,
       board_rank: null,
+      goal_id: null,
       effort: null,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),
@@ -276,6 +279,7 @@ describe("plannerDetailWithEffort", () => {
       dropped_at: null,
       start_date: null,
       board_rank: null,
+      goal_id: null,
       effort: 2,
       created_at: NOW.toISOString(),
       updated_at: NOW.toISOString(),

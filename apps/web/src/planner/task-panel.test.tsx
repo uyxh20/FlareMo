@@ -83,6 +83,7 @@ const PLAN = {
   dropped_at: null,
   start_date: null,
   board_rank: null,
+  goal_id: null,
   effort: 3.5,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
