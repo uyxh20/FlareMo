@@ -94,3 +94,30 @@ third-party credentials. `--include-side-effect-tables` copies them.
 - Tests: `node --test scripts/fork/dev-env.test.mjs`. They run the real
   migrations against an in-memory fake of Cloudflare and need Node 22.5+
   (`node:sqlite`); without it the end-to-end part is skipped.
+
+## Shipping to live
+
+`scripts/fork/prod-deploy.mjs` runs the whole prod upgrade in one command, from
+any machine with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (the token
+needs Workers Scripts and D1 edit rights).
+
+```bash
+node scripts/fork/prod-deploy.mjs status                    # read-only
+node scripts/fork/prod-deploy.mjs deploy --dry-run          # everything except the writes
+node scripts/fork/prod-deploy.mjs deploy --confirm flaremo  # the real thing
+node scripts/fork/prod-deploy.mjs rollback --confirm flaremo
+node scripts/fork/prod-deploy.mjs config                    # just rebuild wrangler.jsonc
+```
+
+`deploy` refuses unless HEAD equals `origin/main` and the tree is clean. Steps:
+rebuild the gitignored root `wrangler.jsonc` from `wrangler.jsonc.example` plus
+the live Worker's vars (checked to name only production resources) -> note the
+live version as the rollback target -> save a D1 Time Travel bookmark ->
+baseline `COUNT(*)` per table -> build -> apply pending migrations -> `wrangler
+deploy --keep-vars` -> re-count and fetch `/` and `/openapi.json`. If a table
+lost rows (sessions, tokens and similar short-lived tables are only noted) or
+the site errors, the Worker is rolled back automatically. Migrations and data
+are never reverted automatically; the bookmark is printed for that. Only counts
+are read from live D1, and var values are masked in wrangler output.
+
+Tests: `node --test scripts/fork/prod-deploy.test.mjs`.
