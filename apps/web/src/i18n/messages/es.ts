@@ -496,6 +496,9 @@ const messages = {
   "auth.password": "Contraseña",
   "auth.signIn": "Iniciar sesión",
   "auth.signingIn": "Iniciando sesión…",
+  "auth.confirmingSession": "Sesión iniciada, abriendo tu espacio…",
+  "auth.sessionNotStored":
+    "La sesión se inició, pero el navegador no guardó el estado. Comprueba que las cookies de este sitio no estén bloqueadas e inténtalo de nuevo.",
   "auth.loginFailed":
     "No se pudo iniciar sesión. Revisa tu usuario y contraseña e inténtalo de nuevo.",
   "auth.statusUnavailable":
