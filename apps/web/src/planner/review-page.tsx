@@ -24,9 +24,21 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { QueryErrorState } from "@/components/query-error-state";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
+import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { plannerErrorMessage, plannerFetchBoard } from "./api";
 import { plannerMarkWeekFresh } from "./goal-cards";
@@ -39,6 +51,7 @@ import {
   plannerLookBackRequest,
   plannerLookForwardRequest,
   plannerSaveReviewStateRequest,
+  plannerStartReviewOverRequest,
   plannerStreamCoach,
   plannerStreamMemo,
 } from "./goals-api";
@@ -105,9 +118,21 @@ import "./goals.css";
 
 const SAVE_DELAY = 800;
 
+/** What the session does to start over, given to the page's header button. */
+type StartOver = { current: (() => Promise<void>) | null };
+
 export function PlannerReviewPage() {
   const strings = usePlannerGoalsStrings();
+  const cockpit = usePlannerStrings();
+  const { t } = useI18n();
   const today = usePlannerToday();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate({ from: "/weekly-review" });
+  const startOver = useRef<(() => Promise<void>) | null>(null);
+  // Bumped after starting over, so the session mounts again on the cleared state.
+  const [run, setRun] = useState(0);
+  const [confirming, setConfirming] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const query = useQuery({
     queryKey: plannerQueryKeys.review(today),
     queryFn: () => plannerFetchReview({ today }),
@@ -131,9 +156,38 @@ export function PlannerReviewPage() {
     content = <ReviewSkeleton />;
   } else {
     content = (
-      <ReviewSession key={review.review_week} review={review} today={today} />
+      <ReviewSession
+        key={`${review.review_week}:${run}`}
+        review={review}
+        startOver={startOver}
+        today={today}
+      />
     );
   }
+
+  const restart = async () => {
+    if (!startOver.current) return;
+    setRestarting(true);
+    try {
+      await startOver.current();
+      await query.refetch();
+      setRun((current) => current + 1);
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.reviewStatus(today),
+      });
+      void navigate({ search: { part: "back" } });
+    } catch (error) {
+      toast.error(
+        plannerErrorMessage(
+          error,
+          strings.review.startOverFailed,
+          cockpit.toast.rateLimited,
+        ),
+      );
+    } finally {
+      setRestarting(false);
+    }
+  };
 
   return (
     <WorkspaceLayout
@@ -157,12 +211,47 @@ export function PlannerReviewPage() {
           sidebarCollapsed={sidebarCollapsed}
           title={strings.review.title}
           toggleSidebarCollapsed={toggleSidebarCollapsed}
+          actions={
+            review && (
+              <Button
+                data-testid="planner-review-start-over"
+                disabled={restarting}
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirming(true)}
+              >
+                {strings.review.startOver}
+              </Button>
+            )
+          }
         />
       )}
     >
       <div className="flex flex-col gap-3 pb-10" data-testid="planner-review">
         {content}
       </div>
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{strings.review.startOverTitle}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {strings.review.startOverBody}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel variant="ghost">
+              {t("common.cancel")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="planner-review-start-over-confirm"
+              variant="destructive"
+              onClick={() => void restart()}
+            >
+              {strings.review.startOver}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </WorkspaceLayout>
   );
 }
@@ -286,9 +375,11 @@ function Parts({
 
 function ReviewSession({
   review,
+  startOver,
   today,
 }: {
   review: PlannerReviewResponse;
+  startOver: StartOver;
   today: string;
 }) {
   const strings = usePlannerGoalsStrings();
@@ -307,11 +398,14 @@ function ReviewSession({
   const dirty = useRef(false);
   const saveTimer = useRef<number | undefined>(undefined);
   const alive = useRef(true);
+  // Set while starting over: nothing more is saved over the cleared review.
+  const stopped = useRef(false);
+  const inFlight = useRef<Promise<unknown> | null>(null);
 
   const flush = useCallback(
     async (keepalive = false) => {
       window.clearTimeout(saveTimer.current);
-      if (!dirty.current) return;
+      if (!dirty.current || stopped.current) return;
       dirty.current = false;
       const saving = stateRef.current as unknown as Record<string, unknown>;
       // The cached review is what the page starts from when it is opened again
@@ -324,7 +418,11 @@ function ReviewSession({
           cached?.review_week === week ? { ...cached, state: saving } : cached,
       );
       try {
-        await plannerSaveReviewStateRequest(week, saving, { keepalive });
+        const request = plannerSaveReviewStateRequest(week, saving, {
+          keepalive,
+        });
+        inFlight.current = request;
+        await request;
       } catch {
         // Saved again with the next change, or when the page is hidden.
         dirty.current = true;
@@ -364,6 +462,29 @@ function ReviewSession({
 
   const coachAbort = useRef<AbortController | null>(null);
   const memoAbort = useRef<AbortController | null>(null);
+
+  // Starting over stops the saves and the model, waits for a save already on
+  // its way, then clears the review on the server. The page then loads it again
+  // and mounts a new session; if the server refuses, saving picks up again.
+  useEffect(() => {
+    startOver.current = async () => {
+      stopped.current = true;
+      window.clearTimeout(saveTimer.current);
+      coachAbort.current?.abort();
+      memoAbort.current?.abort();
+      await inFlight.current?.catch(() => undefined);
+      try {
+        await plannerStartReviewOverRequest(week);
+      } catch (error) {
+        stopped.current = false;
+        void flush();
+        throw error;
+      }
+    };
+    return () => {
+      startOver.current = null;
+    };
+  }, [startOver, week, flush]);
   useEffect(() => {
     alive.current = true;
     const onVisibility = () => {

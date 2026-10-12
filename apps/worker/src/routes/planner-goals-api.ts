@@ -55,6 +55,7 @@ import {
   plannerReviewStatus,
   plannerSaveLookBack,
   plannerSaveReviewState,
+  plannerStartReviewOver,
   plannerUpdateGoal,
   plannerUpsertWeek,
 } from "@flaremo/domain/src/planner";
@@ -308,6 +309,22 @@ plannerGoalsApi.patch(
     }
   },
 );
+
+// Start over: clears the page's state and both done marks; saved results stay.
+plannerGoalsApi.post("/review/:week/start-over", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    const response: PlannerReviewStateResponse = await plannerStartReviewOver(
+      context.db,
+      { userId: context.user.id, weekStart: c.req.param("week") },
+    );
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
 
 plannerGoalsApi.post(
   "/review/:week/look-back",

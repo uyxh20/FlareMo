@@ -130,6 +130,10 @@ export type PlannerGoalsStrings = {
     saved: string;
     stepOf: (step: number, total: number) => string;
     loadFailed: string;
+    startOver: string;
+    startOverTitle: string;
+    startOverBody: string;
+    startOverFailed: string;
 
     start: string;
     drafting: string;
@@ -396,6 +400,11 @@ const en: PlannerGoalsStrings = {
     saved: "Saved",
     stepOf: (step, total) => `Step ${step} of ${total}`,
     loadFailed: "Couldn't load the review.",
+    startOver: "Start over",
+    startOverTitle: "Start this review over?",
+    startOverBody:
+      "Your answers, the chat and the drafts are cleared, and the review starts again from Look back. What you already saved stays: the week's scores, the summary memo, goals and tasks. Saving again updates them.",
+    startOverFailed: "Couldn't start over.",
 
     start: "Start Look back",
     drafting: "Drafting from your week",
@@ -647,6 +656,11 @@ const zhCN: PlannerGoalsStrings = {
     saved: "已保存",
     stepOf: (step, total) => `第 ${step} 步，共 ${total} 步`,
     loadFailed: "复盘加载失败。",
+    startOver: "重新开始",
+    startOverTitle: "重新开始这次复盘？",
+    startOverBody:
+      "你的回答、对话和草稿会被清空，复盘从回顾重新开始。已经保存的内容会保留：本周评分、总结笔记、目标和任务。再次保存会更新它们。",
+    startOverFailed: "无法重新开始。",
 
     start: "开始回顾",
     drafting: "正在根据你的一周起草",

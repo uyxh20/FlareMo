@@ -37,6 +37,7 @@ Two parts, done in any order and left at any point. The page saves where the rev
 
 - The week looked back on is the current week on Saturday and Sunday. From Monday to Friday it is the week before.
 - From Saturday to Monday the sidebar link carries a dot until both parts are done.
+- **Start over** in the header clears the review's progress for that week, after a confirmation, and opens a fresh Look back. What the two saves already wrote stays: the week's record, the summary memo, goals and tasks. Saving again updates them, and the server's commit log is kept, so a task Save week already created is not made twice.
 
 **Look back** is a chat over the week. It goes through:
 
@@ -109,6 +110,7 @@ The full list, with each response type, is the comment block in `packages/contra
 | `GET/POST /goals`, `PATCH/DELETE /goals/:id`                     | Read a year of the cascade; create, edit and remove goals.                                      |
 | `PATCH /weeks/:weekStart`                                        | Edit a week's record.                                                                           |
 | `GET /review`, `GET /review/status`, `PATCH /review/:week/state` | Read the review, read whether it is due and done (for the sidebar dot), and save its progress.  |
+| `POST /review/:week/start-over`                                  | Start over: clears the page's state and both done marks. Saved results stay.                    |
 | `POST /review/:week/look-back`                                   | The week's record, last week's goal results and the summary memo. Safe to send again.           |
 | `POST /review/:week/look-forward`                                | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again.               |
 | `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check`        | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |

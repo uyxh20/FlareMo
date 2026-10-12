@@ -323,6 +323,21 @@ describe("planner goals and weekly review API", () => {
         call("PATCH", `/review/${REVIEW_WEEK}/state`, { state: { step: 2 } }),
       ),
     );
+    onTheWire(
+      plannerReviewStateResponseSchema,
+      await body(call("POST", `/review/${REVIEW_WEEK}/start-over`)),
+    );
+    const fresh = await body<{ state: unknown }>(
+      call("GET", `/review?today=${TODAY}`),
+    );
+    expect(fresh.state).toEqual({});
+    await body(call("POST", "/review/2026-10-07/start-over"), 400);
+    onTheWire(
+      plannerReviewStateResponseSchema,
+      await body(
+        call("PATCH", `/review/${REVIEW_WEEK}/state`, { state: { step: 2 } }),
+      ),
+    );
 
     const back = onTheWire(
       plannerLookBackResponseSchema,
@@ -875,6 +890,7 @@ describe("planner goals and weekly review API", () => {
       ["GET", `/review?today=${TODAY}`, undefined],
       ["GET", `/review/status?today=${TODAY}`, undefined],
       ["PATCH", `/review/${REVIEW_WEEK}/state`, { state: {} }],
+      ["POST", `/review/${REVIEW_WEEK}/start-over`, undefined],
       ["POST", `/review/${REVIEW_WEEK}/ai/opening`, { today: TODAY }],
     ] as const) {
       const res = await call(method, path, payload, { headers: {} });

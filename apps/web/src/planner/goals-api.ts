@@ -122,6 +122,14 @@ export function plannerSaveReviewStateRequest(
   });
 }
 
+/** Starts the week's review over: its state and done marks are cleared. */
+export function plannerStartReviewOverRequest(week: string) {
+  return apiRequest<PlannerReviewStateResponse>(
+    reviewPath(week, "start-over"),
+    { method: "POST" },
+  );
+}
+
 /** Look back is finished: scores, question, verdict, goal results and the memo. */
 export function plannerLookBackRequest(
   week: string,

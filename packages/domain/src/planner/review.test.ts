@@ -16,6 +16,7 @@ import {
   plannerReviewStatus,
   plannerSaveLookBack,
   plannerSaveReviewState,
+  plannerStartReviewOver,
 } from "./review";
 import {
   plannerReadLastQuestion,
@@ -388,6 +389,53 @@ describe("the weekly review", () => {
           userId: rt.user.id,
           weekStart: "2026-10-07",
           state: {},
+        }),
+      ).rejects.toThrow(ValidationError);
+    });
+    it("starts over: clears the page's state and both done marks, keeps the commit log", async () => {
+      await plannerTestRun(
+        rt.database,
+        `INSERT INTO planner_review (user_id, week_start, state, commit_log, look_back_done_at, look_forward_done_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        rt.user.id,
+        W41,
+        JSON.stringify({ v: 1, part: "forward" }),
+        JSON.stringify({ tasks: { "ref-1": "task-1" } }),
+        "2026-10-11T10:00:00.000Z",
+        "2026-10-11T11:00:00.000Z",
+        "2026-10-11T09:00:00.000Z",
+        "2026-10-11T11:00:00.000Z",
+      );
+      await plannerStartReviewOver(rt.db, {
+        userId: rt.user.id,
+        weekStart: W41,
+        now: new Date("2026-10-11T12:00:00.000Z"),
+      });
+      const review = await read(SUNDAY);
+      expect(review.state).toEqual({});
+      expect(review.look_back_done_at).toBeNull();
+      expect(review.look_forward_done_at).toBeNull();
+      expect(
+        await plannerReviewStatus(rt.db, { userId: rt.user.id, today: SUNDAY }),
+      ).toMatchObject({ due: true, look_back_done: false });
+      const [row] = await plannerTestRows<{ commit_log: string }>(
+        rt.database,
+        "SELECT commit_log FROM planner_review WHERE user_id = ? AND week_start = ?",
+        rt.user.id,
+        W41,
+      );
+      expect(JSON.parse(row?.commit_log ?? "{}")).toEqual({
+        tasks: { "ref-1": "task-1" },
+      });
+      // A week with no review yet has nothing to clear, and is not an error.
+      await plannerStartReviewOver(rt.db, {
+        userId: rt.user.id,
+        weekStart: W40,
+      });
+      await expect(
+        plannerStartReviewOver(rt.db, {
+          userId: rt.user.id,
+          weekStart: "2026-10-07",
         }),
       ).rejects.toThrow(ValidationError);
     });

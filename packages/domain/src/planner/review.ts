@@ -351,6 +351,39 @@ export async function plannerSaveReviewState(
   return { updated_at: nowIso };
 }
 
+/**
+ * Starts a week's review over: the page's own record and both parts' done
+ * marks are cleared, so the page opens on a fresh Look back. What the two saves
+ * already wrote stays (the week's record, the summary memo, goals, tasks and
+ * flags), and saving again updates it: the memo is found by its client id, the
+ * plan's goals by their ids, and the commit log is kept so a task already made
+ * for a ref is not made twice.
+ */
+export async function plannerStartReviewOver(
+  db: FlareMoDb,
+  input: { userId: string; weekStart: string; now?: Date },
+): Promise<{ updated_at: string }> {
+  const weekStart = plannerRequireMonday(input.weekStart, "The week");
+  const nowIso = plannerNow(input.now).toISOString();
+  await plannerRunBatch(db, [
+    db
+      .update(plannerReview)
+      .set({
+        state: {},
+        lookBackDoneAt: null,
+        lookForwardDoneAt: null,
+        updatedAt: nowIso,
+      })
+      .where(
+        and(
+          eq(plannerReview.userId, input.userId),
+          eq(plannerReview.weekStart, weekStart),
+        ),
+      ),
+  ]);
+  return { updated_at: nowIso };
+}
+
 // ---------------------------------------------------------------------------
 // The summary memo
 // ---------------------------------------------------------------------------

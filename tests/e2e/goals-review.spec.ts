@@ -95,6 +95,30 @@ test("Look back starts and takes a typed answer without a model", async ({
   ).toBeVisible();
 });
 
+test("Start over clears the review and opens a fresh Look back", async ({
+  page,
+}) => {
+  await page.goto("/weekly-review?part=back");
+  const start = page.getByTestId("planner-start-look-back");
+  if (await start.isVisible()) await start.click();
+  const composer = page.getByTestId("planner-review-composer");
+  await expect(composer).toBeEnabled();
+  const answer = `Answer to clear ${Date.now()}`;
+  await composer.fill(answer);
+  await composer.press("Enter");
+  const chat = page.getByTestId("planner-review-chat");
+  await expect(chat.getByText(answer)).toBeVisible();
+
+  await page.getByTestId("planner-review-start-over").click();
+  await page.getByTestId("planner-review-start-over-confirm").click();
+  await expect(page.getByTestId("planner-start-look-back")).toBeVisible();
+  await expect(page.getByText(answer)).toHaveCount(0);
+  // The server holds the cleared review too.
+  await page.reload();
+  await expect(page.getByTestId("planner-start-look-back")).toBeVisible();
+  await expect(page.getByText(answer)).toHaveCount(0);
+});
+
 test("a week planned in Look forward lands on the cockpit", async ({
   page,
 }) => {

@@ -292,6 +292,7 @@ export function plannerOnTarget(week: {
 //   GET    /review?today[&week]              PlannerReviewResponse
 //   GET    /review/status?today              PlannerReviewStatusResponse
 //   PATCH  /review/:week/state               PlannerReviewStateResponse
+//   POST   /review/:week/start-over          PlannerReviewStateResponse
 //   POST   /review/:week/look-back           PlannerLookBackResponse
 //   POST   /review/:week/look-forward        PlannerCommitResponse
 //   POST   /review/:week/ai/opening          PlannerAiOpeningResponse
