@@ -109,11 +109,15 @@ export type FlareMoEnv = Env & {
   // The weekly review's model (fork-owned planner add-on; see
   // src/routes/planner-review-ai.ts). Workers AI through the AI binding by
   // default, and FLAREMO_REVIEW_MODEL picks another Workers AI text model. The
-  // Worker secret ANTHROPIC_API_KEY switches to Anthropic's API instead, with
+  // Worker secret OPENROUTER_API_KEY switches to OpenRouter (zero data
+  // retention only), with FLAREMO_REVIEW_OPENROUTER_MODEL; without it,
+  // ANTHROPIC_API_KEY switches to Anthropic's API, with
   // FLAREMO_REVIEW_ANTHROPIC_MODEL. FLAREMO_REVIEW_AI=off turns the model off;
   // the review then works from its own drafts.
   FLAREMO_REVIEW_AI?: string;
   FLAREMO_REVIEW_MODEL?: string;
+  FLAREMO_REVIEW_OPENROUTER_MODEL?: string;
+  OPENROUTER_API_KEY?: string;
   FLAREMO_REVIEW_ANTHROPIC_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   // Optional Cloudflare account analytics for the owner usage panel (see
