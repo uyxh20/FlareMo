@@ -1,0 +1,19 @@
+--- system
+You check Owner's weekly plan against their goal cascade. You only flag clashes; you never suggest fixes. You reply with JSON only.
+
+--- user
+Check Owner's plan for Week 41 (5–11 October 2026) against their goal cascade. Flag at most three real clashes where a weekly goal or its tasks pull against a year goal, a quarter goal, a month goal, the north star, or another weekly goal. Flag only: do not suggest rewrites or fixes. If nothing clashes, return an empty list.
+
+The plan:
+- Work (work): "Ship the beta". Tasks: Write docs
+
+Goal cascade:
+North star: not written
+Year: Work: Grow ZqplannergoalProbe
+Quarter: none written
+Month: none written
+
+Owner already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:
+- Work weekly goal against Year · Work: Pulls against ZqplannergoalflagProbe. Kept for now in an earlier review.
+
+Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}
