@@ -86,9 +86,9 @@ function Tile({
   kind: HealthKind;
   title: string;
   big: string;
-  of: number;
+  of?: number;
   note: string;
-  share: number;
+  share?: number;
 }) {
   return (
     <div
@@ -107,11 +107,13 @@ function Tile({
         >
           {big}
         </span>
-        <span className="text-sm text-muted-foreground tabular-nums">
-          / {of}
-        </span>
+        {of !== undefined && (
+          <span className="text-sm text-muted-foreground tabular-nums">
+            / {of}
+          </span>
+        )}
       </div>
-      <Bar share={share} />
+      {share !== undefined && <Bar share={share} />}
       <span className="text-xs text-muted-foreground">{note}</span>
     </div>
   );
@@ -167,11 +169,6 @@ function WeekSection() {
           big={healthFormatUnits(summary.night_out.units)}
           kind="night_out"
           note={s.outNote(healthFormatUnits(summary.night_out.units))}
-          of={summary.night_out.year_target}
-          share={healthShare(
-            summary.night_out.year_used,
-            summary.night_out.year_target,
-          )}
           title={s.outTile}
         />
       </div>

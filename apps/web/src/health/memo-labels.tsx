@@ -131,7 +131,8 @@ export function HealthMemoLabels({ memo }: { memo: LabelMemo }) {
   const query = useQuery({
     queryKey: healthQueryKeys.memo(memo.name, memo.update_time),
     queryFn: () => healthLoadMemoEntries(memo.name),
-    enabled: memo.state !== "trashed",
+    // A memo still on its way to the server (optimistic-…) has no labels yet.
+    enabled: memo.state !== "trashed" && !memo.name.startsWith("optimistic-"),
     staleTime: 5 * 60_000,
     // A failed label read must never become a storm of retries on every card.
     retry: false,

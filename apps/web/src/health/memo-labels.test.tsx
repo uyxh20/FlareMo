@@ -101,6 +101,16 @@ describe("the chips", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it("does not ask for the labels of a memo that has not reached the server", async () => {
+    load.mockResolvedValue([]);
+    mounted = plannerTestMount(
+      <HealthMemoLabels memo={{ ...MEMO, name: "optimistic-123" }} />,
+      { queryClient: new QueryClient() },
+    );
+    await settle();
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it("removes a label with its x", async () => {
     const entry = healthTestEntry({ id: "a", variant: "legs" });
     dismiss.mockResolvedValue({ entry });
