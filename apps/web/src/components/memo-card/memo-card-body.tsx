@@ -71,7 +71,9 @@ export function MemoCardBody({
           <div
             className={cn(
               "overflow-hidden motion-safe:transition-[max-height] motion-safe:duration-250 motion-safe:ease-signal",
-              collapsed ? "max-h-52" : "max-h-[1600px]",
+              // Fork: no cap once expanded, so a long memo is never cut off
+              // (docs/fork-customizations.md).
+              collapsed ? "max-h-52" : "max-h-none",
             )}
           >
             <LazyMemoContent
