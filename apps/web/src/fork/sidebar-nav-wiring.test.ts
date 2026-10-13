@@ -38,4 +38,12 @@ describe("the sidebar hook-in in flaremo-explorer.tsx", () => {
       );
     }
   });
+
+  it("keeps the On this day banner switch wired into the timeline query", () => {
+    const queries = readFileSync(
+      new URL("../hooks/use-workspace-queries.ts", import.meta.url),
+      "utf8",
+    );
+    expect(queries).toContain("forkOnThisDayBannerHidden");
+  });
 });

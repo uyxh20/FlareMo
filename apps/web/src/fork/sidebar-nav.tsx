@@ -1,7 +1,7 @@
 import { Children, type ComponentProps, isValidElement } from "react";
 
 // Fork-owned (docs/fork-customizations.md). The owner does not use Team
-// projects, Projects or Articles, so their sidebar links are hidden. The routes
+// projects, Projects, Articles, On this day or Wander, so their sidebar links are hidden. The routes
 // keep working by URL; the search, the notification bell, the overdue link in
 // the mini calendar and the cockpit link are untouched.
 //
@@ -19,6 +19,8 @@ export const forkHiddenSidebarRoutes = [
   "/team-projects",
   "/projects",
   "/articles",
+  "/review/daily", // On this day
+  "/review/walk", // Wander
 ] as const satisfies readonly string[];
 
 const hiddenRoutes: ReadonlySet<string> = new Set<string>(
@@ -39,3 +41,10 @@ export function ForkSidebarNav({ children, ...props }: ComponentProps<"nav">) {
   });
   return <nav {...props}>{visible}</nav>;
 }
+
+/**
+ * The "On this day" teaser banner at the top of the timeline. Hidden together
+ * with the sidebar entry; set to false to bring it back. While true the timeline
+ * also skips the request that feeds it.
+ */
+export const forkOnThisDayBannerHidden = true;

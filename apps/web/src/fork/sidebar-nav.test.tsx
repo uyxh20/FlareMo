@@ -16,11 +16,13 @@ function Custom() {
 const html = (nav: React.ReactElement) => renderToStaticMarkup(nav);
 
 describe("forkHiddenSidebarRoutes", () => {
-  it("names the three entries the owner does not use", () => {
+  it("names the five entries the owner does not use", () => {
     expect([...forkHiddenSidebarRoutes]).toEqual([
       "/team-projects",
       "/projects",
       "/articles",
+      "/review/daily",
+      "/review/walk",
     ]);
   });
 });
@@ -47,8 +49,8 @@ describe("ForkSidebarNav", () => {
     const markup = html(
       <ForkSidebarNav>
         <Item label="One" to="/" />
-        <Item label="Two" to="/review/daily" />
-        <Item label="Three" to="/review/walk" />
+        <Item label="Two" to="/memory" />
+        <Item label="Three" to="/cockpit" />
       </ForkSidebarNav>,
     );
     expect(markup.indexOf("One")).toBeGreaterThan(-1);

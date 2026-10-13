@@ -14,7 +14,7 @@ const E2E_COOKIE_MUTATION_OPTIONS = {
   headers: { origin: E2E_BASE_URL },
 };
 
-test("the sidebar hides Team projects, Projects and Articles but keeps the rest", async ({
+test("the sidebar hides Team projects, Projects, Articles, On this day and Wander but keeps the rest", async ({
   page,
 }) => {
   await page.goto("/");
@@ -26,13 +26,16 @@ test("the sidebar hides Team projects, Projects and Articles but keeps the rest"
     nav.getByRole("link", { name: /^(Cockpit|驾驶舱)$/ }),
   ).toBeVisible();
   await expect(
-    nav.getByRole("link", { name: /^(On this day|往年今日)$/ }),
-  ).toBeVisible();
-  await expect(
     nav.getByRole("link", { name: /^(Memory|记忆)$/ }),
   ).toBeVisible();
 
-  for (const route of ["/team-projects", "/projects", "/articles"]) {
+  for (const route of [
+    "/team-projects",
+    "/projects",
+    "/articles",
+    "/review/daily",
+    "/review/walk",
+  ]) {
     await expect(nav.locator(`a[href="${route}"]`)).toHaveCount(0);
   }
 });
