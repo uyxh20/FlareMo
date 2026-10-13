@@ -1,4 +1,4 @@
-import type { PlannerBoardCard } from "@flaremo/contracts";
+import type { PlannerBoardCard, PlannerGoalDto } from "@flaremo/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { BanIcon, ChevronRightIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -174,10 +174,12 @@ function PanelBody({
   taskId,
   today,
   actions,
+  weekGoals,
 }: {
   taskId: string;
   today: string;
   actions: PlannerActions;
+  weekGoals: readonly PlannerGoalDto[];
 }) {
   const strings = usePlannerStrings();
   const query = useQuery({
@@ -284,7 +286,11 @@ function PanelBody({
           </div>
         )}
 
-        <PlannerTaskProperties actions={actions} detail={detail} />
+        <PlannerTaskProperties
+          actions={actions}
+          detail={detail}
+          weekGoals={weekGoals}
+        />
 
         <div className="border-t border-border/60 pt-5">
           <PlannerTaskNotes
@@ -326,6 +332,7 @@ export function PlannerTaskPanel({
   onOpenChange,
   today,
   actions,
+  weekGoals = [],
 }: {
   /** The task to show; null while no panel is wanted. */
   taskId: string | null;
@@ -333,6 +340,8 @@ export function PlannerTaskPanel({
   onOpenChange: (open: boolean) => void;
   today: string;
   actions: PlannerActions;
+  /** The cockpit week's goals, which the Goal property picks from. */
+  weekGoals?: readonly PlannerGoalDto[];
 }) {
   const strings = usePlannerStrings();
   const popupRef = useRef<HTMLDivElement | null>(null);
@@ -363,6 +372,7 @@ export function PlannerTaskPanel({
             key={shown}
             taskId={shown}
             today={today}
+            weekGoals={weekGoals}
           />
         )}
       </SheetContent>

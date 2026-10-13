@@ -1,12 +1,11 @@
 import {
   type PlannerBoardCard,
+  type PlannerGoalDto,
   type PlannerTaskDetailResponse,
-  type PlannerTaskProject,
   plannerIsValidDayKey,
   plannerQuarterLabel,
   type TaskPriority,
 } from "@flaremo/contracts";
-import { useQuery } from "@tanstack/react-query";
 import {
   BanIcon,
   CalendarDaysIcon,
@@ -15,7 +14,6 @@ import {
   CheckIcon,
   CircleDotIcon,
   FlagIcon,
-  FolderIcon,
   GaugeIcon,
   PlayIcon,
   TargetIcon,
@@ -30,7 +28,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { listProjects } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,7 +40,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PRIORITY_BADGE } from "@/pages/projects/constants";
-import { plannerFetchTree } from "./api";
 import {
   type PlannerColumnKey,
   plannerCardColumn,
@@ -51,12 +47,12 @@ import {
 } from "./board-model";
 import { plannerDayLong, plannerLocalDayOf } from "./dates";
 import { plannerFormatEffort, plannerParseEffort } from "./effort";
+import { plannerPillarClass } from "./goal-cards";
 import {
-  plannerCardFromDetail,
-  plannerProjectPathLabel,
-  plannerProjectPaths,
-} from "./panel-model";
-import { plannerQueryKeys } from "./query-keys";
+  type PlannerGoalsStrings,
+  usePlannerGoalsStrings,
+} from "./goals-strings";
+import { plannerCardFromDetail } from "./panel-model";
 import { usePlannerStrings } from "./strings";
 import { PlannerColumnIcon } from "./task-card";
 import type { PlannerActions } from "./use-planner-actions";
@@ -378,58 +374,47 @@ function PriorityControl({
 
 // --- Goal ---------------------------------------------------------------------
 
+/** "Work · Ship the launch": the goal's objective, then its title. */
+function goalLabel(goal: PlannerGoalDto, strings: PlannerGoalsStrings): string {
+  const pillar = goal.pillar ? strings.pillar[goal.pillar] : strings.noPillar;
+  const title = goal.title.trim() || goal.lines[0]?.text.trim() || "";
+  return title ? `${pillar} · ${title}` : pillar;
+}
+
+// The goal a task serves is one of the cockpit week's goals, the ones the board
+// tints its cards with and the weekly review plans. Projects are not offered any
+// more (the owner's decision, 13 Oct 2026); a task keeps its project link in the
+// database, untouched.
 function GoalControl({
   card,
-  current,
+  weekGoals,
   actions,
 }: {
   card: PlannerBoardCard;
-  /** The task's project from the detail, with the path above it. */
-  current: PlannerTaskProject | null;
+  weekGoals: readonly PlannerGoalDto[];
   actions: PlannerActions;
 }) {
   const strings = usePlannerStrings();
-  // The same list and cache key as upstream's task dialog, so the two share it.
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: () => listProjects(),
-  });
-  // The paths are a nicety: without the tree the goals still list by name.
-  const treeQuery = useQuery({
-    queryKey: plannerQueryKeys.tree,
-    queryFn: plannerFetchTree,
-    staleTime: 30_000,
-  });
-
-  const options = useMemo(() => {
-    const paths = plannerProjectPaths(treeQuery.data?.nodes ?? []);
-    const all = projectsQuery.data?.projects ?? [];
-    // Active projects to pick from; a task that still points at an archived one
-    // keeps it in the list, so its value never disappears (as upstream's dialog does).
-    const live = all.filter(
-      (project) => project.status === "active" && !project.deleted_at,
-    );
-    const shown =
-      current && !live.some((project) => project.id === current.id)
-        ? [...live, ...all.filter((project) => project.id === current.id)]
-        : live;
-    return shown
-      .map(
-        (project): PlannerTaskProject =>
-          paths.get(project.id) ?? {
-            id: project.id,
-            name: project.name,
-            ancestors: [],
-          },
-      )
-      .map((project) => ({
-        project,
-        label: plannerProjectPathLabel(project),
-      }))
-      .sort((left, right) => left.label.localeCompare(right.label));
-  }, [projectsQuery.data, treeQuery.data, current]);
-
-  const currentLabel = current ? plannerProjectPathLabel(current) : null;
+  const goalStrings = usePlannerGoalsStrings();
+  const options = useMemo(
+    () =>
+      [...weekGoals]
+        .filter((goal) => goal.status !== "closed")
+        .sort((left, right) => left.sort_order - right.sort_order),
+    [weekGoals],
+  );
+  const current =
+    card.goal_id === null
+      ? null
+      : (weekGoals.find((goal) => goal.id === card.goal_id) ?? null);
+  // A goal of another week (or a removed one) is still the task's goal: it shows
+  // as such until another is picked.
+  const currentLabel =
+    card.goal_id === null
+      ? null
+      : current
+        ? goalLabel(current, goalStrings)
+        : strings.panel.otherWeekGoal;
 
   return (
     <DropdownMenu>
@@ -441,15 +426,21 @@ function GoalControl({
               currentLabel ?? strings.panel.empty,
             )}
             className={VALUE_BUTTON}
+            data-testid="planner-panel-goal"
             variant="ghost"
           >
             {currentLabel ? (
-              <>
-                <FolderIcon className="text-muted-foreground" />
+              <span
+                className={cn(
+                  "inline-flex min-w-0 items-center gap-1.5",
+                  current && plannerPillarClass(current.pillar),
+                )}
+              >
+                {current && <i aria-hidden="true" className="planner-dot" />}
                 <span className="truncate" title={currentLabel}>
                   {currentLabel}
                 </span>
-              </>
+              </span>
             ) : (
               <Empty />
             )}
@@ -458,31 +449,34 @@ function GoalControl({
       />
       <DropdownMenuContent className="max-h-72 min-w-56">
         <DropdownMenuItem
-          disabled={card.project_id === null}
-          onClick={() => actions.setProject(card, null)}
+          disabled={card.goal_id === null}
+          onClick={() => actions.setGoal(card, null)}
         >
           {strings.panel.none}
-          {card.project_id === null && <CheckIcon className="ml-auto" />}
+          {card.goal_id === null && <CheckIcon className="ml-auto" />}
         </DropdownMenuItem>
         {options.length > 0 && <DropdownMenuSeparator />}
-        {options.map(({ project, label }) => (
-          <DropdownMenuItem
-            key={project.id}
-            onClick={() => {
-              if (project.id !== card.project_id) {
-                actions.setProject(card, project);
-              }
-            }}
-          >
-            <span className="truncate" title={label}>
-              {label}
-            </span>
-            {project.id === card.project_id && (
-              <CheckIcon className="ml-auto shrink-0" />
-            )}
-          </DropdownMenuItem>
-        ))}
-        {options.length === 0 && !projectsQuery.isPending && (
+        {options.map((goal) => {
+          const label = goalLabel(goal, goalStrings);
+          return (
+            <DropdownMenuItem
+              className={plannerPillarClass(goal.pillar)}
+              key={goal.id}
+              onClick={() => {
+                if (goal.id !== card.goal_id) actions.setGoal(card, goal.id);
+              }}
+            >
+              <i aria-hidden="true" className="planner-dot shrink-0" />
+              <span className="truncate" title={label}>
+                {label}
+              </span>
+              {goal.id === card.goal_id && (
+                <CheckIcon className="ml-auto shrink-0" />
+              )}
+            </DropdownMenuItem>
+          );
+        })}
+        {options.length === 0 && (
           <DropdownMenuItem disabled>{strings.panel.noGoals}</DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -567,9 +561,12 @@ function EffortControl({
 export function PlannerTaskProperties({
   detail,
   actions,
+  weekGoals = [],
 }: {
   detail: PlannerTaskDetailResponse;
   actions: PlannerActions;
+  /** The cockpit week's goals, which the Goal property picks from. */
+  weekGoals?: readonly PlannerGoalDto[];
 }) {
   const strings = usePlannerStrings();
   const card = useMemo(() => plannerCardFromDetail(detail), [detail]);
@@ -609,7 +606,7 @@ export function PlannerTaskProperties({
         <PriorityControl actions={actions} card={card} />
       </PropertyRow>
       <PropertyRow icon={<TargetIcon />} label={strings.panel.property.goal}>
-        <GoalControl actions={actions} card={card} current={detail.project} />
+        <GoalControl actions={actions} card={card} weekGoals={weekGoals} />
       </PropertyRow>
       <PropertyRow icon={<GaugeIcon />} label={strings.panel.property.effort}>
         <EffortControl

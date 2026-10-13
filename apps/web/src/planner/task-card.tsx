@@ -11,7 +11,6 @@ import {
   CheckIcon,
   CircleDashedIcon,
   FlagIcon,
-  FolderIcon,
   HistoryIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -214,7 +213,6 @@ export function PlannerTaskCard({
     card.start_date !== null ||
     card.priority !== "none" ||
     card.due_at !== null ||
-    card.project_name !== null ||
     isDropped;
 
   // The time range: start and due together read as one range, a start alone as
@@ -452,12 +450,6 @@ export function PlannerTaskCard({
               >
                 <CalendarDaysIcon className="size-3 shrink-0" />
                 {plannerDueLabel(card.due_at, today, strings)}
-              </Chip>
-            )}
-            {card.project_name && (
-              <Chip title={card.project_name}>
-                <FolderIcon className="size-3 shrink-0" />
-                <span className="truncate">{card.project_name}</span>
               </Chip>
             )}
             {isDropped && card.dropped_at && (

@@ -27,6 +27,7 @@ import {
   plannerPlaceCardAt,
   plannerPredictDrop,
   plannerPredictDue,
+  plannerPredictGoal,
   plannerPredictMove,
   plannerPredictPlan,
   plannerPredictPriority,
@@ -101,6 +102,8 @@ export type PlannerActions = {
     card: PlannerBoardCard,
     project: PlannerTaskProject | null,
   ) => void;
+  /** The panel's goal: one of the cockpit week's goals, or null for none. */
+  setGoal: (card: PlannerBoardCard, goalId: string | null) => void;
   /** The panel's effort estimate, 0 to 999 with at most one decimal, or null. */
   setEffort: (card: PlannerBoardCard, effort: number | null) => void;
   /** The panel's start date, a day or null. */
@@ -435,6 +438,16 @@ export function usePlannerActions(input: {
               project_id: project?.id ?? null,
             }),
           projectName: project?.name ?? null,
+          failure: text().toast.goalFailed,
+          reveal: false,
+        });
+      },
+
+      setGoal: (card, goalId) => {
+        void edit(card, {
+          predict: (current) => plannerPredictGoal(current, goalId, new Date()),
+          request: () =>
+            plannerUpdateTaskRequest(card.id, { today, goal_id: goalId }),
           failure: text().toast.goalFailed,
           reveal: false,
         });

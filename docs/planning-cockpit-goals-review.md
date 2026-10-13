@@ -9,7 +9,8 @@ It delivers **N2** (the weekly review) and **N3** (the goal UI) of [planning-coc
 ### Cockpit
 
 - Above the board, one card per weekly goal, tinted by its objective, with how many of its tasks are done. An objective with no goal that week shows a dashed card.
-- A task that serves a goal is tinted the same way.
+- A task that serves a goal is tinted the same way, with a chip naming the goal's objective.
+- A task's Goal, in the task panel, is one of the cockpit week's goals: None, then the week's open goals in the order the review set. A task whose goal is from another week says so until another is picked. Projects are no longer offered there and their chip is gone from the cards; a task keeps its project link in the database, untouched (the owner's decision, 2026-10-13).
 - Clicking a card focuses its goal: the other cards and every task that does not serve it fade back. Click it again, or press Escape, to clear the focus.
 - The cards show this week. On a weekend, once next week has been planned, they show next week.
 
@@ -117,6 +118,7 @@ The full list, with each response type, is the comment block in `packages/contra
 | `POST /review/:week/ai/coach`, `/ai/memo`                        | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`.      |
 
 - `GET /board` also returns the cockpit's week and its goals.
+- `PATCH /tasks/:id` takes `goal_id` (a goal's id, or `null` to unlink), written through `plannerSetTaskGoal` with a `goal_changed` history event, as Save week does. An unknown goal is a 404.
 - Writes use the `planner` rate-limit bucket, the review's autosave uses `planner-review-state`, and model calls use `planner-ai`, so a busy chat never blocks a save.
 - Every AI route answers 503 `ai_unavailable` when the model is off or fails, and 429 when throttled. The two streams send that 429 in their own format, as one `{"error":"limited"}` line.
 

@@ -1,20 +1,15 @@
 // @vitest-environment jsdom
 import type {
+  PlannerGoalDto,
   PlannerTaskDetailResponse,
-  PlannerTreeResponse,
   TaskDto,
 } from "@flaremo/contracts";
 import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listProjects } from "@/api";
 import { ApiError } from "@/api/client";
 import { formatDateTime } from "@/lib/date-format";
-import {
-  plannerFetchTaskDetail,
-  plannerFetchTaskHistory,
-  plannerFetchTree,
-} from "./api";
+import { plannerFetchTaskDetail, plannerFetchTaskHistory } from "./api";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerTaskPanel } from "./task-panel";
 import {
@@ -42,17 +37,10 @@ vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   plannerFetchTaskDetail: vi.fn(),
   plannerFetchTaskHistory: vi.fn(),
-  plannerFetchTree: vi.fn(),
-}));
-vi.mock("@/api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api")>()),
-  listProjects: vi.fn(),
 }));
 
 const fetchDetail = vi.mocked(plannerFetchTaskDetail);
 const fetchHistory = vi.mocked(plannerFetchTaskHistory);
-const fetchTree = vi.mocked(plannerFetchTree);
-const fetchProjects = vi.mocked(listProjects);
 
 // Wednesday 7 October 2026: its week starts Monday the 5th, and it is in Q4.
 const TODAY = "2026-10-07";
@@ -83,7 +71,7 @@ const PLAN = {
   dropped_at: null,
   start_date: null,
   board_rank: null,
-  goal_id: null,
+  goal_id: "goal-site",
   effort: 3.5,
   created_at: "2026-10-02T08:00:00.000Z",
   updated_at: "2026-10-02T08:00:00.000Z",
@@ -114,39 +102,34 @@ const BARE: PlannerTaskDetailResponse = {
   comments: [],
 };
 
-const TREE: PlannerTreeResponse = {
-  nodes: [
-    node("projects/work", "Work", null),
-    node("projects/site", "Website relaunch", "projects/work"),
-    node("projects/home", "Home", null),
-  ],
-};
+// The cockpit week's goals, the ones the Goal menu offers.
+const WEEK_GOALS: PlannerGoalDto[] = [
+  weekGoal("goal-gym", "health", "Lift three times", 2),
+  weekGoal("goal-site", "work", "Ship the site", 0),
+  weekGoal("goal-paper", "ai", "Read the paper", 1),
+  weekGoal("goal-done", "work", "An old promise", 3, "closed"),
+];
 
-function node(id: string, name: string, parent: string | null) {
+function weekGoal(
+  id: string,
+  pillar: PlannerGoalDto["pillar"],
+  title: string,
+  sortOrder: number,
+  status: PlannerGoalDto["status"] = "active",
+): PlannerGoalDto {
   return {
     id,
-    name,
-    status: "active" as const,
-    parent_project_id: parent,
-    level: null,
-    period_start: null,
-    period_end: null,
-    sort_order: 0,
-  };
-}
-
-function project(id: string, name: string, extra: object = {}) {
-  return {
-    id,
-    name,
-    description: null,
-    status: "active" as const,
-    task_count_total: 0,
-    task_count_open: 0,
-    deleted_at: null,
-    created_at: "2026-09-01T08:00:00.000Z",
-    updated_at: "2026-09-01T08:00:00.000Z",
-    ...extra,
+    level: "week",
+    period_start: WEEK,
+    pillar,
+    title,
+    lines: [],
+    status,
+    note: null,
+    result: null,
+    sort_order: sortOrder,
+    created_at: "2026-10-05T08:00:00.000Z",
+    updated_at: "2026-10-05T08:00:00.000Z",
   };
 }
 
@@ -184,18 +167,6 @@ beforeEach(() => {
     },
   });
   fetchDetail.mockResolvedValue(DETAIL);
-  fetchTree.mockResolvedValue(TREE);
-  fetchProjects.mockResolvedValue({
-    projects: [
-      project("projects/work", "Work"),
-      project("projects/site", "Website relaunch"),
-      project("projects/home", "Home"),
-      project("projects/old", "Old plan", { status: "archived" }),
-      project("projects/bin", "In the bin", {
-        deleted_at: "2026-09-02T08:00:00.000Z",
-      }),
-    ],
-  });
   fetchHistory.mockResolvedValue({ events: [] });
 });
 
@@ -212,6 +183,7 @@ async function open(
     taskId?: string | null;
     open?: boolean;
     seed?: PlannerTaskDetailResponse;
+    weekGoals?: PlannerGoalDto[];
   } = {},
 ) {
   const actions = plannerTestActions();
@@ -225,6 +197,7 @@ async function open(
       open={isOpen}
       taskId={taskId}
       today={TODAY}
+      weekGoals={options.weekGoals ?? WEEK_GOALS}
       onOpenChange={onOpenChange}
     />
   );
@@ -374,7 +347,7 @@ describe("the properties", () => {
     expect(byLabel("Start date: Empty")).not.toBeNull();
     expect(byLabel("Due date: Fri, Oct 9, 2026")).not.toBeNull();
     expect(byLabel("Priority: High")).not.toBeNull();
-    expect(byLabel("Goal: Work › Website relaunch")).not.toBeNull();
+    expect(byLabel("Goal: Work · Ship the site")).not.toBeNull();
     expect(effortField()?.value).toBe("3.5");
 
     const rows = document.body.querySelector(
@@ -973,57 +946,56 @@ describe("the menus", () => {
   });
 
   describe("goal", () => {
-    it("lists the live goals by their path, the current one ticked", async () => {
+    it("lists the week's open goals in their order, the current one ticked", async () => {
       await open();
-      openMenu(byLabel("Goal: Work › Website relaunch"));
+      openMenu(byLabel("Goal: Work · Ship the site"));
       await settle();
-      // None first; then the active projects, by path. The archived one and the
-      // one in the bin are not offered.
+      // None first; then the week's goals as the review ordered them. The closed
+      // one is not offered.
       expect(names()).toEqual([
         "None",
-        "Home",
-        "Work",
-        "Work › Website relaunch",
+        "Work · Ship the site",
+        "AI Chops · Read the paper",
+        "Health · Lift three times",
       ]);
-      expect(checked()).toEqual(["Work › Website relaunch"]);
+      expect(checked()).toEqual(["Work · Ship the site"]);
     });
 
-    it("moves the task to the goal that is picked, with its path", async () => {
+    it("ties the task to the weekly goal that is picked", async () => {
       const { actions } = await open();
-      await openAndPick("Goal: Work › Website relaunch", "Home");
-      expect(actions.setProject).toHaveBeenCalledWith(
+      await openAndPick(
+        "Goal: Work · Ship the site",
+        "Health · Lift three times",
+      );
+      expect(actions.setGoal).toHaveBeenCalledWith(
         expect.objectContaining({ id: TASK_ID }),
-        { id: "projects/home", name: "Home", ancestors: [] },
+        "goal-gym",
       );
     });
 
-    it("hands over the goals above a nested one", async () => {
+    it("gives a task with no goal one", async () => {
       fetchDetail.mockResolvedValue(BARE);
       const { actions } = await open();
-      await openAndPick("Goal: Empty", "Work › Website relaunch");
-      expect(actions.setProject).toHaveBeenCalledWith(expect.anything(), {
-        id: "projects/site",
-        name: "Website relaunch",
-        ancestors: [{ id: "projects/work", name: "Work" }],
-      });
+      await openAndPick("Goal: Empty", "AI Chops · Read the paper");
+      expect(actions.setGoal).toHaveBeenCalledWith(
+        expect.anything(),
+        "goal-paper",
+      );
     });
 
-    it("takes the task out of its goal with None", async () => {
+    it("takes the task off its goal with None", async () => {
       const { actions } = await open();
-      await openAndPick("Goal: Work › Website relaunch", "None");
-      expect(actions.setProject).toHaveBeenCalledWith(expect.anything(), null);
+      await openAndPick("Goal: Work · Ship the site", "None");
+      expect(actions.setGoal).toHaveBeenCalledWith(expect.anything(), null);
     });
 
     it("does nothing for the goal the task already has", async () => {
       const { actions } = await open();
-      await openAndPick(
-        "Goal: Work › Website relaunch",
-        "Work › Website relaunch",
-      );
-      expect(actions.setProject).not.toHaveBeenCalled();
+      await openAndPick("Goal: Work · Ship the site", "Work · Ship the site");
+      expect(actions.setGoal).not.toHaveBeenCalled();
     });
 
-    it("cannot take a task out of a goal it is not in", async () => {
+    it("cannot take a task off a goal it does not have", async () => {
       fetchDetail.mockResolvedValue(BARE);
       await open();
       openMenu(byLabel("Goal: Empty"));
@@ -1031,36 +1003,39 @@ describe("the menus", () => {
       expect(item("None").hasAttribute("data-disabled")).toBe(true);
     });
 
-    it("keeps a goal that has been archived in the list while the task still has it", async () => {
+    it("says so when the task's goal is from another week", async () => {
       fetchDetail.mockResolvedValue({
         ...DETAIL,
-        task: { ...TASK, project_id: "projects/old" },
-        project: { id: "projects/old", name: "Old plan", ancestors: [] },
+        plan: { ...PLAN, goal_id: "goal-last-week" },
       });
-      await open();
-      openMenu(byLabel("Goal: Old plan"));
+      const { actions } = await open();
+      openMenu(byLabel("Goal: A goal from another week"));
       await settle();
-      expect(names()).toContain("Old plan");
-      expect(checked()).toEqual(["Old plan"]);
+      expect(checked()).toEqual([]);
+      plannerTestClick(item("Work · Ship the site"));
+      await settle();
+      expect(actions.setGoal).toHaveBeenCalledWith(
+        expect.anything(),
+        "goal-site",
+      );
     });
 
-    it("lists the goals by name alone when the goal tree cannot be read", async () => {
-      fetchTree.mockRejectedValue(new ApiError("Server error", 500));
+    it("does not offer projects any more", async () => {
       await open();
-      openMenu(byLabel("Goal: Work › Website relaunch"));
+      openMenu(byLabel("Goal: Work · Ship the site"));
       await settle();
-      expect(names()).toEqual(["None", "Home", "Website relaunch", "Work"]);
+      expect(names()).not.toContain("Website relaunch");
+      expect(text()).not.toContain("Website relaunch");
     });
 
-    it("says there are no projects when there are none", async () => {
-      fetchProjects.mockResolvedValue({ projects: [] });
+    it("points to the weekly review when the week has no goals", async () => {
       fetchDetail.mockResolvedValue(BARE);
-      await open();
+      await open({ weekGoals: [] });
       openMenu(byLabel("Goal: Empty"));
       await settle();
       expect(names()).toEqual([
         "None",
-        "No projects yet. Create one under Projects.",
+        "No goals this week. Plan them in the weekly review.",
       ]);
     });
   });

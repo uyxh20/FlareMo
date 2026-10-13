@@ -316,7 +316,7 @@ describe("an edit made from the panel", () => {
     expect(detail()?.plan?.effort).toBe(4);
   });
 
-  it("moves the task to another goal on both views, with the path the panel asked for", async () => {
+  it("moves the task to another project on both views, with the path asked for", async () => {
     const card = seed();
     const home = {
       id: "projects/home",
@@ -350,7 +350,7 @@ describe("an edit made from the panel", () => {
     expect(detail()?.project).toEqual(home);
   });
 
-  it("takes the task out of its goal with null", async () => {
+  it("takes the task out of its project with null", async () => {
     const card = seed();
     update.mockResolvedValue({
       task: { ...TASK, project_id: null },
@@ -366,7 +366,7 @@ describe("an edit made from the panel", () => {
     expect(detail()?.project).toBeNull();
   });
 
-  it("puts a goal back after a refusal, name and path included", async () => {
+  it("puts a project back after a refusal, name and path included", async () => {
     const card = seed();
     update.mockRejectedValue(new ApiError("No such project", 404));
     actions.setProject(card, {
@@ -380,6 +380,52 @@ describe("an edit made from the panel", () => {
       project_name: "Website relaunch",
     });
     expect(detail()?.project).toEqual(DETAIL.project);
+  });
+
+  it("ties the task to a weekly goal on both views before the server answers", async () => {
+    const card = seed();
+    const request = pendingRequest<PlannerTaskPlanResponse>();
+    update.mockReturnValue(request.promise);
+
+    actions.setGoal(card, "goal-site");
+    await flush();
+
+    expect(update).toHaveBeenCalledWith(TASK_ID, {
+      today: TODAY,
+      goal_id: "goal-site",
+    });
+    expect(boardCard()?.goal_id).toBe("goal-site");
+    expect(detail()?.plan?.goal_id).toBe("goal-site");
+    // The project is left as it was.
+    expect(boardCard()?.project_id).toBe("projects/web");
+
+    request.resolve({ task: TASK, plan: { ...PLAN, goal_id: "goal-site" } });
+    await flush();
+    expect(boardCard()?.goal_id).toBe("goal-site");
+    expect(detail()?.plan?.goal_id).toBe("goal-site");
+  });
+
+  it("takes the task off its weekly goal with null", async () => {
+    const card = seed({ plan: { ...PLAN, goal_id: "goal-site" } });
+    update.mockResolvedValue({ task: TASK, plan: PLAN });
+    actions.setGoal(card, null);
+    await flush();
+    expect(update).toHaveBeenCalledWith(TASK_ID, {
+      today: TODAY,
+      goal_id: null,
+    });
+    expect(boardCard()?.goal_id).toBeNull();
+    expect(detail()?.plan?.goal_id).toBeNull();
+  });
+
+  it("puts the weekly goal back after a refusal", async () => {
+    const card = seed({ plan: { ...PLAN, goal_id: "goal-site" } });
+    update.mockRejectedValue(new ApiError("Goal not found.", 404));
+    actions.setGoal(card, "goal-gone");
+    await flush();
+    expect(boardCard()?.goal_id).toBe("goal-site");
+    expect(detail()?.plan?.goal_id).toBe("goal-site");
+    expect(toast.error).toHaveBeenCalled();
   });
 });
 

@@ -44,6 +44,7 @@ import {
   plannerSetEffort,
   plannerSetPlan,
   plannerSetStartDate,
+  plannerSetTaskGoal,
   plannerSyncHistory,
   plannerUndropTask,
   plannerUpdateComment,
@@ -245,6 +246,7 @@ plannerApi.patch(
         plan,
         effort,
         start_date,
+        goal_id,
         before_id,
         after_id,
         dropped,
@@ -304,6 +306,10 @@ plannerApi.patch(
           taskId,
           startDate: start_date,
         });
+      }
+      if (goal_id !== undefined) {
+        await plannerSetTaskGoal(db, { user, actor, taskId, goalId: goal_id });
+        result = undefined;
       }
       if (dropped === true) {
         result = await plannerDropTask(db, { user, actor, taskId });
