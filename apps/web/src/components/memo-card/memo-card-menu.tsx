@@ -1,5 +1,6 @@
 import {
   ArchiveIcon,
+  CalendarClockIcon,
   Edit3Icon,
   Globe2Icon,
   ImageIcon,
@@ -28,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ForkMemoDateDialog } from "@/fork/memo-date-dialog"; // fork: edit created time
 import { useI18n } from "@/i18n";
 
 // The share-image dialog pulls in html-to-image and the plugin card registry;
@@ -82,6 +84,7 @@ export function MemoCardMenu({
   const { t } = useI18n();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isShareImageOpen, setIsShareImageOpen] = useState(false);
+  const [forkDateOpen, setForkDateOpen] = useState(false); // fork: edit created time
   // Latch: mount the lazy dialog on first open, then keep it mounted so the
   // close animation still plays (the chunk stays out of the entry graph).
   const [shareImageMounted, setShareImageMounted] = useState(false);
@@ -131,6 +134,10 @@ export function MemoCardMenu({
                     <DropdownMenuItem onClick={onStartEditing}>
                       <Edit3Icon />
                       {t("common.edit")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setForkDateOpen(true)}>
+                      <CalendarClockIcon />
+                      Edit date and time
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onPin(id, !memo.pinned)}>
                       <PinIcon />
@@ -182,6 +189,13 @@ export function MemoCardMenu({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+      )}
+      {canManage && !isTrashed && (
+        <ForkMemoDateDialog
+          memo={memo}
+          open={forkDateOpen}
+          onOpenChange={setForkDateOpen}
+        />
       )}
       {!onRequestDelete && (
         <AlertDialog

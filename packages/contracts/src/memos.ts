@@ -76,6 +76,8 @@ export const updateMemoSchema = z
     status: memoStatusSchema.optional(),
     pinned: z.boolean().optional(),
     payload: memoPayloadSchema.optional(),
+    // fork: backdating. ISO instant; the memo's created (and display) time.
+    created_at: z.string().datetime({ offset: true }).optional(),
   })
   .refine(
     (value) => Object.keys(value).length > 0,

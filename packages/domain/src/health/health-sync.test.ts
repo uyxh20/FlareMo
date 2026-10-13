@@ -111,6 +111,17 @@ describe("health sync", () => {
     ]);
   });
 
+  it("moves a row to the new day when the memo is backdated", async () => {
+    const memo = await write("crossfit done");
+    await updateMemo(rt.db, rt.user, memo.id, {
+      created_at: "2026-03-02T12:00:00.000Z",
+    });
+    const live = (await rows()).filter((row) => row.deleted_at === null);
+    expect(live.map((row) => [row.kind, row.day])).toEqual([
+      ["training", "2026-03-02"],
+    ]);
+  });
+
   it("reads nothing from a plan, and writes no event", async () => {
     await write("gym tomorrow");
     expect(await rows()).toEqual([]);
