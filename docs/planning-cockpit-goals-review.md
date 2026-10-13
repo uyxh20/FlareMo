@@ -28,7 +28,7 @@ The cascade from the north star down to a week, one level per address:
 
 - The Year map (`year-map.tsx`, `year-map-model.ts`, added 2026-10-13) replaces the year's heatmap. The time column runs north star, year, Q1 to Q4 (each with its theme line, the quarter's first goal with no objective), months and weeks; the four objectives are the columns. Year and quarter goals are the coloured cards, months and weeks plain ones. Goals have no parent link: a row lines them up by objective and period. Two goals of one objective in a period stack; goals with no objective (most imported weekly goals) get one row across the four columns.
 - Each month shows its week chips (hover gives the scores); a chip opens that week's row, the month label opens or closes all of them, and the current week starts open. A week's label opens its own page. A weekly goal opens a pop-up with the year, quarter and month goals of its objective, its tasks from the board (a year of Done cards) and, for this week and later ones, a field that adds a task to the Backlog linked to the goal. Other goals open the editor; an empty slot adds one.
-- "Follow" an objective: its column widens and the others shrink to dots. A phone opens following Work.
+- "Follow" an objective: only its column shows; the picker switches between them. A phone opens following Work.
 - A week is on target when both scores meet their floors.
 - Each ISO week sits under the month of its Thursday, so no week is split between two months.
 - The averages count only weeks that have ended.

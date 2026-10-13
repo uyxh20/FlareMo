@@ -718,20 +718,8 @@ button.planner-u:hover {
   outline-offset: 2px;
 }
 
-/* Following one objective: the others shrink to their dots. */
+/* Following one objective: only its column is drawn. */
 .planner-ymap.is-following .planner-yc:not(.is-on) {
-  opacity: 0.4;
-}
-.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u {
-  min-height: 28px;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  padding: 0;
-}
-.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-t,
-.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-m,
-.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-add {
   display: none;
 }
 .planner-ymap.is-following .planner-yc.is-on .planner-u {

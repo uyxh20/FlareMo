@@ -60,8 +60,8 @@ import {
 // The north star spans the top; the year and quarter goals are the coloured
 // cards; months and weeks are plain cards under them. Each month folds out its
 // weeks; a weekly goal opens a pop-up with its tasks and the goals above it.
-// Picking an objective follows it: its column widens and the others shrink to
-// dots, which is how a phone opens the map.
+// Picking an objective follows it: only its column is drawn, and the picker
+// switches between them. A phone opens the map following Work.
 
 type Edit = (target: PlannerGoalEditorTarget) => void;
 
@@ -113,12 +113,9 @@ export function PlannerYearMap({
       return next;
     });
 
+  // Following one objective shows only its column; the picker switches it.
   const style: CSSProperties | undefined = follow
-    ? {
-        gridTemplateColumns: `44px ${plannerPillars
-          .map((pillar) => (pillar === follow ? "minmax(0, 1fr)" : "18px"))
-          .join(" ")}`,
-      }
+    ? { gridTemplateColumns: "44px minmax(0, 1fr)" }
     : undefined;
 
   const cell = (pillar: PlannerPillar, children: ReactNode) => (
@@ -172,7 +169,7 @@ export function PlannerYearMap({
           ),
         ),
       )}
-      {goals.loose.length > 0 && (
+      {!follow && goals.loose.length > 0 && (
         <>
           <span />
           <div className="planner-span planner-loose">
@@ -251,20 +248,32 @@ export function PlannerYearMap({
         {strings.weekCode(week.number)}
       </Link>
     );
-    if (plannerMapIsEmpty(week.goals)) {
+    const empty = (
+      <Fragment key={week.monday}>
+        {label}
+        <div className="planner-span planner-loose">
+          <span className="planner-u planner-u-empty">
+            {week.kind === "future" || week.kind === "now"
+              ? strings.map.notPlanned
+              : follow
+                ? strings.goals.noGoal
+                : strings.goals.noGoalsSet}
+          </span>
+        </div>
+      </Fragment>
+    );
+    // Following one objective: only its goals, never the ones with none.
+    if (follow) {
+      const mine = week.goals.byPillar[follow];
+      if (mine.length === 0) return empty;
       return (
         <Fragment key={week.monday}>
           {label}
-          <div className="planner-span planner-loose">
-            <span className="planner-u planner-u-empty">
-              {week.kind === "future" || week.kind === "now"
-                ? strings.map.notPlanned
-                : strings.goals.noGoalsSet}
-            </span>
-          </div>
+          {cell(follow, mine.map(weekUnit))}
         </Fragment>
       );
     }
+    if (plannerMapIsEmpty(week.goals)) return empty;
     return (
       <Fragment key={week.monday}>
         {label}
