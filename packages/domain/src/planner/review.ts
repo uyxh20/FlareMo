@@ -20,6 +20,7 @@ import {
   plannerSummaryMemoTag,
   plannerTodoMarker,
   plannerWeekStartOf,
+  plannerWithRawLogs,
 } from "@flaremo/contracts";
 import type { FlareMoDb, MemoPayload, MemoRow } from "@flaremo/db";
 import {
@@ -52,6 +53,7 @@ import {
   plannerFindSummaryMemo,
   plannerReadFlagGoals,
   plannerReadLastQuestion,
+  plannerReadWeekEntries,
 } from "./review-context";
 import { plannerCleanMemo } from "./review-prompts";
 import {
@@ -502,8 +504,14 @@ export async function plannerSaveLookBack(
   if (auth === null || ach === null) {
     throw new ValidationError("Scores must be 1 to 5 in half steps.");
   }
-  const content = plannerCleanMemo(body.memo, weekStart);
-  if (!content.trim()) throw new ValidationError("The summary is empty.");
+  const cleaned = plannerCleanMemo(body.memo, weekStart);
+  if (!cleaned.trim()) throw new ValidationError("The summary is empty.");
+  // The week's entries go in whole under Raw Logs, as in the past summaries.
+  const content = plannerWithRawLogs(
+    cleaned,
+    weekStart,
+    await plannerReadWeekEntries(db, { userId: user.id, weekStart }),
+  );
 
   const memo = await writeSummaryMemo(db, {
     user,

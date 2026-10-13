@@ -54,6 +54,7 @@ Look back ends in the summary memo. It streams into a sheet with Stop, Write aga
 
 - It has the same shape as the owner's past summaries (`packages/contracts/src/planner-review-memo.ts`) and carries the `vault-summary` tag.
 - There is one memo per week, keyed by its client id `weekly-review-summary:<Monday>`.
+- When it is saved, the server copies the week's diary entries word for word under "4. Raw Logs for this Week", after the diary marker and grouped by day, like the past summaries. The model never writes them, and saving again replaces the copy.
 
 **Look forward** plans the next week in four steps:
 

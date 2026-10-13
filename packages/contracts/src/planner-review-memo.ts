@@ -119,6 +119,43 @@ export function plannerDiaryLine(weekStart: string): string {
   return `Diary entries from ${from} to ${last.date} ${MONTHS[last.month]} ${last.year}.`;
 }
 
+/** One diary entry as the summary's Raw Logs copy it: when, and its text. */
+export type PlannerRawLogEntry = { at: string; content: string };
+
+/**
+ * The summary with the week's diary entries copied in word for word under its
+ * Raw Logs section, after the diary marker, like the owner's past summaries.
+ * Anything already after the marker (an earlier save's copy) is replaced, so
+ * saving again never doubles the entries. Entries are grouped by day.
+ */
+export function plannerWithRawLogs(
+  memo: string,
+  weekStart: string,
+  entries: ReadonlyArray<PlannerRawLogEntry>,
+): string {
+  const marker = plannerDiaryMarker(weekStart);
+  const at = memo.indexOf(marker);
+  const head =
+    at >= 0
+      ? memo.slice(0, at + marker.length)
+      : `${memo.trimEnd()}\n\n${marker}`;
+  const days: string[] = [];
+  let day = "";
+  for (const entry of entries) {
+    const text = entry.content.replace(/\r/g, "").trim();
+    if (!text) continue;
+    const date = entry.at.slice(0, 10);
+    if (date !== day) {
+      day = date;
+      const { year, month, date: dayOfMonth } = partsOf(date);
+      const weekday = new Date(Date.UTC(year, month, dayOfMonth)).getUTCDay();
+      days.push(`### ${WEEKDAYS[weekday]} ${dayOfMonth} ${MONTHS[month]}`);
+    }
+    days.push(text);
+  }
+  return days.length ? `${head}\n\n${days.join("\n\n")}\n` : head;
+}
+
 /** One decimal, as the scores table writes a score: 4 is "4.0". */
 export function plannerFormatScore(value: number): string {
   return (Math.round(value * 10) / 10).toFixed(1);

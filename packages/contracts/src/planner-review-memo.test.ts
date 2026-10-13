@@ -10,6 +10,7 @@ import {
   plannerScoresTable,
   plannerVerdictLine,
   plannerWeekCode,
+  plannerWithRawLogs,
 } from "./planner";
 
 // The weekly summary memo's format (planner-review-memo.ts).
@@ -263,5 +264,37 @@ describe("reading a past summary", () => {
     expect(plannerMemoKeyQuestion(memo)).toBe("Did I get the terms on paper?");
     expect(plannerMemoNextSteps(memo)).toEqual({});
     expect(plannerMemoWeekOf(memo)).toEqual({ year: 2026, week: 41 });
+  });
+});
+
+describe("Raw Logs", () => {
+  const marker = plannerDiaryMarker(WEEK);
+
+  it("copies the entries after the marker, grouped by day", () => {
+    const memo = `# Week 41\n\n## 4. Raw Logs for this Week\n\n${marker}`;
+    expect(
+      plannerWithRawLogs(memo, WEEK, [
+        { at: "2026-10-05T09:00:00.000Z", content: "First.\r\n" },
+        { at: "2026-10-05T21:00:00.000Z", content: "  " },
+        { at: "2026-10-05T22:00:00.000Z", content: "Second. #tag" },
+        { at: "2026-10-11T08:00:00.000Z", content: "# Sunday\n\nLast." },
+      ]),
+    ).toBe(
+      `${memo}\n\n### Monday 5 October\n\nFirst.\n\nSecond. #tag\n\n### Sunday 11 October\n\n# Sunday\n\nLast.\n`,
+    );
+  });
+
+  it("replaces an earlier copy, adds a missing marker and leaves an empty week alone", () => {
+    const memo = `# Week 41\n\n${marker}`;
+    const once = plannerWithRawLogs(memo, WEEK, [
+      { at: "2026-10-06T09:00:00.000Z", content: "Old." },
+    ]);
+    expect(
+      plannerWithRawLogs(once, WEEK, [
+        { at: "2026-10-06T09:00:00.000Z", content: "New." },
+      ]),
+    ).toBe(`${memo}\n\n### Tuesday 6 October\n\nNew.\n`);
+    expect(plannerWithRawLogs("# Week 41\n", WEEK, [])).toBe(memo);
+    expect(plannerWithRawLogs(once, WEEK, [])).toBe(memo);
   });
 });

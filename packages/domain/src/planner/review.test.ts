@@ -519,6 +519,48 @@ describe("the weekly review", () => {
       expect(memos[0]?.content).toContain("Written again.");
     });
 
+    it("copies the week's diary entries in whole under Raw Logs, once", async () => {
+      const long = "Long talk with Zeta about the terms. ".repeat(600);
+      const diary = [
+        ["2026-10-06T08:00:00.000Z", "Gym. #health"],
+        ["2026-10-06T20:00:00.000Z", long],
+        ["2026-10-12T09:00:00.000Z", "Next week already."],
+      ] as const;
+      for (const [at, content] of diary) {
+        const memo = await createMemo(rt.db, rt.user, {
+          content,
+          visibility: "private",
+          source: "web",
+        });
+        await plannerTestRun(
+          rt.database,
+          "UPDATE memos SET created_at = ? WHERE id = ?",
+          at,
+          memo.id,
+        );
+      }
+      const marker = "<!-- flaremo:diary 2026-10-05..2026-10-11 -->";
+      const raw = `${marker}\n\n### Tuesday 6 October\n\nGym. #health\n\n${long.trim()}\n`;
+      const first = await lookBack();
+      let [memo] = await summaryMemos();
+      expect(memo?.content.endsWith(raw)).toBe(true);
+      expect(memo?.content).not.toContain("Next week already.");
+      // The diary's own #tags stay off the summary.
+      expect(
+        await plannerTestRows(
+          rt.database,
+          "SELECT tag FROM memo_tags WHERE memo_id = ?",
+          first.memo_id,
+        ),
+      ).toEqual([{ tag: "vault-summary" }]);
+
+      // Saving the saved text again replaces the copy instead of adding one.
+      await lookBack({ memo: memo?.content ?? "" });
+      [memo] = await summaryMemos();
+      expect(memo?.content.split(marker)).toHaveLength(2);
+      expect(memo?.content.endsWith(raw)).toBe(true);
+    });
+
     it("refuses a week that has not started and scores off the scale", async () => {
       await expect(
         plannerSaveLookBack(rt.db, {

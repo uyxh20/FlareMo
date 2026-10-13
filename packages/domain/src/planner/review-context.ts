@@ -215,14 +215,13 @@ export function plannerFitDiary(
 }
 
 /**
- * The owner's diary entries written during the week, oldest first, without the
- * weekly summaries, fitted to the budget by `plannerFitDiary`.
+ * The owner's diary entries written during the week, oldest first and whole,
+ * without the weekly summaries (at most 200).
  */
-export async function plannerReadWeekDiary(
+export async function plannerReadWeekEntries(
   db: FlareMoDb,
-  input: { userId: string; weekStart: string; maxChars?: number },
-): Promise<PlannerDiaryEntry[]> {
-  const budget = input.maxChars ?? PLANNER_DIARY_CHARS_SMALL;
+  input: { userId: string; weekStart: string },
+): Promise<Array<{ at: string; content: string }>> {
   const summaries = db
     .select({ id: memoTags.memoId })
     .from(memoTags)
@@ -232,7 +231,7 @@ export async function plannerReadWeekDiary(
         eq(memoTags.tag, plannerSummaryMemoTag),
       ),
     );
-  const rows = await db
+  return db
     .select({ at: memos.createdAt, content: memos.content })
     .from(memos)
     .where(
@@ -248,7 +247,18 @@ export async function plannerReadWeekDiary(
     .orderBy(asc(memos.createdAt))
     .limit(200)
     .all();
-  return plannerFitDiary(rows, budget);
+}
+
+/**
+ * The week's diary entries (plannerReadWeekEntries) fitted to the budget by
+ * `plannerFitDiary`.
+ */
+export async function plannerReadWeekDiary(
+  db: FlareMoDb,
+  input: { userId: string; weekStart: string; maxChars?: number },
+): Promise<PlannerDiaryEntry[]> {
+  const rows = await plannerReadWeekEntries(db, input);
+  return plannerFitDiary(rows, input.maxChars ?? PLANNER_DIARY_CHARS_SMALL);
 }
 
 /** Everything the review's model reads about one week. */
