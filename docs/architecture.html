@@ -272,7 +272,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-13 · describes main at commit 6a52b5e, live version 16</p>
+      <p class="meta">Last updated 2026-10-13 · describes main at commit 6a52b5e, live version 17</p>
     </header>
 
     <!-- ============================================================ -->
@@ -822,7 +822,7 @@
     <!-- ============================================================ -->
     <section id="health">
       <h2>Health tracker <span class="chip">fork</span></h2>
-      <p><b>On dev, not live</b> (merged into main). Nothing new to type: every saved entry is read for training, breathwork and nights out, and the results become rows. No AI; fixed word rules.</p>
+      <p><b>Live since 2026-10-13</b> (version 17). Nothing new to type: every saved entry is read for training, breathwork and nights out, and the results become rows. No AI; fixed word rules.</p>
       <figure>
         <div class="fig">
           <svg viewBox="0 0 900 230" role="img" aria-label="Saving a diary entry runs the health reader, which writes rows to health_entry with a history row in health_entry_event. The week strip, the labels under each entry and the Health page read those rows. A nightly sweep re-reads entries from the last three days.">
@@ -1076,7 +1076,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
-        <li><b>Health tracker</b> <span class="chip">fork</span>. On dev, not live (merged into main). See <a href="#health">Health tracker</a>.</li>
+        <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
         <li><b>Long entries no longer look cut off</b>. Live since 2026-10-13. The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
       </ul>
@@ -1087,7 +1087,8 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
-        <li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
+        <li><time>2026-10-13</time><span>Shipped to live (version 17): health tracker and its four tables (migration 9010).</span></li>
+<li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
         <li><time>2026-10-13</time><span>Health tracker: merged into main and deployed to dev; not live yet.</span></li>
 <li><time>2026-10-13</time><span>Health tracker: new section (built, pending on branch feat/health-tracker).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 16): module tests and data-source registry, week-goal picker on tasks, Wander and On this day hidden, expanded-entry height fix. Pending items now read as live.</span></li>
