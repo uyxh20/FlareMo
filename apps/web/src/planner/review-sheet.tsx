@@ -120,7 +120,7 @@ export function PlannerMemoSheet({
     >
       <DialogContent
         aria-label={text.label(weekName)}
-        className="top-3 flex max-h-[calc(100dvh-1.5rem)] w-[min(760px,calc(100%-1rem))] max-w-none translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:top-6 sm:max-h-[calc(100dvh-3rem)] sm:max-w-none"
+        className="top-3 flex max-h-[calc(100dvh-1.5rem)] w-[min(820px,calc(100%-1rem))] max-w-none translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:top-6 sm:max-h-[calc(100dvh-3rem)] sm:max-w-none"
         data-testid="planner-memo-sheet"
         showCloseButton={false}
       >
