@@ -778,7 +778,7 @@
             <text x="450" y="52" text-anchor="middle" class="t-s">task id</text>
           </svg>
         </div>
-        <figcaption>Fork fields sit beside upstream ones, so an upstream update can't break the cockpit. Code: <code>packages/domain/src/planner/</code>, page <code>apps/web/src/planner/cockpit-page.tsx</code>.</figcaption>
+        <figcaption>Fork fields sit beside upstream ones, so an upstream update can't break the cockpit. <b>Pending on dev, not live:</b> the task's Goal field picks from this week's goals instead of projects. Project pickers are gone from the cockpit, but the old project links stay in the database. Code: <code>packages/domain/src/planner/</code>, page <code>apps/web/src/planner/cockpit-page.tsx</code>.</figcaption>
       </figure>
     </section>
 
@@ -814,7 +814,7 @@
             <text x="120" y="276" class="t-s">each goal: title · lines · draft / active / contested / closed · met / partial / missed</text>
           </svg>
         </div>
-        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.</figcaption>
+        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Pending on dev, not live:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".</figcaption>
       </figure>
     </section>
 
@@ -1021,6 +1021,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Cockpit and goals: noted the week-goal picker on tasks (pending on dev).</span></li>
         <li><time>2026-10-13</time><span>In progress: dropped the raw-logs item; added the expanded-entry height fix (pending).</span></li>
         <li><time>2026-10-13</time><span>Redrawn diagram-first: every section is now a figure with a short caption. Added the UTC week boundary.</span></li>
         <li><time>2026-10-13</time><span>In progress: added hiding Wander and On this day (on dev, not merged).</span></li>
