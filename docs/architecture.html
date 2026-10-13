@@ -274,7 +274,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-13 · describes main at commit 6a52b5e, live version 17</p>
+      <p class="meta">Last updated 2026-10-13 · describes main at commit 89c8569, live version 18</p>
     </header>
 
     <!-- ============================================================ -->
@@ -1081,7 +1081,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
-        <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. On dev, not live yet. A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
+        <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
         <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
         <li><b>Long entries no longer look cut off</b>. Live since 2026-10-13. The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
@@ -1093,6 +1093,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Shipped to live (version 18): edit a memo's created date and time. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Edit a memo's created date and time from the ⋯ menu (branch feat/edit-memo-created-time; dev first).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 17): health tracker and its four tables (migration 9010).</span></li>
 <li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
