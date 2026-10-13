@@ -16,6 +16,10 @@ const testBindings = [
   "FLAREMO_TRUSTED_ORIGINS:http://127.0.0.1",
   `BETTER_AUTH_SECRET:${testBetterAuthSecret}`,
   `FLAREMO_BOOTSTRAP_SECRET:${testBootstrapSecret}`,
+  // Fork: the weekly review runs on the page's own drafts here. With the AI
+  // binding on, the local Worker reports a model and the page waits on a
+  // Workers AI call that cannot answer locally.
+  "FLAREMO_REVIEW_AI:off",
 ];
 const testProcessEnv = createTestProcessEnv();
 

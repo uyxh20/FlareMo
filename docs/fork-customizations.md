@@ -134,6 +134,7 @@ These are the only upstream files changed (`git diff --numstat`, added / removed
 | `packages/contracts/src/memos.ts` | `created_at` (optional ISO instant) in `updateMemoSchema`. | +2 / -0 |
 | `packages/domain/src/memos-write.ts` (backdate) | `forkResolveCreatedAt`, the `createdAt` and `original_created_at` payload entries in `updateMemo`'s patch and counter transition. | +50 / -2 |
 | `scripts/persistence-manifest.mjs`                                                                                 | The four health tables in `RESTORE_TABLES`.                                                                                                                                                                                                                                                                                                                                                                                                                | +7 / -0                            |
+| `scripts/e2e-server.mjs`                                                                                           | `FLAREMO_REVIEW_AI:off` in the test bindings, so the weekly review e2e runs on the page's own drafts instead of waiting on Workers AI. | +4 / -0                            |
 
 ## Fork-owned files
 

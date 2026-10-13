@@ -104,6 +104,9 @@ test("Look back starts and takes a typed answer without a model", async ({
   page,
 }) => {
   await page.goto("/weekly-review?part=back");
+  // isVisible() does not wait: let the chat render before asking whether the
+  // review still needs starting, or a fresh review is never started.
+  await expect(page.getByTestId("planner-review-chat")).toBeVisible();
   const start = page.getByTestId("planner-start-look-back");
   // A review already started in this database picks up where it was.
   if (await start.isVisible()) await start.click();
@@ -121,6 +124,9 @@ test("Start over clears the review and opens a fresh Look back", async ({
   page,
 }) => {
   await page.goto("/weekly-review?part=back");
+  // isVisible() does not wait: let the chat render before asking whether the
+  // review still needs starting, or a fresh review is never started.
+  await expect(page.getByTestId("planner-review-chat")).toBeVisible();
   const start = page.getByTestId("planner-start-look-back");
   if (await start.isVisible()) await start.click();
   const composer = page.getByTestId("planner-review-composer");
