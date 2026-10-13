@@ -24,6 +24,7 @@ export const forkModules = {
   search: "Search (keyword and semantic index)",
   cockpit: "Planning cockpit (tasks, board, history)",
   goals: "Goals and weekly review",
+  health: "Health tracker (training, breathwork, nights out)",
   account: "Account, sign-in and settings",
   integrations: "Webhooks, notifications, push",
   ops: "Background jobs",
@@ -661,6 +662,67 @@ export const forkDataSources: readonly ForkDataSource[] = [
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
+  },
+
+  // --- Health tracker ------------------------------------------------------
+  {
+    id: "health_entry",
+    table: "health_entry",
+    module: "health",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "Training sessions, breathwork and nights out, read from diary entries or fixed by hand",
+    uses: {
+      lookBack: gap(
+        "on hold: the weekly review does not read the health tracker yet",
+      ),
+      lookForward: no("the goal check reads goals only"),
+      search: no(
+        "each row comes from a diary entry, and the entry is already searchable",
+      ),
+      memory: no(
+        "the memory layer reads the diary entries the rows are read from",
+      ),
+      mcp: gap("agents cannot read health entries over MCP"),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "health_entry_event",
+    table: "health_entry_event",
+    module: "health",
+    kind: "history",
+    owner: "fork",
+    holds: "Every change to a health entry, append-only",
+    uses: {
+      lookBack: REVIEW_SKIPS,
+      lookForward: REVIEW_SKIPS,
+      search: NOT_CONTENT,
+      memory: NOT_CONTENT,
+      mcp: no("not exposed to agents"),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "health_target",
+    table: "health_target",
+    module: "health",
+    kind: "bookkeeping",
+    owner: "fork",
+    holds: "The owner's health targets (sessions a week, nights out a year)",
+    uses: plumbing("health tracker settings"),
+  },
+  {
+    id: "health_sync_state",
+    table: "health_sync_state",
+    module: "health",
+    kind: "bookkeeping",
+    owner: "fork",
+    holds: "When the diary was first read for health entries",
+    uses: plumbing("health tracker bookkeeping"),
   },
 
   // --- Account, settings and plumbing --------------------------------------

@@ -75,6 +75,10 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `planner_week` | goals | content | yes | – | – | – | **gap** | **gap** | yes |
 | `planner_review` | goals | content | – | – | – | – | – | **gap** | yes |
 | `planner_goal_flag` | goals | content | yes | yes | – | – | – | **gap** | yes |
+| `health_entry` | health | content | **gap** | – | – | – | **gap** | **gap** | yes |
+| `health_entry_event` | health | history | – | – | – | – | – | **gap** | yes |
+| `health_target` | health | bookkeeping | – | – | – | – | – | – | yes |
+| `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | yes |
 | `articles` | articles | content | – | – | – | – | – | – | yes |
 
 System tables, none of which reach a consumer except the backup: `shortcuts`, `users`, `auth_users`, `auth_sessions`, `auth_accounts`, `auth_verifications`, `auth_apikeys`, `auth_user_links`, `auth_bootstrap`, `auth_organizations`, `auth_members`, `auth_invitations`, `settings`, `voice_service_config`, `integration_config`, `usage_counters`, `memos_webhooks`, `memos_webhook_events`, `memos_webhook_deliveries`, `push_subscriptions`, `memos_notifications`, `data_tasks`, `member_removal_jobs`.
@@ -106,6 +110,10 @@ Gaps (left out, and probably should not be):
 - `planner_week` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_goal_flag` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `health_entry` → lookBack: on hold: the weekly review does not read the health tracker yet.
+- `health_entry` → mcp: agents cannot read health entries over MCP.
+- `health_entry` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `health_entry_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 
 <!-- data-sources:end -->
 
