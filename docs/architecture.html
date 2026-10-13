@@ -1089,7 +1089,7 @@
         <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
         <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
-        <li><b>Weekly review: health, memories, edit before saving</b> <span class="chip">fork</span>. On branch <code>feat/review-health-memories-edit</code>, dev first. The review reads the health tracker and the week's memories, cuts the week at local midnight, checks the plan against next week's own month and year, and lets you edit the summary before saving. See <a href="#review">Weekly review</a>.</li>
+        <li><b>Weekly review: health, memories, edit before saving</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 20). The review reads the health tracker and the week's memories, cuts the week at local midnight, checks the plan against next week's own month and year, and lets you edit the summary before saving. See <a href="#review">Weekly review</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
         <li><b>Long entries no longer look cut off</b>. Live since 2026-10-13. The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
       </ul>
@@ -1100,6 +1100,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Shipped to live (version 20): weekly review reads health and memories, local-midnight weeks, plan-week goal check, editable summary. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Weekly review: reads health and memories, week cut at local midnight, look forward checks the plan week's goals, summary editable before saving (branch feat/review-health-memories-edit; dev first).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 19): Goals Year map, with pillar follow and split rows. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Goals Year map on the /goals year page (branch feat/goals-year-map; deployed to dev, not live). No migration.</span></li>
