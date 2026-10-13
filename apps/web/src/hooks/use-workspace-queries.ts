@@ -16,6 +16,7 @@ import {
 } from "@/api";
 import type { ExplorerView as ViewMode } from "@/components/flaremo-explorer";
 import { todayKey } from "@/lib/calendar-date";
+import { forkOnThisDayBannerHidden } from "@/fork/sidebar-nav";
 import { viewToMemoState } from "@/lib/memo-cache";
 import { queryKeys } from "@/lib/query-keys";
 import { ACTIVITY_WINDOW_DAYS } from "@/lib/time-horizon";
@@ -185,6 +186,7 @@ export function useWorkspaceQueries({
   // Gate the fetch on the same filters that gate the banner: a filtered
   // timeline never renders it, so the request would be pure waste.
   const onThisDayEnabled =
+    !forkOnThisDayBannerHidden &&
     view === "all" &&
     !dayFilter &&
     !searchQuery &&
