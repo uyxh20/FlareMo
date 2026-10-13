@@ -33,7 +33,8 @@ test("the Goals deep link opens the year and survives a refresh", async ({
   await page.goto("/goals");
   await expect(heading(page, GOALS)).toBeVisible();
   await expect(page.getByTestId("planner-goals")).toBeVisible();
-  // A year has 52 or 53 weeks in its heatmap.
+  // The Year map has a chip for each of the year's 52 or 53 weeks.
+  await expect(page.getByTestId("planner-year-map")).toBeVisible();
   expect(await page.getByTestId("planner-week-cell").count()).toBeGreaterThan(
     51,
   );
@@ -48,10 +49,31 @@ test("a bad Goals address shows the year instead of an error", async ({
   for (const search of ["?week=40", "?week=2026-10-06", "?year=2026&q=9"]) {
     await page.goto(`/goals${search}`);
     await expect(page.getByTestId("planner-goals")).toBeVisible();
+    await expect(page.getByTestId("planner-year-map")).toBeVisible();
     expect(await page.getByTestId("planner-week-cell").count()).toBeGreaterThan(
       51,
     );
   }
+});
+
+test("the Year map follows one pillar and opens a month's weeks", async ({
+  page,
+}) => {
+  await page.goto("/goals?year=2026");
+  const map = page.getByTestId("planner-year-map");
+  await expect(map).toBeVisible();
+  const work = page.getByRole("button", { name: /^(Work|工作)$/ });
+  await work.click();
+  await expect(work).toHaveAttribute("aria-pressed", "true");
+  await expect(map).toHaveClass(/is-following/);
+
+  const january = page.getByRole("button", { name: /January|一月/ });
+  await expect(january).toHaveAttribute("aria-expanded", "false");
+  await january.click();
+  await expect(january).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("link", { name: /Week 1$|第 1 周/ }),
+  ).toBeVisible();
 });
 
 test("the sidebar links to Goals and the weekly review", async ({ page }) => {
