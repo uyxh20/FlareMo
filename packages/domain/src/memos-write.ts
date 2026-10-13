@@ -4,6 +4,7 @@ import { memoRevisions, memos, memoTags } from "@flaremo/db";
 import { and, eq } from "drizzle-orm";
 import { insertEmbeddingTask } from "./embedding-outbox";
 import { ConflictError, ForbiddenError } from "./errors";
+import { forkHealthSyncMemo } from "./health/after-memo-write"; // fork: health tracker
 import { createResourceId } from "./ids";
 import {
   adjustmentForMemoTransition,
@@ -159,6 +160,7 @@ export async function createMemo(
     }
     throw error;
   }
+  await forkHealthSyncMemo(db, row.id); // fork: health tracker, never throws
   return getMemoById(db, user, row.id, { includeDeleted: true });
 }
 
@@ -443,6 +445,7 @@ export async function updateMemo(
   }
 
   void pruneMemoRevisions(db, id).catch(() => undefined);
+  await forkHealthSyncMemo(db, id); // fork: health tracker, never throws
 
   return getMemoById(db, user, id, { includeDeleted: true });
 }

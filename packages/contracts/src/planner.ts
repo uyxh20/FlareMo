@@ -34,6 +34,8 @@ import {
 // here, so the package index (an upstream file) stays untouched. So do goals and
 // the weekly review (migration 9005) and the weekly summary memo's format. None
 // of these files imports this one back.
+// The health tracker add-on (docs/fork-health-tracker.md) rides the same way.
+export * from "./fork-health";
 export * from "./planner-goals";
 export * from "./planner-rank";
 export * from "./planner-review-memo";

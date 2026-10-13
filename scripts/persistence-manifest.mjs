@@ -66,6 +66,13 @@ export const RESTORE_TABLES = [
   "planner_week",
   "planner_review",
   "planner_goal_flag",
+  // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo
+  // ids by value, no foreign keys, so any order restores. The events table is
+  // the append-only history and is restored like the rest.
+  "health_entry",
+  "health_entry_event",
+  "health_target",
+  "health_sync_state",
 ];
 
 // Derived tables that must not be restored verbatim, because a stale copy
