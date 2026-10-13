@@ -1,11 +1,11 @@
 import type { HealthEntryDto } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { eq } from "drizzle-orm";
 import {
   type HealthEntryRow,
   healthEntry,
   healthEntryEvent,
 } from "@flaremo/db/src/schema/fork-health";
+import { eq } from "drizzle-orm";
 
 // Row helpers shared by the health tracker's domain modules (fork-owned add-on,
 // docs/fork-health-tracker.md): the wire shape of a row, the snapshot an event

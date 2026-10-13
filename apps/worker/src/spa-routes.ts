@@ -31,6 +31,7 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/cockpit",
   "/goals",
   "/weekly-review",
+  "/health", // fork: health tracker
   "/capture",
   "/articles",
   "/review/daily",

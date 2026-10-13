@@ -17,6 +17,7 @@ import {
 } from "@/api";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { healthRoute } from "@/health/route"; // fork: health tracker
 import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { queryKeys } from "@/lib/query-keys";
@@ -647,6 +648,7 @@ const router = createRouter({
     cockpitRoute,
     goalsRoute,
     weeklyReviewRoute,
+    healthRoute, // fork: health tracker
     captureRoute,
     articlesRoute,
     articleEditRoute,

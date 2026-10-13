@@ -18,8 +18,9 @@ import {
   plannerTestRun,
   plannerTestRuntime,
 } from "../planner/test-support";
-import { healthDismissEntry, healthPatchEntry } from "./write";
+import type { HealthParsedEntry } from "./parse";
 import { healthToday } from "./read";
+import type { HealthEntryRow } from "./rows";
 import {
   healthEnsureScanned,
   healthNightlySweep,
@@ -27,6 +28,7 @@ import {
   healthRescan,
   healthSyncMemo,
 } from "./sync";
+import { healthDismissEntry, healthPatchEntry } from "./write";
 
 // The health tracker's sync against a real D1 (fork-owned add-on,
 // docs/fork-health-tracker.md): what a memo save writes, what a re-read keeps,
@@ -403,10 +405,10 @@ describe("health sync", () => {
 });
 
 describe("healthPlanMemoSync", () => {
-  const base = {
+  const base: HealthEntryRow = {
     id: "e1",
     userId: "u1",
-    kind: "training" as const,
+    kind: "training",
     day: "2026-10-13",
     variant: "gym",
     minutes: null,
@@ -415,7 +417,7 @@ describe("healthPlanMemoSync", () => {
     bender: false,
     needsCheck: false,
     feel: null,
-    source: "memo" as const,
+    source: "memo",
     memoId: "memos/m1",
     dismissed: false,
     edited: false,
@@ -423,10 +425,10 @@ describe("healthPlanMemoSync", () => {
     updatedAt: "2026-10-13T10:00:00.000Z",
     deletedAt: null,
   };
-  const read = {
-    kind: "training" as const,
+  const read: HealthParsedEntry = {
+    kind: "training",
     day: "2026-10-13",
-    variant: "gym" as const,
+    variant: "gym",
     minutes: null,
     homeAt: null,
     units: null,
@@ -435,7 +437,7 @@ describe("healthPlanMemoSync", () => {
     feel: null,
   };
   const now = "2026-10-14T10:00:00.000Z";
-  const plan = (existing: (typeof base)[], parsed: (typeof read)[]) =>
+  const plan = (existing: HealthEntryRow[], parsed: HealthParsedEntry[]) =>
     healthPlanMemoSync({
       memoId: "memos/m1",
       userId: "u1",

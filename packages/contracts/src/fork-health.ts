@@ -370,6 +370,8 @@ export const healthYearResponseSchema = z.object({
     training: z.number().int(),
     breath_days: z.number().int(),
   }),
+  /** The nights of the year still waiting for a home time, oldest first. */
+  needs_check_entries: z.array(healthEntryDtoSchema),
 });
 export type HealthYearResponse = z.infer<typeof healthYearResponseSchema>;
 

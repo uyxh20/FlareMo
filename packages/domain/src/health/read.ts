@@ -18,7 +18,7 @@ import { and, asc, between, eq, inArray, isNull } from "drizzle-orm";
 import { parseResourceName } from "../ids";
 import { type HealthEntryRow, healthToDto } from "./rows";
 
-// What the health tracker's API and the weekly review read (fork-owned add-on,
+// What the health tracker's API reads (fork-owned add-on,
 // docs/fork-health-tracker.md). Nothing here writes. A row counts when it is
 // neither soft-deleted nor dismissed.
 
@@ -234,6 +234,9 @@ export async function healthReadYear(
         rows.filter((row) => row.kind === "breath").map((row) => row.day),
       ).size,
     },
+    needs_check_entries: nights
+      .filter((row) => row.needsCheck)
+      .map(healthToDto),
   };
 }
 
@@ -275,58 +278,4 @@ export async function healthReadMemos(
     }
   }
   return result;
-}
-
-// --- The weekly review -----------------------------------------------------------
-
-/** What the weekly review reads about one reviewed week. */
-export type HealthReviewSummary = {
-  weekStart: string;
-  training: { sessions: number; target: number; variants: string[] };
-  breath: { days: number; sessions: number; target: number };
-  nights: Array<{
-    day: string;
-    homeAt: string | null;
-    units: number | null;
-    bender: boolean;
-  }>;
-  nightUnits: number;
-  yearUsed: number;
-  yearTarget: number;
-};
-
-/** The reviewed week (Monday to Sunday) beside the targets and the year so far. */
-export async function healthReadReviewSummary(
-  db: FlareMoDb,
-  input: { userId: string; weekStart: string },
-): Promise<HealthReviewSummary> {
-  const week = await healthReadWeek(db, {
-    userId: input.userId,
-    start: input.weekStart,
-  });
-  const training = week.entries.filter((entry) => entry.kind === "training");
-  return {
-    weekStart: input.weekStart,
-    training: {
-      sessions: week.summary.training.sessions,
-      target: week.summary.training.target,
-      variants: training.map((entry) => entry.variant ?? "gym"),
-    },
-    breath: {
-      days: week.summary.breath.days,
-      sessions: week.summary.breath.sessions,
-      target: week.summary.breath.target,
-    },
-    nights: week.entries
-      .filter((entry) => entry.kind === "night_out")
-      .map((entry) => ({
-        day: entry.day,
-        homeAt: entry.home_at,
-        units: entry.units,
-        bender: entry.bender,
-      })),
-    nightUnits: week.summary.night_out.units,
-    yearUsed: week.summary.night_out.year_used,
-    yearTarget: week.summary.night_out.year_target,
-  };
 }

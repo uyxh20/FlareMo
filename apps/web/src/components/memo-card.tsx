@@ -5,6 +5,7 @@ import { MemoCardBody } from "@/components/memo-card/memo-card-body";
 import { MemoCardEditor } from "@/components/memo-card/memo-card-editor";
 import { MemoCardHeader } from "@/components/memo-card/memo-card-header";
 import { useMemoCardActions } from "@/components/memo-card/use-memo-card-actions";
+import { HealthMemoLabels } from "@/health/memo-labels"; // fork: health tracker
 import { cn } from "@/lib/utils";
 
 type MemoCardProps = {
@@ -150,6 +151,7 @@ export const MemoCard = memo(function MemoCard({
           taskInteraction={taskInteraction}
         />
       )}
+      <HealthMemoLabels memo={memo} /> {/* fork: health tracker */}
     </article>
   );
 });

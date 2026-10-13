@@ -122,7 +122,7 @@ const NEGATED_BEFORE =
 
 /** A negation just after a keyword (`gym skipped`, `crossfit cancelled`). */
 const NEGATED_AFTER =
-  /^\s*[:\-]?\s*(?:was |is |got )?(?:skipped|cancelled|canceled|missed|not\b|no\b|didn't|didnt|nope|off\b)/;
+  /^\s*[:-]?\s*(?:was |is |got )?(?:skipped|cancelled|canceled|missed|not\b|no\b|didn't|didnt|nope|off\b)/;
 
 function negatedAt(text: string, index: number, length: number): boolean {
   const before = text.slice(Math.max(0, index - 40), index);

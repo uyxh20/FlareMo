@@ -37,6 +37,7 @@ import {
   type UserPlanLimits,
   updateMemberRemovalJob,
 } from "@flaremo/domain";
+import { healthNightlySweep } from "@flaremo/domain/src/health/sync";
 import { plannerSyncAllUsers } from "@flaremo/domain/src/planner/history-sync-nightly";
 import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import { cleanupFlaremoArtifacts } from "./artifact-cleanup";
@@ -317,6 +318,7 @@ export async function runScheduledMaintenance(
       );
     }
   }
+  await healthNightlySweep(db, new Date(scheduledTime)); // fork: health tracker safety net
   // Reconcile data-transfer tasks: expire stale queued/running tasks whose
   // lease lapsed (interrupted request), then garbage-collect completed task
   // rows older than the TTL along with their R2 export artifacts.

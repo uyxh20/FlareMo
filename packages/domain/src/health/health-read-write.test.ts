@@ -8,7 +8,6 @@ import {
 } from "../planner/test-support";
 import {
   healthReadMemos,
-  healthReadReviewSummary,
   healthReadTargets,
   healthReadWeek,
   healthReadYear,
@@ -218,6 +217,7 @@ describe("health read and write", () => {
         needs_check: 1,
       });
       expect(year.totals).toEqual({ training: 2, breath_days: 1 });
+      expect(year.needs_check_entries.map((entry) => entry.id)).toEqual(["n3"]);
     });
 
     it("counts a finished year in full", async () => {
@@ -454,49 +454,6 @@ describe("health read and write", () => {
         "SELECT deleted_at FROM health_entry WHERE id = 'g'",
       );
       expect(row?.deleted_at).toBeNull();
-    });
-  });
-
-  describe("the review summary", () => {
-    it("reports the reviewed week beside the targets and the year", async () => {
-      await seed(
-        { id: "t1", kind: "training", day: "2026-10-05", variant: "crossfit" },
-        { id: "t2", kind: "training", day: "2026-10-07", variant: "back" },
-        { id: "b1", kind: "breath", day: "2026-10-05", minutes: 10 },
-        { id: "b2", kind: "breath", day: "2026-10-06", minutes: 10 },
-        {
-          id: "n1",
-          kind: "night_out",
-          day: "2026-10-09",
-          homeAt: "03:30",
-          units: 1,
-        },
-        {
-          id: "n2",
-          kind: "night_out",
-          day: "2026-10-10",
-          units: 1,
-          bender: true,
-        },
-        { id: "n0", kind: "night_out", day: "2026-03-01", units: 0.5 },
-      );
-      expect(
-        await healthReadReviewSummary(rt.db, {
-          userId: rt.user.id,
-          weekStart: "2026-10-05",
-        }),
-      ).toEqual({
-        weekStart: "2026-10-05",
-        training: { sessions: 2, target: 3, variants: ["crossfit", "back"] },
-        breath: { days: 2, sessions: 2, target: 7 },
-        nights: [
-          { day: "2026-10-09", homeAt: "03:30", units: 1, bender: false },
-          { day: "2026-10-10", homeAt: null, units: 1, bender: true },
-        ],
-        nightUnits: 2,
-        yearUsed: 2.5,
-        yearTarget: 12,
-      });
     });
   });
 });

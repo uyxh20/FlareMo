@@ -111,6 +111,7 @@ function isPrivateAppNavigation(url) {
     `${scopePath}cockpit`,
     `${scopePath}goals`,
     `${scopePath}weekly-review`,
+    `${scopePath}health`, // fork: health tracker
     `${scopePath}forgot-password`,
     `${scopePath}login`,
     `${scopePath}memory`,
