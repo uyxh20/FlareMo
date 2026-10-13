@@ -496,7 +496,7 @@
         else's entries never show. It returns 10 results by default.
       </p>
       <div class="callout warn">
-        <p><b>Known gap, found while writing this page.</b> On 2026-10-13 only 46 of 579 entries were in the semantic index; 533 were marked "not indexed", and the task queue was empty. Most likely the older entries were imported without an indexing task. Keyword search is unaffected. The admin "rebuild embeddings" action (<code>POST /api/app/admin/embeddings/rebuild</code>) is the built-in way to fill the index. Memories are partly indexed too: 73 of 118.</p>
+        <p><b>Known gap, found while writing this page.</b> On 2026-10-13 only 46 of 579 entries were in the semantic index; 533 were marked "not indexed", and the task queue was empty. The cause is in the code: importing data (<code>packages/domain/src/import-export/import-data.ts</code>) saves entries as "not indexed" without queueing an indexing task, and nothing sweeps those rows later. Keyword search is unaffected. The admin "rebuild embeddings" action (<code>POST /api/app/admin/embeddings/rebuild</code>) is the built-in way to fill the index. Memories are partly indexed too: 73 of 118.</p>
       </div>
       <p class="where">Code: <code>packages/domain/src/embedding-outbox.ts</code>, <code>embedding-processors.ts</code>, <code>embedding.ts</code>, <code>semantic-search.ts</code>; route <code>GET /api/app/search/semantic</code>.</p>
     </section>
@@ -763,6 +763,7 @@
       <h2>Changelog</h2>
       <p>One line per change to this page. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Search: named the confirmed cause of the not-indexed entries (import skips the indexing queue).</span></li>
         <li><time>2026-10-13</time><span>First version, written from the code on main (4ca0c19) and live row counts.</span></li>
       </ul>
     </section>
