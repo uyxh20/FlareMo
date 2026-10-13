@@ -1,0 +1,770 @@
+<title>Schizo Diary Architecture</title>
+<meta name="description" content="How Schizo Diary works: where data sits, how memos, search, memory, the weekly review, the cockpit and deploys fit together." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap"
+/>
+<style>
+  /*
+   * HOW TO UPDATE THIS PAGE
+   * Source: docs/architecture.html in uyxh20/FlareMo, also published as an Artifact.
+   * Each topic is one <section id="..."> with a stable id. When you ship something,
+   * edit only the sections it touches, bump the "Last updated" date in the header,
+   * and add one line to the changelog at the bottom (#changelog). Never paste diary,
+   * memory or task text, or any secret, into this page. Counts and lengths only.
+   *
+   * Layout: a reference manual. Sticky contents rail on the left (desktop),
+   * one readable column on phones. Data stores carry a consistent colour chip.
+   */
+  :root {
+    --bg: #f6f7f8;
+    --surface: #ffffff;
+    --ink: #1b2027;
+    --muted: #5a6370;
+    --rule: #dde1e6;
+    --accent: #0f6e78;
+    --accent-soft: #e2f1f2;
+    --fork: #9a5a12;
+    --fork-soft: #f8ecdc;
+    --warn: #a8361f;
+    --warn-soft: #fbe7e2;
+    --d1: #2f5fb3;
+    --r2: #7a4fb0;
+    --vec: #0f6e78;
+    --ai: #a0531a;
+    --code-bg: #eef1f4;
+    --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+    --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161b;
+      --surface: #1a1f26;
+      --ink: #e4e8ed;
+      --muted: #9aa4b1;
+      --rule: #2c333d;
+      --accent: #5cc3cc;
+      --accent-soft: #163338;
+      --fork: #e2a35a;
+      --fork-soft: #3a2a17;
+      --warn: #f08b72;
+      --warn-soft: #3d201a;
+      --d1: #7ea6f0;
+      --r2: #b996e6;
+      --vec: #5cc3cc;
+      --ai: #e2995c;
+      --code-bg: #222932;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161b;
+    --surface: #1a1f26;
+    --ink: #e4e8ed;
+    --muted: #9aa4b1;
+    --rule: #2c333d;
+    --accent: #5cc3cc;
+    --accent-soft: #163338;
+    --fork: #e2a35a;
+    --fork-soft: #3a2a17;
+    --warn: #f08b72;
+    --warn-soft: #3d201a;
+    --d1: #7ea6f0;
+    --r2: #b996e6;
+    --vec: #5cc3cc;
+    --ai: #e2995c;
+    --code-bg: #222932;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.6;
+    padding-inline: 16px;
+    padding-block: 0 48px;
+  }
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 48px;
+  }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    nav.toc { display: none; }
+  }
+
+  nav.toc {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    align-self: start;
+    padding-block: 40px;
+    font-size: 14px;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+  nav.toc p {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; counter-reset: toc; }
+  nav.toc a {
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+
+  main { min-width: 0; padding-block: 40px 0; }
+  header.top { padding-bottom: 28px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 8px;
+  }
+  h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: clamp(32px, 5vw, 46px); margin: 0 0 12px; font-weight: 700; letter-spacing: -0.01em; }
+  h2 { font-size: 26px; margin: 0 0 14px; font-weight: 700; }
+  h3 { font-size: 18px; margin: 26px 0 8px; font-weight: 500; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 64ch; margin: 0; }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 14px; font-family: var(--font-mono); }
+
+  section { padding-block: 36px; border-bottom: 1px solid var(--rule); scroll-margin-top: 16px; }
+  section > p, section > ul, section > ol { max-width: 68ch; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  a { color: var(--accent); }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+  }
+  .where { font-size: 13px; color: var(--muted); margin-top: 14px; }
+  .where code { font-size: 12px; }
+
+  /* Store chips: the same colour means the same storage service everywhere */
+  .chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+    vertical-align: 1px;
+  }
+  .chip.d1 { color: var(--d1); }
+  .chip.r2 { color: var(--r2); }
+  .chip.vec { color: var(--vec); }
+  .chip.ai { color: var(--ai); }
+  .chip.fork { color: var(--fork); }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 18px 0 8px;
+  }
+  @media (max-width: 520px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { background: var(--surface); padding: 14px 16px; }
+  .stat b {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat span { font-size: 13px; color: var(--muted); }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    max-width: 68ch;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.fork { border-color: var(--fork); background: var(--fork-soft); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .table-scroll { overflow-x: auto; margin: 14px 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; background: var(--bg); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* System map */
+  .map {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+    margin: 18px 0;
+  }
+  @media (max-width: 700px) { .map { grid-template-columns: minmax(0, 1fr); } }
+  .col { display: grid; gap: 10px; align-content: start; }
+  .col h4 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .box { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .box strong { display: block; font-size: 15px; }
+  .box small { color: var(--muted); display: block; line-height: 1.45; }
+  .box.worker { border: 2px solid var(--accent); }
+  .box.store-d1 { border-left: 4px solid var(--d1); }
+  .box.store-r2 { border-left: 4px solid var(--r2); }
+  .box.store-vec { border-left: 4px solid var(--vec); }
+  .box.store-ai { border-left: 4px solid var(--ai); }
+  .inner { display: grid; gap: 6px; margin-top: 8px; }
+  .inner div { background: var(--bg); border-radius: 5px; padding: 6px 9px; font-size: 13px; }
+
+  /* Step flows: the order is real, so the numbers are information */
+  ol.flow { list-style: none; padding: 0; counter-reset: step; display: grid; gap: 10px; max-width: 72ch; }
+  ol.flow > li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 12px;
+    margin: 0;
+  }
+  ol.flow > li::before {
+    content: counter(step);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    display: grid;
+    place-items: center;
+    margin-top: 1px;
+  }
+
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 14px 0; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+  .card h3 { margin-top: 0; }
+  .card p:last-child, .card ul:last-child { margin-bottom: 0; }
+
+  .board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 14px 0; max-width: 72ch; }
+  @media (max-width: 520px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .board div { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .board b { display: block; font-size: 14px; }
+
+  .cascade { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0; font-size: 14px; }
+  .cascade span { background: var(--surface); border: 1px solid var(--rule); border-radius: 999px; padding: 3px 12px; }
+  .cascade i { color: var(--muted); font-style: normal; }
+
+  ul.log { list-style: none; padding: 0; font-size: 14px; }
+  ul.log li { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--rule); }
+  ul.log time { font-family: var(--font-mono); color: var(--muted); font-size: 13px; }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#glance">At a glance</a></li>
+      <li><a href="#map">System map</a></li>
+      <li><a href="#data">Where data sits</a></li>
+      <li><a href="#memos">Diary entries</a></li>
+      <li><a href="#search">Search and vectors</a></li>
+      <li><a href="#memory">Memory and dreaming</a></li>
+      <li><a href="#review">Weekly review</a></li>
+      <li><a href="#cockpit">Cockpit and history</a></li>
+      <li><a href="#goals">Goals</a></li>
+      <li><a href="#nightly">Nightly jobs</a></li>
+      <li><a href="#access">Login, apps and MCP</a></li>
+      <li><a href="#fork">Fork rules</a></li>
+      <li><a href="#deploys">Dev, prod and deploys</a></li>
+      <li><a href="#next">In progress</a></li>
+      <li><a href="#changelog">Changelog</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="top">
+      <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
+      <h1>How Schizo Diary works</h1>
+      <p class="lede">
+        A plain-English map of the whole app: what runs where, where every kind of data is kept,
+        how entries get searched and remembered, and what the AI actually reads during the weekly review.
+      </p>
+      <p class="meta">Last updated 2026-10-13 · describes main at commit 4ca0c19</p>
+    </header>
+
+    <!-- ============================================================ -->
+    <section id="glance">
+      <h2>At a glance</h2>
+      <p>
+        Schizo Diary is a fork of the open-source app FlareMo. It runs entirely on Cloudflare: one
+        program (a "Worker") serves both the web pages and the API, and it keeps everything in
+        Cloudflare's storage services. There is no server of your own to look after.
+      </p>
+      <p>
+        Two halves live side by side. The <b>diary half</b> comes from FlareMo: quick entries (called
+        memos), tags, attachments, search and an AI "memory" layer. The <b>planning half</b> is
+        fork-only: the cockpit board, goals and the weekly review.
+      </p>
+      <div class="stats" role="list" aria-label="Live data snapshot">
+        <div class="stat" role="listitem"><b>536</b><span>live diary entries (579 incl. bin)</span></div>
+        <div class="stat" role="listitem"><b>118</b><span>memories</span></div>
+        <div class="stat" role="listitem"><b>185</b><span>goals</span></div>
+        <div class="stat" role="listitem"><b>46</b><span>tasks</span></div>
+        <div class="stat" role="listitem"><b>91</b><span>task history events</span></div>
+        <div class="stat" role="listitem"><b>55</b><span>database tables</span></div>
+      </div>
+      <p class="where">Row counts read from the live database on 2026-10-13 (counts only). First entry: 2026-01-04. Database size about 9 MB.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="map">
+      <h2>System map</h2>
+      <p>Everything you or an AI agent does goes through the one Worker. It is the only thing that touches the data.</p>
+      <div class="map" role="group" aria-label="System map">
+        <div class="col">
+          <h4>Who talks to it</h4>
+          <div class="box"><strong>Your browser</strong><small>The React web app (diary, cockpit, goals, review). Logged in with a cookie.</small></div>
+          <div class="box"><strong>Phone apps for Memos</strong><small>Third-party Memos clients, through the compatible API and a personal token.</small></div>
+          <div class="box"><strong>AI agents (MCP)</strong><small>Claude and others, reading and writing memos and memories with a personal token.</small></div>
+          <div class="box"><strong>The nightly timer</strong><small>Fires every day at 03:17 UTC.</small></div>
+        </div>
+        <div class="col">
+          <h4>Cloudflare Worker "flaremo"</h4>
+          <div class="box worker">
+            <strong>One program, many doors</strong>
+            <small>Built from <code>apps/worker</code> (API) and <code>apps/web</code> (pages). Shared rules live in <code>packages/domain</code>.</small>
+            <div class="inner">
+              <div>Web pages (the app itself)</div>
+              <div><code>/api/app</code> · the app's own API</div>
+              <div><code>/api/app/planner</code> · cockpit, goals, review <span class="chip fork">fork</span></div>
+              <div><code>/api/v1</code> · Memos-compatible API</div>
+              <div><code>/mcp</code> and <code>/memory/mcp</code> · AI agents</div>
+              <div><code>/share/…</code> · public share pages</div>
+              <div><code>/api/auth</code> · login</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <h4>Where it keeps things</h4>
+          <div class="box store-d1"><strong>D1 database <span class="chip d1">D1</span></strong><small>The source of truth. Every entry, tag, task, goal, memory and login.</small></div>
+          <div class="box store-r2"><strong>R2 file storage <span class="chip r2">R2</span></strong><small>Attachments, avatars and export bundles.</small></div>
+          <div class="box store-vec"><strong>Vectorize <span class="chip vec">Vectors</span></strong><small>Two search indexes of "meaning fingerprints": memos and memories.</small></div>
+          <div class="box store-ai"><strong>AI models <span class="chip ai">AI</span></strong><small>Workers AI for embeddings and nightly dreaming. The review can use OpenRouter or Anthropic instead.</small></div>
+          <div class="box"><strong>Queues</strong><small>Two background job lines: data exports and team-member removal.</small></div>
+        </div>
+      </div>
+      <p class="where">Wiring: <code>wrangler.json</code> (bindings and cron) and <code>apps/worker/src/index.ts</code> (route mounts).</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="data">
+      <h2>Where data sits</h2>
+      <p>
+        D1 is the only place that holds the real record. Everything else is either a file (R2) or a
+        derived copy that can be rebuilt from D1 (the vector indexes). If R2 or Vectorize were wiped,
+        the diary text would still be whole.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Kind of data</th><th>Store</th><th>Main tables or path</th></tr></thead>
+          <tbody>
+            <tr><td>Diary entries, tags, edit history, links, comments, reactions</td><td><span class="chip d1">D1</span></td><td><code>memos</code>, <code>memo_tags</code>, <code>memo_revisions</code>, <code>memo_relations</code>, <code>reactions</code></td></tr>
+            <tr><td>Keyword search index</td><td><span class="chip d1">D1</span></td><td><code>memos_fts</code>, <code>memory_fts</code> (kept in step automatically)</td></tr>
+            <tr><td>Attachment details (name, size, type)</td><td><span class="chip d1">D1</span></td><td><code>attachments</code></td></tr>
+            <tr><td>Attachment files</td><td><span class="chip r2">R2</span></td><td><code>attachments/&lt;user&gt;/&lt;id&gt;/&lt;filename&gt;</code></td></tr>
+            <tr><td>Export bundles</td><td><span class="chip r2">R2</span></td><td><code>exports/&lt;task&gt;/…</code>, deleted when they expire</td></tr>
+            <tr><td>Memories and their evidence and history</td><td><span class="chip d1">D1</span></td><td><code>memory_items</code> plus 7 supporting tables</td></tr>
+            <tr><td>Meaning fingerprints (embeddings)</td><td><span class="chip vec">Vectors</span></td><td>indexes <code>flaremo-memos</code> and <code>flaremo-memories</code></td></tr>
+            <tr><td>Tasks (title, status, priority, due date, notes)</td><td><span class="chip d1">D1</span></td><td><code>tasks</code>, <code>projects</code>, <code>task_activity</code> (upstream)</td></tr>
+            <tr><td>Cockpit extras, history, goals, reviews <span class="chip fork">fork</span></td><td><span class="chip d1">D1</span></td><td>the 10 <code>planner_*</code> tables</td></tr>
+            <tr><td>Logins, sessions, personal tokens</td><td><span class="chip d1">D1</span></td><td><code>auth_*</code> tables</td></tr>
+            <tr><td>Settings, usage counters, background job state</td><td><span class="chip d1">D1</span></td><td><code>settings</code>, <code>usage_counters</code>, <code>embedding_tasks</code>, <code>data_tasks</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>The 55 tables, grouped</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Group</th><th>Tables</th><th>Defined in</th></tr></thead>
+          <tbody>
+            <tr><td>Login and accounts</td><td class="num">11</td><td><code>packages/db/src/schema/auth.ts</code></td></tr>
+            <tr><td>Planner <span class="chip fork">fork</span></td><td class="num">10</td><td><code>packages/db/src/schema/planner.ts</code></td></tr>
+            <tr><td>Diary entries</td><td class="num">8</td><td><code>schema/memos.ts</code></td></tr>
+            <tr><td>Memory</td><td class="num">8</td><td><code>schema/memory.ts</code></td></tr>
+            <tr><td>Webhooks and notifications</td><td class="num">5</td><td><code>schema/social.ts</code></td></tr>
+            <tr><td>Attachments, articles, share links</td><td class="num">3</td><td><code>schema/content.ts</code></td></tr>
+            <tr><td>Upstream tasks and projects</td><td class="num">3</td><td><code>schema/tasks.ts</code></td></tr>
+            <tr><td>Settings and background jobs</td><td class="num">3</td><td><code>schema/ops.ts</code></td></tr>
+            <tr><td>Search-index queue and usage</td><td class="num">2</td><td><code>schema/usage.ts</code></td></tr>
+            <tr><td>Voice and integration config</td><td class="num">2</td><td><code>schema/instance.ts</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="where">Changes to tables arrive as numbered files in <code>migrations/</code>. Upstream uses 0000–0033; fork migrations start at 9000.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="memos">
+      <h2>Diary entries (memos)</h2>
+      <p>Each entry is one row in the <code>memos</code> table. Here is what happens when you save one.</p>
+      <ol class="flow">
+        <li><div><b>The text is saved as Markdown</b> in <code>memos.content</code>, with a visibility (private, protected or public) and a status (normal, archived, trashed or deleted). A small JSON field remembers things like whether it has a link or an open checkbox.</div></li>
+        <li><div><b>Tags are pulled out.</b> Every <code>#tag</code> in the text is lowercased and stored as its own row in <code>memo_tags</code>. Nested tags use a slash, like <code>#health/gym</code>.</div></li>
+        <li><div><b>A copy of the old version is kept</b> in <code>memo_revisions</code> on every edit, up to the 50 most recent per entry.</div></li>
+        <li><div><b>The keyword index updates itself</b> (<code>memos_fts</code>), so plain-text search sees the change at once.</div></li>
+        <li><div><b>A "please index this" note is queued</b> in <code>embedding_tasks</code>, in the same save. The semantic index is updated just after the response is sent (see <a href="#search">Search</a>).</div></li>
+      </ol>
+      <div class="two">
+        <div class="card">
+          <h3>Attachments</h3>
+          <p>The file goes to R2; D1 keeps its name, size and type, and which entry it belongs to. Uploads never attached to an entry are cleaned up after 7 days.</p>
+        </div>
+        <div class="card">
+          <h3>Comments and links</h3>
+          <p>A comment is itself a memo, linked to its parent in <code>memo_relations</code>. Links between entries live in the same table.</p>
+        </div>
+        <div class="card">
+          <h3>Deleting</h3>
+          <p>Delete first moves an entry to the bin. After 30 days in the bin the nightly job deletes it for good, with its files and search vectors.</p>
+        </div>
+      </div>
+      <p class="where">Code: <code>packages/domain/src/memos-write.ts</code>, <code>tags.ts</code>, <code>revisions.ts</code>, <code>memos-lifecycle.ts</code>; files in <code>apps/worker/src/attachment-http.ts</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="search">
+      <h2>Search and vectors</h2>
+      <p>There are two separate kinds of search, and they don't mix for diary entries.</p>
+      <div class="two">
+        <div class="card">
+          <h3>Keyword search</h3>
+          <p>Finds the exact words you type, using SQLite's built-in full-text index in D1. Always up to date. This is what the normal search box uses.</p>
+        </div>
+        <div class="card">
+          <h3>Semantic search</h3>
+          <p>Finds entries that mean something similar, even with different words. Uses "embeddings": each piece of text is turned into a list of 1,024 numbers that captures its meaning.</p>
+        </div>
+      </div>
+      <h3>Yes, entries are vectorized. Here is how.</h3>
+      <ol class="flow">
+        <li><div><b>Queue.</b> Every save adds a row to <code>embedding_tasks</code>. The text itself is not copied; it is re-read when the task runs, so the newest version is what gets indexed.</div></li>
+        <li><div><b>Run.</b> Tasks run in the background after any save request, and again in the nightly job. Up to 32 per run, 5 tries each.</div></li>
+        <li><div><b>Cut into chunks.</b> Long entries are split at line and sentence breaks into pieces of about 1,000 characters.</div></li>
+        <li><div><b>Embed.</b> Each chunk goes to the Workers AI model <code>@cf/qwen/qwen3-embedding-0.6b</code>, which returns 1,024 numbers.</div></li>
+        <li><div><b>Store.</b> The numbers go into the Vectorize index <code>flaremo-memos</code>, tagged only with the entry id and user id. No text is stored there.</div></li>
+      </ol>
+      <p>
+        A semantic search embeds your query the same way, asks Vectorize for the closest chunks, scores
+        each entry by its best chunk, then double-checks every hit against D1 so trashed or someone
+        else's entries never show. It returns 10 results by default.
+      </p>
+      <div class="callout warn">
+        <p><b>Known gap, found while writing this page.</b> On 2026-10-13 only 46 of 579 entries were in the semantic index; 533 were marked "not indexed", and the task queue was empty. Most likely the older entries were imported without an indexing task. Keyword search is unaffected. The admin "rebuild embeddings" action (<code>POST /api/app/admin/embeddings/rebuild</code>) is the built-in way to fill the index. Memories are partly indexed too: 73 of 118.</p>
+      </div>
+      <p class="where">Code: <code>packages/domain/src/embedding-outbox.ts</code>, <code>embedding-processors.ts</code>, <code>embedding.ts</code>, <code>semantic-search.ts</code>; route <code>GET /api/app/search/semantic</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="memory">
+      <h2>Memory and dreaming</h2>
+      <p>
+        Memories are short, standalone conclusions ("prefers morning workouts", "decided X") kept
+        separately from the diary, mainly so AI agents can learn about you without rereading
+        every entry. Each one has a kind (fact, preference, decision, lesson, event…), a confidence
+        from 0 to 100, a trust level (inferred, observed, confirmed, locked) and a link back to the
+        entry it came from.
+      </p>
+      <h3>How memories are made</h3>
+      <div class="two">
+        <div class="card">
+          <h3>Agents write them</h3>
+          <p>An AI agent connected through <code>/memory/mcp</code> can save a memory directly with <code>memory_remember</code>.</p>
+        </div>
+        <div class="card">
+          <h3>Nightly "dreaming"</h3>
+          <p>Every night the app rereads recent entries and proposes new memories. Nothing is extracted at the moment you save an entry.</p>
+        </div>
+      </div>
+      <h3>One dreaming pass</h3>
+      <ol class="flow">
+        <li><div>Picks users who wrote in the last 2 days (just you).</div></li>
+        <li><div>Reads entries since the last dreaming run, or the last 24 hours: up to 20 entries plus 20 recent event memories, capped at 12,000 characters in total and 1,200 per entry.</div></li>
+        <li><div>Asks the Workers AI model <code>@cf/meta/llama-3.1-8b-instruct</code> for up to 8 candidate memories.</div></li>
+        <li><div>Saves at most 5 a day. Ones that sound like instructions wait for your review; facts you rejected in the last 30 days are blocked.</div></li>
+        <li><div>On Mondays it also samples 30 confirmed facts and flags up to 3 that contradict each other.</div></li>
+      </ol>
+      <p>
+        When an agent asks to recall something, the app combines four searches (exact key, keyword,
+        vector, and one hop of related memories), ranks them together, and favours confirmed and
+        locked memories. Older event memories fade gradually over a year.
+      </p>
+      <p class="where">Code: <code>apps/worker/src/memory-dreaming.ts</code>, <code>packages/domain/src/memory/</code> (consolidation, recall, maintenance); API <code>/api/app/memory</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="review">
+      <h2>Weekly review: look back and look forward <span class="chip fork">fork</span></h2>
+      <p>
+        The review page at <code>/weekly-review</code> has two halves. <b>Look back</b> is a short chat
+        about last week that ends in scores and a summary entry. <b>Look forward</b> turns next week's
+        goals into a plan on the board. On Saturday and Sunday it reviews the current week; Monday to
+        Friday it reviews the week before.
+      </p>
+      <h3>What the AI reads</h3>
+      <p>The context is rebuilt fresh from D1 on every AI call. Nothing is cached between calls.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Ingredient</th><th>How much</th></tr></thead>
+          <tbody>
+            <tr><td>Your diary entries from the reviewed week (Monday to Sunday), oldest first, skipping old weekly summaries</td><td>up to 200 entries, trimmed to fit <b>40,000 characters</b> (OpenRouter or Anthropic) or <b>12,000</b> (Workers AI). Short entries stay whole; long ones are cut evenly and end with "…"</td></tr>
+            <tr><td>Goals: north star, plus the year, quarter, month and week goals that cover the reviewed week</td><td>all of them</td></tr>
+            <tr><td>Scores from recent weeks</td><td>last 8 weeks</td></tr>
+            <tr><td>Last week's summary entry and its next steps</td><td>first 4,000 characters, plus 600 per pillar</td></tr>
+            <tr><td>Last week's key question</td><td>one line</td></tr>
+            <tr><td>Tasks done that week; tasks in Doing and To Do</td><td>up to 40 done; up to 30 each in Doing and To Do</td></tr>
+            <tr><td>Open and recently kept goal clashes</td><td>last 8 weeks</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <p><b>What it does not read:</b> memories, the vector search, or diary entries from earlier weeks. The look back only sees the one week, plus last week's summary as the bridge.</p>
+      </div>
+      <h3>The five AI calls</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Step</th><th>What it produces</th><th>Answer length cap</th></tr></thead>
+          <tbody>
+            <tr><td>Opening</td><td>A short recap of the week and tap-to-answer options</td><td class="num">1,600 tokens</td></tr>
+            <tr><td>Coach</td><td>One reply per chat turn, streamed; sees the last 40 turns</td><td class="num">400 tokens</td></tr>
+            <tr><td>Close</td><td>Draft scores (authenticity, achievement) and trajectory</td><td class="num">1,200 tokens</td></tr>
+            <tr><td>Memo</td><td>The weekly summary entry, streamed</td><td class="num">2,600 tokens</td></tr>
+            <tr><td>Check (look forward)</td><td>Up to 3 clashes between next week's goals</td><td class="num">700 tokens</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3>Which model answers</h3>
+      <p>The first one that is configured wins:</p>
+      <ol class="flow">
+        <li><div><b>OpenRouter</b>, if an OpenRouter key is set. Default model <code>openai/gpt-6.1-sol</code>, the most accurate in the October 2026 review eval, with zero data retention.</div></li>
+        <li><div><b>Anthropic</b>, if an Anthropic key is set. Default <code>claude-sonnet-5-5</code>.</div></li>
+        <li><div><b>Workers AI</b> otherwise: <code>@cf/meta/llama-3.3-70b-instruct-fp8-fast</code>, with the smaller 12,000-character diary budget.</div></li>
+      </ol>
+      <p>Per <code>docs/planning-cockpit-goals-review.md</code>, the OpenRouter key is set on dev only, so live runs on Workers AI. If the AI fails, the page falls back to its own drafts.</p>
+      <h3>Where the results go</h3>
+      <ul>
+        <li>Work in progress autosaves to <code>planner_review</code>, so you can leave and come back.</li>
+        <li>Finishing look back writes a normal diary entry tagged <code>#vault-summary</code>, and the scores, question and verdict to <code>planner_week</code>.</li>
+        <li>Finishing look forward saves next week's goals, links tasks to them and reorders To Do with the plan on top. Each step is recorded, so pressing it twice never creates a task twice.</li>
+      </ul>
+      <p class="where">Code: <code>packages/domain/src/planner/review-context.ts</code>, <code>review-prompts.ts</code>, <code>review.ts</code>; <code>apps/worker/src/routes/planner-review-ai.ts</code>, <code>planner-goals-api.ts</code>; page <code>apps/web/src/planner/review-page.tsx</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="cockpit">
+      <h2>Cockpit and task history <span class="chip fork">fork</span></h2>
+      <p>
+        The cockpit at <code>/cockpit</code> is one board built on top of the original FlareMo tasks.
+        A task's title, status, priority, due date and notes stay in the upstream <code>tasks</code>
+        table. Everything the cockpit adds (start date, effort, position on the board, goal, comments)
+        sits next to it in fork tables, joined by task id, so an upstream update can't break it.
+      </p>
+      <div class="board" aria-label="Board columns">
+        <div><b>Backlog</b>To do, not yet planned</div>
+        <div><b>To Do</b>To do, planned</div>
+        <div><b>Doing</b>In progress</div>
+        <div><b>Done</b>Last 14 days shown</div>
+      </div>
+      <p>Dropped tasks sit in their own list and stop raising overdue alerts. Dragging a card writes a single position key, so reordering stays cheap.</p>
+      <h3>The history archive (the data flywheel)</h3>
+      <p>
+        <code>planner_task_event</code> is a permanent log of everything that happens to a task:
+        created, planned, moved, effort or date changed, commented, dropped, deleted, restored and purged.
+        It has no hard link to the tasks table, so when a task is purged from the bin its history stays.
+        The purge event keeps a copy of the task's title and project name.
+      </p>
+      <div class="callout fork">
+        <p><b>Rule:</b> never weaken this archive. Comment events store only the comment id, never its text. Moving a card's position writes no event.</p>
+      </div>
+      <p>
+        History is gathered by comparing the tasks table with a snapshot (<code>planner_task_seen</code>)
+        each time the cockpit opens (at most every 30 seconds), and twice a night: once before and
+        once after the bin is emptied, so a purge is always recorded.
+      </p>
+      <p class="where">Code: <code>packages/domain/src/planner/</code> (columns, board-rank, plans, history-sync); <code>apps/worker/src/routes/planner-api.ts</code>; page <code>apps/web/src/planner/cockpit-page.tsx</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="goals">
+      <h2>Goals <span class="chip fork">fork</span></h2>
+      <p>Goals live in <code>planner_goal</code> and form a cascade, each level crossed with four pillars (stored as <code>of</code>, <code>work</code>, <code>ai</code>, <code>health</code>):</p>
+      <div class="cascade" aria-label="Goal levels">
+        <span>North star</span><i>→</i><span>Year</span><i>→</i><span>Quarter</span><i>→</i><span>Month</span><i>→</i><span>Week</span>
+      </div>
+      <p>
+        Each goal has a title, a few lines of detail, a status (draft, active, contested, closed) and,
+        once closed, a result (met, partial, missed). A task serves a goal through its <code>goal_id</code>.
+        Reviewed weeks and their scores live in <code>planner_week</code>; goal clashes found by the
+        check live in <code>planner_goal_flag</code>. The goals page is at <code>/goals</code>.
+      </p>
+      <p class="where">Code: <code>packages/domain/src/planner/goals.ts</code>; migration <code>migrations/9005_planner_goals_review.sql</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="nightly">
+      <h2>Nightly jobs</h2>
+      <p>Every day at 03:17 UTC the Worker runs one housekeeping pass, in this order. A failure in one step never stops the others.</p>
+      <ol class="flow">
+        <li><div>Run any queued data exports and team-member removals.</div></li>
+        <li><div>Send pending webhooks.</div></li>
+        <li><div>Memory upkeep: expire unanswered proposals after 14 days, re-check evidence, demote untouched "observed" memories after 90 days.</div></li>
+        <li><div>Dreaming pass, plus the Monday contradiction check.</div></li>
+        <li><div>Work through the semantic-index queue.</div></li>
+        <li><div>Clean up orphaned attachments (up to 10,000 a night).</div></li>
+        <li><div>Empty the bin of anything older than 30 days, with a planner history sync before and after.</div></li>
+        <li><div>Delete expired export files, rebuild the hourly writing heatmap.</div></li>
+        <li><div>Create "on this day" and overdue-task notifications.</div></li>
+      </ol>
+      <p class="where">Code: <code>apps/worker/src/scheduled-tasks.ts</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="access">
+      <h2>Login, apps and MCP</h2>
+      <p>
+        Login uses the Better Auth library. In the browser you get a cookie that the page script can't
+        read. Scripts, Memos phone apps and AI agents use a <b>personal access token</b> that starts
+        with <code>memos_pat_</code>; each one can be revoked and expires within a year at most.
+        Public sign-up is off. This is a single-user install.
+      </p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Door</th><th>Used by</th><th>What it can do</th></tr></thead>
+          <tbody>
+            <tr><td><code>/api/app/*</code></td><td>The web app</td><td>Everything the app shows</td></tr>
+            <tr><td><code>/api/v1/*</code></td><td>Memos phone and desktop apps</td><td>Read and write entries the way the Memos app expects</td></tr>
+            <tr><td><code>/mcp</code></td><td>AI agents</td><td>22 tools: list, create, edit and delete entries, comments, links, reactions, attachments, saved filters</td></tr>
+            <tr><td><code>/memory/mcp</code></td><td>AI agents</td><td>7 tools: bootstrap, recall, remember, compile, checkpoint, link, forget</td></tr>
+            <tr><td><code>/share/…</code></td><td>Anyone with the link</td><td>Read one shared entry</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>All requests share a rate limit of 30 per minute per bucket. Writes made with a cookie must come from the app's own address.</p>
+      <p class="where">Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>, <code>routes/mcp/</code>, <code>routes/memory-mcp.ts</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="fork">
+      <h2>Fork rules</h2>
+      <p>
+        This repo is a fork of <code>realchendahuang/FlareMo</code> and pulls in its updates regularly.
+        To keep that painless, fork code lives in its own folders and upstream files only get the
+        smallest possible hook into it.
+      </p>
+      <div class="two">
+        <div class="card">
+          <h3>Fork-owned places</h3>
+          <ul>
+            <li><code>apps/web/src/planner/</code>, <code>apps/web/src/fork/</code></li>
+            <li><code>packages/domain/src/planner/</code></li>
+            <li><code>packages/contracts/src/fork-brand.ts</code>, <code>planner-*.ts</code></li>
+            <li><code>migrations/9xxx_*.sql</code>, <code>scripts/fork/</code></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>What the fork changes</h3>
+          <ul>
+            <li>The name "Schizo Diary", swapped in at display time</li>
+            <li>Team projects, Projects and Articles hidden from the sidebar (still reachable by URL)</li>
+            <li>The <code>#</code> tag picker with scroll and autocomplete</li>
+            <li>Cockpit, goals and weekly review</li>
+          </ul>
+        </div>
+      </div>
+      <p>Fork database changes only ever add things, never link to upstream tables, and use numbers from 9000 up. Small "wiring" tests fail if an upstream update drops one of the hooks.</p>
+      <p class="where">Full list with undo steps: <code>docs/fork-customizations.md</code>; cockpit design: <code>docs/planning-cockpit-implementation-plan.md</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="deploys">
+      <h2>Dev, prod and deploys</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th></th><th>Live (prod)</th><th>Dev</th></tr></thead>
+          <tbody>
+            <tr><td>Worker</td><td><code>flaremo</code></td><td><code>flaremo-dev</code></td></tr>
+            <tr><td>Address</td><td><code>flaremo.ulysse-ha-19.workers.dev</code></td><td>its own workers.dev address</td></tr>
+            <tr><td>Database</td><td>D1 <code>flaremo</code>, your real data</td><td>D1 <code>flaremo-dev</code>, a copy cloned from live</td></tr>
+            <tr><td>Files, vectors, queues</td><td>live set</td><td>separate dev set</td></tr>
+            <tr><td>Managed by</td><td><code>scripts/fork/prod-deploy.mjs</code></td><td><code>scripts/fork/dev-env.mjs</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Nothing deploys automatically when code is pushed. Changes go local, then dev, then you try them, then live only when you say "push to prod".</p>
+      <h3>What a live deploy does</h3>
+      <ol class="flow">
+        <li><div>Refuses unless the code is exactly what is on <code>main</code>.</div></li>
+        <li><div>Rebuilds the private config from the template plus the live settings (secrets are never printed).</div></li>
+        <li><div>Notes the current live version as the rollback target and saves a database Time Travel bookmark (kept 7 days on the free plan).</div></li>
+        <li><div>Counts rows in every table.</div></li>
+        <li><div>Applies new migrations, then deploys.</div></li>
+        <li><div>Counts again and loads the site. If any table lost rows or the site errors, it switches the Worker back to the previous version on its own.</div></li>
+      </ol>
+      <p>The dev clone copies live data table by table, replays any new migrations as a rehearsal, and fails if any row count doesn't match. Its safety guard only allows read commands against live.</p>
+      <p class="where">Details: <code>docs/fork-dev-environment.md</code>.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="next">
+      <h2>In progress</h2>
+      <ul>
+        <li><b>Health tracker</b> for gym, meditation and nights out. Being designed in its own thread; this page gets a section when it ships.</li>
+      </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="changelog">
+      <h2>Changelog</h2>
+      <p>One line per change to this page. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
+      <ul class="log">
+        <li><time>2026-10-13</time><span>First version, written from the code on main (4ca0c19) and live row counts.</span></li>
+      </ul>
+    </section>
+  </main>
+</div>
