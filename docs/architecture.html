@@ -274,7 +274,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-13 · describes main at commit 89c8569, live version 18</p>
+      <p class="meta">Last updated 2026-10-13 · describes main at commit 23d14d7, live version 19</p>
     </header>
 
     <!-- ============================================================ -->
@@ -820,7 +820,7 @@
             <text x="120" y="276" class="t-s">each goal: title · lines · draft / active / contested / closed · met / partial / missed</text>
           </svg>
         </div>
-        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".<br /><b>On dev (branch feat/goals-year-map):</b> the year page of <code>/goals</code> is now the Year map, this same grid on screen: pillars as columns, north star to weeks down one page. Goals line up by pillar and period (no parent link); weekly goals with no pillar get one row across the columns. A weekly goal opens a pop-up with its tasks and the goals above it.</figcaption>
+        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".<br /><b>Live since 2026-10-13 (version 19):</b> the year page of <code>/goals</code> is the Year map, this same grid on screen: pillars as columns, north star to weeks down one page. Goals line up by pillar and period (no parent link). A period's goals in one pillar share one split row, one part per goal, points as chips. Following a pillar shows only that pillar. Weekly goals with no pillar get one row across the columns. A weekly goal opens a pop-up with its tasks and the goals above it.</figcaption>
       </figure>
     </section>
 
@@ -1081,7 +1081,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
-        <li><b>Goals Year map</b> <span class="chip">fork</span>. On dev, not live. Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
+        <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
         <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
@@ -1094,6 +1094,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Shipped to live (version 19): Goals Year map, with pillar follow and split rows. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Goals Year map on the /goals year page (branch feat/goals-year-map; deployed to dev, not live). No migration.</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 18): edit a memo's created date and time. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Edit a memo's created date and time from the ⋯ menu (branch feat/edit-memo-created-time; dev first).</span></li>
