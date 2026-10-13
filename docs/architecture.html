@@ -257,6 +257,7 @@
       <li><a href="#review">Weekly review</a></li>
       <li><a href="#cockpit">Cockpit and history</a></li>
       <li><a href="#goals">Goals</a></li>
+      <li><a href="#health">Health tracker</a></li>
       <li><a href="#nightly">Nightly jobs</a></li>
       <li><a href="#access">Login, apps and MCP</a></li>
       <li><a href="#fork">Fork rules</a></li>
@@ -819,6 +820,51 @@
     </section>
 
     <!-- ============================================================ -->
+    <section id="health">
+      <h2>Health tracker <span class="chip">fork</span></h2>
+      <p><b>Pending, not on dev yet</b> (branch <code>feat/health-tracker</code>). Nothing new to type: every saved entry is read for training, breathwork and nights out, and the results become rows. No AI; fixed word rules.</p>
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 900 230" role="img" aria-label="Saving a diary entry runs the health reader, which writes rows to health_entry with a history row in health_entry_event. The week strip, the labels under each entry and the Health page read those rows. A nightly sweep re-reads entries from the last three days.">
+            <rect x="20" y="40" width="150" height="56" rx="8" class="n n-acc" />
+            <text x="95" y="64" text-anchor="middle" class="t-b">Diary entry</text>
+            <text x="95" y="82" text-anchor="middle" class="t-s">saved or edited</text>
+            <line x1="170" y1="68" x2="228" y2="68" class="a" marker-end="url(#ah)" />
+
+            <rect x="232" y="40" width="190" height="56" rx="8" class="n n-fork fill-fork" />
+            <text x="327" y="64" text-anchor="middle" class="t-b">Health reader</text>
+            <text x="327" y="82" text-anchor="middle" class="t-s">word rules, no AI</text>
+            <line x1="422" y1="68" x2="480" y2="68" class="a" marker-end="url(#ah)" />
+
+            <rect x="484" y="30" width="180" height="76" rx="8" class="n n-d1" />
+            <text x="574" y="54" text-anchor="middle" class="t-b t-m">health_entry</text>
+            <text x="574" y="72" text-anchor="middle" class="t-s">one row per kind per entry</text>
+            <text x="574" y="90" text-anchor="middle" class="t-s t-m">+ health_entry_event</text>
+            <line x1="664" y1="68" x2="722" y2="68" class="a" marker-end="url(#ah)" />
+
+            <rect x="726" y="20" width="160" height="30" rx="6" class="n" />
+            <text x="806" y="40" text-anchor="middle">Week strip</text>
+            <rect x="726" y="54" width="160" height="30" rx="6" class="n" />
+            <text x="806" y="74" text-anchor="middle">Labels on entries</text>
+            <rect x="726" y="88" width="160" height="30" rx="6" class="n" />
+            <text x="806" y="108" text-anchor="middle">Health page</text>
+
+            <rect x="232" y="140" width="190" height="44" rx="8" class="n n-soft dash" />
+            <text x="327" y="160" text-anchor="middle" class="t-b">Nightly sweep</text>
+            <text x="327" y="176" text-anchor="middle" class="t-s">last 3 days, gone entries</text>
+            <line x1="327" y1="140" x2="327" y2="100" class="a dash" marker-end="url(#ah)" />
+
+            <text x="484" y="150" class="t-s">training: sessions · split · target 3 a week</text>
+            <text x="484" y="170" class="t-s">breath: minutes · days of 7 · target 7</text>
+            <text x="484" y="190" class="t-s">night out: home after midnight · ½ to 03:00, 1 after</text>
+            <text x="484" y="210" class="t-s">budget 12 units a year · × on a label is remembered</text>
+          </svg>
+        </div>
+        <figcaption>Tables: <code>health_entry</code>, <code>health_entry_event</code> (append-only), <code>health_target</code>, <code>health_sync_state</code> (migration <code>9010_planner_health.sql</code>). The first visit to the Health page reads the whole diary once. Not read by the weekly review yet (on hold). Code: <code>packages/domain/src/health/</code>, <code>apps/web/src/health/</code>, API <code>/api/app/health-tracker</code>. Page: <code>/health</code>. Guide: <code>docs/fork-health-tracker.md</code>.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================================================ -->
     <section id="nightly">
       <h2>Nightly jobs</h2>
       <p>One housekeeping pass at 03:17 UTC, in this order. One failing step doesn't stop the rest.</p>
@@ -1010,7 +1056,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
-        <li><b>Health tracker</b> for gym, meditation and nights out. In design; gets a section when it ships.</li>
+        <li><b>Health tracker</b> <span class="chip">fork</span>. Built, not on dev yet (branch <code>feat/health-tracker</code>). See <a href="#health">Health tracker</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. On dev only, not merged (branch <code>hide-wander-on-this-day</code>). Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>. Moves into <a href="#fork">Fork rules</a> when merged.</li>
         <li><b>Long entries no longer look cut off</b>. Pending, not on dev yet (branch <code>fix/memo-expand-cutoff</code>). The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
       </ul>
@@ -1021,6 +1067,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Health tracker: new section (built, pending on branch feat/health-tracker).</span></li>
         <li><time>2026-10-13</time><span>Cockpit and goals: noted the week-goal picker on tasks (pending on dev).</span></li>
         <li><time>2026-10-13</time><span>In progress: dropped the raw-logs item; added the expanded-entry height fix (pending).</span></li>
         <li><time>2026-10-13</time><span>Redrawn diagram-first: every section is now a figure with a short caption. Added the UTC week boundary.</span></li>
