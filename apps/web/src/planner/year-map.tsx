@@ -47,6 +47,7 @@ import {
   type PlannerMapMark,
   type PlannerMapWeek,
   type PlannerYearMapData,
+  plannerGoalParts,
   plannerGoalTasks,
   plannerMapInitialWeeks,
   plannerMapIsEmpty,
@@ -145,17 +146,17 @@ export function PlannerYearMap({
         cell(
           pillar,
           goals.byPillar[pillar].length ? (
-            goals.byPillar[pillar].map((goal) => (
-              <MapUnit
-                current={current}
-                goal={goal}
-                key={goal.id}
-                mark={plannerMapMark(goal)}
-                strings={strings}
-                strong={strong}
-                onClick={() => onEdit({ kind: "edit", goal })}
-              />
-            ))
+            <Split current={current} strong={strong}>
+              {goals.byPillar[pillar].map((goal) => (
+                <MapUnit
+                  goal={goal}
+                  key={goal.id}
+                  mark={plannerMapMark(goal)}
+                  strings={strings}
+                  onClick={() => onEdit({ kind: "edit", goal })}
+                />
+              ))}
+            </Split>
           ) : (
             <button
               aria-label={`${strings.editor.add} · ${strings.pillar[pillar]}`}
@@ -172,19 +173,17 @@ export function PlannerYearMap({
       {!follow && goals.loose.length > 0 && (
         <>
           <span />
-          <div className="planner-span planner-loose">
+          <Split current={current} span strong={strong}>
             {goals.loose.map((goal) => (
               <MapUnit
-                current={current}
                 goal={goal}
                 key={goal.id}
                 mark={plannerMapMark(goal)}
                 strings={strings}
-                strong={strong}
                 onClick={() => onEdit({ kind: "edit", goal })}
               />
             ))}
-          </div>
+          </Split>
         </>
       )}
     </>
@@ -228,15 +227,19 @@ export function PlannerYearMap({
     );
     const weekUnit = (goal: PlannerGoalDto) => (
       <MapUnit
-        current={week.kind === "now"}
         goal={goal}
         key={goal.id}
         label={strings.map.tasksFor(plannerGoalText(goal))}
         mark={plannerMapMark(goal, progress(goal))}
         strings={strings}
-        strong={false}
         onClick={() => setPopGoal(goal)}
       />
+    );
+    const now = week.kind === "now";
+    const split = (goals: PlannerGoalDto[], span = false) => (
+      <Split current={now} span={span} strong={false}>
+        {goals.map(weekUnit)}
+      </Split>
     );
     const label = (
       <Link
@@ -269,7 +272,7 @@ export function PlannerYearMap({
       return (
         <Fragment key={week.monday}>
           {label}
-          {cell(follow, mine.map(weekUnit))}
+          {cell(follow, split(mine))}
         </Fragment>
       );
     }
@@ -280,21 +283,21 @@ export function PlannerYearMap({
         {hasPillarGoal ? (
           <>
             {plannerPillars.map((pillar) =>
-              cell(pillar, week.goals.byPillar[pillar].map(weekUnit)),
+              cell(
+                pillar,
+                week.goals.byPillar[pillar].length > 0 &&
+                  split(week.goals.byPillar[pillar]),
+              ),
             )}
             {week.goals.loose.length > 0 && (
               <>
                 <span />
-                <div className="planner-span planner-loose">
-                  {week.goals.loose.map(weekUnit)}
-                </div>
+                {split(week.goals.loose, true)}
               </>
             )}
           </>
         ) : (
-          <div className="planner-span planner-loose">
-            {week.goals.loose.map(weekUnit)}
-          </div>
+          split(week.goals.loose, true)
         )}
       </Fragment>
     );
@@ -527,25 +530,49 @@ function markText(
   }
 }
 
-/** A goal on the map: a dot, its text in up to two lines, and its mark. */
+/**
+ * A period's goals in one objective: one row split into equal parts, one per
+ * goal. Year and quarter rows are coloured; the current month and week are
+ * outlined. `span` lays it across the four columns (goals with no objective).
+ */
+function Split({
+  strong,
+  current,
+  span = false,
+  children,
+}: {
+  strong: boolean;
+  current: boolean;
+  span?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn("planner-split", span && "planner-span is-span")}
+      data-current={current || undefined}
+      data-strong={strong || undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** One part of a split row: a dot, the goal's heading, its mark, its points as chips. */
 function MapUnit({
   goal,
   mark,
-  strong,
-  current,
   label,
   strings,
   onClick,
 }: {
   goal: PlannerGoalDto;
   mark: PlannerMapMark | null;
-  strong: boolean;
-  current: boolean;
   label?: string;
   strings: PlannerGoalsStrings;
   onClick: () => void;
 }) {
   const text = plannerGoalText(goal);
+  const { head, points } = plannerGoalParts(goal);
   const shown = mark ? markText(mark, strings) : null;
   const hint = [text, shown?.label, goal.note].filter(Boolean).join("\n");
   return (
@@ -554,18 +581,35 @@ function MapUnit({
         .filter(Boolean)
         .join(", ")}
       className={cn("planner-u", plannerPillarClass(goal.pillar))}
-      data-current={current || undefined}
-      data-strong={strong || undefined}
       data-testid="planner-goal"
       title={hint}
       type="button"
       onClick={onClick}
     >
-      <i aria-hidden="true" className="planner-dot" />
-      <span className="planner-u-t">{text}</span>
-      {shown && (
-        <span aria-hidden="true" className="planner-u-m" data-kind={mark?.kind}>
-          {shown.text}
+      <span className="planner-u-h">
+        <i aria-hidden="true" className="planner-dot" />
+        <span className="planner-u-t">{head}</span>
+        {shown && (
+          <span
+            aria-hidden="true"
+            className="planner-u-m"
+            data-kind={mark?.kind}
+          >
+            {shown.text}
+          </span>
+        )}
+      </span>
+      {points.length > 0 && (
+        <span aria-hidden="true" className="planner-chips">
+          {points.map((point) => (
+            <span
+              className="planner-chip"
+              data-struck={point.struck || undefined}
+              key={point.text}
+            >
+              {point.text}
+            </span>
+          ))}
         </span>
       )}
     </button>

@@ -1,6 +1,7 @@
 import type { PlannerBoardCard, PlannerGoalDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  plannerGoalParts,
   plannerGoalTasks,
   plannerMapInitialWeeks,
   plannerMapMark,
@@ -208,5 +209,35 @@ describe("plannerGoalTasks", () => {
       plannerGoalTasks(weekWork.id, board).map((task) => task.card),
     ).toEqual([doing, done]);
     expect(plannerGoalTasks(weekWork.id, undefined)).toEqual([]);
+  });
+});
+
+describe("plannerGoalParts", () => {
+  it("heads a split part with the title and turns the points into chips", () => {
+    expect(
+      plannerGoalParts({
+        title: "Ship the beta",
+        lines: [
+          { text: "Fix login" },
+          { text: " ", struck: false },
+          { text: "Demo", struck: true },
+        ],
+      }),
+    ).toEqual({
+      head: "Ship the beta",
+      points: [
+        { text: "Fix login", struck: false },
+        { text: "Demo", struck: true },
+      ],
+    });
+  });
+
+  it("leads with the first point when a goal has no title", () => {
+    expect(
+      plannerGoalParts({
+        title: "",
+        lines: [{ text: "One" }, { text: "Two" }],
+      }),
+    ).toEqual({ head: "One", points: [{ text: "Two", struck: false }] });
   });
 });

@@ -262,3 +262,22 @@ export function plannerMapPath(
   }
   return [];
 }
+
+/**
+ * A goal as a part of a split row: its heading, and its points as chips. A
+ * goal with no title leads with its first point.
+ */
+export function plannerGoalParts(
+  goal: Pick<PlannerGoalDto, "title" | "lines">,
+): {
+  head: string;
+  points: Array<{ text: string; struck: boolean }>;
+} {
+  const points = goal.lines
+    .filter((line) => line.text.trim())
+    .map((line) => ({ text: line.text.trim(), struck: line.struck ?? false }));
+  const title = goal.title.trim();
+  if (title) return { head: title, points };
+  const [first, ...rest] = points;
+  return { head: first?.text ?? "", points: rest };
+}

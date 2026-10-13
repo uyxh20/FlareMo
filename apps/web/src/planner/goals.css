@@ -587,9 +587,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
     transform 0.12s,
     border-color 0.12s;
 }
-button.planner-u:hover {
-  border-color: var(--planner-p, var(--foreground));
-}
 .planner-u .planner-dot {
   width: 7px;
   height: 7px;
@@ -620,24 +617,99 @@ button.planner-u:hover {
 .planner-u-m[data-kind="contested"] {
   color: var(--warning);
 }
-.planner-u[data-strong] {
+/*
+ * A split row: one period's goals in one objective, one equal part per goal,
+ * points as chips under each heading. Same rule at year, quarter, month and
+ * week. All four objectives side by side leave too little width, so there the
+ * parts stack; following one objective, or across the columns, they sit side
+ * by side.
+ */
+.planner-split {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.planner-ymap.is-following .planner-split,
+.planner-split.is-span {
+  flex-direction: row;
+}
+.planner-split > .planner-u {
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.planner-split > .planner-u + .planner-u {
+  border-top: 1px solid var(--border);
+}
+.planner-ymap.is-following .planner-split > .planner-u + .planner-u,
+.planner-split.is-span > .planner-u + .planner-u {
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
+.planner-split > button.planner-u:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.planner-u-h {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.planner-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.planner-chip {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--planner-p, var(--border)) 35%, var(--border));
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+.planner-chip[data-struck] {
+  text-decoration: line-through;
+}
+.planner-split[data-strong] {
   border-color: color-mix(in oklab, var(--planner-p) 60%, var(--border));
   background: color-mix(in oklab, var(--planner-p) 24%, var(--card));
+}
+.planner-split[data-strong] > .planner-u {
   padding: 9px 11px;
   font-size: 13.5px;
 }
-.planner-u[data-strong] .planner-u-t {
+.planner-split[data-strong] > .planner-u + .planner-u {
+  border-color: color-mix(in oklab, var(--planner-p) 45%, var(--border));
+}
+.planner-split[data-strong] .planner-u-t {
   font-weight: 650;
 }
-.planner-u[data-strong] .planner-dot {
+.planner-split[data-strong] .planner-dot {
   width: 10px;
   height: 10px;
 }
-.planner-u[data-strong] .planner-u-m {
+.planner-split[data-strong] .planner-u-m {
   color: var(--foreground);
   opacity: 0.8;
 }
-.planner-u[data-current] {
+.planner-split[data-strong] .planner-chip {
+  border-color: color-mix(in oklab, var(--planner-p) 55%, var(--border));
+  color: var(--foreground);
+}
+.planner-split[data-current] {
   border-color: var(--brand-500);
 }
 .planner-u-add {
