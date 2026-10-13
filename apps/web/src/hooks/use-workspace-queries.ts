@@ -15,8 +15,8 @@ import {
   type Task,
 } from "@/api";
 import type { ExplorerView as ViewMode } from "@/components/flaremo-explorer";
-import { todayKey } from "@/lib/calendar-date";
 import { forkOnThisDayBannerHidden } from "@/fork/sidebar-nav";
+import { todayKey } from "@/lib/calendar-date";
 import { viewToMemoState } from "@/lib/memo-cache";
 import { queryKeys } from "@/lib/query-keys";
 import { ACTIVITY_WINDOW_DAYS } from "@/lib/time-horizon";
