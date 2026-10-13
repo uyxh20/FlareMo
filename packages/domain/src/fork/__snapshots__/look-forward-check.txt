@@ -7,11 +7,11 @@ Check Owner's plan for Week 41 (5–11 October 2026) against their goal cascade.
 The plan:
 - Work (work): "Ship the beta". Tasks: Write docs
 
-Goal cascade:
+Goal cascade for W41:
 North star: not written
-Year: Work: Grow ZqplannergoalProbe
-Quarter: none written
-Month: none written
+Year 2026: Work: Grow ZqplannergoalProbe
+Quarter Q4 2026: none written
+Month October: none written
 
 Owner already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:
 - Work weekly goal against Year · Work: Pulls against ZqplannergoalflagProbe. Kept for now in an earlier review.

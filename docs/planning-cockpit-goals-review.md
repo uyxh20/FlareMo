@@ -54,7 +54,7 @@ Two parts, done in any order and left at any point. The page saves where the rev
 
 The model drafts answer options first and coaches in the chat as the owner answers. The side panel shows 19 weeks of both scores against their floors, and what has been answered so far.
 
-Look back ends in the summary memo. It streams into a sheet with Stop, Write again, Copy markdown and Look forward, and is saved to the owner's memos as soon as it is finished:
+Look back ends in the summary memo. It streams into a sheet with Stop, then Edit, Write again, Copy markdown and Save. It is not saved until the owner presses Save, so they can edit the markdown first; the text they save is the one kept, and its Next Steps fill Look forward. After saving, the main button is Look forward, until the memo is edited again. Look forward from the chat opens the sheet while the memo is unsaved:
 
 - It has the same shape as the owner's past summaries (`packages/contracts/src/planner-review-memo.ts`) and carries the `vault-summary` tag.
 - There is one memo per week, keyed by its client id `weekly-review-summary:<Monday>`.
@@ -139,11 +139,15 @@ The full list, with each response type, is the comment block in `packages/contra
 
 **What the model reads**, each time a draft is asked for, comes from the owner's own data:
 
-- the goal cascade;
+- the goal cascade of the reviewed week, and for the conflict check the cascade of the week being planned (its own month, quarter and year, so a plan for the first week of November is checked against November's goals and one for the first week of a new year against that year's);
 - up to eight weeks of scores;
 - the previous summary's first 4,000 characters, and its Next Steps on their own, since they usually come later;
 - the week's tasks;
 - the week's diary entries, without the summaries: up to 40,000 characters, or 12,000 with Workers AI. Entries shorter than an even share stay whole and give the rest to the longer ones, which are cut to one length.
+- the health tracker's rows for the week (day, kind, variant, minutes, home time, units, bender, a short "feel" note) and its totals against the targets, including the night-out units used this year (`plannerReadWeekHealth`);
+- the owner's live memories created or updated during the week, up to 25, most important first, with the ones the owner never confirmed marked (`plannerReadWeekMemories`).
+
+A week runs from Monday 00:00 to the next Monday 00:00 in the owner's zone (`FORK_HEALTH_TIME_ZONE`, Europe/Copenhagen), not in UTC: diary entries, finished tasks and memories are cut at local midnight (`plannerWeekInstants`), and each entry is dated by its local day.
 
 The context opens with rules for reading it, one for each kind of invented fact the model eval found: only what this week's material says happened is an event, an entry's day is when it was written and not always the day it describes, numbers are copied and never totalled, and #tags are not names. When the owner changes a drafted score, the memo is told which scores the drafts were written for and writes the basis afresh.
 

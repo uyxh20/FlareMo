@@ -231,6 +231,36 @@ export function healthLocalMoment(
   };
 }
 
+/**
+ * The instant local midnight starts `day` in FORK_HEALTH_TIME_ZONE, as an ISO
+ * timestamp (`2026-09-27T22:00:00.000Z` for 28 September in Copenhagen). It is
+ * how a local week or day is cut out of UTC `created_at` columns. Daylight
+ * saving is handled by checking the zone's offset at the guess and again at the
+ * answer.
+ */
+export function healthLocalDayStart(
+  day: string,
+  timeZone: string = FORK_HEALTH_TIME_ZONE,
+): string {
+  const midnightUtc = requireDay(day).getTime();
+  const offsetAt = (instant: number) => {
+    const local = healthLocalMoment(new Date(instant), timeZone);
+    const wall = Date.UTC(
+      Number(local.day.slice(0, 4)),
+      Number(local.day.slice(5, 7)) - 1,
+      Number(local.day.slice(8, 10)),
+      local.hour,
+      local.minute,
+    );
+    // Seconds are not in the formatter's parts; zones have whole-minute offsets.
+    return wall - Math.floor(instant / 60_000) * 60_000;
+  };
+  let instant = midnightUtc - offsetAt(midnightUtc);
+  const second = midnightUtc - offsetAt(instant);
+  if (second !== instant) instant = second;
+  return new Date(instant).toISOString();
+}
+
 // --- HTTP API --------------------------------------------------------------
 
 export const healthKindSchema = z.enum(healthKinds);

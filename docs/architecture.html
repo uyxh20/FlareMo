@@ -620,10 +620,10 @@
     <!-- ============================================================ -->
     <section id="review">
       <h2>Weekly review <span class="chip">fork</span></h2>
-      <p>Look back chats about the week and writes a summary. Look forward turns goals into a plan. Weekends review this week, weekdays last week. A week runs Monday 00:00 to Monday 00:00 <b>UTC</b>, not your local time.</p>
+      <p>Look back chats about the week and writes a summary. Look forward turns goals into a plan. Weekends review this week, weekdays last week. A week runs Monday 00:00 to Monday 00:00 in <b>your own time</b> (Copenhagen), so a note written at 00:30 on Monday counts for the new week.</p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 380" role="img" aria-label="Each AI call gets this week's diary capped at 40,000 or 12,000 characters, goals, 8 weeks of scores, last week's summary and question, tasks and goal clashes. It does not get memories, vectors or older weeks. Five kinds of call with answer caps from 400 to 2,600 tokens.">
+          <svg viewBox="0 0 900 460" role="img" aria-label="Each AI call gets this week's diary capped at 40,000 or 12,000 characters, goals, 8 weeks of scores, last week's summary and question, tasks, goal clashes, the week's health tracker rows against the targets, and memories made or changed that week. It does not get vectors, task notes or older weeks. Five kinds of call with answer caps from 400 to 2,600 tokens.">
             <text x="20" y="20" class="t-s t-m">WHAT THE AI READS · rebuilt on every call</text>
             <rect x="20" y="32" width="330" height="54" rx="8" class="n n-acc fill-acc" />
             <text x="34" y="54" class="t-b">This week's diary</text>
@@ -638,15 +638,20 @@
             <text x="34" y="236">Tasks: 40 done · 30 Doing · 30 To Do</text>
             <rect x="20" y="254" width="330" height="34" rx="8" class="n" />
             <text x="34" y="276">Goal clashes, last 8 weeks</text>
+            <rect x="20" y="294" width="330" height="34" rx="8" class="n n-acc" />
+            <text x="34" y="316">Health tracker: the week vs targets</text>
+            <rect x="20" y="334" width="330" height="34" rx="8" class="n n-acc" />
+            <text x="34" y="356">Memories made or changed, ≤ 25</text>
 
-            <rect x="20" y="310" width="330" height="54" rx="8" class="n n-warn dash" />
-            <text x="34" y="332" class="t-b t-warn">Not read</text>
-            <text x="34" y="352" class="t-s">memories · vector search · earlier weeks</text>
+            <rect x="20" y="390" width="330" height="54" rx="8" class="n n-warn dash" />
+            <text x="34" y="412" class="t-b t-warn">Not read</text>
+            <text x="34" y="432" class="t-s">vector search · task notes · earlier weeks</text>
 
             <path d="M 350 59 C 390 59, 380 160, 410 160" class="a" />
             <path d="M 350 111 C 380 111, 390 160, 410 160" class="a" />
             <path d="M 350 191 C 380 191, 390 160, 410 160" class="a" />
             <path d="M 350 271 C 390 271, 380 160, 410 160" class="a" />
+            <path d="M 350 331 C 395 331, 380 160, 410 160" class="a" />
             <line x1="408" y1="160" x2="426" y2="160" class="a" marker-end="url(#ah)" />
 
             <rect x="430" y="118" width="140" height="84" rx="12" class="n n-ai" />
@@ -673,7 +678,7 @@
             <text x="700" y="349" class="t-s">12,000 · Workers AI (live)</text>
           </svg>
         </div>
-        <figcaption>Bars are to scale. Short entries stay whole; long ones are cut evenly with "…" until the week fits. Nothing is cached between calls.</figcaption>
+        <figcaption>Bars are to scale. Short entries stay whole; long ones are cut evenly with "…" until the week fits. Nothing is cached between calls. The goal check reads the goals of the week being planned (its own month, quarter and year), not of the week reviewed.</figcaption>
       </figure>
       <figure>
         <div class="fig">
@@ -698,9 +703,9 @@
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 150" role="img" aria-label="Finishing look back writes a summary diary entry and the week's scores. Finishing look forward saves next week's goals, links tasks and reorders To Do.">
+          <svg viewBox="0 0 900 150" role="img" aria-label="Saving look back writes the summary diary entry, as you edited it, and the week's scores. Finishing look forward saves next week's goals, links tasks and reorders To Do.">
             <rect x="20" y="20" width="170" height="48" rx="24" class="n n-acc" />
-            <text x="105" y="49" text-anchor="middle" class="t-b">Finish look back</text>
+            <text x="105" y="49" text-anchor="middle" class="t-b">Save summary</text>
             <line x1="190" y1="44" x2="236" y2="44" class="a" marker-end="url(#ah)" />
             <rect x="240" y="20" width="300" height="48" rx="8" class="n n-d1" />
             <text x="254" y="40" class="t-b">Summary entry</text>
@@ -720,7 +725,7 @@
             <text x="694" y="117" class="t-b">To Do reordered</text>
           </svg>
         </div>
-        <figcaption>Work in progress autosaves to <code>planner_review</code>. Each step is logged, so finishing twice never creates a task twice. Code: <code>packages/domain/src/planner/review*.ts</code>, <code>apps/worker/src/routes/planner-review-ai.ts</code>.</figcaption>
+        <figcaption>The summary is written, then waits: you can edit its text before pressing Save, and what you save is what is kept. Work in progress autosaves to <code>planner_review</code>. Each step is logged, so finishing twice never creates a task twice. Code: <code>packages/domain/src/planner/review*.ts</code>, <code>apps/worker/src/routes/planner-review-ai.ts</code>.</figcaption>
       </figure>
     </section>
 
@@ -865,7 +870,7 @@
             <text x="484" y="210" class="t-s">budget 12 units a year · × on a label is remembered</text>
           </svg>
         </div>
-        <figcaption>Tables: <code>health_entry</code>, <code>health_entry_event</code> (append-only), <code>health_target</code>, <code>health_sync_state</code> (migration <code>9010_planner_health.sql</code>). The first visit to the Health page reads the whole diary once. Not read by the weekly review yet (on hold). Code: <code>packages/domain/src/health/</code>, <code>apps/web/src/health/</code>, API <code>/api/app/health-tracker</code>. Page: <code>/health</code>. Guide: <code>docs/fork-health-tracker.md</code>.</figcaption>
+        <figcaption>Tables: <code>health_entry</code>, <code>health_entry_event</code> (append-only), <code>health_target</code>, <code>health_sync_state</code> (migration <code>9010_planner_health.sql</code>). The first visit to the Health page reads the whole diary once. Read by the weekly review: the week's rows and totals against the targets (not the change history). Code: <code>packages/domain/src/health/</code>, <code>apps/web/src/health/</code>, API <code>/api/app/health-tracker</code>. Page: <code>/health</code>. Guide: <code>docs/fork-health-tracker.md</code>.</figcaption>
       </figure>
       <figure>
         <div class="fig" style="padding: 16px 18px;">
@@ -1084,6 +1089,7 @@
         <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
         <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
+        <li><b>Weekly review: health, memories, edit before saving</b> <span class="chip">fork</span>. On branch <code>feat/review-health-memories-edit</code>, dev first. The review reads the health tracker and the week's memories, cuts the week at local midnight, checks the plan against next week's own month and year, and lets you edit the summary before saving. See <a href="#review">Weekly review</a>.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
         <li><b>Long entries no longer look cut off</b>. Live since 2026-10-13. The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
       </ul>
@@ -1094,6 +1100,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Weekly review: reads health and memories, week cut at local midnight, look forward checks the plan week's goals, summary editable before saving (branch feat/review-health-memories-edit; dev first).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 19): Goals Year map, with pillar follow and split rows. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Goals Year map on the /goals year page (branch feat/goals-year-map; deployed to dev, not live). No migration.</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 18): edit a memo's created date and time. No migration; row counts unchanged.</span></li>

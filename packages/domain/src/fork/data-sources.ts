@@ -312,8 +312,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds:
       "Memories: facts, preferences and patterns extracted about the owner",
     uses: {
-      lookBack: gap(
-        "the review does not read memories, so it cannot use what the app already knows",
+      lookBack: yes(
+        "live memories created or updated in the reviewed week (local days), up to 25, most important first, unconfirmed ones marked",
       ),
       lookForward: gap(
         "the goal check does not read memories (preferences, constraints)",
@@ -674,8 +674,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds:
       "Training sessions, breathwork and nights out, read from diary entries or fixed by hand",
     uses: {
-      lookBack: gap(
-        "on hold: the weekly review does not read the health tracker yet",
+      lookBack: yes(
+        "the reviewed week's rows (day, kind, variant, minutes, home time, units, bender, feel) and the totals against the targets",
       ),
       lookForward: no("the goal check reads goals only"),
       search: no(

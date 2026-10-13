@@ -795,17 +795,37 @@ function ReviewSession({
     }
     if (!alive.current) return;
     setMemoLive(null);
+    // Not saved yet: the owner reads it, edits it if they want, then saves.
     setBack((latest) => ({
       ...latest,
       memo,
       memoBy: by,
       memoStopped: stopped,
+      memoSaved: false,
     }));
     if (note) toast(note);
-    await saveLookBack(memo);
+  };
+
+  /** The owner changed the memo's text in the sheet; it is saved on Save. */
+  const editMemo = (memo: string) =>
+    setBack((latest) =>
+      latest.memo === memo ? latest : { ...latest, memo, memoSaved: false },
+    );
+
+  /** Saves the memo as it now reads, then stays in the sheet. */
+  const saveMemo = () => {
+    const memo = stateRef.current.back.memo ?? review.summary?.content ?? null;
+    if (memo?.trim()) void saveLookBack(memo);
   };
 
   const toLookForward = () => {
+    // A memo that was written or edited but not saved yet is saved first, in
+    // the sheet, where the owner can see it.
+    const current = stateRef.current.back;
+    if (current.memo && !current.memoSaved) {
+      setSheetOpen(true);
+      return;
+    }
     setSheetOpen(false);
     void navigate({
       search: { part: "forward", step: stateRef.current.forward.step },
@@ -1121,6 +1141,9 @@ function ReviewSession({
         memoBy={back.memoBy}
         open={sheetOpen}
         saveFailed={memoSaveFailed}
+        saved={
+          back.memoSaved || (!back.memo && Boolean(review.look_back_done_at))
+        }
         saving={memoSaving}
         stopped={back.memoStopped}
         strings={strings}
@@ -1130,10 +1153,8 @@ function ReviewSession({
           setSheetOpen(false);
         }}
         onLookForward={toLookForward}
-        onRetrySave={() => {
-          const memo = stateRef.current.back.memo;
-          if (memo) void saveLookBack(memo);
-        }}
+        onEdit={editMemo}
+        onSave={saveMemo}
         onStop={() => memoAbort.current?.abort()}
         onWriteAgain={() => void writeMemo(true)}
       />

@@ -1,5 +1,6 @@
 import { plannerSummaryMemoTag } from "@flaremo/contracts";
 import { XIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { plannerWeekNumber } from "./goals-model";
 import type { PlannerGoalsStrings } from "./goals-strings";
 import { PlannerBadge } from "./goals-ui";
@@ -15,8 +17,10 @@ import { PlannerMarkdown } from "./review-markdown";
 
 // The summary memo sheet of the weekly review (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): the memo as it streams in, with Stop
-// while the model writes, then Write again, Copy markdown and Look forward. The
-// memo is saved to the owner's memos as soon as it is finished.
+// while the model writes, then Edit, Write again, Copy markdown and Save. The
+// memo is saved to the owner's memos only when they press Save, so they can
+// edit it first; the text they save is what is kept. After that the main
+// button is Look forward, until the memo is edited again.
 
 /** "5 – 11 Oct" from two days written YYYY-MM-DD. */
 function dayRange(from: string, to: string, strings: PlannerGoalsStrings) {
@@ -58,13 +62,15 @@ export function PlannerMemoSheet({
   memoBy,
   stopped,
   canWriteAgain,
+  saved,
   saving,
   saveFailed,
   strings,
   onClose,
   onStop,
   onWriteAgain,
-  onRetrySave,
+  onEdit,
+  onSave,
   onLookForward,
 }: {
   open: boolean;
@@ -76,19 +82,29 @@ export function PlannerMemoSheet({
   memoBy: "model" | "page" | null;
   stopped: boolean;
   canWriteAgain: boolean;
+  /** The memo as shown is the one saved in the owner's memos. */
+  saved: boolean;
   saving: boolean;
   saveFailed: boolean;
   strings: PlannerGoalsStrings;
   onClose: () => void;
   onStop: () => void;
   onWriteAgain: () => void;
-  onRetrySave: () => void;
+  /** The owner changed the text. */
+  onEdit: (memo: string) => void;
+  onSave: () => void;
   onLookForward: () => void;
 }) {
   const text = strings.review.memo;
   const streaming = live !== null;
   const markdown = live ?? memo ?? "";
   const weekName = strings.week(plannerWeekNumber(week));
+  const [editing, setEditing] = useState(false);
+
+  // A new memo starts in the preview.
+  useEffect(() => {
+    if (streaming || !open) setEditing(false);
+  }, [streaming, open]);
 
   const copy = async () => {
     if (await copyText(markdown)) toast.success(text.copied);
@@ -144,37 +160,74 @@ export function PlannerMemoSheet({
               </Button>
             ) : (
               <>
-                {canWriteAgain && (
+                {canWriteAgain && !editing && (
                   <Button size="sm" variant="outline" onClick={onWriteAgain}>
                     {text.writeAgain}
                   </Button>
                 )}
-                {saveFailed && !saving && (
-                  <Button size="sm" variant="outline" onClick={onRetrySave}>
-                    {text.retry}
-                  </Button>
-                )}
                 <Button
-                  disabled={!markdown}
+                  data-testid="planner-memo-edit"
+                  disabled={!memo}
                   size="sm"
                   variant="outline"
-                  onClick={() => void copy()}
+                  onClick={() => setEditing((now) => !now)}
                 >
-                  {text.copy}
+                  {editing ? text.preview : text.edit}
                 </Button>
-                <Button
-                  disabled={saving || !memo}
-                  size="sm"
-                  onClick={onLookForward}
-                >
-                  {saving ? text.saving : strings.review.toLookForward}
-                </Button>
+                {!editing && (
+                  <Button
+                    disabled={!markdown}
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copy()}
+                  >
+                    {text.copy}
+                  </Button>
+                )}
+                {saved ? (
+                  <Button
+                    disabled={saving || !memo}
+                    size="sm"
+                    onClick={onLookForward}
+                  >
+                    {strings.review.toLookForward}
+                  </Button>
+                ) : (
+                  <Button
+                    data-testid="planner-memo-save"
+                    disabled={saving || !memo?.trim()}
+                    size="sm"
+                    onClick={() => {
+                      setEditing(false);
+                      onSave();
+                    }}
+                  >
+                    {saving ? text.saving : saveFailed ? text.retry : text.save}
+                  </Button>
+                )}
               </>
             )}
           </div>
         </div>
+        {!streaming && memo && !saved && (
+          <p
+            className="border-b border-border px-4 py-2 text-xs text-muted-foreground"
+            data-testid="planner-memo-unsaved"
+          >
+            {text.unsavedHint}
+          </p>
+        )}
         <div className="min-h-40 overflow-y-auto px-[18px] pt-4 pb-6 sm:px-7 sm:pt-5 sm:pb-7">
-          {markdown ? (
+          {editing && !streaming ? (
+            <Textarea
+              aria-label={text.editLabel}
+              autoFocus
+              className="min-h-[50dvh] font-mono text-[13px] leading-relaxed md:text-[13px]"
+              data-testid="planner-memo-editor"
+              value={memo ?? ""}
+              onChange={(event) => onEdit(event.target.value)}
+            />
+          ) : markdown ? (
             <PlannerMarkdown
               diaryLabel={(from, to) => text.diary(dayRange(from, to, strings))}
               live={streaming}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plannerFitDiary } from "./review-context";
+import { plannerFitDiary, plannerWeekInstants } from "./review-context";
 
 // Fitting the week's diary to the review model's budget (review-context.ts).
 
@@ -51,5 +51,25 @@ describe("fitting the diary to the budget", () => {
       4,
     );
     expect(emoji?.text).toBe("😀…");
+  });
+});
+
+describe("plannerWeekInstants", () => {
+  it("cuts a week at the owner's local midnight, through daylight saving", () => {
+    // Summer time (UTC+2) at both ends.
+    expect(plannerWeekInstants("2026-10-05")).toEqual({
+      from: "2026-10-04T22:00:00.000Z",
+      to: "2026-10-11T22:00:00.000Z",
+    });
+    // The clocks go back on Sunday 25 October: the week ends at UTC+1.
+    expect(plannerWeekInstants("2026-10-19")).toEqual({
+      from: "2026-10-18T22:00:00.000Z",
+      to: "2026-10-25T23:00:00.000Z",
+    });
+    // The clocks go forward on Sunday 29 March 2026.
+    expect(plannerWeekInstants("2026-03-23")).toEqual({
+      from: "2026-03-22T23:00:00.000Z",
+      to: "2026-03-29T22:00:00.000Z",
+    });
   });
 });

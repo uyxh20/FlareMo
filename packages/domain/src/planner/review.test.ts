@@ -4,6 +4,7 @@ import {
 } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ConflictError, ValidationError } from "../errors";
+import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import { plannerReadBoard } from "./board";
@@ -332,6 +333,129 @@ describe("the weekly review", () => {
         4, 25, 971,
       ]);
       expect(context.diary[2]?.text).toMatch(/^Long talk with Zeta\. .*…$/);
+    });
+
+    it("cuts the week at local midnight and reads the plan week's goals, health and memories", async () => {
+      // Week 44, 26 Oct to 1 Nov 2026 (Copenhagen is UTC+1 after 25 Oct),
+      // plans week 45 in November.
+      const W44 = "2026-10-26";
+      const entries: Array<[string, string]> = [
+        ["2026-10-25T22:30:00.000Z", "Sunday before, 23:30 local."],
+        ["2026-10-25T23:30:00.000Z", "Monday 00:30 local."],
+        ["2026-11-01T22:30:00.000Z", "Sunday 23:30 local."],
+        ["2026-11-01T23:30:00.000Z", "Next Monday 00:30 local."],
+      ];
+      for (const [at, content] of entries) {
+        const memo = await createMemo(rt.db, rt.user, {
+          content,
+          visibility: "private",
+          source: "web",
+        });
+        await plannerTestRun(
+          rt.database,
+          "UPDATE memos SET created_at = ? WHERE id = ?",
+          at,
+          memo.id,
+        );
+      }
+      for (const [periodStart, title] of [
+        ["2026-10-01", "October work"],
+        ["2026-11-01", "November work"],
+      ] as const) {
+        await plannerCreateGoal(rt.db, {
+          userId: rt.user.id,
+          goal: { level: "month", periodStart, pillar: "work", title },
+        });
+      }
+      await plannerTestRun(
+        rt.database,
+        `INSERT INTO health_entry (id, user_id, kind, day, variant, feel, source, created_at, updated_at)
+         VALUES ('h1', ?, 'training', '2026-10-27', 'crossfit', 'good pump', 'manual', ?, ?)`,
+        rt.user.id,
+        "2026-10-27T18:00:00.000Z",
+        "2026-10-27T18:00:00.000Z",
+      );
+      const memory = (content: string) =>
+        createMemory(
+          rt.db,
+          rt.user,
+          { type: "user" },
+          {
+            content,
+            type: "semantic",
+            kind: "preference",
+            scopeType: "global",
+            scopeKey: null,
+            tier: "normal",
+            importance: 60,
+            confidence: 80,
+          },
+        );
+      for (const [content, at] of [
+        ["Trains best in the morning", "2026-10-28T09:00:00.000Z"],
+        ["Likes long walks", "2026-10-01T09:00:00.000Z"],
+      ] as const) {
+        await memory(content);
+        await plannerTestRun(
+          rt.database,
+          "UPDATE memory_items SET created_at = ?, updated_at = ? WHERE content = ?",
+          at,
+          at,
+          content,
+        );
+      }
+
+      const context = await plannerReadReviewContext(rt.db, {
+        userId: rt.user.id,
+        ownerName: "Anon",
+        weekStart: W44,
+        today: "2026-11-01",
+      });
+      expect(context.diary.map((entry) => entry.text)).toEqual([
+        "Monday 00:30 local.",
+        "Sunday 23:30 local.",
+      ]);
+      expect(context.monthGoals.map((goal) => goal.title)).toEqual([
+        "October work",
+      ]);
+      expect(context.planCascade.month).toBe(10);
+      expect(context.planCascade.monthGoals.map((goal) => goal.title)).toEqual([
+        "November work",
+      ]);
+      expect(context.health?.summary.training.sessions).toBe(1);
+      expect(context.health?.entries[0]?.feel).toBe("good pump");
+      expect(context.memories.map((item) => item.content)).toEqual([
+        "Trains best in the morning",
+      ]);
+    });
+
+    it("reads next year's goals when the plan week is in a new year", async () => {
+      // Week 53 of 2026 (28 Dec to 3 Jan) belongs to 2026; week 1 of 2027 does not.
+      for (const periodStart of ["2026-01-01", "2027-01-01"]) {
+        await plannerCreateGoal(rt.db, {
+          userId: rt.user.id,
+          goal: {
+            level: "year",
+            periodStart,
+            pillar: "work",
+            title: `Work ${periodStart.slice(0, 4)}`,
+          },
+        });
+      }
+      const context = await plannerReadReviewContext(rt.db, {
+        userId: rt.user.id,
+        ownerName: "Anon",
+        weekStart: "2026-12-28",
+        today: "2027-01-03",
+      });
+      expect(context.yearGoals.map((goal) => goal.title)).toEqual([
+        "Work 2026",
+      ]);
+      expect(context.planCascade.year).toBe(2027);
+      expect(context.planCascade.quarter).toBe(1);
+      expect(context.planCascade.yearGoals.map((goal) => goal.title)).toEqual([
+        "Work 2027",
+      ]);
     });
 
     it("is due from Saturday to Monday until both parts are done", async () => {

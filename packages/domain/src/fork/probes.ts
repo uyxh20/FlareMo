@@ -162,6 +162,14 @@ export const PROBES: Record<string, Probe> = {
         confidence: 80,
       },
     );
+    // The review reads the memories made during the reviewed week.
+    await plannerTestRun(
+      p.rt.database,
+      "UPDATE memory_items SET created_at = ?, updated_at = ? WHERE user_id = ?",
+      IN_WEEK,
+      IN_WEEK,
+      p.user.id,
+    );
   },
   tasks: async (p) => {
     await insertTask(p, {

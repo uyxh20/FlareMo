@@ -1,4 +1,7 @@
 import {
+  type HealthEntryDto,
+  type HealthWeekSummary,
+  healthLocalDayStart,
   type PlannerGoalDto,
   type PlannerPillar,
   plannerAddDays,
@@ -13,7 +16,7 @@ import {
   plannerWeekMonthOf,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { memos, memoTags, tasks } from "@flaremo/db";
+import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
 import {
   plannerGoalFlag,
   plannerTaskPlan,
@@ -31,8 +34,10 @@ import {
   lt,
   ne,
   notInArray,
+  or,
   sql,
 } from "drizzle-orm";
+import { healthReadWeek } from "../health/read";
 import {
   plannerReadGoalsById,
   plannerReadNorthStar,
@@ -42,9 +47,29 @@ import {
 
 // What the weekly review's model reads (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): the goal cascade, recent scores, the
-// last summary, the week's tasks and the week's diary entries, read from the
+// last summary, the week's tasks, the week's diary entries, the week's health
+// tracker rows and the memories made or changed that week, read from the
 // owner's own data each time a draft is asked for. The prompts that use it are in
 // review-prompts.ts. Nothing here writes.
+//
+// A week runs from Monday 00:00 to the next Monday 00:00 in the owner's own
+// zone (FORK_HEALTH_TIME_ZONE), not in UTC: an entry written at 00:30 on Monday
+// in Copenhagen belongs to the new week even though it is still Sunday in UTC.
+
+/**
+ * The UTC instants a review week starts and ends at: the owner's local
+ * midnight on `weekStart` and seven days later, for comparing with UTC
+ * `created_at` and `completed_at` columns.
+ */
+export function plannerWeekInstants(weekStart: string): {
+  from: string;
+  to: string;
+} {
+  return {
+    from: healthLocalDayStart(weekStart),
+    to: healthLocalDayStart(plannerAddDays(weekStart, 7)),
+  };
+}
 
 /** A live memo's id and text. */
 export type PlannerMemoText = { id: string; content: string };
@@ -223,6 +248,7 @@ export async function plannerReadWeekDiary(
   input: { userId: string; weekStart: string; maxChars?: number },
 ): Promise<PlannerDiaryEntry[]> {
   const budget = input.maxChars ?? PLANNER_DIARY_CHARS_SMALL;
+  const week = plannerWeekInstants(input.weekStart);
   const summaries = db
     .select({ id: memoTags.memoId })
     .from(memoTags)
@@ -239,8 +265,8 @@ export async function plannerReadWeekDiary(
       and(
         eq(memos.userId, input.userId),
         LIVE_MEMO,
-        gte(memos.createdAt, input.weekStart),
-        lt(memos.createdAt, plannerAddDays(input.weekStart, 7)),
+        gte(memos.createdAt, week.from),
+        lt(memos.createdAt, week.to),
         ne(memos.source, plannerSummaryMemoSource),
         notInArray(memos.id, summaries),
       ),
@@ -249,6 +275,121 @@ export async function plannerReadWeekDiary(
     .limit(200)
     .all();
   return plannerFitDiary(rows, budget);
+}
+
+/** A memory made or changed during the week, as the review reads it. */
+export type PlannerWeekMemory = {
+  kind: string;
+  content: string;
+  /** Proposed by the memory layer and not confirmed by the owner yet. */
+  unconfirmed: boolean;
+};
+
+/** Memories the review reads per week, most important first. */
+export const PLANNER_MEMORY_MAX = 25;
+const MEMORY_CHARS = 280;
+
+/**
+ * The owner's live memories created or updated during the week (local
+ * midnight to local midnight), most important first. Rejected, archived,
+ * superseded and deleted memories are left out.
+ */
+export async function plannerReadWeekMemories(
+  db: FlareMoDb,
+  input: { userId: string; weekStart: string },
+): Promise<PlannerWeekMemory[]> {
+  const week = plannerWeekInstants(input.weekStart);
+  const rows = await db
+    .select({
+      kind: memoryItems.kind,
+      content: memoryItems.content,
+      verification: memoryItems.verification,
+    })
+    .from(memoryItems)
+    .where(
+      and(
+        eq(memoryItems.userId, input.userId),
+        eq(memoryItems.status, "active"),
+        isNull(memoryItems.deletedAt),
+        isNull(memoryItems.rejectedAt),
+        or(
+          and(
+            gte(memoryItems.createdAt, week.from),
+            lt(memoryItems.createdAt, week.to),
+          ),
+          and(
+            gte(memoryItems.updatedAt, week.from),
+            lt(memoryItems.updatedAt, week.to),
+          ),
+        ),
+      ),
+    )
+    .orderBy(desc(memoryItems.importance), desc(memoryItems.updatedAt))
+    .limit(PLANNER_MEMORY_MAX)
+    .all();
+  return rows.flatMap((row) => {
+    const text = row.content.replace(/\s+/g, " ").trim();
+    if (!text) return [];
+    return [
+      {
+        kind: row.kind,
+        content:
+          text.length > MEMORY_CHARS
+            ? `${text.slice(0, MEMORY_CHARS - 1)}…`
+            : text,
+        unconfirmed: row.verification === "inferred",
+      },
+    ];
+  });
+}
+
+/** The week's health tracker rows and how they compare with the targets. */
+export type PlannerWeekHealth = {
+  entries: Array<
+    Pick<
+      HealthEntryDto,
+      | "kind"
+      | "day"
+      | "variant"
+      | "minutes"
+      | "home_at"
+      | "units"
+      | "bender"
+      | "needs_check"
+      | "feel"
+    >
+  >;
+  summary: HealthWeekSummary;
+};
+
+const HEALTH_FEEL_CHARS = 160;
+
+/** The health tracker's view of the reviewed week (Monday to Sunday, local days). */
+export async function plannerReadWeekHealth(
+  db: FlareMoDb,
+  input: { userId: string; weekStart: string },
+): Promise<PlannerWeekHealth> {
+  const week = await healthReadWeek(db, {
+    userId: input.userId,
+    start: input.weekStart,
+  });
+  return {
+    entries: week.entries.map((entry) => ({
+      kind: entry.kind,
+      day: entry.day,
+      variant: entry.variant,
+      minutes: entry.minutes,
+      home_at: entry.home_at,
+      units: entry.units,
+      bender: entry.bender,
+      needs_check: entry.needs_check,
+      feel: entry.feel
+        ? entry.feel.replace(/\s+/g, " ").trim().slice(0, HEALTH_FEEL_CHARS) ||
+          null
+        : null,
+    })),
+    summary: week.summary,
+  };
 }
 
 /** Everything the review's model reads about one week. */
@@ -262,6 +403,19 @@ export type PlannerReviewContext = {
   yearGoals: PlannerGoalDto[];
   quarterGoals: PlannerGoalDto[];
   monthGoals: PlannerGoalDto[];
+  /**
+   * The year, quarter and month goals of the week being planned (`planWeek`),
+   * which the look forward check reads. They differ from the ones above when
+   * the plan week falls in another month, quarter or year.
+   */
+  planCascade: {
+    year: number;
+    quarter: number;
+    month: number;
+    yearGoals: PlannerGoalDto[];
+    quarterGoals: PlannerGoalDto[];
+    monthGoals: PlannerGoalDto[];
+  };
   /** The weekly goals of the week looked back on, with any result recorded. */
   weekGoals: PlannerGoalDto[];
   /** Up to eight weeks of scores ending with the week before the one reviewed. */
@@ -288,6 +442,10 @@ export type PlannerReviewContext = {
     why: string;
   }>;
   diary: PlannerDiaryEntry[];
+  /** The health tracker's rows for the week, with the targets. */
+  health: PlannerWeekHealth | null;
+  /** Memories made or changed during the week. */
+  memories: PlannerWeekMemory[];
 };
 
 const PREVIOUS_SUMMARY_MAX = 4_000;
@@ -310,10 +468,38 @@ export async function plannerReadReviewContext(
 ): Promise<PlannerReviewContext> {
   const { userId, weekStart } = input;
   const planWeek = plannerAddDays(weekStart, 7);
-  const weekEnd = plannerAddDays(weekStart, 7);
+  const week = plannerWeekInstants(weekStart);
   const anchor = plannerWeekMonthOf(weekStart);
   const thursday = plannerAddDays(weekStart, 3);
+  const planAnchor = plannerWeekMonthOf(planWeek);
+  const planThursday = plannerAddDays(planWeek, 3);
   const scoresFrom = plannerAddDays(weekStart, -7 * 8);
+  // The plan week's cascade is only read again where it differs.
+  const samePeriod = <T>(
+    reviewed: string,
+    planned: string,
+    read: (periodStart: string) => Promise<T>,
+    already: Promise<T>,
+  ): Promise<T> => (reviewed === planned ? already : read(planned));
+  const readYear = (start: string) =>
+    plannerReadPeriodGoals(db, { userId, level: "year", periodStart: start });
+  const readQuarter = (start: string) =>
+    plannerReadPeriodGoals(db, {
+      userId,
+      level: "quarter",
+      periodStart: start,
+    });
+  const readMonth = (start: string) =>
+    plannerReadPeriodGoals(db, { userId, level: "month", periodStart: start });
+  const yearStart = `${anchor.year}-01-01`;
+  const planYearStart = `${planAnchor.year}-01-01`;
+  const quarterStart = plannerQuarterStartOf(thursday);
+  const planQuarterStart = plannerQuarterStartOf(planThursday);
+  const monthStart = plannerMonthStartOf(thursday);
+  const planMonthStart = plannerMonthStartOf(planThursday);
+  const yearRead = readYear(yearStart);
+  const quarterRead = readQuarter(quarterStart);
+  const monthRead = readMonth(monthStart);
 
   const [
     northStar,
@@ -328,23 +514,16 @@ export async function plannerReadReviewContext(
     open,
     flags,
     diary,
+    planYearGoals,
+    planQuarterGoals,
+    planMonthGoals,
+    health,
+    memories,
   ] = await Promise.all([
     plannerReadNorthStar(db, userId),
-    plannerReadPeriodGoals(db, {
-      userId,
-      level: "year",
-      periodStart: `${anchor.year}-01-01`,
-    }),
-    plannerReadPeriodGoals(db, {
-      userId,
-      level: "quarter",
-      periodStart: plannerQuarterStartOf(thursday),
-    }),
-    plannerReadPeriodGoals(db, {
-      userId,
-      level: "month",
-      periodStart: plannerMonthStartOf(thursday),
-    }),
+    yearRead,
+    quarterRead,
+    monthRead,
     plannerReadWeekGoals(db, { userId, weekStart }),
     db
       .select({
@@ -375,8 +554,8 @@ export async function plannerReadReviewContext(
           eq(tasks.userId, userId),
           isNull(tasks.deletedAt),
           eq(tasks.status, "done"),
-          gte(tasks.completedAt, weekStart),
-          lt(tasks.completedAt, weekEnd),
+          gte(tasks.completedAt, week.from),
+          lt(tasks.completedAt, week.to),
         ),
       )
       .orderBy(asc(tasks.completedAt))
@@ -413,6 +592,12 @@ export async function plannerReadReviewContext(
       weekStart,
       maxChars: input.diaryChars,
     }),
+    samePeriod(yearStart, planYearStart, readYear, yearRead),
+    samePeriod(quarterStart, planQuarterStart, readQuarter, quarterRead),
+    samePeriod(monthStart, planMonthStart, readMonth, monthRead),
+    // The tracker is an add-on: a review still works if it cannot be read.
+    plannerReadWeekHealth(db, { userId, weekStart }).catch(() => null),
+    plannerReadWeekMemories(db, { userId, weekStart }).catch(() => []),
   ]);
 
   const live = open.filter((row) => !row.droppedAt);
@@ -426,6 +611,14 @@ export async function plannerReadReviewContext(
     yearGoals,
     quarterGoals,
     monthGoals,
+    planCascade: {
+      year: planAnchor.year,
+      quarter: Math.floor(Number(planQuarterStart.slice(5, 7)) / 3) + 1,
+      month: Number(planMonthStart.slice(5, 7)) - 1,
+      yearGoals: planYearGoals,
+      quarterGoals: planQuarterGoals,
+      monthGoals: planMonthGoals,
+    },
     weekGoals,
     scores: scoreRows.map((row) => ({
       weekStart: row.weekStart,
@@ -467,6 +660,8 @@ export async function plannerReadReviewContext(
         why: flag.why,
       })),
     diary,
+    health,
+    memories,
   };
 }
 

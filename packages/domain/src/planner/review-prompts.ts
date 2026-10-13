@@ -1,5 +1,6 @@
 import {
   FORK_PRODUCT_NAME,
+  healthLocalMoment,
   type PlannerGoalDto,
   type PlannerGoalLevel,
   type PlannerPillar,
@@ -128,11 +129,24 @@ function scoreText(score: {
     : `${code} not scored`;
 }
 
-function diaryDay(at: string): string {
-  const key = at.slice(0, 10);
+/** The owner's local day of a UTC timestamp; a bare day stays as it is. */
+function localDayKey(at: string): string {
+  if (at.length <= 10) return at.slice(0, 10);
+  try {
+    return healthLocalMoment(at).day;
+  } catch {
+    return at.slice(0, 10);
+  }
+}
+
+function dayName(key: string): string {
   const { year, month, date } = day(key);
   const weekday = new Date(Date.UTC(year, month, date)).getUTCDay();
   return `${WEEKDAYS[weekday]} ${date} ${SHORT_MONTHS[month]}`;
+}
+
+function diaryDay(at: string): string {
+  return dayName(localDayKey(at));
 }
 
 /**
@@ -147,6 +161,76 @@ export function plannerReadingRules(name: string): string {
 - The day in brackets is when an entry was written. An entry can describe an earlier day: use the day it names, or say "this week".
 - Copy numbers exactly as written. Don't total things up (entries, sessions, days): name them, or leave the number out.
 - #tags are labels, not people or names. Tie a person or a company to an event only the way the diary does.`;
+}
+
+const HEALTH_VARIANTS: Record<string, string> = {
+  wim_hof: "Wim Hof",
+  meditation: "meditation",
+};
+
+function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/**
+ * The health tracker's week: what was logged on which day and how it compares
+ * with the owner's targets. The totals are the tracker's own, so the model
+ * copies them instead of counting.
+ */
+export function plannerHealthLines(context: PlannerReviewContext): string[] {
+  const health = context.health;
+  if (!health) return [];
+  const { summary, entries } = health;
+  const of = (kind: string) => entries.filter((entry) => entry.kind === kind);
+  const feel = (text: string | null) => (text ? ` (${quote(text)})` : "");
+  const training = of("training").map(
+    (entry) =>
+      `${dayName(entry.day)} ${entry.variant ?? "session"}${entry.minutes ? `, ${entry.minutes} min` : ""}${feel(entry.feel)}`,
+  );
+  const breath = of("breath").map(
+    (entry) =>
+      `${dayName(entry.day)} ${HEALTH_VARIANTS[entry.variant ?? ""] ?? entry.variant ?? "session"}${entry.minutes ? ` ${entry.minutes} min` : ""}${feel(entry.feel)}`,
+  );
+  const nights = of("night_out").map((entry) => {
+    const parts = [
+      entry.home_at ? `home ${entry.home_at}` : null,
+      entry.units === null
+        ? "units not checked yet"
+        : plural(entry.units, "unit"),
+      entry.bender ? "bender" : null,
+    ].filter(Boolean);
+    return `${dayName(entry.day)} (${parts.join(", ")})${feel(entry.feel)}`;
+  });
+  const lines = [
+    "",
+    `Health tracker for this week, read from the diary by fixed word rules or set by hand. Its totals are exact; copy them:`,
+    `- Training: ${plural(summary.training.sessions, "session")}, target ${summary.training.target} a week${training.length ? `. ${training.join("; ")}` : ""}`,
+    `- Breathwork: ${summary.breath.days} of ${summary.breath.target} days (${plural(summary.breath.sessions, "session")}, ${summary.breath.minutes} min)${breath.length ? `. ${breath.join("; ")}` : ""}`,
+    `- Nights out: ${plural(summary.night_out.nights, "night")}, ${plural(summary.night_out.units, "unit")} this week${nights.length ? `. ${nights.join("; ")}` : ""}. Year so far: ${summary.night_out.year_used} of ${summary.night_out.year_target} units.${
+      summary.night_out.needs_check
+        ? ` ${plural(summary.night_out.needs_check, "night")} still ${summary.night_out.needs_check === 1 ? "needs" : "need"} a check.`
+        : ""
+    }`,
+  ];
+  if (!entries.length) {
+    lines.push(
+      "Nothing was logged in the tracker this week. That means nothing was recorded, not that nothing happened.",
+    );
+  }
+  return lines;
+}
+
+/** Memories the app made or changed during the week. */
+export function plannerMemoryLines(context: PlannerReviewContext): string[] {
+  if (!context.memories.length) return [];
+  return [
+    "",
+    `Memories the app noted or updated about ${context.ownerName} this week. They are conclusions an AI drew from the diary, not events; "unconfirmed" ones were never checked by ${context.ownerName}:`,
+    ...context.memories.map(
+      (memory) =>
+        `- ${memory.kind}${memory.unconfirmed ? ", unconfirmed" : ""}: ${memory.content}`,
+    ),
+  ];
 }
 
 /** The context block every prompt ends with. */
@@ -194,6 +278,7 @@ export function plannerReviewContextBlock(
         .join("; ")}`,
     );
   }
+  lines.push(...plannerHealthLines(context), ...plannerMemoryLines(context));
   if (context.previousSummary) {
     lines.push(
       "",
@@ -835,6 +920,9 @@ export function plannerCheckMessages(
   settled: readonly PlannerCheckSettled[],
 ): PlannerChatMessage[] {
   const name = context.ownerName;
+  // The plan is for next week, so it is checked against next week's month,
+  // quarter and year, not the reviewed week's.
+  const cascade = context.planCascade;
   const planText = plan
     .map(
       (goal) =>
@@ -863,11 +951,11 @@ export function plannerCheckMessages(
 The plan:
 ${planText || "- no goals"}
 
-Goal cascade:
+Goal cascade for ${plannerWeekCode(context.planWeek)}:
 North star: ${context.northStar ? goalText(context.northStar) : "not written"}
-Year: ${goalsByPillar(context.yearGoals)}
-Quarter: ${goalsByPillar(context.quarterGoals)}
-Month: ${goalsByPillar(context.monthGoals)}
+Year ${cascade.year}: ${goalsByPillar(cascade.yearGoals)}
+Quarter Q${cascade.quarter} ${cascade.year}: ${goalsByPillar(cascade.quarterGoals)}
+Month ${MONTHS[cascade.month]}: ${goalsByPillar(cascade.monthGoals)}
 ${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
 Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}`,
     },
@@ -923,9 +1011,9 @@ export function plannerParseCheck(
   const list = Array.isArray(parsed.flags) ? parsed.flags : [];
   const cascade: Record<string, readonly PlannerGoalDto[]> = {
     north_star: context.northStar ? [context.northStar] : [],
-    year: context.yearGoals,
-    quarter: context.quarterGoals,
-    month: context.monthGoals,
+    year: context.planCascade.yearGoals,
+    quarter: context.planCascade.quarterGoals,
+    month: context.planCascade.monthGoals,
   };
   const out: PlannerCheckFlag[] = [];
   for (const entry of list) {

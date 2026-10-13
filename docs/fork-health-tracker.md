@@ -85,6 +85,8 @@ All in `apps/web/src/health/`, English only (the strings are in `strings.ts`, no
 - **Chips** under a memo card, for example `Gym · Back`, `Wim Hof · 10 min`, `Night out · Fri · home 03:30 · 1`. The x removes the label. A night without a time shows **home when?** and four buttons: Before 00:00, 00-03, 03-06, Morning, which set the home time to 23:30, 01:30, 04:30 and 08:00. All cards on a page get their labels through one request.
 - **/health** (sidebar link "Health"): the last 7 days against the targets, the night-out budget with the year's pace, the list of nights that need a home time, the year as three rows of weekly cells, and the Re-read diary button.
 
+**The weekly review** reads the reviewed week's rows and totals (Monday to Sunday, local days) into every Look back prompt: what was done on which day, the targets, bender nights, nights still needing a check and the year's night-out units. It reads them through `healthReadWeek`, so it counts exactly what the /health page counts. The change history (`health_entry_event`) is not read. See [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
+
 Colours are the CSS variables `--health-training`, `--health-breath` and `--health-out` (with light and dark values) in `health.css`.
 
 ## Tests

@@ -226,6 +226,11 @@ export type PlannerGoalsStrings = {
       savedToast: string;
       saveFailed: string;
       retry: string;
+      edit: string;
+      preview: string;
+      save: string;
+      editLabel: string;
+      unsavedHint: string;
       label: (week: string) => string;
     };
 
@@ -512,6 +517,12 @@ const en: PlannerGoalsStrings = {
       savedToast: "Summary saved to your memos",
       saveFailed: "Couldn't save the summary",
       retry: "Try again",
+      edit: "Edit",
+      preview: "Preview",
+      save: "Save summary",
+      editLabel: "Edit the summary (markdown)",
+      unsavedHint:
+        "Not saved yet. Edit it if you like, then save it to your memos.",
       label: (week) => `${week} summary memo`,
     },
 
@@ -789,6 +800,11 @@ const zhCN: PlannerGoalsStrings = {
       savedToast: "总结已存入你的笔记",
       saveFailed: "总结保存失败",
       retry: "重试",
+      edit: "编辑",
+      preview: "预览",
+      save: "保存总结",
+      editLabel: "编辑总结（Markdown）",
+      unsavedHint: "还没保存。可以先修改，再存入你的笔记。",
       label: (week) => `${week} 总结笔记`,
     },
 

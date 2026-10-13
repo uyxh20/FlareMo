@@ -17,6 +17,14 @@ Doing: none
 To Do: none
 Open clashes from earlier checks: Year · Work: Pulls against ZqplannergoalflagProbe.
 
+Health tracker for this week, read from the diary by fixed word rules or set by hand. Its totals are exact; copy them:
+- Training: 1 session, target 3 a week. Wed 30 Sep crossfit ("ZqhealthentryProbe")
+- Breathwork: 0 of 7 days (0 sessions, 0 min)
+- Nights out: 0 nights, 0 units this week. Year so far: 0 of 12 units.
+
+Memories the app noted or updated about Owner this week. They are conclusions an AI drew from the diary, not events; "unconfirmed" ones were never checked by Owner:
+- preference: Prefers training in the morning, tag ZqmemoryitemsProbe
+
 Last week's summary (W39), as written then. It is about last week, not this one:
 <<<
 # Week 39: September 21 - 27, 2026

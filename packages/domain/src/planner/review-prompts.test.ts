@@ -67,6 +67,33 @@ const CONTEXT: PlannerReviewContext = {
     }),
   ],
   monthGoals: [],
+  // Week 41 plans week 42: still October, Q4 2026.
+  planCascade: {
+    year: 2026,
+    quarter: 4,
+    month: 9,
+    yearGoals: [
+      goal({
+        id: "year-work",
+        level: "year",
+        period_start: "2026-01-01",
+        pillar: "work",
+        title: "Stay on better terms",
+        status: "contested",
+        note: "6 Oct: join Acme",
+      }),
+    ],
+    quarterGoals: [
+      goal({
+        id: "q4-ai",
+        level: "quarter",
+        period_start: "2026-10-01",
+        pillar: "ai",
+        title: "Ship one public artifact",
+      }),
+    ],
+    monthGoals: [],
+  },
   weekGoals: [
     goal({
       id: "w-work",
@@ -84,6 +111,8 @@ const CONTEXT: PlannerReviewContext = {
   openFlags: [],
   keptFlags: [],
   diary: [{ at: "2026-10-07T20:00:00.000Z", text: "Long talk with Acme." }],
+  health: null,
+  memories: [],
 };
 
 const ANSWERS = {
@@ -189,6 +218,182 @@ describe("the context block", () => {
     expect(plain).toContain(
       "The day in brackets is when each was written:\n[Wed 7 Oct] Long talk with Acme.",
     );
+  });
+});
+
+describe("health and memories in the context", () => {
+  const health = {
+    entries: [
+      {
+        kind: "training" as const,
+        day: "2026-10-05",
+        variant: "crossfit",
+        minutes: null,
+        home_at: null,
+        units: null,
+        bender: false,
+        needs_check: false,
+        feel: "heavy legs",
+      },
+      {
+        kind: "breath" as const,
+        day: "2026-10-06",
+        variant: "wim_hof",
+        minutes: 10,
+        home_at: null,
+        units: null,
+        bender: false,
+        needs_check: false,
+        feel: null,
+      },
+      {
+        kind: "night_out" as const,
+        day: "2026-10-10",
+        variant: null,
+        minutes: null,
+        home_at: "04:30",
+        units: 1,
+        bender: true,
+        needs_check: false,
+        feel: null,
+      },
+    ],
+    summary: {
+      training: { sessions: 1, target: 3 },
+      breath: { days: 1, sessions: 1, minutes: 10, target: 7 },
+      night_out: {
+        units: 1,
+        nights: 1,
+        needs_check: 0,
+        year_target: 12,
+        year_used: 5,
+      },
+    },
+  };
+
+  it("gives the tracker's week with targets, days and bender nights", () => {
+    const block = plannerReviewContextBlock({ ...CONTEXT, health });
+    expect(block).toContain(
+      '- Training: 1 session, target 3 a week. Mon 5 Oct crossfit ("heavy legs")',
+    );
+    expect(block).toContain(
+      "- Breathwork: 1 of 7 days (1 session, 10 min). Tue 6 Oct Wim Hof 10 min",
+    );
+    expect(block).toContain(
+      "- Nights out: 1 night, 1 unit this week. Sat 10 Oct (home 04:30, 1 unit, bender). Year so far: 5 of 12 units.",
+    );
+    // In every look back prompt.
+    expect(said(plannerOpeningMessages({ ...CONTEXT, health }))).toContain(
+      "Health tracker for this week",
+    );
+  });
+
+  it("says an empty tracker week is unrecorded, and skips a tracker it could not read", () => {
+    const empty = plannerReviewContextBlock({
+      ...CONTEXT,
+      health: { entries: [], summary: health.summary },
+    });
+    expect(empty).toContain("Nothing was logged in the tracker this week.");
+    expect(plannerReviewContextBlock(CONTEXT)).not.toContain("Health tracker");
+  });
+
+  it("lists the week's memories as conclusions, marking unconfirmed ones", () => {
+    const block = plannerReviewContextBlock({
+      ...CONTEXT,
+      memories: [
+        {
+          kind: "preference",
+          content: "Trains best mornings",
+          unconfirmed: false,
+        },
+        { kind: "fact", content: "Moved to Acme talks", unconfirmed: true },
+      ],
+    });
+    expect(block).toContain(
+      "Memories the app noted or updated about Anon this week.",
+    );
+    expect(block).toContain("- preference: Trains best mornings");
+    expect(block).toContain("- fact, unconfirmed: Moved to Acme talks");
+    expect(plannerReviewContextBlock(CONTEXT)).not.toContain(
+      "Memories the app",
+    );
+  });
+
+  it("dates a diary entry by the owner's local day, not the UTC day", () => {
+    const block = plannerReviewContextBlock({
+      ...CONTEXT,
+      // 23:30 UTC on Sunday 11 Oct is 01:30 on Monday 12 Oct in Copenhagen.
+      diary: [{ at: "2026-10-11T23:30:00.000Z", text: "Late note." }],
+    });
+    expect(block).toContain("[Mon 12 Oct] Late note.");
+  });
+});
+
+describe("the look forward check reads the plan week's goals", () => {
+  it("checks the plan against next month's goals at a month change", () => {
+    const check = said(
+      plannerCheckMessages(
+        {
+          ...CONTEXT,
+          weekStart: "2026-10-26",
+          planWeek: "2026-11-02",
+          monthGoals: [
+            goal({
+              id: "oct-work",
+              level: "month",
+              period_start: "2026-10-01",
+              pillar: "work",
+              title: "October work goal",
+            }),
+          ],
+          planCascade: {
+            ...CONTEXT.planCascade,
+            month: 10,
+            monthGoals: [
+              goal({
+                id: "nov-work",
+                level: "month",
+                period_start: "2026-11-01",
+                pillar: "work",
+                title: "November work goal",
+              }),
+            ],
+          },
+        },
+        [{ id: "g1", pillar: "work", title: "Sign", tasks: [] }],
+        [],
+      ),
+    );
+    expect(check).toContain("Month November: Work: November work goal");
+    expect(check).not.toContain("October work goal");
+  });
+
+  it("ties a flag to the plan week's goal, not the reviewed week's", () => {
+    const flags = plannerParseCheck(
+      JSON.stringify({
+        flags: [
+          { goal: "work", with_level: "year", with_goal: "work", why: "Pull." },
+        ],
+      }),
+      {
+        ...CONTEXT,
+        planCascade: {
+          ...CONTEXT.planCascade,
+          year: 2027,
+          yearGoals: [
+            goal({
+              id: "year-2027-work",
+              level: "year",
+              period_start: "2027-01-01",
+              pillar: "work",
+              title: "2027 work",
+            }),
+          ],
+        },
+      },
+      [{ id: "g1", pillar: "work", title: "Sign", tasks: [] }],
+    );
+    expect(flags[0]?.with_goal_id).toBe("year-2027-work");
   });
 });
 

@@ -49,7 +49,7 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `shares` | diary | bookkeeping | – | – | – | – | – | yes | yes |
 | `memos_sse_events` | diary | bookkeeping | – | – | – | – | – | – | yes |
 | `memo_hourly_counts` | diary | derived | – | – | – | – | – | – | – |
-| `memory_items` | memory | content | **gap** | **gap** | yes | yes | yes | yes | yes |
+| `memory_items` | memory | content | yes | **gap** | yes | yes | yes | yes | yes |
 | `memory_revisions` | memory | history | – | – | – | yes | – | yes | yes |
 | `memory_relations` | memory | structure | – | – | – | yes | – | yes | yes |
 | `memory_resource_links` | memory | structure | – | – | – | yes | – | yes | yes |
@@ -75,7 +75,7 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `planner_week` | goals | content | yes | – | – | – | **gap** | **gap** | yes |
 | `planner_review` | goals | content | – | – | – | – | – | **gap** | yes |
 | `planner_goal_flag` | goals | content | yes | yes | – | – | – | **gap** | yes |
-| `health_entry` | health | content | **gap** | – | – | – | **gap** | **gap** | yes |
+| `health_entry` | health | content | yes | – | – | – | **gap** | **gap** | yes |
 | `health_entry_event` | health | history | – | – | – | – | – | **gap** | yes |
 | `health_target` | health | bookkeeping | – | – | – | – | – | – | yes |
 | `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | yes |
@@ -87,7 +87,6 @@ Gaps (left out, and probably should not be):
 
 - `memos:earlier-week` → lookBack: only the reviewed week's entries and last week's summary are read; earlier weeks are not.
 - `attachments` → lookBack: the review is not told an entry had a photo or file, nor its name.
-- `memory_items` → lookBack: the review does not read memories, so it cannot use what the app already knows.
 - `memory_items` → lookForward: the goal check does not read memories (preferences, constraints).
 - `tasks` → search: tasks are not in keyword or semantic search.
 - `tasks` → mcp: agents cannot read or change tasks over MCP.
@@ -110,7 +109,6 @@ Gaps (left out, and probably should not be):
 - `planner_week` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_goal_flag` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `health_entry` → lookBack: on hold: the weekly review does not read the health tracker yet.
 - `health_entry` → mcp: agents cannot read health entries over MCP.
 - `health_entry` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
