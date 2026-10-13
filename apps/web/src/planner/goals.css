@@ -403,3 +403,378 @@ a.planner-cell:hover {
     animation: none;
   }
 }
+
+/* --- The Year map (year-map.tsx) ------------------------------------------ */
+
+/* Following an objective: the picker's chips. */
+.planner-picker,
+.planner-wstrip {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.planner-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.planner-picker button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--foreground);
+}
+.planner-picker button[aria-pressed="true"] {
+  border-color: var(--planner-p, var(--foreground));
+  box-shadow: inset 0 0 0 1px var(--planner-p, var(--foreground));
+  background: color-mix(
+    in oklab,
+    var(--planner-p, var(--muted-foreground)) var(--planner-tint),
+    var(--card)
+  );
+}
+
+/* A time column, then one column per objective. */
+.planner-ymap {
+  display: grid;
+  grid-template-columns: 58px repeat(4, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 6px;
+  min-width: 660px;
+}
+.planner-ymap.is-following {
+  min-width: 0;
+  column-gap: 10px;
+}
+.planner-ymap .planner-span {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+.planner-yc {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Time labels: North star, the year, quarters, months, weeks. */
+.planner-yl {
+  padding-top: 8px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  text-align: left;
+}
+.planner-yl.is-star {
+  padding-top: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--brand-600);
+}
+.dark .planner-yl.is-star {
+  color: var(--brand-400);
+}
+.planner-yl.is-period {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.planner-yl.planner-qlab {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.planner-yl.is-now {
+  color: var(--brand-600);
+}
+.dark .planner-yl.is-now {
+  color: var(--brand-300);
+}
+button.planner-yl.planner-ml {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 4px;
+}
+button.planner-yl.planner-ml::after {
+  content: "▸";
+  font-size: 9px;
+  transition: transform 0.15s;
+}
+button.planner-yl.planner-ml[aria-expanded="true"]::after {
+  transform: rotate(90deg);
+}
+.planner-yl.planner-wl {
+  padding-top: 9px;
+  font-size: 10.5px;
+  border-radius: 4px;
+}
+.planner-yl.planner-wl:hover {
+  color: var(--foreground);
+}
+
+/* The north star and a quarter's theme line. */
+.planner-ystar {
+  width: 100%;
+  border-radius: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 15.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--foreground);
+}
+.planner-ystar:hover,
+.planner-theme:hover {
+  background: color-mix(in oklab, var(--foreground) 5%, transparent);
+}
+.planner-qband {
+  grid-column: 2 / -1;
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  margin-top: 6px;
+  padding-top: 14px;
+}
+.planner-theme {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 2px 4px;
+  margin-left: -4px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.planner-theme-add {
+  color: var(--muted-foreground);
+  opacity: 0.6;
+}
+
+/* A goal: dot, up to two lines, a mark. Year and quarter goals are coloured. */
+.planner-u {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 6px 9px;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--foreground);
+  transition:
+    transform 0.12s,
+    border-color 0.12s;
+}
+button.planner-u:hover {
+  border-color: var(--planner-p, var(--foreground));
+}
+.planner-u .planner-dot {
+  width: 7px;
+  height: 7px;
+}
+.planner-u-t {
+  display: -webkit-box;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.planner-u-m {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+.planner-u-m[data-kind="met"] {
+  color: var(--success);
+}
+.planner-u-m[data-kind="missed"] {
+  color: var(--destructive);
+}
+.planner-u-m[data-kind="partial"],
+.planner-u-m[data-kind="contested"] {
+  color: var(--warning);
+}
+.planner-u[data-strong] {
+  border-color: color-mix(in oklab, var(--planner-p) 60%, var(--border));
+  background: color-mix(in oklab, var(--planner-p) 24%, var(--card));
+  padding: 9px 11px;
+  font-size: 13.5px;
+}
+.planner-u[data-strong] .planner-u-t {
+  font-weight: 650;
+}
+.planner-u[data-strong] .planner-dot {
+  width: 10px;
+  height: 10px;
+}
+.planner-u[data-strong] .planner-u-m {
+  color: var(--foreground);
+  opacity: 0.8;
+}
+.planner-u[data-current] {
+  border-color: var(--brand-500);
+}
+.planner-u-add {
+  justify-content: center;
+  min-height: 30px;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted-foreground);
+  opacity: 0.45;
+}
+.planner-u-add:hover,
+.planner-u-add:focus-visible {
+  opacity: 1;
+}
+.planner-u-empty {
+  width: auto;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+/* Goals with no objective: one row across the four columns. */
+.planner-loose {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 5px;
+}
+
+/* A month's weeks. */
+.planner-wstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: -1px 0 4px;
+}
+.planner-wchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+.planner-wchip b {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.planner-wchip[aria-pressed="true"] {
+  border-color: var(--foreground);
+  background: var(--card);
+  color: var(--foreground);
+}
+.planner-wchip[data-kind="now"] {
+  border-color: var(--brand-500);
+}
+.planner-wchip[data-kind="now"] b {
+  color: var(--brand-600);
+}
+.dark .planner-wchip[data-kind="now"] b {
+  color: var(--brand-300);
+}
+.planner-wchip[data-kind="future"] {
+  border-style: dashed;
+}
+.planner-wchip[data-kind="none"] {
+  opacity: 0.55;
+}
+
+.planner-ymap button:focus-visible,
+.planner-ymap a:focus-visible,
+.planner-picker button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Following one objective: the others shrink to their dots. */
+.planner-ymap.is-following .planner-yc:not(.is-on) {
+  opacity: 0.4;
+}
+.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u {
+  min-height: 28px;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-t,
+.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-m,
+.planner-ymap.is-following .planner-yc:not(.is-on) .planner-u-add {
+  display: none;
+}
+.planner-ymap.is-following .planner-yc.is-on .planner-u {
+  font-size: 13.5px;
+}
+.planner-ymap.is-following .planner-yc.is-on .planner-u-t {
+  -webkit-line-clamp: 3;
+}
+
+/* A weekly goal's pop-up. */
+.planner-pop {
+  border-color: color-mix(in oklab, var(--planner-p, var(--border)) 40%, var(--border));
+}
+.planner-pop-path {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 10px;
+  background: color-mix(
+    in oklab,
+    var(--planner-p, var(--muted-foreground)) var(--planner-tint),
+    var(--background)
+  );
+  padding: 10px 12px;
+  font-size: 12.5px;
+}
+.planner-pop-path > div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+.planner-pop-col {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+.planner-pop-col[data-column="doing"] {
+  border-color: var(--planner-p, var(--foreground));
+  color: var(--planner-p, var(--foreground));
+}

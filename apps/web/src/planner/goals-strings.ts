@@ -91,6 +91,31 @@ export type PlannerGoalsStrings = {
     loadFailed: string;
   };
 
+  /** The Year map, the Goals page's year: objectives as columns, the year running down. */
+  map: {
+    follow: string;
+    allPillars: string;
+    /** "2026 · following Work". */
+    following: (pillar: string) => string;
+    openWeeks: (month: string) => string;
+    closeWeeks: (month: string) => string;
+    weeksOf: (month: string) => string;
+    /** A week's details (scores, summary, adding a goal): "Open week 41". */
+    openWeek: (week: string) => string;
+    notPlanned: string;
+    tasksFor: (goal: string) => string;
+    /** "2 of 3 tasks done". */
+    tasksDone: (done: number, total: number) => string;
+    noTasks: string;
+    addTask: string;
+    newTask: string;
+    taskAdded: string;
+    addTaskFailed: string;
+    openCockpit: string;
+    editGoal: string;
+    close: string;
+  };
+
   editor: {
     newTitle: string;
     editTitle: string;
@@ -361,6 +386,27 @@ const en: PlannerGoalsStrings = {
     loadFailed: "Couldn't load the goals.",
   },
 
+  map: {
+    follow: "Follow a pillar",
+    allPillars: "All pillars",
+    following: (pillar) => `following ${pillar}`,
+    openWeeks: (month) => `Open the weeks of ${month}`,
+    closeWeeks: (month) => `Close the weeks of ${month}`,
+    weeksOf: (month) => `Weeks of ${month}`,
+    openWeek: (week) => `Open ${week}`,
+    notPlanned: "Not planned yet",
+    tasksFor: (goal) => `Tasks for ${goal}`,
+    tasksDone: (done, total) => `${done} of ${total} tasks done`,
+    noTasks: "No tasks on the board for this goal.",
+    addTask: "Add a task",
+    newTask: "New task for this goal",
+    taskAdded: "Task added to the backlog",
+    addTaskFailed: "Couldn't add the task.",
+    openCockpit: "Open in cockpit",
+    editGoal: "Edit goal",
+    close: "Close",
+  },
+
   editor: {
     newTitle: "New goal",
     editTitle: "Edit goal",
@@ -615,6 +661,27 @@ const zhCN: PlannerGoalsStrings = {
     noGoal: "没有目标",
     summary: "总结",
     loadFailed: "目标加载失败。",
+  },
+
+  map: {
+    follow: "跟随一个方向",
+    allPillars: "全部方向",
+    following: (pillar) => `跟随${pillar}`,
+    openWeeks: (month) => `展开${month}的各周`,
+    closeWeeks: (month) => `收起${month}的各周`,
+    weeksOf: (month) => `${month}的各周`,
+    openWeek: (week) => `打开${week}`,
+    notPlanned: "还没规划",
+    tasksFor: (goal) => `${goal}的任务`,
+    tasksDone: (done, total) => `${total} 个任务完成 ${done} 个`,
+    noTasks: "看板上没有这个目标的任务。",
+    addTask: "添加任务",
+    newTask: "这个目标的新任务",
+    taskAdded: "任务已加入待规划",
+    addTaskFailed: "任务添加失败。",
+    openCockpit: "在驾驶舱打开",
+    editGoal: "编辑目标",
+    close: "关闭",
   },
 
   editor: {

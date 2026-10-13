@@ -21,12 +21,15 @@ The cascade from the north star down to a week, one level per address:
 | Address                     | Shows                                                                                  |
 | --------------------------- | -------------------------------------------------------------------------------------- |
 | `/goals`                    | The current ISO year.                                                                  |
-| `/goals?year=2026`          | The north star, the year's average scores, a heatmap of every week and the year goals. |
+| `/goals?year=2026`          | The Year map: the whole cascade on one page (see below).                               |
 | `/goals?year=2026&q=4`      | A quarter: its months and quarter goals.                                               |
 | `/goals?year=2026&q=4&m=10` | A month (1 to 12): its goals and weeks.                                                |
 | `/goals?week=2026-10-05`    | One week, by its Monday: its scores and weekly goals, with a link to its summary memo. |
 
-- The heatmap legend is On target, Below, Not scored and Not yet. A week is on target when both scores meet their floors.
+- The Year map (`year-map.tsx`, `year-map-model.ts`, added 2026-10-13) replaces the year's heatmap. The time column runs north star, year, Q1 to Q4 (each with its theme line, the quarter's first goal with no objective), months and weeks; the four objectives are the columns. Year and quarter goals are the coloured cards, months and weeks plain ones. Goals have no parent link: a row lines them up by objective and period. Two goals of one objective in a period stack; goals with no objective (most imported weekly goals) get one row across the four columns.
+- Each month shows its week chips (hover gives the scores); a chip opens that week's row, the month label opens or closes all of them, and the current week starts open. A week's label opens its own page. A weekly goal opens a pop-up with the year, quarter and month goals of its objective, its tasks from the board (a year of Done cards) and, for this week and later ones, a field that adds a task to the Backlog linked to the goal. Other goals open the editor; an empty slot adds one.
+- "Follow" an objective: its column widens and the others shrink to dots. A phone opens following Work.
+- A week is on target when both scores meet their floors.
 - Each ISO week sits under the month of its Thursday, so no week is split between two months.
 - The averages count only weeks that have ended.
 - Every goal opens in the goal editor: its objective, its title, the points under it (each with an optional short note, or struck through), its status, its result and a note.
@@ -153,6 +156,7 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 | File                                                                              | What it holds                                                                                                                                                                  |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `goals-page.tsx`, `goal-editor.tsx`, `goals-ui.tsx`                               | The Goals page, the goal editor and their shared pieces.                                                                                                                       |
+| `year-map.tsx`, `year-map-model.ts`                                               | The Year map, the Goals page's year, and the plain functions it is laid out by.                                                                                                |
 | `goal-cards.tsx`                                                                  | The cockpit's goal cards. `board.tsx`, `task-card.tsx` and `cockpit-page.tsx` add the tint and the focus.                                                                      |
 | `review-page.tsx`                                                                 | The weekly review: state, saves and model calls.                                                                                                                               |
 | `review-back.tsx`, `review-charts.tsx`, `review-sheet.tsx`, `review-markdown.tsx` | Look back's chat, the score charts, the memo sheet and a small Markdown renderer. It renders to React elements, never to HTML.                                                 |
@@ -161,7 +165,7 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 | `goals-api.ts`                                                                    | The typed client, with an NDJSON reader for the two streams.                                                                                                                   |
 | `goals-search.ts`                                                                 | The two routes' search validators. They always return every key, because TanStack Router otherwise lets the root's raw search through.                                         |
 | `goals-strings.ts`, `nav-label.ts`, `nav-link.tsx`                                | Copy in English and Simplified Chinese, and the sidebar's Goals and Weekly review links. They sit beside Cockpit through `PlannerNavLink`, which the explorer already renders. |
-| `goals.css`                                                                       | The objectives' colours and tints, the heatmap cells, the charts and the memo's typography, in light and dark.                                                                 |
+| `goals.css`                                                                       | The objectives' colours and tints, the Year map, the heatmap cells, the charts and the memo's typography, in light and dark.                                                   |
 
 ## Upstream files with a hook-in
 

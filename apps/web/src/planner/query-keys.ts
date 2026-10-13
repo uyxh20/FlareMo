@@ -9,6 +9,13 @@ export const plannerQueryKeys = {
   boards: ["planner", "board"] as const,
   board: (today: string, includeDropped: boolean) =>
     ["planner", "board", today, includeDropped] as const,
+  /**
+   * The board the Goals page's Year map reads tasks from: a year of Done cards,
+   * so a past weekly goal still shows what was done for it. Under `boards`, so
+   * the cockpit's optimistic patches and refreshes reach it too.
+   */
+  goalsBoard: (today: string) =>
+    ["planner", "board", today, false, "year"] as const,
   /** One task's archived timeline. */
   history: (taskId: string) => ["planner", "history", taskId] as const,
   /** The full upstream task (with notes), for the edit dialog. */

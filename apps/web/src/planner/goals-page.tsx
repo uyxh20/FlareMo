@@ -14,11 +14,6 @@ import { type ReactNode, useState } from "react";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { cn, stripResourceName } from "@/lib/utils";
@@ -29,7 +24,6 @@ import {
   type PlannerWeekStats,
   plannerAverageText,
   plannerCellKind,
-  plannerCellLines,
   plannerGoalsOf,
   plannerGoalText,
   plannerIsoYearOf,
@@ -61,14 +55,17 @@ import {
 } from "./goals-ui";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
+import { PlannerYearMap } from "./year-map";
+import { plannerYearMap } from "./year-map-model";
 import "./goals.css";
 
 // The Goals page at /goals (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): the cascade from the north star down to
-// a week, one level per address. The year shows the north star, the averages of
-// its weeks, a heatmap of every week and the year goals; a quarter shows its
-// months and goals; a month its goals and weeks; a week its scores and weekly
-// goals, with a link to its summary memo. Every goal opens in the goal editor.
+// a week. The year is the Year map (year-map.tsx): every level on one page, the
+// objectives as columns. A quarter, a month and a week still have their own
+// address: a quarter shows its months and goals; a month its goals and weeks; a
+// week its scores and weekly goals, with a link to its summary memo. Every goal
+// opens in the goal editor.
 //
 // Weeks are ISO weeks, each shown under its Thursday's month; the averages only
 // count weeks that have ended.
@@ -154,6 +151,7 @@ export function PlannerGoalsPage() {
       <YearView
         data={data}
         strings={strings}
+        today={today}
         year={place.year}
         onEdit={setEditing}
       />
@@ -259,66 +257,18 @@ function YearView({
   data,
   strings,
   year,
+  today,
   onEdit,
-}: ViewProps & { year: number }) {
-  const records = plannerWeeksByMonday(data.weeks);
-  const months = plannerYearMonths(year);
-  const stats = plannerWeekStats(months.flat(), records, data.current_week);
-  const start = plannerMonthStart(year, 0);
-  const { theme, goals } = plannerPeriodGoals(data.goals, "year", start);
+}: ViewProps & { year: number; today: string }) {
   return (
-    <>
-      <div className="flex flex-col gap-5">
-        <Theme
-          editLabel={strings.editor.edit(strings.goals.northStar)}
-          empty={strings.goals.noNorthStar}
-          eyebrow={strings.goals.northStar}
-          goal={data.north_star}
-          strings={strings}
-          onAdd={() =>
-            onEdit({
-              kind: "new",
-              level: "north_star",
-              periodStart: null,
-              pillar: null,
-            })
-          }
-          onEdit={onEdit}
-        />
-        {theme && (
-          <Theme
-            editLabel={strings.editor.edit(strings.goals.year(year))}
-            eyebrow={strings.goals.year(year)}
-            goal={theme}
-            strings={strings}
-            onEdit={onEdit}
-          />
-        )}
-      </div>
-      <StatTiles stats={stats} strings={strings} />
-      <section>
-        <PlannerSectionTitle>{strings.goals.weeks}</PlannerSectionTitle>
-        <Heatmap
-          counts={plannerWeekGoalCounts(data.goals)}
-          currentWeek={data.current_week}
-          months={months}
-          records={records}
-          strings={strings}
-          year={year}
-        />
-        <Legend strings={strings} />
-      </section>
-      <section>
-        <PlannerSectionTitle>{strings.goals.yearGoals}</PlannerSectionTitle>
-        <GoalCards
-          goals={goals}
-          level="year"
-          periodStart={start}
-          strings={strings}
-          onEdit={onEdit}
-        />
-      </section>
-    </>
+    <PlannerYearMap
+      currentWeek={data.current_week}
+      key={year}
+      map={plannerYearMap(data, year)}
+      strings={strings}
+      today={today}
+      onEdit={onEdit}
+    />
   );
 }
 
@@ -739,105 +689,6 @@ function StatTiles({
         }
       />
     </div>
-  );
-}
-
-function Heatmap({
-  year,
-  months,
-  records,
-  counts,
-  currentWeek,
-  strings,
-}: {
-  year: number;
-  months: string[][];
-  records: ReadonlyMap<string, PlannerWeekDto>;
-  counts: ReadonlyMap<string, number>;
-  currentWeek: string;
-  strings: PlannerGoalsStrings;
-}) {
-  return (
-    <div className="flex flex-col gap-3 overflow-x-auto px-0.5 pt-1 pb-1">
-      {[1, 2, 3, 4].map((quarter) => (
-        <div
-          className="grid grid-cols-[30px_auto] items-start gap-2.5 sm:grid-cols-[44px_auto]"
-          key={quarter}
-        >
-          <Link
-            className="pt-px text-sm font-semibold hover:text-brand-600 dark:hover:text-brand-300"
-            search={{ year, q: quarter }}
-            to="/goals"
-          >
-            {strings.goals.quarter(quarter)}
-          </Link>
-          <div className="flex gap-2.5 sm:gap-3.5">
-            {plannerQuarterMonths(quarter).map((month) => (
-              <div className="flex flex-col gap-1.5" key={month}>
-                <Link
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                  search={{ year, q: quarter, m: month + 1 }}
-                  to="/goals"
-                >
-                  {strings.months[month]}
-                </Link>
-                <div className="flex gap-[3px] sm:gap-1">
-                  {(months[month] ?? []).map((monday) => (
-                    <WeekCell
-                      count={counts.get(monday) ?? 0}
-                      currentWeek={currentWeek}
-                      key={monday}
-                      monday={monday}
-                      record={records.get(monday)}
-                      strings={strings}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** A week in the heatmap: a link once the week has started, its numbers on hover. */
-function WeekCell({
-  monday,
-  currentWeek,
-  record,
-  count,
-  strings,
-}: {
-  monday: string;
-  currentWeek: string;
-  record: PlannerWeekDto | undefined;
-  count: number;
-  strings: PlannerGoalsStrings;
-}) {
-  const kind = plannerCellKind(monday, currentWeek, record);
-  const lines = plannerCellLines(monday, currentWeek, record, count, strings);
-  const cell =
-    monday <= currentWeek ? (
-      <Link
-        aria-label={lines.join(", ")}
-        className="planner-cell outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-        data-kind={kind}
-        data-testid="planner-week-cell"
-        search={{ week: monday }}
-        to="/goals"
-      />
-    ) : (
-      <span className="planner-cell" data-kind={kind} />
-    );
-  return (
-    <Tooltip>
-      <TooltipTrigger render={cell} />
-      <TooltipContent className="whitespace-pre-line tabular-nums">
-        {lines.join("\n")}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
