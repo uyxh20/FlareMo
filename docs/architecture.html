@@ -1012,7 +1012,7 @@
       <ul class="list">
         <li><b>Health tracker</b> for gym, meditation and nights out. In design; gets a section when it ships.</li>
         <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. On dev only, not merged (branch <code>hide-wander-on-this-day</code>). Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>. Moves into <a href="#fork">Fork rules</a> when merged.</li>
-        <li><b>Raw logs in the weekly summary</b> <span class="chip">fork</span>. On dev only, not merged (branch <code>fix/review-raw-logs</code>). Saving the summary copies that week's entries word for word into section "4. Raw Logs", grouped by day, replacing the copy on each re-save. Tags are not carried over. Moves into <a href="#review">Weekly review</a> when merged.</li>
+        <li><b>Long entries no longer look cut off</b>. Pending, not on dev yet (branch <code>fix/memo-expand-cutoff</code>). The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
       </ul>
     </section>
 
@@ -1021,7 +1021,8 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
-        <li><time>2026-10-13</time><span>Redrawn diagram-first: every section is now a figure with a short caption. Added the UTC week boundary and raw logs (on dev).</span></li>
+        <li><time>2026-10-13</time><span>In progress: dropped the raw-logs item; added the expanded-entry height fix (pending).</span></li>
+        <li><time>2026-10-13</time><span>Redrawn diagram-first: every section is now a figure with a short caption. Added the UTC week boundary.</span></li>
         <li><time>2026-10-13</time><span>In progress: added hiding Wander and On this day (on dev, not merged).</span></li>
         <li><time>2026-10-13</time><span>Search: named the confirmed cause of the not-indexed entries (import skips the indexing queue).</span></li>
         <li><time>2026-10-13</time><span>First version, written from the code on main (4ca0c19) and live row counts.</span></li>
