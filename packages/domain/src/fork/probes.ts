@@ -258,6 +258,18 @@ export const PROBES: Record<string, Probe> = {
       );
     }
   },
+  health_entry: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO health_entry (id, user_id, kind, day, variant, feel, source, created_at, updated_at)
+       VALUES (?, ?, 'training', '2026-09-30', 'crossfit', ?, 'manual', ?, ?)`,
+      nextId("health"),
+      p.user.id,
+      p.marker,
+      IN_WEEK,
+      IN_WEEK,
+    );
+  },
   articles: async (p) => {
     await plannerTestRun(
       p.rt.database,

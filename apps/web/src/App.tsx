@@ -22,6 +22,7 @@ import {
 } from "@/components/workspace/workspace-sidebar";
 import { WorkspaceComposer } from "@/components/workspace-composer";
 import { WorkspaceSearch } from "@/components/workspace-search";
+import { HealthWeekStrip } from "@/health/week-strip"; // fork: health tracker
 import { useDataTransfer } from "@/hooks/use-data-transfer";
 import { useMemoMutations } from "@/hooks/use-memo-mutations";
 import { useWorkspaceFilters } from "@/hooks/use-workspace-filters";
@@ -309,6 +310,8 @@ export function FlareMoApp() {
                 tags={stats.tags}
                 captureAvailable={Boolean(captureStatusQuery.data?.available)}
               />
+              {/* fork: health tracker */}
+              <HealthWeekStrip visible={view === "all" && !hasFilters} />
               {hasFilters && (
                 <WorkspaceFilterChips
                   activeTag={activeTag}
