@@ -341,6 +341,15 @@ export function plannerPredictProject(
   };
 }
 
+/** The weekly goal the task serves, or null; it never moves the card. */
+export function plannerPredictGoal(
+  card: PlannerBoardCard,
+  goalId: string | null,
+  now: Date,
+): PlannerBoardCard {
+  return { ...card, goal_id: goalId, updated_at: now.toISOString() };
+}
+
 /** Dropping keeps the plan and clears the due date (decision D1). */
 export function plannerPredictDrop(
   card: PlannerBoardCard,

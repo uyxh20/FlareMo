@@ -190,6 +190,8 @@ export type PlannerStrings = {
     clearStart: string;
     effortInvalid: string;
     noGoals: string;
+    /** The task's goal belongs to another week than the cockpit's. */
+    otherWeekGoal: string;
     notes: {
       title: string;
       placeholder: string;
@@ -441,7 +443,8 @@ const en: PlannerStrings = {
     quarterHint: "from start or due date",
     clearStart: "Clear start date",
     effortInvalid: "Use a number from 0 to 999, with one decimal at most.",
-    noGoals: "No projects yet. Create one under Projects.",
+    noGoals: "No goals this week. Plan them in the weekly review.",
+    otherWeekGoal: "A goal from another week",
     notes: {
       title: "Notes",
       placeholder: "Add notes…",
@@ -684,7 +687,8 @@ const zhCN: PlannerStrings = {
     quarterHint: "由开始或截止日期得出",
     clearStart: "清除开始日期",
     effortInvalid: "请输入 0 到 999 的数字，最多一位小数。",
-    noGoals: "还没有项目，请先在“项目”里创建。",
+    noGoals: "本周还没有目标，请在每周复盘里制定。",
+    otherWeekGoal: "其他周的目标",
     notes: {
       title: "备注",
       placeholder: "添加备注…",

@@ -353,15 +353,15 @@ export const plannerCreateTaskSchema = z.strictObject({
  *   1. `dropped: false`  undrop
  *   2. title, notes, priority, due_at, project_id  through upstream's updateTask
  *   3. `column` (a column move) or else `plan`
- *   4. `effort` and `start_date`  on the plan row; `null` clears either
+ *   4. `effort`, `start_date` and `goal_id`  on the plan row; `null` clears any
  *   5. `dropped: true`   drop
  *
  * It is not atomic: a step that fails leaves the earlier steps applied. A
  * `column` move sets the plan itself (the move table lives on the server), so
  * sending `column` and `plan` together is a 400. `status` and `sort_order` are
  * not accepted here: move columns with `column`, reorder through `/api/app/tasks`.
- * `effort` and `start_date` are planner-side fields that are not a plan: setting
- * them never moves the task, and they are allowed on a dropped task.
+ * `effort`, `start_date` and `goal_id` are planner-side fields that are not a
+ * plan: setting them never moves the task, and they are allowed on a dropped task.
  */
 const plannerTaskIdSchema = z.string().trim().min(1).max(256);
 
@@ -373,6 +373,9 @@ export const plannerUpdateTaskSchema = z
     effort: plannerEffortSchema.nullable().optional(),
     // The start day, YYYY-MM-DD, or null to clear it (v1.2, migration 9002).
     start_date: plannerDaySchema.nullable().optional(),
+    // The weekly goal the task serves (planner_goal.id, migration 9005), or null
+    // to unlink it. Written with a `goal_changed` event, as the weekly review does.
+    goal_id: z.uuid().nullable().optional(),
     // Where in `column` the card goes (migration 9004): between two cards of that
     // column. `before_id` is the card that will sit directly BELOW it, `after_id`
     // the one directly ABOVE it (ids of cards in the target column, as the board

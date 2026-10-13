@@ -273,6 +273,7 @@ export function PlannerCockpitPage() {
         open={panel.taskId !== null}
         taskId={panel.taskId}
         today={today}
+        weekGoals={week?.goals ?? []}
         onOpenChange={(next) => {
           if (!next) panel.close();
         }}

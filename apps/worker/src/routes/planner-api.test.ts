@@ -2590,6 +2590,70 @@ describe("planner API", () => {
     });
   });
 
+  describe("PATCH /tasks/:id with goal_id", () => {
+    const createWeekGoal = async (title: string) =>
+      (
+        await body<{ goal: { id: string } }>(
+          send("POST", `${API}/goals`, {
+            level: "week",
+            period_start: plannerPeriodStart("week", TODAY),
+            pillar: "work",
+            title,
+          }),
+          201,
+        )
+      ).goal;
+
+    it("links, moves and unlinks the task's weekly goal, with a goal_changed event each time", async () => {
+      const task = await createTask("Serve a goal");
+      const first = await createWeekGoal("Ship the launch");
+      const second = await createWeekGoal("Close the deal");
+
+      const linked = await patchTaskOk(task.id, { goal_id: first.id });
+      expect(linked.plan).toMatchObject({ horizon: null, goal_id: first.id });
+      expect(
+        (await patchTaskOk(task.id, { goal_id: second.id })).plan?.goal_id,
+      ).toBe(second.id);
+      // The same goal again changes nothing and writes no event.
+      await patchTaskOk(task.id, { goal_id: second.id });
+      expect(
+        (await patchTaskOk(task.id, { goal_id: null })).plan?.goal_id,
+      ).toBeNull();
+
+      expect(
+        (
+          await rows<{ type: string; data: string }>(
+            "SELECT type, data FROM planner_task_event WHERE task_id = ? ORDER BY id",
+            task.id,
+          )
+        ).map((row) => [row.type, JSON.parse(row.data)]),
+      ).toEqual([
+        ["goal_changed", { from: null, to: first.id }],
+        ["goal_changed", { from: first.id, to: second.id }],
+        ["goal_changed", { from: second.id, to: null }],
+      ]);
+      // A goal is not a plan: the task stays in Backlog.
+      expect(titles((await boardOk()).columns.backlog)).toEqual([
+        "Serve a goal",
+      ]);
+    });
+
+    it("answers 404 for a goal that is not the caller's, 400 for one that is not an id, and changes nothing", async () => {
+      const task = await createTask("Unlinked");
+      await body(
+        patchTask(task.id, { goal_id: "00000000-0000-4000-8000-000000000000" }),
+        404,
+      );
+      await body(patchTask(task.id, { goal_id: "not-a-goal" }), 400);
+      expect(
+        await rows(
+          "SELECT goal_id FROM planner_task_plan WHERE task_id = ? AND goal_id IS NOT NULL",
+          task.id,
+        ),
+      ).toEqual([]);
+    });
+  });
+
   describe("PATCH /tasks/:id with effort", () => {
     it("sets, changes and clears the estimate, and answers with the plan that holds it", async () => {
       const task = await createTask("Estimate me");
