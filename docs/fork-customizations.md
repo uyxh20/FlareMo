@@ -122,6 +122,7 @@ All new, none in conflict with anything upstream ships.
 | `scripts/fork/review-ab/`                       | The weekly review A/B test (plain API vs Managed Agents), run by hand against the dev database. See `docs/fork-review-ab-test.md`. It also adds `@anthropic-ai/sdk` and `@types/node` to the root dev dependencies; the app does not use them. |
 | `scripts/fork/review-eval/`                     | The weekly review model eval (several models through OpenRouter, zero data retention), run by hand against the dev database. See `docs/fork-review-model-eval.md`.                                                                             |
 | `scripts/fork/prod-deploy.mjs`, `prod-deploy.test.mjs`   | One-command ship to live (`deploy`, `rollback`, `status`, `config`). See `docs/fork-dev-environment.md`, "Shipping to live". Touches no upstream file. |
+| `packages/domain/src/fork/`                     | The data-source registry and its tests: which data reaches the weekly review, search, memory, MCP, the export and the backup. See `docs/fork-data-sources.md`. Test-only; the app imports none of it. |
 | `docs/fork-customizations.md`                   | This file.                                                                                                                                                                                                                                     |
 
 ## Undoing a change
