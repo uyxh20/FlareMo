@@ -80,6 +80,16 @@ The owner logs training, breath work and nights out in the diary. The tracker re
 - New tables come from the hand-written `migrations/9010_planner_health.sql` (additive, no foreign keys to upstream tables). They are listed in `RESTORE_TABLES`.
 - The API is at `/api/app/health-tracker`, because `/api/app/health` is upstream's.
 
+### 5. Edit a memo's created date and time
+
+The owner can backdate a note (retrofit entries) from the memo's ⋯ menu: **Edit date and time** opens a small dialog with a date-time picker. No migration: `memos.created_at` already exists.
+
+- API: `PATCH` memo accepts an optional `created_at` (ISO instant). A future time (beyond 5 minutes of clock skew) is refused; the same instant is a no-op. Only the author can do it.
+- The very first time is kept in the memo payload as `original_created_at` and is never overwritten by later moves.
+- Follows automatically: timeline order, calendar, hourly counts (adjusted in the same save), weekly review week, search and export. The health tracker re-reads the memo on save, so its rows move to the new day (unless the owner edited or dismissed the row).
+- Not covered: the nightly memory "dreaming" sweep only looks at entries newer than its last run, so a note backdated before that run is not swept; the manual memory button still works. The MCP update tool does not take `created_at`.
+- Files: `apps/web/src/fork/memo-date-dialog.tsx`, `apps/web/src/fork/memo-date.ts`, `packages/domain/src/memo-backdate.test.ts`. Undo: remove the menu item and dialog lines in `memo-card-menu.tsx`, the `created_at` field in `updateMemoSchema`, and the `forkResolveCreatedAt` pieces in `updateMemo`.
+
 ## Upstream files with a hook-in
 
 These are the only upstream files changed (`git diff --numstat`, added / removed lines).
@@ -120,6 +130,9 @@ These are the only upstream files changed (`git diff --numstat`, added / removed
 | `apps/worker/src/scheduled-tasks.ts` (health)                                                                      | Imports `healthNightlySweep` and awaits it once in the nightly block.                                                                                                                                                                                                                                                                                                                                                                                      | +2 / -0                            |
 | `packages/contracts/src/planner.ts`                                                                                | `export * from "./fork-health";` (the index, an upstream file, stays untouched).                                                                                                                                                                                                                                                                                                                                                                           | +2 / -0                            |
 | `packages/domain/src/memos-write.ts`                                                                               | Imports `forkHealthSyncMemo` and awaits it at the end of `createMemo` and of `updateMemo`.                                                                                                                                                                                                                                                                                                                                                                 | +3 / -0                            |
+| `apps/web/src/components/memo-card/memo-card-menu.tsx` | Imports `ForkMemoDateDialog`, a `forkDateOpen` state, one menu item "Edit date and time", and the dialog next to the menu. | +14 / -0 |
+| `packages/contracts/src/memos.ts` | `created_at` (optional ISO instant) in `updateMemoSchema`. | +2 / -0 |
+| `packages/domain/src/memos-write.ts` (backdate) | `forkResolveCreatedAt`, the `createdAt` and `original_created_at` payload entries in `updateMemo`'s patch and counter transition. | +50 / -2 |
 | `scripts/persistence-manifest.mjs`                                                                                 | The four health tables in `RESTORE_TABLES`.                                                                                                                                                                                                                                                                                                                                                                                                                | +7 / -0                            |
 
 ## Fork-owned files

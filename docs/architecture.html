@@ -490,6 +490,7 @@
           </svg>
         </div>
         <figcaption>A comment is also an entry, linked to its parent in <code>memo_relations</code>. Code: <code>packages/domain/src/memos-write.ts</code>, <code>tags.ts</code>, <code>memos-lifecycle.ts</code>.</figcaption>
+        <p class="note"><b>Backdating</b> <span class="chip">fork</span>. The ⋯ menu has "Edit date and time". It changes <code>memos.created_at</code> (no new table), keeps the first time in the memo's extra data as <code>original_created_at</code>, refuses future times, moves the hourly counts, and re-reads the health rows so they land on the new day. The weekly review picks the week from this time. Nightly memory "dreaming" only scans entries newer than its last run, so a note backdated before that is not swept.</p>
       </figure>
     </section>
 
@@ -1089,6 +1090,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Edit a memo's created date and time from the ⋯ menu (branch feat/edit-memo-created-time; dev first).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 17): health tracker and its four tables (migration 9010).</span></li>
 <li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
         <li><time>2026-10-13</time><span>Health tracker: merged into main and deployed to dev; not live yet.</span></li>

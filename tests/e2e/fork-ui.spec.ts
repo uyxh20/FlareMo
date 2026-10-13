@@ -209,3 +209,25 @@ test("Escape in the focus canvas closes only the open tag list", async ({
   await page.keyboard.press("Escape");
   await expect(canvas).toBeHidden();
 });
+
+test("a memo's date and time can be edited from the ⋯ menu", async ({
+  page,
+}) => {
+  const content = `Backdate me ${Date.now()}`;
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: /new note|新笔记/i });
+  await composer.fill(content);
+  await page.getByRole("button", { name: /^(save|保存|send|发送)$/i }).click();
+  await expect(composer).toHaveText("");
+  const card = page.locator("article", { hasText: content }).first();
+  await expect(card).toBeVisible();
+  await card.hover();
+  await card.getByRole("button", { name: /^(Actions|操作)$/ }).click();
+  await page.getByRole("menuitem", { name: "Edit date and time" }).click();
+  const input = page.getByLabel("Created date and time");
+  await input.fill("2026-03-02T09:30");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Date and time updated")).toBeVisible();
+  // the card now shows the new date on hover, and sits in March 2026
+  await expect(card.getByText(/Mar 2/).first()).toBeAttached();
+});
