@@ -862,6 +862,26 @@
         </div>
         <figcaption>Tables: <code>health_entry</code>, <code>health_entry_event</code> (append-only), <code>health_target</code>, <code>health_sync_state</code> (migration <code>9010_planner_health.sql</code>). The first visit to the Health page reads the whole diary once. Not read by the weekly review yet (on hold). Code: <code>packages/domain/src/health/</code>, <code>apps/web/src/health/</code>, API <code>/api/app/health-tracker</code>. Page: <code>/health</code>. Guide: <code>docs/fork-health-tracker.md</code>.</figcaption>
       </figure>
+      <figure>
+        <div class="fig" style="padding: 16px 18px;">
+          <p style="margin: 0 0 8px; font-weight: 600;">How to log it</p>
+          <p style="margin: 0 0 10px; color: var(--muted);">There is no form. You write in the diary as usual and the reader looks at the words. These always work:</p>
+          <ul class="list" style="margin-top: 0;">
+            <li><b>Training:</b> <code>#gym push</code>, <code>pull</code>, <code>back</code>, <code>chest</code>, <code>legs</code> or <code>upper</code>; <code>#crossfit</code>; <code>#gym zone 2 bike 20</code> for cardio with minutes.</li>
+            <li><b>Breath:</b> <code>#wimhof 10</code> or <code>#meditation 15</code>. With no number it counts 10 minutes.</li>
+            <li><b>Night out:</b> <code>#out til 0330</code>, <code>#out home 1am</code> or <code>#out bender</code>. Add a day word (<code>friday</code>, <code>yesterday</code>, <code>last night</code>) if the night was not today.</li>
+          </ul>
+          <p style="margin: 10px 0 6px; font-weight: 600;">What the reader does</p>
+          <ul class="list" style="margin-top: 0;">
+            <li><b>Every save and edit:</b> the entry is read and gets at most one row per kind, linked to it, plus a history row. Editing updates the rows. Deleting the entry soft-deletes them; restoring it brings them back.</li>
+            <li><b>First visit to /health:</b> reads the whole diary once. A nightly pass re-reads the last 3 days and tidies rows whose entry is gone.</li>
+            <li><b>Plans are ignored:</b> "tomorrow gym" or "no gym today" make nothing. Weekly summaries, vault summary / theme / tracker imports and entries over 1,500 characters are skipped. For 300 to 1,500 characters only a #tag or a clear "done / went" counts.</li>
+            <li><b>Night weight:</b> home before midnight 0, before 03:00 &frac12;, later 1, still out in the morning 1 with a bender flag. With no home time the label shows four buttons (before 00:00, 00 to 03, 03 to 06, morning). Your pick sets the time and marks the row as edited.</li>
+            <li><b>Your word stays:</b> the &times; on a label removes it for good. A re-read never brings back a removed row and never overwrites one you edited.</li>
+          </ul>
+        </div>
+        <figcaption>Standard tags are the dependable path; free-text sentences are read too, by fixed word rules, so an odd phrasing can be missed. If a label is wrong, fix it on the label or edit the entry.</figcaption>
+      </figure>
     </section>
 
     <!-- ============================================================ -->
@@ -1067,6 +1087,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
         <li><time>2026-10-13</time><span>Health tracker: merged into main and deployed to dev; not live yet.</span></li>
 <li><time>2026-10-13</time><span>Health tracker: new section (built, pending on branch feat/health-tracker).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 16): module tests and data-source registry, week-goal picker on tasks, Wander and On this day hidden, expanded-entry height fix. Pending items now read as live.</span></li>
