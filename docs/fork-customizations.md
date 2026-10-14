@@ -6,6 +6,30 @@ One rule runs through every change: **logic goes in fork-owned files under `apps
 
 The planning cockpit is a separate fork add-on with its own document: [planning-cockpit-implementation-plan.md](planning-cockpit-implementation-plan.md). So is the health tracker: [fork-health-tracker.md](fork-health-tracker.md).
 
+## Where things live
+
+Every fork-owned folder or file group, so nothing is a surprise. Generate the raw list with `comm -23 <(git ls-files | sort) <(git ls-tree -r --name-only upstream/main | sort)`.
+
+| Where                                                                                                          | What it is                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/planner/`                                                                                        | The planning cockpit, Goals and weekly review screens: board, task panel, year map, goals editor, review page, their hooks, strings and tests.    |
+| `apps/web/src/fork/`                                                                                           | Small fork changes to upstream screens: hidden sidebar entries, the `#` tag picker, the product name, the backdate dialog.                        |
+| `apps/web/src/health/`                                                                                         | The health tracker screens: week strip, memo labels, Health page.                                                                                 |
+| `packages/domain/src/planner/`                                                                                 | Planner logic: plans, board, task history archive, goals, weekly review context and prompts, nightly sync.                                        |
+| `packages/domain/src/health/`                                                                                  | Reads health values out of diary entries and keeps the tracker rows in step.                                                                      |
+| `packages/domain/src/fork/`                                                                                    | The registry of which data reaches which feature, the guard tests (frozen migrations, hook-in table, agent ask rules) and the backdating rules.                               |
+| `packages/domain/src/memo-backdate.test.ts` | Tests for editing a memo's created date (the rules are in `packages/domain/src/fork/memo-backdate.ts`, called from a hook-in in `memos-write.ts`). |
+| `packages/contracts/src/planner*.ts`, `fork-brand.ts`, `fork-health.ts`                                        | Shared types and request schemas for the planner, the product name and the health tracker.                                                        |
+| `packages/db/src/schema/planner.ts`, `fork-health.ts`, `packages/db/src/planner-migrations.ts` and their tests | Drizzle mirror of the fork tables (kept out of the schema barrel) and checks that it matches the SQL.                                             |
+| `migrations/9xxx_*.sql`                                                                                        | Hand-written, additive fork migrations (planner, goals and review, health). Not in the Drizzle journal; applied hashes are frozen.                |
+| `apps/worker/src/fork/`                                                                                        | Product-name helpers for the Worker (page titles, mail copy) and the password reset checks.                                                                                     |
+| `apps/worker/src/routes/planner-*.ts`, `health-api.ts` and their tests                                         | The fork API routes: planner, goals, review, review model calls, health tracker, and a test that upstream flows still work.                       |
+| `scripts/fork/dev-env*.mjs`, `fake-wrangler.mjs`                                                               | The separate dev deployment: clone live data, deploy, safety guard for every wrangler call.                                                       |
+| `scripts/fork/prod-deploy.mjs`                                                                                 | The one way to ship to live (status, dry run, deploy, rollback).                                                                                  |
+| `tests/e2e/cockpit.spec.ts`, `goals-review.spec.ts`, `fork-ui.spec.ts`                                         | Opt-in browser tests for the fork screens. Written, not run by default.                                                                           |
+| `docs/fork-*.md`, `docs/planning-cockpit-*.md`                                                                 | The fork's own docs (this file, data sources, dev environment, health tracker, planner plan, goals and review). |
+| `.claude/settings.json`, `.cursorrules`                                                                        | Agent settings: ask before raw live writes; editor rules.                             |
+
 ## What is customized, and why
 
 ### 1. Five sidebar entries are hidden
