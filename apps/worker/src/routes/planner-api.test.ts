@@ -1,3 +1,4 @@
+import { defaultKeyHasher } from "@better-auth/api-key";
 import {
   type PlannerBoardResponse,
   type PlannerCommentDto,
@@ -5,7 +6,6 @@ import {
   type PlannerCommentResponse,
   type PlannerCreateTaskResponse,
   type PlannerHistoryRangeResponse,
-  type PlannerRolloverResponse,
   type PlannerRollupResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
@@ -21,7 +21,6 @@ import {
   plannerDeleteCommentResponseSchema,
   plannerHistoryRangeResponseSchema,
   plannerPeriodStart,
-  plannerRolloverResponseSchema,
   plannerRollupResponseSchema,
   plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
@@ -33,7 +32,7 @@ import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { createDb } from "@flaremo/db";
 import { applyPlannerMigrations } from "@flaremo/db/src/planner-migrations";
 import { ensureSingleUser } from "@flaremo/domain";
-import { plannerColumns } from "@flaremo/domain/src/planner";
+import { plannerColumns, plannerRollover } from "@flaremo/domain/src/planner";
 import type { Miniflare } from "miniflare";
 import {
   afterAll,
@@ -539,6 +538,10 @@ describe("planner API", () => {
           body: entry.body,
           headers: asOwnerCookie(),
         });
+        if (entry.path === "/rollover") {
+          expect(response.status, "the retired rollover").toBe(410);
+          continue;
+        }
         expect(response.status, `${entry.method} ${entry.path}`).toBeLessThan(
           300,
         );
@@ -587,10 +590,11 @@ describe("planner API", () => {
       expect(created.plan?.horizon).toBe("week");
       // The deployment's own Origin is fine too.
       await body(
-        request("POST", `${API}/rollover`, {
-          body: { today: TODAY },
+        request("POST", `${API}/tasks`, {
+          body: { title: "With origin", today: TODAY },
           headers: { ...bearer, origin: ORIGIN },
         }),
+        201,
       );
       // Reads work without one.
       const read = await body<PlannerBoardResponse>(
@@ -614,23 +618,33 @@ describe("planner API", () => {
         });
         expect(response.status, `${method} ${path}`).toBe(403);
       }
-      expect(await count("tasks")).toBe(1);
+      expect(await count("tasks")).toBe(2);
     });
 
-    // Upstream's `resolveActor` (copied into planner-api.ts) looks for the
-    // `memos_pat_` prefix on the whole Authorization header, which starts with
-    // "Bearer ", so the token hint it was written to add is never produced and a
-    // PAT is an agent with no name. That is upstream's to fix. This test does not
-    // pin the name; it pins that the planner labels a token exactly as upstream's
-    // own task route does, so one agent is one actor across both.
-    it("attributes a token's writes to an agent, labelled as upstream's task route labels it", async () => {
+    // Fork review finding A04: upstream's `resolveActor` tests the `memos_pat_`
+    // prefix on the whole "Bearer …" header, so it never names the agent. The
+    // planner names it `pat:` plus the start of the token's stored hash, which
+    // matches one row of `auth_apikeys` and holds no part of the secret.
+    it("names a token's writes after its stored key hash, where upstream's task route leaves the name blank", async () => {
       const token = await createPat();
       const bearer = { authorization: `Bearer ${token}` };
+      const label = {
+        actor_type: "agent",
+        actor_name: `pat:${(await defaultKeyHasher(token)).slice(0, 8)}`,
+      };
       const actorsOf = (query: string, ...params: unknown[]) =>
         rows<{ actor_type: string; actor_name: string | null }>(
           query,
           ...params,
         );
+      // The label is the start of the key's own row, not of the token.
+      expect(
+        await rows<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM auth_apikeys WHERE substr(key, 1, 8) = ?",
+          label.actor_name.slice(4),
+        ),
+      ).toEqual([{ n: 1 }]);
+      expect(token).not.toContain(label.actor_name.slice(4));
 
       const viaUpstream = await body<{ task: { id: string } }>(
         request("POST", "/api/app/tasks", {
@@ -639,12 +653,12 @@ describe("planner API", () => {
         }),
         201,
       );
-      const [label, ...extra] = await actorsOf(
-        "SELECT actor_type, actor_name FROM task_activity WHERE task_id = ?",
-        viaUpstream.task.id,
-      );
-      expect(extra).toEqual([]);
-      expect(label?.actor_type).toBe("agent");
+      expect(
+        await actorsOf(
+          "SELECT actor_type, actor_name FROM task_activity WHERE task_id = ?",
+          viaUpstream.task.id,
+        ),
+      ).toEqual([{ actor_type: "agent", actor_name: null }]);
 
       const created = await body<PlannerCreateTaskResponse>(
         request("POST", `${API}/tasks`, {
@@ -664,8 +678,8 @@ describe("planner API", () => {
         }),
       );
 
-      // The planner's own events and upstream's activity rows written by the
-      // planner route all carry the same actor as upstream's route gave the token.
+      // The planner's own events and the upstream activity rows the planner
+      // route writes both carry the name.
       const planner = await actorsOf(
         "SELECT actor_type, actor_name FROM planner_task_event WHERE source = 'planner'",
       );
@@ -683,7 +697,13 @@ describe("planner API", () => {
       await expireSyncDebounce();
       const events = (await history(created.task.id)).events;
       expect(events.length).toBeGreaterThan(3);
-      expect(events.every((event) => event.actor_type === "agent")).toBe(true);
+      expect(
+        events.every(
+          (event) =>
+            event.actor_type === "agent" &&
+            event.actor_name === label.actor_name,
+        ),
+      ).toBe(true);
     });
 
     it("records the owner as a user, with no name, for a cookie session", async () => {
@@ -716,11 +736,6 @@ describe("planner API", () => {
         );
         expect(message).toContain("today");
         await domainError(
-          send("POST", `${API}/rollover`, { today }),
-          400,
-          "within one day",
-        );
-        await domainError(
           send("POST", `${API}/tasks`, { title: "Never created", today }),
           400,
           "within one day",
@@ -749,7 +764,6 @@ describe("planner API", () => {
           week: plannerPeriodStart("week", today),
           month: plannerPeriodStart("month", today),
         });
-        await body(send("POST", `${API}/rollover`, { today }));
       }
     });
 
@@ -762,13 +776,8 @@ describe("planner API", () => {
         "10/05/2026",
       ]) {
         expect((await board({ today })).status, today).toBe(400);
-        expect(
-          (await send("POST", `${API}/rollover`, { today })).status,
-          today,
-        ).toBe(400);
       }
       expect((await send("GET", `${API}/board`)).status).toBe(400);
-      expect((await send("POST", `${API}/rollover`, {})).status).toBe(400);
       expect(
         (await send("POST", `${API}/tasks`, { title: "No today" })).status,
       ).toBe(400);
@@ -852,7 +861,7 @@ describe("planner API", () => {
         ["PATCH", treePath, { period_start: "2026-02-30" }],
         ["PATCH", treePath, { sort_order: 1.5 }],
         ["PATCH", treePath, { name: "Renamed" }],
-        ["POST", `${API}/rollover`, { today: TODAY, extra: 1 }],
+        ["POST", `${API}/tasks`, { title: "Extra", today: TODAY, extra: 1 }],
       ];
       for (const [method, path, requestBody] of bad) {
         const response = await send(method, path, requestBody);
@@ -879,7 +888,7 @@ describe("planner API", () => {
       });
       expect(malformed.status).toBe(400);
       const notJson = await fetchWorker(
-        new Request(url(`${API}/rollover`), {
+        new Request(url(`${API}/tasks`), {
           method: "POST",
           headers: { ...asOwnerCookie(), "content-type": "application/json" },
           body: "{not json",
@@ -1110,131 +1119,31 @@ describe("planner API", () => {
   // ===========================================================================
 
   describe("POST /rollover", () => {
-    it("carries unfinished plans into the current period, once, and leaves the rest alone", async () => {
-      const tomorrow = shiftDay(TODAY, 1);
-      const weekStart = plannerPeriodStart("week", tomorrow);
-      const monthStart = plannerPeriodStart("month", tomorrow);
-      const lastWeek = shiftDay(weekStart, -7);
-      const lastMonth = plannerPeriodStart("month", shiftDay(monthStart, -1));
-
-      const dayTask = await createTask("Day plan", {
+    // Fork review finding A05: the web stopped calling it, and every call
+    // wrote permanent `carried_over` events to the archive.
+    it("answers 410 and writes nothing, not even for a plan it would have carried", async () => {
+      const task = await createTask("Day plan", {
         plan: { horizon: "day", day: TODAY },
       });
-      const weekTask = await createTask("Week plan", {
-        plan: { horizon: "week", day: TODAY },
-      });
-      const monthTask = await createTask("Month plan", {
-        plan: { horizon: "month", day: TODAY },
-      });
-      const doneTask = await createTask("Done plan", {
-        plan: { horizon: "day", day: TODAY },
-      });
-      await patchTaskOk(doneTask.id, { column: "done" });
-      const droppedTask = await createTask("Dropped plan", {
-        plan: { horizon: "day", day: TODAY },
-      });
-      await patchTaskOk(droppedTask.id, { dropped: true });
-      await createTask("Backlog task");
-      // The API will not plan into the past, so age the week and month plans.
-      await run(
-        "UPDATE planner_task_plan SET period_start = ? WHERE task_id = ?",
-        lastWeek,
-        weekTask.id,
-      );
-      await run(
-        "UPDATE planner_task_plan SET period_start = ? WHERE task_id = ?",
-        lastMonth,
-        monthTask.id,
-      );
+      const eventsBefore = await count("planner_task_event");
 
-      const first = onTheWire(
-        plannerRolloverResponseSchema,
-        await body<PlannerRolloverResponse>(
-          send("POST", `${API}/rollover`, { today: tomorrow }),
-        ),
-      );
-      expect(first).toEqual({ history: "ok", carried: 3 });
-
-      const moved = await boardOk({ today: tomorrow });
-      const byTitle = new Map(
-        [...moved.columns.todo, ...moved.columns.done].map((card) => [
-          card.title,
-          card,
-        ]),
-      );
-      expect(byTitle.get("Day plan")).toMatchObject({
-        horizon: "day",
-        period_start: tomorrow,
-        carry_count: 1,
+      const response = await send("POST", `${API}/rollover`, {
+        today: shiftDay(TODAY, 1),
       });
-      expect(byTitle.get("Week plan")).toMatchObject({
-        horizon: "week",
-        period_start: weekStart,
-        carry_count: 1,
-      });
-      expect(byTitle.get("Month plan")).toMatchObject({
-        horizon: "month",
-        period_start: monthStart,
-        carry_count: 1,
-      });
-      // Finished work is not carried, and neither is a dropped plan.
-      expect(byTitle.get("Done plan")).toMatchObject({
-        period_start: TODAY,
-        carry_count: 0,
-      });
-      const withDropped = await boardOk({
-        today: tomorrow,
-        include_dropped: "true",
-      });
-      expect(withDropped.columns.dropped?.[0]).toMatchObject({
-        title: "Dropped plan",
-        period_start: TODAY,
-        carry_count: 0,
+      expect(response.status).toBe(410);
+      expect(await response.json()).toEqual({
+        error: { message: expect.stringContaining("no longer") },
       });
 
-      // The second call finds nothing left to carry.
+      expect(await count("planner_task_event")).toBe(eventsBefore);
       expect(
-        await body<PlannerRolloverResponse>(
-          send("POST", `${API}/rollover`, { today: tomorrow }),
-        ),
-      ).toEqual({ history: "ok", carried: 0 });
-      expect(
-        (await boardOk({ today: tomorrow })).columns.todo.find(
-          (card) => card.title === "Day plan",
-        )?.carry_count,
-      ).toBe(1);
-
-      // Each carry left an event, with the move in it.
-      const events = (await history(dayTask.id)).events.filter(
-        (event) => event.type === "carried_over",
-      );
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({
-        source: "planner",
-        actor_type: "user",
-        data: {
-          from: { horizon: "day", period_start: TODAY },
-          to: { horizon: "day", period_start: tomorrow },
-        },
-      });
-    });
-
-    it("syncs the history first, whatever the sync reports", async () => {
-      const task = await createUpstreamTask("Made in /projects");
-      expect(await count("planner_task_event")).toBe(0);
-
-      expect(
-        await body<PlannerRolloverResponse>(
-          send("POST", `${API}/rollover`, { today: TODAY }),
-        ),
-      ).toEqual({ history: "ok", carried: 0 });
-
-      // Upstream's `created` row is now in the archive.
-      const archived = await rows<{ type: string; source: string }>(
-        "SELECT type, source FROM planner_task_event WHERE task_id = ?",
-        task.id,
-      );
-      expect(archived).toEqual([{ type: "created", source: "activity" }]);
+        (
+          await rows<{ period_start: string; carry_count: number }>(
+            "SELECT period_start, carry_count FROM planner_task_plan WHERE task_id = ?",
+            task.id,
+          )
+        )[0],
+      ).toEqual({ period_start: TODAY, carry_count: 0 });
     });
   });
 
@@ -1989,12 +1898,6 @@ describe("planner API", () => {
         ).toBe(1);
 
         expect((await boardOk()).history).toBe("paused");
-        await expireSyncDebounce();
-        const rollover = await body<PlannerRolloverResponse>(
-          send("POST", `${API}/rollover`, { today: shiftDay(TODAY, 1) }),
-        );
-        // Rollover carried on past the paused sync.
-        expect(rollover).toEqual({ history: "paused", carried: 1 });
       });
     });
   });
@@ -2368,9 +2271,13 @@ describe("planner API", () => {
         project_id: goal,
         plan: { horizon: "day", day: TODAY },
       });
-      await body(
-        send("POST", `${API}/rollover`, { today: shiftDay(TODAY, 1) }),
-      );
+      // The route is gone (410), but carries already in the archive still count.
+      await plannerRollover(db, {
+        userId: owner.id,
+        actor: { type: "user" },
+        today: shiftDay(TODAY, 1),
+        now: new Date(),
+      });
 
       const rollup = await body<PlannerRollupResponse>(
         send(
@@ -2638,13 +2545,30 @@ describe("planner API", () => {
       ]);
     });
 
-    it("answers 404 for a goal that is not the caller's, 400 for one that is not an id, and changes nothing", async () => {
+    it("answers 404 for a goal that is not the caller's, 400 for one that is not an id or not weekly, and changes nothing", async () => {
       const task = await createTask("Unlinked");
       await body(
         patchTask(task.id, { goal_id: "00000000-0000-4000-8000-000000000000" }),
         404,
       );
       await body(patchTask(task.id, { goal_id: "not-a-goal" }), 400);
+      // A year or quarter goal holds no tasks: only weekly goals do.
+      const quarter = (
+        await body<{ goal: { id: string } }>(
+          send("POST", `${API}/goals`, {
+            level: "quarter",
+            period_start: plannerPeriodStart("month", TODAY),
+            pillar: "work",
+            title: "Not for tasks",
+          }),
+          201,
+        )
+      ).goal;
+      await domainError(
+        patchTask(task.id, { goal_id: quarter.id }),
+        400,
+        "weekly goal",
+      );
       expect(
         await rows(
           "SELECT goal_id FROM planner_task_plan WHERE task_id = ? AND goal_id IS NOT NULL",

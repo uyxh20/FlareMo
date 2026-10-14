@@ -1,5 +1,5 @@
 import { importBundleSchema } from "@flaremo/contracts";
-import { projects, taskActivity, tasks } from "@flaremo/db";
+import { projects, taskActivity, tasks, users } from "@flaremo/db";
 import { getTableColumns } from "drizzle-orm";
 import {
   afterAll,
@@ -1114,12 +1114,132 @@ describe("plannerSyncHistory", () => {
     });
   });
 
+  describe("mass-purge brake", () => {
+    const insertLive = (count: number, userId = rt.user.id) =>
+      plannerTestInsertTasks(
+        rt.database,
+        Array.from({ length: count }, (_, i) => ({
+          id: `tasks/bulk-${userId}-${i}`,
+          userId,
+          title: `Bulk ${i}`,
+        })),
+      );
+    const plansOf = async (userId = rt.user.id) =>
+      (
+        await plannerTestRows<{ n: number }>(
+          rt.database,
+          "SELECT COUNT(*) AS n FROM planner_task_plan WHERE user_id = ?",
+          userId,
+        )
+      )[0]?.n;
+
+    it("pauses and deletes nothing when many live tasks vanish at once", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await insertLive(30);
+      expect(await sync(0)).toEqual({ history: "ok" });
+      await plannerTestRun(
+        rt.database,
+        "INSERT INTO planner_task_plan (task_id, user_id, carry_count, created_at, updated_at) SELECT id, user_id, 0, created_at, created_at FROM tasks",
+      );
+      const seenBefore = await plannerTestCount(
+        rt.database,
+        "planner_task_seen",
+      );
+
+      // An upstream rebuild empties the table, and an edit lands afterwards.
+      await plannerTestRun(rt.database, "DELETE FROM tasks");
+      const task = await createTask(rt.db, rt.user, USER, { title: "After" });
+
+      expect(await sync(1)).toEqual({ history: "paused" });
+      const paused = await state();
+      expect(paused?.status).toBe("paused");
+      expect(paused?.paused_reason).toContain(
+        "mass purge brake: 30 of 30 archived tasks",
+      );
+      // Nothing recorded as purged, no snapshot or plan row deleted...
+      expect(
+        await plannerTestRows(
+          rt.database,
+          "SELECT 1 FROM planner_task_event WHERE type = 'purged'",
+        ),
+      ).toEqual([]);
+      expect(await plannerTestCount(rt.database, "planner_task_seen")).toBe(
+        seenBefore,
+      );
+      expect(await plansOf()).toBe(30);
+      // ...but new activity is still archived.
+      expect(await plannerTestTypes(rt.database, task.id)).toEqual(["created"]);
+      // And it stays paused while the gap lasts.
+      expect(await sync(2)).toEqual({ history: "paused" });
+    });
+
+    it("lets a few stray hard deletes through", async () => {
+      await insertLive(10);
+      await sync(0);
+      await plannerTestRun(
+        rt.database,
+        "DELETE FROM tasks WHERE id IN (SELECT id FROM tasks ORDER BY id LIMIT 4)",
+      );
+      expect(await sync(1)).toEqual({ history: "ok" });
+      expect(await plannerTestCount(rt.database, "planner_task_seen")).toBe(6);
+    });
+
+    it("trips on a fifth of the archive once five tasks vanish", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      await insertLive(20);
+      await sync(0);
+      await plannerTestRun(
+        rt.database,
+        "DELETE FROM tasks WHERE id IN (SELECT id FROM tasks ORDER BY id LIMIT 5)",
+      );
+      expect(await sync(1)).toEqual({ history: "paused" });
+    });
+
+    it("never brakes the trash purge, however large", async () => {
+      await insertLive(30);
+      await plannerTestRun(
+        rt.database,
+        "UPDATE tasks SET deleted_at = '2026-01-01T00:00:00.000Z'",
+      );
+      await sync(0);
+      expect(
+        await hardDeleteExpiredTasks(rt.db, "2026-02-01T00:00:00.000Z"),
+      ).toBe(30);
+      expect(await sync(1)).toEqual({ history: "ok" });
+      expect(
+        (
+          await plannerTestRows(
+            rt.database,
+            "SELECT 1 FROM planner_task_event WHERE type = 'purged'",
+          )
+        ).length,
+      ).toBe(30);
+    });
+
+    it("does not brake for a removed member, whose tasks upstream deletes outright", async () => {
+      await insertLive(30, rt.other.id);
+      await sync(0, rt.other.id);
+      await plannerTestRun(
+        rt.database,
+        "UPDATE users SET status = 'removed' WHERE id = ?",
+        rt.other.id,
+      );
+      await plannerTestRun(
+        rt.database,
+        "DELETE FROM tasks WHERE user_id = ?",
+        rt.other.id,
+      );
+      expect(await sync(1, rt.other.id)).toEqual({ history: "ok" });
+    });
+  });
+
   describe("compatibility guards", () => {
     it("keeps every required column inside Drizzle's columns for the same tables", () => {
       const drizzle = {
         tasks: getTableColumns(tasks),
         task_activity: getTableColumns(taskActivity),
         projects: getTableColumns(projects),
+        users: getTableColumns(users),
       };
       for (const [table, columns] of Object.entries(plannerRequiredColumns)) {
         const known = Object.values(drizzle[table as keyof typeof drizzle]).map(

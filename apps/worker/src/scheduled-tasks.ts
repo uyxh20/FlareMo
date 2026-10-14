@@ -303,9 +303,14 @@ export async function runScheduledMaintenance(
     // Projects first: the FK cascade removes their binned tasks and trails
     // in the same statement, so the task sweep below only ever handles
     // tasks deleted independently of their project.
-    await plannerSyncAllUsers(db, new Date(scheduledTime)); // fork: archive before the purge
-    const purgedProjects = await hardDeleteExpiredProjects(db, trashCutoff);
-    const purgedTasks = await hardDeleteExpiredTasks(db, trashCutoff);
+    // fork: archive before the purge, and skip it on a night the archive paused
+    const archive = await plannerSyncAllUsers(db, new Date(scheduledTime));
+    const purgedProjects = archive.paused
+      ? 0
+      : await hardDeleteExpiredProjects(db, trashCutoff);
+    const purgedTasks = archive.paused
+      ? 0
+      : await hardDeleteExpiredTasks(db, trashCutoff);
     await plannerSyncAllUsers(db, new Date(scheduledTime)); // fork: record `purged`
     if (purgedProjects > 0 || purgedTasks > 0) {
       console.log(

@@ -155,7 +155,45 @@ describe("nightly planner history sync", () => {
     void owner;
   });
 
-  it("does not fail the purge when the planner tables are missing", async () => {
+  // Fork review finding A01: the purge cascades away `task_activity`, so it
+  // must not run on a night the archive could not copy first.
+  it("skips the task purge on a night the archive copy paused, and purges once it resumes", async () => {
+    const created = await send("POST", "/api/app/tasks", { title: "Old" });
+    const task = (await created.json<{ task: { id: string } }>()).task;
+    await send("DELETE", `/api/app/tasks/${bare(task.id)}`);
+    await ctx.d1
+      .prepare("UPDATE tasks SET deleted_at = '2020-01-01T00:00:00.000Z'")
+      .run();
+    const tasksLeft = async () =>
+      (
+        await ctx.d1
+          .prepare("SELECT COUNT(*) AS n FROM tasks")
+          .first<{ n: number }>()
+      )?.n;
+
+    // An upstream change renames a column the archive reads: the copy pauses.
+    await ctx.d1
+      .prepare("ALTER TABLE task_activity RENAME COLUMN changes TO changes_x")
+      .run();
+    await runScheduledMaintenance(ctx.env, Date.now());
+    expect(await tasksLeft()).toBe(1);
+    expect(await archive(task.id)).toEqual([]);
+
+    // Fixed the next day: the copy runs first, then the purge.
+    await ctx.d1
+      .prepare("ALTER TABLE task_activity RENAME COLUMN changes_x TO changes")
+      .run();
+    await runScheduledMaintenance(ctx.env, Date.now() + 86_400_000);
+    expect(await tasksLeft()).toBe(0);
+    // (Sorted: the back-dated delete stamp sorts before the creation.)
+    expect((await archive(task.id)).map((event) => event.type).sort()).toEqual([
+      "created",
+      "deleted",
+      "purged",
+    ]);
+  });
+
+  it("skips the task purge when the archive is installed but its sync state is missing", async () => {
     await ctx.d1.prepare("DROP TABLE planner_sync_state").run();
     const created = await send("POST", "/api/app/tasks", { title: "Old" });
     const task = (await created.json<{ task: { id: string } }>()).task;
@@ -167,6 +205,6 @@ describe("nightly planner history sync", () => {
     const left = await ctx.d1
       .prepare("SELECT COUNT(*) AS n FROM tasks")
       .first<{ n: number }>();
-    expect(left?.n).toBe(0);
+    expect(left?.n).toBe(1);
   });
 });

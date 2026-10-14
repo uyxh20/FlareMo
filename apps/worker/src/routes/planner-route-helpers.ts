@@ -1,3 +1,4 @@
+import { defaultKeyHasher } from "@better-auth/api-key";
 import { plannerTodayWithinBounds } from "@flaremo/contracts";
 import { type TaskActor, ValidationError } from "@flaremo/domain";
 import type { Context } from "hono";
@@ -7,25 +8,28 @@ import type { HonoBindings, ReturnTypeOfRequestContext } from "../context";
 // planner-goals-api.ts, which planner-api.ts mounts. Kept in their own module so
 // the sub-router does not import the router that mounts it.
 
-// A copy of tasks-api.ts's `resolveActor`, which is not exported. Agents write
-// through the same route as the browser, so the actor is derived from the
-// credential: a PAT is an agent (labelled with a short token hint so the
-// activity trail stays attributable), a cookie session is the owner.
+// The actor of a planner write is derived from the credential: a PAT is an
+// agent, a cookie session is the owner.
 //
-// Kept identical on purpose, bug included: it tests the `memos_pat_` prefix on
-// the whole Authorization header, which starts with "Bearer ", so the hint is
-// never produced and a PAT is an agent with no name. Fixing it here alone would
-// label one token differently through the two APIs; fix both, or export one.
-export function plannerResolveActor(
+// This started as a copy of tasks-api.ts's `resolveActor`, which tests the
+// `memos_pat_` prefix against the whole Authorization header ("Bearer …"), so
+// it never produces a name and every agent write landed in the permanent
+// archive with `actor_name = NULL` (fork review finding A04). The planner
+// labels the agent `pat:` plus the first 8 characters of the token's stored
+// hash (Better Auth keeps SHA-256, base64url, in `auth_apikeys.key`): that matches
+// one key, and puts no part of the secret itself in the archive. Upstream's
+// own task route still labels the same token with no name; that is upstream's
+// to fix.
+export async function plannerResolveActor(
   c: Context<HonoBindings>,
   credential: ReturnTypeOfRequestContext["credential"],
-): TaskActor {
+): Promise<TaskActor> {
   if (credential !== "pat") return { type: "user" };
-  const token = c.req.raw.headers.get("authorization")?.trim() ?? "";
-  const hint = token.startsWith("memos_pat_")
-    ? token.slice("memos_pat_".length, "memos_pat_".length + 8)
-    : null;
-  return { type: "agent", name: hint ? `pat:${hint}` : undefined };
+  const header = c.req.raw.headers.get("authorization")?.trim() ?? "";
+  const token = header.replace(/^Bearer\s+/i, "");
+  if (!token.startsWith("memos_pat_")) return { type: "agent" };
+  const hash = await defaultKeyHasher(token);
+  return { type: "agent", name: `pat:${hash.slice(0, 8)}` };
 }
 
 // `today` is the client's local date. Local dates around the world span UTC-12

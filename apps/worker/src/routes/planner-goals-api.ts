@@ -366,7 +366,7 @@ plannerGoalsApi.post(
         context.db,
         {
           user: context.user,
-          actor: plannerResolveActor(c, context.credential),
+          actor: await plannerResolveActor(c, context.credential),
           weekStart: c.req.param("week"),
           body,
         },
