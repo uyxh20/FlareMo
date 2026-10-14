@@ -77,4 +77,21 @@ describe("updateMemo created_at", () => {
       }),
     ).rejects.toBeInstanceOf(ValidationError);
   });
+
+  it("keeps the first time when a full payload replaces the old one", async () => {
+    const memo = await make("restored later");
+    const moved = await updateMemo(db, owner, memo.id, {
+      created_at: "2026-03-02T09:30:00.000Z",
+    });
+    // A revision restore (or an /api/v1 client) sends a payload without it.
+    const { original_created_at: _dropped, ...older } = moved.payload;
+    const restored = await updateMemo(db, owner, memo.id, { payload: older });
+    expect(restored.createdAt).toBe("2026-03-02T09:30:00.000Z");
+    expect(restored.payload.original_created_at).toBe(memo.createdAt);
+    // and a later move still records the true original
+    const again = await updateMemo(db, owner, memo.id, {
+      created_at: "2026-03-04T08:00:00.000Z",
+    });
+    expect(again.payload.original_created_at).toBe(memo.createdAt);
+  });
 });

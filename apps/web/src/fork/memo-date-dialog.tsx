@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2Icon } from "lucide-react";
+import { CalendarClockIcon, Loader2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { Memo } from "@/api";
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/error";
 import { getMemoResourceId } from "@/lib/memo";
@@ -21,6 +22,21 @@ import { forkLocalInputToIso, forkLocalInputValue } from "./memo-date";
 // Fork add-on (docs/fork-customizations.md, "Edit a memo's created time"):
 // the dialog behind the ⋯ menu's "Edit date and time". Backdates (or moves)
 // a memo; the server keeps the very first time in the memo payload.
+//
+// English only, like every fork add-on: keys in the eight upstream catalogs would
+// make each upstream merge a conflict (see apps/web/src/health/strings.ts).
+
+export const FORK_MEMO_DATE_LABEL = "Edit date and time";
+
+/** The ⋯ menu's entry; memo-card-menu.tsx renders it next to "Edit". */
+export function ForkMemoDateMenuItem({ onSelect }: { onSelect: () => void }) {
+  return (
+    <DropdownMenuItem onClick={onSelect}>
+      <CalendarClockIcon />
+      {FORK_MEMO_DATE_LABEL}
+    </DropdownMenuItem>
+  );
+}
 
 type MemoDateDialogProps = {
   open: boolean;
@@ -28,11 +44,18 @@ type MemoDateDialogProps = {
   memo: Memo;
 };
 
-export function ForkMemoDateDialog({
-  open,
-  onOpenChange,
-  memo,
-}: MemoDateDialogProps) {
+/**
+ * Every manageable card renders this, so it stays empty until the first open
+ * (the same latch upstream uses for its share-image dialog), then stays mounted
+ * so the close animation still plays.
+ */
+export function ForkMemoDateDialog(props: MemoDateDialogProps) {
+  const [mounted, setMounted] = useState(props.open);
+  if (props.open && !mounted) setMounted(true);
+  return mounted ? <MemoDateDialog {...props} /> : null;
+}
+
+function MemoDateDialog({ open, onOpenChange, memo }: MemoDateDialogProps) {
   const queryClient = useQueryClient();
   const [value, setValue] = useState(() =>
     forkLocalInputValue(memo.create_time),
@@ -76,7 +99,7 @@ export function ForkMemoDateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Edit date and time</DialogTitle>
+          <DialogTitle>{FORK_MEMO_DATE_LABEL}</DialogTitle>
           <DialogDescription>
             Moves this note on the timeline, the calendar, the health tracker
             and the weekly review. The original time is kept.

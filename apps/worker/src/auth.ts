@@ -24,7 +24,6 @@ import {
   MEMOS_PAT_CONFIG_ID,
   MEMOS_PAT_PREFIX,
 } from "./auth-env";
-import { sendPasswordResetEmail } from "./email";
 import type { FlareMoEnv } from "./env";
 
 /**
@@ -133,32 +132,8 @@ export function createFlareMoAuth(
       maxPasswordLength: 128,
       autoSignIn: false,
       // Password resets must invalidate every session, including sessions
-      // the operator cannot inspect in a browser. memos_pat_ PATs are a
-      // separate credential class and stay valid unless an operator recovery
-      // or explicit revoke disables them.
+      // the operator cannot inspect in a browser.
       revokeSessionsOnPasswordReset: true,
-      resetPasswordTokenExpiresIn: 60 * 60,
-      sendResetPassword: async ({ user, token }, request) => {
-        // Same delivery path as POST /api/auth/flaremo/forgot-password: the
-        // mail link opens /reset?token=… and the page posts to Better Auth's
-        // /api/auth/reset-password. Ignore Better Auth's default URL so the
-        // existing reset page keeps working.
-        const sent = await sendPasswordResetEmail(env, db, {
-          to: user.email,
-          token,
-          publicUrl,
-          acceptLanguage:
-            request instanceof Request
-              ? request.headers.get("accept-language")
-              : null,
-        });
-        if (!sent) {
-          // Do not throw: Better Auth only invokes this hook for an existing
-          // identity, so a 500 would distinguish known addresses from unknown
-          // ones. Delivery failures are already logged in sendPasswordResetEmail.
-          return;
-        }
-      },
     },
     // Social sign-in merges into an existing account when the verified
     // provider email matches (Google/GitHub verify addresses); nothing is
