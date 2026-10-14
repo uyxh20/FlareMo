@@ -121,3 +121,11 @@ are never reverted automatically; the bookmark is printed for that. Only counts
 are read from live D1, and var values are masked in wrangler output.
 
 Tests: `node --test scripts/fork/prod-deploy.test.mjs`.
+
+This script is the way to ship. The repo's `.claude/settings.json` makes a
+Claude session ask first before any raw live write (`wrangler deploy`,
+`wrangler versions deploy`, `wrangler rollback`, remote `d1 migrations apply`
+or `d1 execute`, `d1 time-travel restore`), because those skip every safeguard
+above. The script itself is not prompted: it carries its own `--confirm
+flaremo`. `packages/domain/src/fork/guards.test.ts` fails if a later edit
+allows a raw live write again.

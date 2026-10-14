@@ -61,7 +61,7 @@ Look back ends in the summary memo. It streams into a sheet with Stop, then Edit
 
 **Look forward** plans the next week in four steps:
 
-1. Settle the clashes the last conflict check flagged, by rewriting a goal or keeping it for now.
+1. Settle the clashes the last conflict check flagged, by rewriting a goal or keeping it for now. A rewrite changes the goal's title and makes it active; its lines and note stay, and the old title is kept as a struck line, since goals keep no other history.
 2. Choose the week's goals, one slot per objective. The Next Steps of the week's summary (or, before it exists, the one before) fill the slots as starting points.
 3. Plan their tasks: linked from the board or new, under the To Do cap of 7.
 4. Commit with the question for next Sunday, after a conflict check that only flags.

@@ -145,3 +145,65 @@ describe("upstream files still call the fork's hooks", () => {
     expect(catchAll).toBeGreaterThan(planner);
   });
 });
+
+describe("Claude sessions ask before writing to live", () => {
+  // The repo's .claude/settings.json once allowed raw `wrangler deploy` and
+  // remote migrations with no prompt, which skipped every safeguard of
+  // scripts/fork/prod-deploy.mjs (clean tree, Time Travel bookmark, row counts,
+  // automatic rollback). Raw live writes must prompt; the deploy script is the
+  // way to ship and carries its own `--confirm flaremo`.
+  const settings = JSON.parse(
+    readFileSync(repo(".claude/settings.json"), "utf8"),
+  ) as { permissions?: { allow?: string[]; ask?: string[] } };
+  const LIVE_WRITES = [
+    "npx wrangler deploy --config wrangler.jsonc --keep-vars",
+    "wrangler deploy --config ../../wrangler.jsonc --keep-vars",
+    "npx wrangler d1 migrations apply DB --remote --config wrangler.jsonc",
+    "npx wrangler d1 execute flaremo --remote --command 'DELETE FROM memos'",
+    "npx wrangler rollback --config wrangler.jsonc",
+    "npx wrangler versions deploy --config wrangler.jsonc",
+    "npx wrangler d1 time-travel restore flaremo --bookmark x",
+  ];
+
+  /** A Bash permission rule as Claude Code reads it: `*` matches any text. */
+  const matches = (rule: string, command: string) => {
+    const inner = /^Bash\((.*)\)$/.exec(rule)?.[1];
+    if (inner === undefined) return false;
+    const pattern = inner
+      .split("*")
+      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*");
+    return new RegExp(`^${pattern}$`).test(command);
+  };
+
+  it("allows no live write without a prompt", () => {
+    const allowed = LIVE_WRITES.filter((command) =>
+      (settings.permissions?.allow ?? []).some((rule) =>
+        matches(rule, command),
+      ),
+    );
+    expect(allowed).toEqual([]);
+  });
+
+  it("asks before every live write", () => {
+    const unasked = LIVE_WRITES.filter(
+      (command) =>
+        !(settings.permissions?.ask ?? []).some((rule) =>
+          matches(rule, command),
+        ),
+    );
+    expect(unasked).toEqual([]);
+  });
+
+  it("leaves the deploy script and local work unprompted", () => {
+    const asked = [
+      "node scripts/fork/prod-deploy.mjs deploy --confirm flaremo",
+      "node scripts/fork/dev-env.mjs deploy",
+      "npx wrangler d1 migrations apply DB --local",
+      "pnpm exec vitest run packages/domain/src/fork",
+    ].filter((command) =>
+      (settings.permissions?.ask ?? []).some((rule) => matches(rule, command)),
+    );
+    expect(asked).toEqual([]);
+  });
+});
