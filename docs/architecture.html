@@ -274,7 +274,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-14 · describes main at commit e426a24, live version 22</p>
+      <p class="meta">Last updated 2026-10-14 · describes main at commit 65f464c, live version 23</p>
     </header>
 
     <!-- ============================================================ -->
@@ -825,7 +825,7 @@
             <text x="120" y="276" class="t-s">each goal: title · lines · draft / active / contested / closed · met / partial / missed</text>
           </svg>
         </div>
-        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".<br /><b>Live since 2026-10-13 (version 19):</b> the year page of <code>/goals</code> is the Year map, this same grid on screen: pillars as columns, north star to weeks down one page. Goals line up by pillar and period (no parent link). A period's goals in one pillar share one split row, one part per goal, points as chips. Following a pillar shows only that pillar. Weekly goals with no pillar get one row across the columns. A weekly goal opens a pop-up with its tasks and the goals above it.<br /><b>Live since 2026-10-14 (version 22):</b> only the current month and current week rows are coloured; year and quarter goals are plain cards with larger type. Point chips have a grey border, not the pillar colour, and all pillar dots are one small size.</figcaption>
+        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".<br /><b>Live since 2026-10-13 (version 19):</b> the year page of <code>/goals</code> is the Year map, this same grid on screen: pillars as columns, north star to weeks down one page. Goals line up by pillar and period (no parent link). A period's goals in one pillar share one split row, one part per goal, points as chips. Following a pillar shows only that pillar. Weekly goals with no pillar get one row across the columns. A weekly goal opens a pop-up with its tasks and the goals above it.<br /><b>Live since 2026-10-14 (version 22):</b> only the current month and current week rows are coloured; year and quarter goals are plain cards with larger type. Point chips have a grey border, not the pillar colour, and all pillar dots are one small size.<br /><b>Live since 2026-10-14 (version 23):</b> quarters hold only pillar goals. The generic quarter "theme" lines were removed (soft-deleted on live) and the "+" that added them is gone from the Year map and Quarter page; a new quarter goal has no "No pillar" choice.</figcaption>
       </figure>
     </section>
 
@@ -1086,6 +1086,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
+        <li><b>Quarters: pillar goals only</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 23). The four generic quarter theme lines were soft-deleted on live, and the app no longer offers a way to add one. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>, <code>goals-page.tsx</code>, <code>goal-editor.tsx</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Year map: colour only now</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 22). Only the current month and current week rows are coloured; year and quarter goals are plain cards. No migration. Code: <code>apps/web/src/planner/goals.css</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Rewrite keeps a goal's details</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 21). Rewriting a goal in Check goals changes only its title: its lines and note stay, and the old title is kept as a struck line. Code: <code>packages/domain/src/planner/review.ts</code>. See <a href="#review">Weekly review</a>.</li>
         <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
