@@ -1,5 +1,8 @@
 <title>Schizo Diary Architecture</title>
-<meta name="description" content="How Schizo Diary works, mostly in diagrams: where data sits, memos, search and vectors, memory, the weekly review, the cockpit and deploys." />
+<meta
+  name="description"
+  content="How Schizo Diary works, mostly in diagrams: where data sits, memos, search and vectors, memory, the weekly review, the cockpit and deploys."
+/>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
@@ -42,9 +45,11 @@
     --vec: #0f6e78;
     --ai: #a0531a;
     --code-bg: #eef1f4;
-    --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+    --font-display:
+      "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
     --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --font-mono:
+      "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -87,7 +92,9 @@
     color-scheme: dark;
   }
 
-  * { box-sizing: border-box; }
+  * {
+    box-sizing: border-box;
+  }
   body {
     background: var(--bg);
     color: var(--ink);
@@ -105,8 +112,13 @@
     gap: 44px;
   }
   @media (max-width: 860px) {
-    .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
-    nav.toc { display: none; }
+    .wrap {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    nav.toc {
+      display: none;
+    }
   }
   nav.toc {
     position: sticky;
@@ -125,12 +137,35 @@
     color: var(--muted);
     margin: 0 0 10px;
   }
-  nav.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-  nav.toc a { display: block; padding: 4px 8px; border-radius: 4px; color: var(--muted); text-decoration: none; }
-  nav.toc a:hover, nav.toc a:focus-visible { color: var(--ink); background: var(--accent-soft); outline: none; }
+  nav.toc ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+  }
+  nav.toc a {
+    display: block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  nav.toc a:hover,
+  nav.toc a:focus-visible {
+    color: var(--ink);
+    background: var(--accent-soft);
+    outline: none;
+  }
 
-  main { min-width: 0; padding-block: 40px 0; }
-  header.top { padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+  main {
+    min-width: 0;
+    padding-block: 40px 0;
+  }
+  header.top {
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--rule);
+  }
   .eyebrow {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -139,17 +174,62 @@
     color: var(--accent);
     margin: 0 0 8px;
   }
-  h1, h2 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; }
-  h1 { font-size: clamp(32px, 5vw, 46px); margin: 0 0 10px; font-weight: 700; letter-spacing: -0.01em; }
-  h2 { font-size: 24px; margin: 0 0 6px; font-weight: 700; }
-  .lede { font-size: 17px; color: var(--muted); max-width: 64ch; margin: 0; }
-  .meta { font-size: 13px; color: var(--muted); margin-top: 12px; font-family: var(--font-mono); }
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+    line-height: 1.2;
+  }
+  h1 {
+    font-size: clamp(32px, 5vw, 46px);
+    margin: 0 0 10px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 24px;
+    margin: 0 0 6px;
+    font-weight: 700;
+  }
+  .lede {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 64ch;
+    margin: 0;
+  }
+  .meta {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 12px;
+    font-family: var(--font-mono);
+  }
 
-  section { padding-block: 32px; border-bottom: 1px solid var(--rule); scroll-margin-top: 16px; }
-  section > p { max-width: 68ch; margin: 0 0 8px; color: var(--muted); }
-  a { color: var(--accent); }
-  code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
-  .where { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  section {
+    padding-block: 32px;
+    border-bottom: 1px solid var(--rule);
+    scroll-margin-top: 16px;
+  }
+  section > p {
+    max-width: 68ch;
+    margin: 0 0 8px;
+    color: var(--muted);
+  }
+  a {
+    color: var(--accent);
+  }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+  }
+  .where {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
   .chip {
     display: inline-block;
     font-family: var(--font-mono);
@@ -172,75 +252,261 @@
     overflow: hidden;
     margin: 18px 0 8px;
   }
-  @media (max-width: 760px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  .stat { background: var(--surface); padding: 12px 14px; }
-  .stat b { display: block; font-family: var(--font-display); font-size: 26px; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 12px; color: var(--muted); line-height: 1.35; display: block; }
+  @media (max-width: 760px) {
+    .stats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .stat {
+    background: var(--surface);
+    padding: 12px 14px;
+  }
+  .stat b {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat span {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.35;
+    display: block;
+  }
 
-  figure { margin: 16px 0 6px; }
-  .fig { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; }
-  .fig svg { display: block; width: 100%; min-width: 680px; height: auto; }
-  figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; max-width: 72ch; }
-  figcaption b { color: var(--ink); }
-  figure > p.note { font-size: 14px; color: var(--muted); max-width: 72ch; margin: 8px 0 0; }
-  figure > p.note b { color: var(--ink); }
+  figure {
+    margin: 16px 0 6px;
+  }
+  .fig {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .fig svg {
+    display: block;
+    width: 100%;
+    min-width: 680px;
+    height: auto;
+  }
+  figcaption {
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 8px;
+    max-width: 72ch;
+  }
+  figcaption b {
+    color: var(--ink);
+  }
+  figure > p.note {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 72ch;
+    margin: 8px 0 0;
+  }
+  figure > p.note b {
+    color: var(--ink);
+  }
 
   /* SVG vocabulary */
-  svg text { fill: var(--ink); font-family: var(--font-body); font-size: 13px; }
-  svg .t-s { fill: var(--muted); font-size: 11.5px; }
-  svg .t-m { font-family: var(--font-mono); font-size: 11.5px; }
-  svg .t-b { font-weight: 600; }
-  svg .t-h { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
-  svg .t-warn { fill: var(--warn); }
-  svg .t-fork { fill: var(--fork); }
-  svg .t-on { fill: var(--surface); }
-  svg .n { fill: var(--surface); stroke: var(--rule); stroke-width: 1.3; }
-  svg .n-soft { fill: var(--bg); stroke: none; }
-  svg .n-acc { stroke: var(--accent); stroke-width: 2; }
-  svg .n-d1 { stroke: var(--d1); stroke-width: 2; }
-  svg .n-r2 { stroke: var(--r2); stroke-width: 2; }
-  svg .n-vec { stroke: var(--vec); stroke-width: 2; }
-  svg .n-ai { stroke: var(--ai); stroke-width: 2; }
-  svg .n-fork { stroke: var(--fork); stroke-width: 2; }
-  svg .n-warn { stroke: var(--warn); stroke-width: 1.6; }
-  svg .fill-acc { fill: var(--accent-soft); }
-  svg .fill-fork { fill: var(--fork-soft); }
-  svg .fill-warn { fill: var(--warn-soft); }
-  svg .dash { stroke-dasharray: 5 4; }
-  svg .a { stroke: var(--muted); stroke-width: 1.4; fill: none; }
-  svg .a-acc { stroke: var(--accent); }
-  svg .a-warn { stroke: var(--warn); }
-  svg .ah { fill: var(--muted); }
-  svg .f-d1 { fill: var(--d1); }
-  svg .f-vec { fill: var(--vec); }
-  svg .f-ai { fill: var(--ai); }
-  svg .f-fork { fill: var(--fork); }
-  svg .f-warn { fill: var(--warn); }
-  svg .f-acc { fill: var(--accent); }
-  svg .f-track { fill: var(--code-bg); }
-  svg .f-muted { fill: var(--muted); }
-  svg .line { stroke: var(--rule); stroke-width: 1.3; }
-  svg .line-strong { stroke: var(--muted); stroke-width: 2; }
+  svg text {
+    fill: var(--ink);
+    font-family: var(--font-body);
+    font-size: 13px;
+  }
+  svg .t-s {
+    fill: var(--muted);
+    font-size: 11.5px;
+  }
+  svg .t-m {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+  }
+  svg .t-b {
+    font-weight: 600;
+  }
+  svg .t-h {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+  }
+  svg .t-warn {
+    fill: var(--warn);
+  }
+  svg .t-fork {
+    fill: var(--fork);
+  }
+  svg .t-on {
+    fill: var(--surface);
+  }
+  svg .n {
+    fill: var(--surface);
+    stroke: var(--rule);
+    stroke-width: 1.3;
+  }
+  svg .n-soft {
+    fill: var(--bg);
+    stroke: none;
+  }
+  svg .n-acc {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  svg .n-d1 {
+    stroke: var(--d1);
+    stroke-width: 2;
+  }
+  svg .n-r2 {
+    stroke: var(--r2);
+    stroke-width: 2;
+  }
+  svg .n-vec {
+    stroke: var(--vec);
+    stroke-width: 2;
+  }
+  svg .n-ai {
+    stroke: var(--ai);
+    stroke-width: 2;
+  }
+  svg .n-fork {
+    stroke: var(--fork);
+    stroke-width: 2;
+  }
+  svg .n-warn {
+    stroke: var(--warn);
+    stroke-width: 1.6;
+  }
+  svg .fill-acc {
+    fill: var(--accent-soft);
+  }
+  svg .fill-fork {
+    fill: var(--fork-soft);
+  }
+  svg .fill-warn {
+    fill: var(--warn-soft);
+  }
+  svg .dash {
+    stroke-dasharray: 5 4;
+  }
+  svg .a {
+    stroke: var(--muted);
+    stroke-width: 1.4;
+    fill: none;
+  }
+  svg .a-acc {
+    stroke: var(--accent);
+  }
+  svg .a-warn {
+    stroke: var(--warn);
+  }
+  svg .ah {
+    fill: var(--muted);
+  }
+  svg .f-d1 {
+    fill: var(--d1);
+  }
+  svg .f-vec {
+    fill: var(--vec);
+  }
+  svg .f-ai {
+    fill: var(--ai);
+  }
+  svg .f-fork {
+    fill: var(--fork);
+  }
+  svg .f-warn {
+    fill: var(--warn);
+  }
+  svg .f-acc {
+    fill: var(--accent);
+  }
+  svg .f-track {
+    fill: var(--code-bg);
+  }
+  svg .f-muted {
+    fill: var(--muted);
+  }
+  svg .line {
+    stroke: var(--rule);
+    stroke-width: 1.3;
+  }
+  svg .line-strong {
+    stroke: var(--muted);
+    stroke-width: 2;
+  }
 
-  ul.list { margin: 8px 0 0; padding-left: 20px; max-width: 68ch; }
-  ul.list li { margin-bottom: 8px; }
-  ul.log { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14px; }
-  ul.log li { display: grid; grid-template-columns: 100px minmax(0, 1fr); gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--rule); }
-  ul.log time { font-family: var(--font-mono); color: var(--muted); font-size: 13px; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+  ul.list {
+    margin: 8px 0 0;
+    padding-left: 20px;
+    max-width: 68ch;
+  }
+  ul.list li {
+    margin-bottom: 8px;
+  }
+  ul.log {
+    list-style: none;
+    padding: 0;
+    margin: 8px 0 0;
+    font-size: 14px;
+  }
+  ul.log li {
+    display: grid;
+    grid-template-columns: 100px minmax(0, 1fr);
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--rule);
+  }
+  ul.log time {
+    font-family: var(--font-mono);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
 </style>
 
 <!-- Shared arrowheads, referenced by every figure -->
 <svg width="0" height="0" style="position: absolute" aria-hidden="true">
   <defs>
-    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker
+      id="ah"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
       <path d="M0 0 L10 5 L0 10 z" class="ah" />
     </marker>
-    <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker
+      id="ah-acc"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
       <path d="M0 0 L10 5 L0 10 z" class="f-acc" />
     </marker>
-    <marker id="ah-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <marker
+      id="ah-warn"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto-start-reverse"
+    >
       <path d="M0 0 L10 5 L0 10 z" class="f-warn" />
     </marker>
   </defs>
@@ -273,32 +539,61 @@
     <header class="top">
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
-      <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-14 · describes main at commit 5f53a7a, live version 24</p>
+      <p class="lede">
+        The whole app in pictures: what runs where, where data is kept, and what
+        the AI reads.
+      </p>
+      <p class="meta">
+        Last updated 2026-10-14 · describes main at commit 1daf24b, live version
+        25
+      </p>
     </header>
 
     <!-- ============================================================ -->
     <section id="glance">
       <h2>At a glance</h2>
-      <p>A fork of FlareMo that runs entirely on Cloudflare. The diary half comes from FlareMo; the planning half (cockpit, goals, review) is fork-only.</p>
-      <div class="stats" role="list" aria-label="Live data snapshot, 2026-10-13">
-        <div class="stat" role="listitem"><b>536</b><span>diary entries (+43 in bin)</span></div>
+      <p>
+        A fork of FlareMo that runs entirely on Cloudflare. The diary half comes
+        from FlareMo; the planning half (cockpit, goals, review) is fork-only.
+      </p>
+      <div
+        class="stats"
+        role="list"
+        aria-label="Live data snapshot, 2026-10-13"
+      >
+        <div class="stat" role="listitem">
+          <b>536</b><span>diary entries (+43 in bin)</span>
+        </div>
         <div class="stat" role="listitem"><b>118</b><span>memories</span></div>
         <div class="stat" role="listitem"><b>185</b><span>goals</span></div>
         <div class="stat" role="listitem"><b>46</b><span>tasks</span></div>
-        <div class="stat" role="listitem"><b>91</b><span>task history events</span></div>
-        <div class="stat" role="listitem"><b>59</b><span>database tables</span></div>
+        <div class="stat" role="listitem">
+          <b>91</b><span>task history events</span>
+        </div>
+        <div class="stat" role="listitem">
+          <b>59</b><span>database tables</span>
+        </div>
       </div>
-      <p class="where">Live row counts, 2026-10-13 (59 tables, 60 counting the migrations record). First entry 2026-01-04. Database about 9 MB.</p>
+      <p class="where">
+        Live row counts, 2026-10-13 (59 tables, 60 counting the migrations
+        record). First entry 2026-01-04. Database about 9 MB.
+      </p>
     </section>
 
     <!-- ============================================================ -->
     <section id="map">
       <h2>System map</h2>
-      <p>One program, the Worker, does everything. It is the only thing that touches your data.</p>
+      <p>
+        One program, the Worker, does everything. It is the only thing that
+        touches your data.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 380" role="img" aria-label="Browser, Memos apps, AI agents and the nightly timer all go through one Cloudflare Worker, which reads and writes D1, R2, Vectorize and AI models.">
+          <svg
+            viewBox="0 0 900 380"
+            role="img"
+            aria-label="Browser, Memos apps, AI agents and the nightly timer all go through one Cloudflare Worker, which reads and writes D1, R2, Vectorize and AI models."
+          >
             <text x="20" y="18" class="t-s t-m">WHO TALKS TO IT</text>
             <rect x="20" y="34" width="170" height="56" rx="8" class="n" />
             <text x="34" y="58" class="t-b">Your browser</text>
@@ -309,125 +604,381 @@
             <rect x="20" y="190" width="170" height="56" rx="8" class="n" />
             <text x="34" y="214" class="t-b">AI agents</text>
             <text x="34" y="233" class="t-s">Claude etc. over MCP</text>
-            <rect x="20" y="268" width="170" height="56" rx="8" class="n dash" />
+            <rect
+              x="20"
+              y="268"
+              width="170"
+              height="56"
+              rx="8"
+              class="n dash"
+            />
             <text x="34" y="292" class="t-b">Nightly timer</text>
             <text x="34" y="311" class="t-s">03:17 UTC daily</text>
 
-            <line x1="190" y1="62" x2="296" y2="96" class="a" marker-end="url(#ah)" />
+            <line
+              x1="190"
+              y1="62"
+              x2="296"
+              y2="96"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="206" y="66" class="t-s">cookie</text>
-            <line x1="190" y1="140" x2="296" y2="160" class="a" marker-end="url(#ah)" />
+            <line
+              x1="190"
+              y1="140"
+              x2="296"
+              y2="160"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="206" y="136" class="t-s">token</text>
-            <line x1="190" y1="218" x2="296" y2="214" class="a" marker-end="url(#ah)" />
+            <line
+              x1="190"
+              y1="218"
+              x2="296"
+              y2="214"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="206" y="210" class="t-s">token</text>
-            <line x1="190" y1="296" x2="296" y2="270" class="a" marker-end="url(#ah)" />
+            <line
+              x1="190"
+              y1="296"
+              x2="296"
+              y2="270"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="206" y="300" class="t-s">cron</text>
 
-            <text x="300" y="18" class="t-s t-m">CLOUDFLARE WORKER "flaremo"</text>
-            <rect x="300" y="34" width="290" height="330" rx="12" class="n n-acc" />
+            <text x="300" y="18" class="t-s t-m">
+              CLOUDFLARE WORKER "flaremo"
+            </text>
+            <rect
+              x="300"
+              y="34"
+              width="290"
+              height="330"
+              rx="12"
+              class="n n-acc"
+            />
             <text x="318" y="60" class="t-h">One program, many doors</text>
-            <rect x="316" y="74" width="258" height="30" rx="6" class="n-soft" />
+            <rect
+              x="316"
+              y="74"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
             <text x="328" y="94">Web app pages</text>
-            <rect x="316" y="110" width="258" height="30" rx="6" class="n-soft" />
-            <text x="328" y="130" class="t-m">/api/app</text><text x="430" y="130" class="t-s">app's own API</text>
-            <rect x="316" y="146" width="258" height="30" rx="6" class="fill-fork" />
-            <text x="328" y="166" class="t-m">/api/app/planner</text><text x="470" y="166" class="t-s t-fork">fork</text>
-            <rect x="316" y="182" width="258" height="30" rx="6" class="n-soft" />
-            <text x="328" y="202" class="t-m">/api/v1</text><text x="430" y="202" class="t-s">Memos-compatible</text>
-            <rect x="316" y="218" width="258" height="30" rx="6" class="n-soft" />
-            <text x="328" y="238" class="t-m">/mcp  /memory/mcp</text><text x="490" y="238" class="t-s">agents</text>
-            <rect x="316" y="254" width="258" height="30" rx="6" class="n-soft" />
-            <text x="328" y="274" class="t-m">/share/…</text><text x="430" y="274" class="t-s">public links</text>
-            <rect x="316" y="290" width="258" height="30" rx="6" class="n-soft" />
-            <text x="328" y="310" class="t-m">/api/auth</text><text x="430" y="310" class="t-s">login</text>
-            <text x="318" y="348" class="t-s">+ 2 job queues: exports, member removal</text>
+            <rect
+              x="316"
+              y="110"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
+            <text x="328" y="130" class="t-m">/api/app</text>
+            <text x="430" y="130" class="t-s">app's own API</text>
+            <rect
+              x="316"
+              y="146"
+              width="258"
+              height="30"
+              rx="6"
+              class="fill-fork"
+            />
+            <text x="328" y="166" class="t-m">/api/app/planner</text>
+            <text x="470" y="166" class="t-s t-fork">fork</text>
+            <rect
+              x="316"
+              y="182"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
+            <text x="328" y="202" class="t-m">/api/v1</text>
+            <text x="430" y="202" class="t-s">Memos-compatible</text>
+            <rect
+              x="316"
+              y="218"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
+            <text x="328" y="238" class="t-m">/mcp /memory/mcp</text>
+            <text x="490" y="238" class="t-s">agents</text>
+            <rect
+              x="316"
+              y="254"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
+            <text x="328" y="274" class="t-m">/share/…</text>
+            <text x="430" y="274" class="t-s">public links</text>
+            <rect
+              x="316"
+              y="290"
+              width="258"
+              height="30"
+              rx="6"
+              class="n-soft"
+            />
+            <text x="328" y="310" class="t-m">/api/auth</text>
+            <text x="430" y="310" class="t-s">login</text>
+            <text x="318" y="348" class="t-s">
+              + 2 job queues: exports, member removal
+            </text>
 
             <text x="700" y="18" class="t-s t-m">WHERE IT KEEPS THINGS</text>
-            <rect x="700" y="34" width="180" height="62" rx="8" class="n n-d1" />
+            <rect
+              x="700"
+              y="34"
+              width="180"
+              height="62"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="714" y="58" class="t-b">D1 database</text>
             <text x="714" y="78" class="t-s">source of truth</text>
-            <rect x="700" y="112" width="180" height="54" rx="8" class="n n-r2" />
+            <rect
+              x="700"
+              y="112"
+              width="180"
+              height="54"
+              rx="8"
+              class="n n-r2"
+            />
             <text x="714" y="135" class="t-b">R2 files</text>
             <text x="714" y="154" class="t-s">attachments, exports</text>
-            <rect x="700" y="182" width="180" height="54" rx="8" class="n n-vec" />
+            <rect
+              x="700"
+              y="182"
+              width="180"
+              height="54"
+              rx="8"
+              class="n n-vec"
+            />
             <text x="714" y="205" class="t-b">Vectorize</text>
             <text x="714" y="224" class="t-s">2 meaning indexes</text>
-            <rect x="700" y="252" width="180" height="54" rx="8" class="n n-ai" />
+            <rect
+              x="700"
+              y="252"
+              width="180"
+              height="54"
+              rx="8"
+              class="n n-ai"
+            />
             <text x="714" y="275" class="t-b">Workers AI</text>
             <text x="714" y="294" class="t-s">embeddings, dreaming</text>
-            <rect x="700" y="318" width="180" height="46" rx="8" class="n n-ai dash" />
+            <rect
+              x="700"
+              y="318"
+              width="180"
+              height="46"
+              rx="8"
+              class="n n-ai dash"
+            />
             <text x="714" y="338" class="t-b">OpenRouter / Anthropic</text>
-            <text x="714" y="356" class="t-s">review only, if a key is set</text>
+            <text x="714" y="356" class="t-s">
+              review only, if a key is set
+            </text>
 
-            <line x1="590" y1="80" x2="696" y2="65" class="a" marker-end="url(#ah)" />
+            <line
+              x1="590"
+              y1="80"
+              x2="696"
+              y2="65"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="604" y="64" class="t-s">read / write</text>
-            <line x1="590" y1="140" x2="696" y2="139" class="a" marker-end="url(#ah)" />
+            <line
+              x1="590"
+              y1="140"
+              x2="696"
+              y2="139"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="610" y="133" class="t-s">files</text>
-            <line x1="590" y1="205" x2="696" y2="209" class="a" marker-end="url(#ah)" />
+            <line
+              x1="590"
+              y1="205"
+              x2="696"
+              y2="209"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="604" y="200" class="t-s">vectors</text>
-            <line x1="590" y1="270" x2="696" y2="279" class="a" marker-end="url(#ah)" />
+            <line
+              x1="590"
+              y1="270"
+              x2="696"
+              y2="279"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="604" y="266" class="t-s">prompts</text>
-            <line x1="590" y1="330" x2="696" y2="341" class="a dash" marker-end="url(#ah)" />
+            <line
+              x1="590"
+              y1="330"
+              x2="696"
+              y2="341"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
           </svg>
         </div>
-        <figcaption>Every request, from you, a phone app, an AI agent or the nightly timer, enters the same Worker. Wiring: <code>wrangler.json</code>, <code>apps/worker/src/index.ts</code>.</figcaption>
+        <figcaption>
+          Every request, from you, a phone app, an AI agent or the nightly
+          timer, enters the same Worker. Wiring: <code>wrangler.json</code>,
+          <code>apps/worker/src/index.ts</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="data">
       <h2>Where data sits</h2>
-      <p>D1 holds the real record. R2 holds files. Vectorize is a copy that can be rebuilt from D1.</p>
+      <p>
+        D1 holds the real record. R2 holds files. Vectorize is a copy that can
+        be rebuilt from D1.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 364" role="img" aria-label="D1 holds 59 tables in eleven groups. Attachment rows point to files in R2. Diary entries and memories are copied into Vectorize as meaning fingerprints.">
-            <rect x="20" y="16" width="540" height="334" rx="12" class="n n-d1" />
+          <svg
+            viewBox="0 0 900 364"
+            role="img"
+            aria-label="D1 holds 59 tables in eleven groups. Attachment rows point to files in R2. Diary entries and memories are copied into Vectorize as meaning fingerprints."
+          >
+            <rect
+              x="20"
+              y="16"
+              width="540"
+              height="334"
+              rx="12"
+              class="n n-d1"
+            />
             <text x="38" y="44" class="t-h">D1 database</text>
-            <text x="150" y="44" class="t-s">59 tables · bar = number of tables</text>
+            <text x="150" y="44" class="t-s">
+              59 tables · bar = number of tables
+            </text>
 
             <text x="38" y="78">Login and accounts</text>
-            <rect x="250" y="66" width="242" height="16" rx="3" class="f-d1" /><text x="500" y="79" class="t-s">11</text>
-            <text x="38" y="102">Planner <tspan class="t-fork t-s">fork</tspan></text>
-            <rect x="250" y="90" width="220" height="16" rx="3" class="f-fork" /><text x="478" y="103" class="t-s">10</text>
+            <rect x="250" y="66" width="242" height="16" rx="3" class="f-d1" />
+            <text x="500" y="79" class="t-s">11</text>
+            <text x="38" y="102">
+              Planner
+              <tspan class="t-fork t-s">fork</tspan>
+            </text>
+            <rect
+              x="250"
+              y="90"
+              width="220"
+              height="16"
+              rx="3"
+              class="f-fork"
+            />
+            <text x="478" y="103" class="t-s">10</text>
             <text x="38" y="126">Diary entries</text>
-            <rect x="250" y="114" width="176" height="16" rx="3" class="f-d1" /><text x="434" y="127" class="t-s">8</text>
+            <rect x="250" y="114" width="176" height="16" rx="3" class="f-d1" />
+            <text x="434" y="127" class="t-s">8</text>
             <text x="38" y="150">Memory</text>
-            <rect x="250" y="138" width="176" height="16" rx="3" class="f-d1" /><text x="434" y="151" class="t-s">8</text>
+            <rect x="250" y="138" width="176" height="16" rx="3" class="f-d1" />
+            <text x="434" y="151" class="t-s">8</text>
             <text x="38" y="174">Webhooks, notifications</text>
-            <rect x="250" y="162" width="110" height="16" rx="3" class="f-d1" /><text x="368" y="175" class="t-s">5</text>
+            <rect x="250" y="162" width="110" height="16" rx="3" class="f-d1" />
+            <text x="368" y="175" class="t-s">5</text>
             <text x="38" y="198">Attachments, shares</text>
-            <rect x="250" y="186" width="66" height="16" rx="3" class="f-d1" /><text x="324" y="199" class="t-s">3</text>
+            <rect x="250" y="186" width="66" height="16" rx="3" class="f-d1" />
+            <text x="324" y="199" class="t-s">3</text>
             <text x="38" y="222">Upstream tasks</text>
-            <rect x="250" y="210" width="66" height="16" rx="3" class="f-d1" /><text x="324" y="223" class="t-s">3</text>
+            <rect x="250" y="210" width="66" height="16" rx="3" class="f-d1" />
+            <text x="324" y="223" class="t-s">3</text>
             <text x="38" y="246">Settings, jobs</text>
-            <rect x="250" y="234" width="66" height="16" rx="3" class="f-d1" /><text x="324" y="247" class="t-s">3</text>
+            <rect x="250" y="234" width="66" height="16" rx="3" class="f-d1" />
+            <text x="324" y="247" class="t-s">3</text>
             <text x="38" y="270">Index queue, usage</text>
-            <rect x="250" y="258" width="44" height="16" rx="3" class="f-d1" /><text x="302" y="271" class="t-s">2</text>
+            <rect x="250" y="258" width="44" height="16" rx="3" class="f-d1" />
+            <text x="302" y="271" class="t-s">2</text>
             <text x="38" y="294">Voice, integrations</text>
-            <rect x="250" y="282" width="44" height="16" rx="3" class="f-d1" /><text x="302" y="295" class="t-s">2</text>
-            <text x="38" y="318">Health tracker <tspan class="t-fork t-s">fork</tspan></text>
-            <rect x="250" y="306" width="88" height="16" rx="3" class="f-fork" /><text x="346" y="319" class="t-s">4</text>
+            <rect x="250" y="282" width="44" height="16" rx="3" class="f-d1" />
+            <text x="302" y="295" class="t-s">2</text>
+            <text x="38" y="318">
+              Health tracker
+              <tspan class="t-fork t-s">fork</tspan>
+            </text>
+            <rect
+              x="250"
+              y="306"
+              width="88"
+              height="16"
+              rx="3"
+              class="f-fork"
+            />
+            <text x="346" y="319" class="t-s">4</text>
 
-            <rect x="660" y="30" width="220" height="118" rx="10" class="n n-r2" />
+            <rect
+              x="660"
+              y="30"
+              width="220"
+              height="118"
+              rx="10"
+              class="n n-r2"
+            />
             <text x="676" y="56" class="t-h">R2 files</text>
             <text x="676" y="80" class="t-m">attachments/…</text>
             <text x="676" y="100" class="t-m">avatars/…</text>
             <text x="676" y="120" class="t-m">exports/…</text>
             <text x="676" y="138" class="t-s">only the files themselves</text>
 
-            <rect x="660" y="190" width="220" height="118" rx="10" class="n n-vec" />
+            <rect
+              x="660"
+              y="190"
+              width="220"
+              height="118"
+              rx="10"
+              class="n n-vec"
+            />
             <text x="676" y="216" class="t-h">Vectorize</text>
             <text x="676" y="240" class="t-m">flaremo-memos</text>
             <text x="676" y="260" class="t-m">flaremo-memories</text>
             <text x="676" y="290" class="t-s">numbers only, no text</text>
 
-            <path d="M 560 194 C 610 194, 610 100, 656 100" class="a" marker-end="url(#ah)" />
+            <path
+              d="M 560 194 C 610 194, 610 100, 656 100"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="566" y="214" class="t-s">file lives in</text>
-            <path d="M 560 122 C 610 122, 600 240, 656 240" class="a dash" marker-end="url(#ah)" />
-            <path d="M 560 146 C 600 146, 610 262, 656 262" class="a dash" marker-end="url(#ah)" />
-            <text x="600" y="326" class="t-s">copied as fingerprints, rebuildable</text>
+            <path
+              d="M 560 122 C 610 122, 600 240, 656 240"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
+            <path
+              d="M 560 146 C 600 146, 610 262, 656 262"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
+            <text x="600" y="326" class="t-s">
+              copied as fingerprints, rebuildable
+            </text>
           </svg>
         </div>
-        <figcaption>If R2 or Vectorize were wiped, every word of the diary would still be in D1. Tables: <code>packages/db/src/schema/</code>. Changes ship as <code>migrations/</code> files (upstream 0000–0033, fork 9000+).</figcaption>
+        <figcaption>
+          If R2 or Vectorize were wiped, every word of the diary would still be
+          in D1. Tables: <code>packages/db/src/schema/</code>. Changes ship as
+          <code>migrations/</code> files (upstream 0000–0033, fork 9000+).
+        </figcaption>
       </figure>
     </section>
 
@@ -437,197 +988,657 @@
       <p>What one save sets off, and how an entry leaves.</p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 262" role="img" aria-label="Saving an entry writes the memos row, then tags, a revision, the keyword index instantly, and an indexing task that fills the vector index seconds later. Attached files go to R2.">
-            <rect x="20" y="105" width="120" height="60" rx="10" class="n n-acc" />
-            <text x="80" y="140" text-anchor="middle" class="t-b">You save</text>
-            <line x1="140" y1="135" x2="196" y2="135" class="a" marker-end="url(#ah)" />
-            <rect x="200" y="100" width="170" height="70" rx="10" class="n n-d1" />
-            <text x="285" y="128" text-anchor="middle" class="t-b">memos row</text>
-            <text x="285" y="148" text-anchor="middle" class="t-s">Markdown + visibility</text>
+          <svg
+            viewBox="0 0 900 262"
+            role="img"
+            aria-label="Saving an entry writes the memos row, then tags, a revision, the keyword index instantly, and an indexing task that fills the vector index seconds later. Attached files go to R2."
+          >
+            <rect
+              x="20"
+              y="105"
+              width="120"
+              height="60"
+              rx="10"
+              class="n n-acc"
+            />
+            <text x="80" y="140" text-anchor="middle" class="t-b">
+              You save
+            </text>
+            <line
+              x1="140"
+              y1="135"
+              x2="196"
+              y2="135"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <rect
+              x="200"
+              y="100"
+              width="170"
+              height="70"
+              rx="10"
+              class="n n-d1"
+            />
+            <text x="285" y="128" text-anchor="middle" class="t-b">
+              memos row
+            </text>
+            <text x="285" y="148" text-anchor="middle" class="t-s">
+              Markdown + visibility
+            </text>
 
             <rect x="450" y="14" width="250" height="48" rx="8" class="n" />
             <text x="464" y="35" class="t-m">memo_tags</text>
-            <text x="464" y="53" class="t-s">each #tag lowercased, one row</text>
+            <text x="464" y="53" class="t-s">
+              each #tag lowercased, one row
+            </text>
             <rect x="450" y="76" width="250" height="48" rx="8" class="n" />
             <text x="464" y="97" class="t-m">memo_revisions</text>
             <text x="464" y="115" class="t-s">old version kept, last 50</text>
             <rect x="450" y="138" width="250" height="48" rx="8" class="n" />
             <text x="464" y="159" class="t-m">memos_fts</text>
             <text x="464" y="177" class="t-s">keyword index, instant</text>
-            <rect x="450" y="200" width="250" height="48" rx="8" class="n n-vec" />
+            <rect
+              x="450"
+              y="200"
+              width="250"
+              height="48"
+              rx="8"
+              class="n n-vec"
+            />
             <text x="464" y="221" class="t-m">embedding_tasks</text>
             <text x="464" y="239" class="t-s">"index me" note</text>
 
-            <line x1="370" y1="125" x2="446" y2="38" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="130" x2="446" y2="100" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="140" x2="446" y2="162" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="148" x2="446" y2="224" class="a" marker-end="url(#ah)" />
+            <line
+              x1="370"
+              y1="125"
+              x2="446"
+              y2="38"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="130"
+              x2="446"
+              y2="100"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="140"
+              x2="446"
+              y2="162"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="148"
+              x2="446"
+              y2="224"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="384" y="100" class="t-s">same save</text>
 
-            <line x1="700" y1="224" x2="756" y2="224" class="a a-acc" marker-end="url(#ah-acc)" />
+            <line
+              x1="700"
+              y1="224"
+              x2="756"
+              y2="224"
+              class="a a-acc"
+              marker-end="url(#ah-acc)"
+            />
             <text x="712" y="214" class="t-s">later</text>
-            <rect x="760" y="200" width="120" height="48" rx="8" class="n n-vec" />
-            <text x="820" y="229" text-anchor="middle" class="t-b">Vectorize</text>
+            <rect
+              x="760"
+              y="200"
+              width="120"
+              height="48"
+              rx="8"
+              class="n n-vec"
+            />
+            <text x="820" y="229" text-anchor="middle" class="t-b">
+              Vectorize
+            </text>
 
-            <rect x="200" y="206" width="170" height="44" rx="8" class="n n-r2" />
-            <text x="285" y="233" text-anchor="middle" class="t-b">R2 · attached files</text>
-            <line x1="250" y1="170" x2="250" y2="202" class="a dash" marker-end="url(#ah)" />
+            <rect
+              x="200"
+              y="206"
+              width="170"
+              height="44"
+              rx="8"
+              class="n n-r2"
+            />
+            <text x="285" y="233" text-anchor="middle" class="t-b">
+              R2 · attached files
+            </text>
+            <line
+              x1="250"
+              y1="170"
+              x2="250"
+              y2="202"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
           </svg>
         </div>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 110" role="img" aria-label="An entry moves to the bin on delete, and is deleted for good with its files and vectors after 30 days.">
-            <rect x="20" y="30" width="150" height="50" rx="25" class="n n-acc" />
-            <text x="95" y="60" text-anchor="middle" class="t-b">Normal / archived</text>
-            <line x1="170" y1="55" x2="296" y2="55" class="a" marker-end="url(#ah)" />
-            <text x="233" y="46" text-anchor="middle" class="t-s">you delete</text>
+          <svg
+            viewBox="0 0 900 110"
+            role="img"
+            aria-label="An entry moves to the bin on delete, and is deleted for good with its files and vectors after 30 days."
+          >
+            <rect
+              x="20"
+              y="30"
+              width="150"
+              height="50"
+              rx="25"
+              class="n n-acc"
+            />
+            <text x="95" y="60" text-anchor="middle" class="t-b">
+              Normal / archived
+            </text>
+            <line
+              x1="170"
+              y1="55"
+              x2="296"
+              y2="55"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <text x="233" y="46" text-anchor="middle" class="t-s">
+              you delete
+            </text>
             <rect x="300" y="30" width="150" height="50" rx="25" class="n" />
-            <text x="375" y="60" text-anchor="middle" class="t-b">In the bin</text>
-            <line x1="450" y1="55" x2="596" y2="55" class="a a-warn" marker-end="url(#ah-warn)" />
-            <text x="523" y="46" text-anchor="middle" class="t-s">after 30 days, nightly</text>
-            <rect x="600" y="30" width="280" height="50" rx="25" class="n n-warn fill-warn" />
-            <text x="740" y="52" text-anchor="middle" class="t-b">Gone for good</text>
-            <text x="740" y="70" text-anchor="middle" class="t-s">row, files and vectors removed</text>
+            <text x="375" y="60" text-anchor="middle" class="t-b">
+              In the bin
+            </text>
+            <line
+              x1="450"
+              y1="55"
+              x2="596"
+              y2="55"
+              class="a a-warn"
+              marker-end="url(#ah-warn)"
+            />
+            <text x="523" y="46" text-anchor="middle" class="t-s">
+              after 30 days, nightly
+            </text>
+            <rect
+              x="600"
+              y="30"
+              width="280"
+              height="50"
+              rx="25"
+              class="n n-warn fill-warn"
+            />
+            <text x="740" y="52" text-anchor="middle" class="t-b">
+              Gone for good
+            </text>
+            <text x="740" y="70" text-anchor="middle" class="t-s">
+              row, files and vectors removed
+            </text>
           </svg>
         </div>
-        <figcaption>A comment is also an entry, linked to its parent in <code>memo_relations</code>. Code: <code>packages/domain/src/memos-write.ts</code>, <code>tags.ts</code>, <code>memos-lifecycle.ts</code>.</figcaption>
-        <p class="note"><b>Backdating</b> <span class="chip">fork</span>. The ⋯ menu has "Edit date and time". It changes <code>memos.created_at</code> (no new table), keeps the first time in the memo's extra data as <code>original_created_at</code>, refuses future times, moves the hourly counts, and re-reads the health rows so they land on the new day. The weekly review picks the week from this time. Nightly memory "dreaming" only scans entries newer than its last run, so a note backdated before that is not swept.</p>
+        <figcaption>
+          A comment is also an entry, linked to its parent in
+          <code>memo_relations</code>. Code:
+          <code>packages/domain/src/memos-write.ts</code>, <code>tags.ts</code>,
+          <code>memos-lifecycle.ts</code>.
+        </figcaption>
+        <p class="note">
+          <b>Backdating</b> <span class="chip">fork</span>. The ⋯ menu has "Edit
+          date and time". It changes <code>memos.created_at</code> (no new
+          table), keeps the first time in the memo's extra data as
+          <code>original_created_at</code>, refuses future times, moves the
+          hourly counts, and re-reads the health rows so they land on the new
+          day. The weekly review picks the week from this time. Nightly memory
+          "dreaming" only scans entries newer than its last run, so a note
+          backdated before that is not swept.
+        </p>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="search">
       <h2>Search and vectors</h2>
-      <p>Two separate searches. Keyword search matches your exact words. Semantic search matches meaning, using vectors.</p>
+      <p>
+        Two separate searches. Keyword search matches your exact words. Semantic
+        search matches meaning, using vectors.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 270" role="img" aria-label="Indexing: an entry is cut into chunks of about 1,000 characters, each turned into 1,024 numbers by a Workers AI model and stored in Vectorize. Searching: your query becomes numbers the same way, is matched in Vectorize, checked against D1, and the top 10 returned.">
-            <text x="20" y="22" class="t-s t-m">INDEXING · in the background</text>
+          <svg
+            viewBox="0 0 900 270"
+            role="img"
+            aria-label="Indexing: an entry is cut into chunks of about 1,000 characters, each turned into 1,024 numbers by a Workers AI model and stored in Vectorize. Searching: your query becomes numbers the same way, is matched in Vectorize, checked against D1, and the top 10 returned."
+          >
+            <text x="20" y="22" class="t-s t-m">
+              INDEXING · in the background
+            </text>
             <rect x="20" y="36" width="140" height="62" rx="8" class="n" />
             <text x="90" y="64" text-anchor="middle" class="t-b">Entry</text>
-            <text x="90" y="83" text-anchor="middle" class="t-s">re-read from D1</text>
+            <text x="90" y="83" text-anchor="middle" class="t-s">
+              re-read from D1
+            </text>
             <rect x="196" y="36" width="140" height="62" rx="8" class="n" />
             <text x="266" y="64" text-anchor="middle" class="t-b">Chunks</text>
-            <text x="266" y="83" text-anchor="middle" class="t-s">~1,000 chars each</text>
-            <rect x="372" y="36" width="150" height="62" rx="8" class="n n-ai" />
-            <text x="447" y="64" text-anchor="middle" class="t-b">Embedding model</text>
-            <text x="447" y="83" text-anchor="middle" class="t-s t-m">qwen3-embedding-0.6b</text>
+            <text x="266" y="83" text-anchor="middle" class="t-s">
+              ~1,000 chars each
+            </text>
+            <rect
+              x="372"
+              y="36"
+              width="150"
+              height="62"
+              rx="8"
+              class="n n-ai"
+            />
+            <text x="447" y="64" text-anchor="middle" class="t-b">
+              Embedding model
+            </text>
+            <text x="447" y="83" text-anchor="middle" class="t-s t-m">
+              qwen3-embedding-0.6b
+            </text>
             <rect x="558" y="36" width="140" height="62" rx="8" class="n" />
-            <text x="628" y="64" text-anchor="middle" class="t-b">1,024 numbers</text>
-            <text x="628" y="83" text-anchor="middle" class="t-s">per chunk</text>
-            <rect x="734" y="36" width="146" height="62" rx="8" class="n n-vec" />
-            <text x="807" y="64" text-anchor="middle" class="t-b">Vectorize</text>
-            <text x="807" y="83" text-anchor="middle" class="t-s t-m">flaremo-memos</text>
-            <line x1="160" y1="67" x2="192" y2="67" class="a" marker-end="url(#ah)" />
-            <line x1="336" y1="67" x2="368" y2="67" class="a" marker-end="url(#ah)" />
-            <line x1="522" y1="67" x2="554" y2="67" class="a" marker-end="url(#ah)" />
-            <line x1="698" y1="67" x2="730" y2="67" class="a" marker-end="url(#ah)" />
+            <text x="628" y="64" text-anchor="middle" class="t-b">
+              1,024 numbers
+            </text>
+            <text x="628" y="83" text-anchor="middle" class="t-s">
+              per chunk
+            </text>
+            <rect
+              x="734"
+              y="36"
+              width="146"
+              height="62"
+              rx="8"
+              class="n n-vec"
+            />
+            <text x="807" y="64" text-anchor="middle" class="t-b">
+              Vectorize
+            </text>
+            <text x="807" y="83" text-anchor="middle" class="t-s t-m">
+              flaremo-memos
+            </text>
+            <line
+              x1="160"
+              y1="67"
+              x2="192"
+              y2="67"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="336"
+              y1="67"
+              x2="368"
+              y2="67"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="522"
+              y1="67"
+              x2="554"
+              y2="67"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="698"
+              y1="67"
+              x2="730"
+              y2="67"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
             <text x="20" y="176" class="t-s t-m">SEARCHING · when you ask</text>
-            <rect x="20" y="190" width="140" height="62" rx="8" class="n n-acc" />
-            <text x="90" y="226" text-anchor="middle" class="t-b">Your query</text>
-            <rect x="196" y="190" width="140" height="62" rx="8" class="n n-ai" />
-            <text x="266" y="218" text-anchor="middle" class="t-b">Same model</text>
-            <text x="266" y="237" text-anchor="middle" class="t-s">→ 1,024 numbers</text>
+            <rect
+              x="20"
+              y="190"
+              width="140"
+              height="62"
+              rx="8"
+              class="n n-acc"
+            />
+            <text x="90" y="226" text-anchor="middle" class="t-b">
+              Your query
+            </text>
+            <rect
+              x="196"
+              y="190"
+              width="140"
+              height="62"
+              rx="8"
+              class="n n-ai"
+            />
+            <text x="266" y="218" text-anchor="middle" class="t-b">
+              Same model
+            </text>
+            <text x="266" y="237" text-anchor="middle" class="t-s">
+              → 1,024 numbers
+            </text>
             <rect x="372" y="190" width="150" height="62" rx="8" class="n" />
-            <text x="447" y="218" text-anchor="middle" class="t-b">Closest chunks</text>
-            <text x="447" y="237" text-anchor="middle" class="t-s">best chunk per entry</text>
-            <rect x="558" y="190" width="140" height="62" rx="8" class="n n-d1" />
-            <text x="628" y="218" text-anchor="middle" class="t-b">Check in D1</text>
-            <text x="628" y="237" text-anchor="middle" class="t-s">yours, not trashed</text>
-            <rect x="734" y="190" width="146" height="62" rx="8" class="n n-acc fill-acc" />
+            <text x="447" y="218" text-anchor="middle" class="t-b">
+              Closest chunks
+            </text>
+            <text x="447" y="237" text-anchor="middle" class="t-s">
+              best chunk per entry
+            </text>
+            <rect
+              x="558"
+              y="190"
+              width="140"
+              height="62"
+              rx="8"
+              class="n n-d1"
+            />
+            <text x="628" y="218" text-anchor="middle" class="t-b">
+              Check in D1
+            </text>
+            <text x="628" y="237" text-anchor="middle" class="t-s">
+              yours, not trashed
+            </text>
+            <rect
+              x="734"
+              y="190"
+              width="146"
+              height="62"
+              rx="8"
+              class="n n-acc fill-acc"
+            />
             <text x="807" y="226" text-anchor="middle" class="t-b">Top 10</text>
-            <line x1="160" y1="221" x2="192" y2="221" class="a" marker-end="url(#ah)" />
-            <line x1="336" y1="221" x2="368" y2="221" class="a" marker-end="url(#ah)" />
-            <line x1="522" y1="221" x2="554" y2="221" class="a" marker-end="url(#ah)" />
-            <line x1="698" y1="221" x2="730" y2="221" class="a" marker-end="url(#ah)" />
-            <path d="M 807 98 C 807 150, 447 140, 447 186" class="a a-acc dash" marker-end="url(#ah-acc)" />
+            <line
+              x1="160"
+              y1="221"
+              x2="192"
+              y2="221"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="336"
+              y1="221"
+              x2="368"
+              y2="221"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="522"
+              y1="221"
+              x2="554"
+              y2="221"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="698"
+              y1="221"
+              x2="730"
+              y2="221"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <path
+              d="M 807 98 C 807 150, 447 140, 447 186"
+              class="a a-acc dash"
+              marker-end="url(#ah-acc)"
+            />
             <text x="650" y="140" class="t-s">looks up</text>
           </svg>
         </div>
-        <figcaption>Indexing runs after every save and again nightly, up to 32 tasks a run. Code: <code>packages/domain/src/embedding*.ts</code>, <code>semantic-search.ts</code>.</figcaption>
+        <figcaption>
+          Indexing runs after every save and again nightly, up to 32 tasks a
+          run. Code: <code>packages/domain/src/embedding*.ts</code>,
+          <code>semantic-search.ts</code>.
+        </figcaption>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 120" role="img" aria-label="Only 46 of 579 diary entries and 73 of 118 memories are in the semantic index.">
-            <text x="20" y="22" class="t-s t-m">IN THE SEMANTIC INDEX · 2026-10-13</text>
+          <svg
+            viewBox="0 0 900 120"
+            role="img"
+            aria-label="Only 46 of 579 diary entries and 73 of 118 memories are in the semantic index."
+          >
+            <text x="20" y="22" class="t-s t-m">
+              IN THE SEMANTIC INDEX · 2026-10-13
+            </text>
             <text x="20" y="58">Diary entries</text>
-            <rect x="170" y="44" width="600" height="20" rx="4" class="f-track" />
-            <rect x="170" y="44" width="47.7" height="20" rx="4" class="f-warn" />
+            <rect
+              x="170"
+              y="44"
+              width="600"
+              height="20"
+              rx="4"
+              class="f-track"
+            />
+            <rect
+              x="170"
+              y="44"
+              width="47.7"
+              height="20"
+              rx="4"
+              class="f-warn"
+            />
             <text x="780" y="59" class="t-b">46 / 579</text>
             <text x="20" y="98">Memories</text>
-            <rect x="170" y="84" width="600" height="20" rx="4" class="f-track" />
-            <rect x="170" y="84" width="371.2" height="20" rx="4" class="f-vec" />
+            <rect
+              x="170"
+              y="84"
+              width="600"
+              height="20"
+              rx="4"
+              class="f-track"
+            />
+            <rect
+              x="170"
+              y="84"
+              width="371.2"
+              height="20"
+              rx="4"
+              class="f-vec"
+            />
             <text x="780" y="99" class="t-b">73 / 118</text>
           </svg>
         </div>
-        <figcaption><b>Known gap.</b> Importing data (<code>import-export/import-data.ts</code>) saves entries as "not indexed" without queueing them, and nothing catches them later. Keyword search is unaffected. The admin action <code>POST /api/app/admin/embeddings/rebuild</code> fills the index.</figcaption>
+        <figcaption>
+          <b>Known gap.</b> Importing data
+          (<code>import-export/import-data.ts</code>) saves entries as "not
+          indexed" without queueing them, and nothing catches them later.
+          Keyword search is unaffected. The admin action
+          <code>POST /api/app/admin/embeddings/rebuild</code> fills the index.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="memory">
       <h2>Memory and dreaming</h2>
-      <p>Memories are short conclusions about you, kept apart from the diary so AI agents don't have to reread everything.</p>
+      <p>
+        Memories are short conclusions about you, kept apart from the diary so
+        AI agents don't have to reread everything.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 290" role="img" aria-label="Memories come from AI agents directly, or from the nightly dreaming pass, which reads recent entries, asks a small model for up to 8 ideas and saves at most 5 a day.">
+          <svg
+            viewBox="0 0 900 290"
+            role="img"
+            aria-label="Memories come from AI agents directly, or from the nightly dreaming pass, which reads recent entries, asks a small model for up to 8 ideas and saves at most 5 a day."
+          >
             <rect x="20" y="30" width="170" height="56" rx="8" class="n" />
             <text x="34" y="54" class="t-b">AI agent</text>
             <text x="34" y="73" class="t-s t-m">memory_remember</text>
-            <line x1="190" y1="58" x2="676" y2="70" class="a" marker-end="url(#ah)" />
+            <line
+              x1="190"
+              y1="58"
+              x2="676"
+              y2="70"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="420" y="56" class="t-s">writes directly</text>
 
             <text x="20" y="150" class="t-s t-m">NIGHTLY DREAMING</text>
-            <rect x="20" y="164" width="170" height="72" rx="8" class="n n-d1" />
+            <rect
+              x="20"
+              y="164"
+              width="170"
+              height="72"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="34" y="188" class="t-b">Recent entries</text>
             <text x="34" y="207" class="t-s">≤ 20 entries</text>
             <text x="34" y="225" class="t-s">≤ 12,000 chars</text>
-            <rect x="226" y="164" width="140" height="72" rx="8" class="n n-ai" />
-            <text x="296" y="194" text-anchor="middle" class="t-b">Llama 3.1 8B</text>
-            <text x="296" y="213" text-anchor="middle" class="t-s">Workers AI</text>
+            <rect
+              x="226"
+              y="164"
+              width="140"
+              height="72"
+              rx="8"
+              class="n n-ai"
+            />
+            <text x="296" y="194" text-anchor="middle" class="t-b">
+              Llama 3.1 8B
+            </text>
+            <text x="296" y="213" text-anchor="middle" class="t-s">
+              Workers AI
+            </text>
             <rect x="402" y="174" width="120" height="52" rx="8" class="n" />
-            <text x="462" y="198" text-anchor="middle" class="t-b">≤ 8 ideas</text>
-            <text x="462" y="216" text-anchor="middle" class="t-s">candidates</text>
-            <rect x="558" y="182" width="96" height="36" rx="8" class="n n-acc" />
-            <text x="606" y="205" text-anchor="middle" class="t-b">≤ 5 / day</text>
-            <line x1="190" y1="200" x2="222" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="366" y1="200" x2="398" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="522" y1="200" x2="554" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="654" y1="200" x2="676" y2="200" class="a" marker-end="url(#ah)" />
-            <text x="402" y="258" class="t-s">rejected in last 30 days → blocked</text>
-            <text x="402" y="276" class="t-s">sounds like an instruction → waits for you</text>
+            <text x="462" y="198" text-anchor="middle" class="t-b">
+              ≤ 8 ideas
+            </text>
+            <text x="462" y="216" text-anchor="middle" class="t-s">
+              candidates
+            </text>
+            <rect
+              x="558"
+              y="182"
+              width="96"
+              height="36"
+              rx="8"
+              class="n n-acc"
+            />
+            <text x="606" y="205" text-anchor="middle" class="t-b">
+              ≤ 5 / day
+            </text>
+            <line
+              x1="190"
+              y1="200"
+              x2="222"
+              y2="200"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="366"
+              y1="200"
+              x2="398"
+              y2="200"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="522"
+              y1="200"
+              x2="554"
+              y2="200"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="654"
+              y1="200"
+              x2="676"
+              y2="200"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <text x="402" y="258" class="t-s">
+              rejected in last 30 days → blocked
+            </text>
+            <text x="402" y="276" class="t-s">
+              sounds like an instruction → waits for you
+            </text>
 
-            <rect x="680" y="20" width="200" height="250" rx="12" class="n n-d1" />
+            <rect
+              x="680"
+              y="20"
+              width="200"
+              height="250"
+              rx="12"
+              class="n n-d1"
+            />
             <text x="696" y="46" class="t-h">memory_items</text>
             <text x="696" y="76" class="t-s">kind</text>
             <text x="696" y="94">fact · decision · lesson…</text>
             <text x="696" y="124" class="t-s">trust</text>
             <text x="696" y="142">inferred → locked</text>
             <text x="696" y="172" class="t-s">confidence 0–100</text>
-            <rect x="696" y="180" width="160" height="8" rx="4" class="f-track" />
+            <rect
+              x="696"
+              y="180"
+              width="160"
+              height="8"
+              rx="4"
+              class="f-track"
+            />
             <rect x="696" y="180" width="80" height="8" rx="4" class="f-acc" />
             <text x="696" y="212" class="t-s">evidence</text>
             <text x="696" y="230">link to source entry</text>
             <text x="696" y="256" class="t-s">also vectorized</text>
           </svg>
         </div>
-        <figcaption>Nothing is extracted when you save an entry; dreaming runs at 03:17 UTC. Recall mixes exact-key, keyword, vector and linked-memory search and favours confirmed memories. Code: <code>apps/worker/src/memory-dreaming.ts</code>, <code>packages/domain/src/memory/</code>.</figcaption>
+        <figcaption>
+          Nothing is extracted when you save an entry; dreaming runs at 03:17
+          UTC. Recall mixes exact-key, keyword, vector and linked-memory search
+          and favours confirmed memories. Code:
+          <code>apps/worker/src/memory-dreaming.ts</code>,
+          <code>packages/domain/src/memory/</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="review">
       <h2>Weekly review <span class="chip">fork</span></h2>
-      <p>Look back chats about the week and writes a summary. Look forward turns goals into a plan. Weekends review this week, weekdays last week. A week runs Monday 00:00 to Monday 00:00 in <b>your own time</b> (Copenhagen), so a note written at 00:30 on Monday counts for the new week.</p>
+      <p>
+        Look back chats about the week and writes a summary. Look forward turns
+        goals into a plan. Weekends review this week, weekdays last week. A week
+        runs Monday 00:00 to Monday 00:00 in <b>your own time</b> (Copenhagen),
+        so a note written at 00:30 on Monday counts for the new week.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 460" role="img" aria-label="Each AI call gets this week's diary capped at 40,000 or 12,000 characters, goals, 8 weeks of scores, last week's summary and question, tasks, goal clashes, the week's health tracker rows against the targets, and memories made or changed that week. It does not get vectors, task notes or older weeks. Five kinds of call with answer caps from 400 to 2,600 tokens.">
-            <text x="20" y="20" class="t-s t-m">WHAT THE AI READS · rebuilt on every call</text>
-            <rect x="20" y="32" width="330" height="54" rx="8" class="n n-acc fill-acc" />
+          <svg
+            viewBox="0 0 900 460"
+            role="img"
+            aria-label="Each AI call gets this week's diary capped at 40,000 or 12,000 characters, goals, 8 weeks of scores, last week's summary and question, tasks, goal clashes, the week's health tracker rows against the targets, and memories made or changed that week. It does not get vectors, task notes or older weeks. Five kinds of call with answer caps from 400 to 2,600 tokens."
+          >
+            <text x="20" y="20" class="t-s t-m">
+              WHAT THE AI READS · rebuilt on every call
+            </text>
+            <rect
+              x="20"
+              y="32"
+              width="330"
+              height="54"
+              rx="8"
+              class="n n-acc fill-acc"
+            />
             <text x="34" y="54" class="t-b">This week's diary</text>
-            <text x="34" y="74" class="t-s">≤ 200 entries, trimmed to the budget ↘</text>
+            <text x="34" y="74" class="t-s">
+              ≤ 200 entries, trimmed to the budget ↘
+            </text>
             <rect x="20" y="94" width="330" height="34" rx="8" class="n" />
             <text x="34" y="116">Goals: north star → this week</text>
             <rect x="20" y="134" width="330" height="34" rx="8" class="n" />
@@ -638,219 +1649,738 @@
             <text x="34" y="236">Tasks: 40 done · 30 Doing · 30 To Do</text>
             <rect x="20" y="254" width="330" height="34" rx="8" class="n" />
             <text x="34" y="276">Goal clashes, last 8 weeks</text>
-            <rect x="20" y="294" width="330" height="34" rx="8" class="n n-acc" />
+            <rect
+              x="20"
+              y="294"
+              width="330"
+              height="34"
+              rx="8"
+              class="n n-acc"
+            />
             <text x="34" y="316">Health tracker: the week vs targets</text>
-            <rect x="20" y="334" width="330" height="34" rx="8" class="n n-acc" />
+            <rect
+              x="20"
+              y="334"
+              width="330"
+              height="34"
+              rx="8"
+              class="n n-acc"
+            />
             <text x="34" y="356">Memories made or changed, ≤ 25</text>
 
-            <rect x="20" y="390" width="330" height="54" rx="8" class="n n-warn dash" />
+            <rect
+              x="20"
+              y="390"
+              width="330"
+              height="54"
+              rx="8"
+              class="n n-warn dash"
+            />
             <text x="34" y="412" class="t-b t-warn">Not read</text>
-            <text x="34" y="432" class="t-s">vector search · task notes · earlier weeks</text>
+            <text x="34" y="432" class="t-s">
+              vector search · task notes · earlier weeks
+            </text>
 
             <path d="M 350 59 C 390 59, 380 160, 410 160" class="a" />
             <path d="M 350 111 C 380 111, 390 160, 410 160" class="a" />
             <path d="M 350 191 C 380 191, 390 160, 410 160" class="a" />
             <path d="M 350 271 C 390 271, 380 160, 410 160" class="a" />
             <path d="M 350 331 C 395 331, 380 160, 410 160" class="a" />
-            <line x1="408" y1="160" x2="426" y2="160" class="a" marker-end="url(#ah)" />
+            <line
+              x1="408"
+              y1="160"
+              x2="426"
+              y2="160"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
-            <rect x="430" y="118" width="140" height="84" rx="12" class="n n-ai" />
-            <text x="500" y="154" text-anchor="middle" class="t-h">AI model</text>
-            <text x="500" y="176" text-anchor="middle" class="t-s">picked below</text>
-            <line x1="570" y1="160" x2="600" y2="160" class="a" marker-end="url(#ah)" />
+            <rect
+              x="430"
+              y="118"
+              width="140"
+              height="84"
+              rx="12"
+              class="n n-ai"
+            />
+            <text x="500" y="154" text-anchor="middle" class="t-h">
+              AI model
+            </text>
+            <text x="500" y="176" text-anchor="middle" class="t-s">
+              picked below
+            </text>
+            <line
+              x1="570"
+              y1="160"
+              x2="600"
+              y2="160"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
-            <text x="610" y="20" class="t-s t-m">FIVE CALLS · answer cap, tokens</text>
+            <text x="610" y="20" class="t-s t-m">
+              FIVE CALLS · answer cap, tokens
+            </text>
             <text x="610" y="58" class="t-b">Opening</text>
-            <rect x="700" y="46" width="98.5" height="16" rx="3" class="f-ai" /><text x="806" y="59" class="t-s">1,600 · recap</text>
+            <rect x="700" y="46" width="98.5" height="16" rx="3" class="f-ai" />
+            <text x="806" y="59" class="t-s">1,600 · recap</text>
             <text x="610" y="98" class="t-b">Coach</text>
-            <rect x="700" y="86" width="24.6" height="16" rx="3" class="f-ai" /><text x="732" y="99" class="t-s">400 · each chat turn</text>
+            <rect x="700" y="86" width="24.6" height="16" rx="3" class="f-ai" />
+            <text x="732" y="99" class="t-s">400 · each chat turn</text>
             <text x="610" y="138" class="t-b">Close</text>
-            <rect x="700" y="126" width="73.8" height="16" rx="3" class="f-ai" /><text x="782" y="139" class="t-s">1,200 · scores</text>
+            <rect
+              x="700"
+              y="126"
+              width="73.8"
+              height="16"
+              rx="3"
+              class="f-ai"
+            />
+            <text x="782" y="139" class="t-s">1,200 · scores</text>
             <text x="610" y="178" class="t-b">Memo</text>
-            <rect x="700" y="166" width="160" height="16" rx="3" class="f-ai" /><text x="700" y="200" class="t-s">2,600 · weekly summary</text>
+            <rect x="700" y="166" width="160" height="16" rx="3" class="f-ai" />
+            <text x="700" y="200" class="t-s">2,600 · weekly summary</text>
             <text x="610" y="234" class="t-b">Check</text>
-            <rect x="700" y="222" width="43" height="16" rx="3" class="f-ai" /><text x="751" y="235" class="t-s">700 · goal clashes</text>
+            <rect x="700" y="222" width="43" height="16" rx="3" class="f-ai" />
+            <text x="751" y="235" class="t-s">700 · goal clashes</text>
 
-            <text x="610" y="298" class="t-s t-m">DIARY BUDGET · characters</text>
-            <rect x="610" y="310" width="270" height="18" rx="3" class="f-acc" />
-            <text x="618" y="323" class="t-s t-on">40,000 · OpenRouter / Anthropic</text>
+            <text x="610" y="298" class="t-s t-m">
+              DIARY BUDGET · characters
+            </text>
+            <rect
+              x="610"
+              y="310"
+              width="270"
+              height="18"
+              rx="3"
+              class="f-acc"
+            />
+            <text x="618" y="323" class="t-s t-on">
+              40,000 · OpenRouter / Anthropic
+            </text>
             <rect x="610" y="336" width="81" height="18" rx="3" class="f-ai" />
             <text x="700" y="349" class="t-s">12,000 · Workers AI (live)</text>
           </svg>
         </div>
-        <figcaption>Bars are to scale. Short entries stay whole; long ones are cut evenly with "…" until the week fits. Nothing is cached between calls. The goal check reads the goals of the week being planned (its own month, quarter and year), not of the week reviewed.</figcaption>
+        <figcaption>
+          Bars are to scale. Short entries stay whole; long ones are cut evenly
+          with "…" until the week fits. Nothing is cached between calls. The
+          goal check reads the goals of the week being planned (its own month,
+          quarter and year), not of the week reviewed.
+        </figcaption>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 110" role="img" aria-label="The model is chosen in order: OpenRouter if its key is set, else Anthropic if its key is set, else Workers AI Llama 3.3 70B, which is what live uses today.">
-            <text x="20" y="20" class="t-s t-m">WHICH MODEL ANSWERS · first one configured wins</text>
-            <rect x="20" y="36" width="250" height="64" rx="10" class="n n-ai dash" />
+          <svg
+            viewBox="0 0 900 110"
+            role="img"
+            aria-label="The model is chosen in order: OpenRouter if its key is set, else Anthropic if its key is set, else Workers AI Llama 3.3 70B, which is what live uses today."
+          >
+            <text x="20" y="20" class="t-s t-m">
+              WHICH MODEL ANSWERS · first one configured wins
+            </text>
+            <rect
+              x="20"
+              y="36"
+              width="250"
+              height="64"
+              rx="10"
+              class="n n-ai dash"
+            />
             <text x="36" y="60" class="t-b">OpenRouter key set?</text>
             <text x="36" y="82" class="t-m t-s">openai/gpt-6.1-sol</text>
-            <line x1="270" y1="68" x2="316" y2="68" class="a" marker-end="url(#ah)" />
+            <line
+              x1="270"
+              y1="68"
+              x2="316"
+              y2="68"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="284" y="60" class="t-s">no</text>
-            <rect x="320" y="36" width="250" height="64" rx="10" class="n n-ai dash" />
+            <rect
+              x="320"
+              y="36"
+              width="250"
+              height="64"
+              rx="10"
+              class="n n-ai dash"
+            />
             <text x="336" y="60" class="t-b">Anthropic key set?</text>
             <text x="336" y="82" class="t-m t-s">claude-sonnet-5-5</text>
-            <line x1="570" y1="68" x2="616" y2="68" class="a" marker-end="url(#ah)" />
+            <line
+              x1="570"
+              y1="68"
+              x2="616"
+              y2="68"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="584" y="60" class="t-s">no</text>
-            <rect x="620" y="36" width="260" height="64" rx="10" class="n n-acc fill-acc" />
+            <rect
+              x="620"
+              y="36"
+              width="260"
+              height="64"
+              rx="10"
+              class="n n-acc fill-acc"
+            />
             <text x="636" y="60" class="t-b">Workers AI · live today</text>
-            <text x="636" y="82" class="t-m t-s">llama-3.3-70b-instruct-fp8-fast</text>
+            <text x="636" y="82" class="t-m t-s">
+              llama-3.3-70b-instruct-fp8-fast
+            </text>
           </svg>
         </div>
-        <figcaption>Per <code>docs/planning-cockpit-goals-review.md</code>, the OpenRouter key is set on dev only. If the AI fails, the page uses its own drafts.</figcaption>
+        <figcaption>
+          Per <code>docs/planning-cockpit-goals-review.md</code>, the OpenRouter
+          key is set on dev only. If the AI fails, the page uses its own drafts.
+        </figcaption>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 150" role="img" aria-label="Saving look back writes the summary diary entry, as you edited it, and the week's scores. Finishing look forward saves next week's goals, links tasks and reorders To Do.">
-            <rect x="20" y="20" width="170" height="48" rx="24" class="n n-acc" />
-            <text x="105" y="49" text-anchor="middle" class="t-b">Save summary</text>
-            <line x1="190" y1="44" x2="236" y2="44" class="a" marker-end="url(#ah)" />
-            <rect x="240" y="20" width="300" height="48" rx="8" class="n n-d1" />
+          <svg
+            viewBox="0 0 900 150"
+            role="img"
+            aria-label="Saving look back writes the summary diary entry, as you edited it, and the week's scores. Finishing look forward saves next week's goals, links tasks and reorders To Do."
+          >
+            <rect
+              x="20"
+              y="20"
+              width="170"
+              height="48"
+              rx="24"
+              class="n n-acc"
+            />
+            <text x="105" y="49" text-anchor="middle" class="t-b">
+              Save summary
+            </text>
+            <line
+              x1="190"
+              y1="44"
+              x2="236"
+              y2="44"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <rect
+              x="240"
+              y="20"
+              width="300"
+              height="48"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="254" y="40" class="t-b">Summary entry</text>
             <text x="254" y="58" class="t-s t-m">#vault-summary</text>
-            <rect x="560" y="20" width="320" height="48" rx="8" class="n n-d1" />
+            <rect
+              x="560"
+              y="20"
+              width="320"
+              height="48"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="574" y="40" class="t-b">Scores, question, verdict</text>
             <text x="574" y="58" class="t-s t-m">planner_week</text>
 
-            <rect x="20" y="88" width="170" height="48" rx="24" class="n n-acc" />
-            <text x="105" y="117" text-anchor="middle" class="t-b">Finish look forward</text>
-            <line x1="190" y1="112" x2="236" y2="112" class="a" marker-end="url(#ah)" />
-            <rect x="240" y="88" width="200" height="48" rx="8" class="n n-d1" />
+            <rect
+              x="20"
+              y="88"
+              width="170"
+              height="48"
+              rx="24"
+              class="n n-acc"
+            />
+            <text x="105" y="117" text-anchor="middle" class="t-b">
+              Finish look forward
+            </text>
+            <line
+              x1="190"
+              y1="112"
+              x2="236"
+              y2="112"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <rect
+              x="240"
+              y="88"
+              width="200"
+              height="48"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="254" y="117" class="t-b">Next week's goals</text>
-            <rect x="460" y="88" width="200" height="48" rx="8" class="n n-d1" />
+            <rect
+              x="460"
+              y="88"
+              width="200"
+              height="48"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="474" y="117" class="t-b">Tasks linked to goals</text>
-            <rect x="680" y="88" width="200" height="48" rx="8" class="n n-d1" />
+            <rect
+              x="680"
+              y="88"
+              width="200"
+              height="48"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="694" y="117" class="t-b">To Do reordered</text>
           </svg>
         </div>
-        <figcaption>The summary is written, then waits: you can edit its text before pressing Save, and what you save is what is kept. Work in progress autosaves to <code>planner_review</code>. Each step is logged, so finishing twice never creates a task twice. Code: <code>packages/domain/src/planner/review*.ts</code>, <code>apps/worker/src/routes/planner-review-ai.ts</code>.</figcaption>
+        <figcaption>
+          The summary is written, then waits: you can edit its text before
+          pressing Save, and what you save is what is kept. Work in progress
+          autosaves to <code>planner_review</code>. Each step is logged, so
+          finishing twice never creates a task twice. Code:
+          <code>packages/domain/src/planner/review*.ts</code>,
+          <code>apps/worker/src/routes/planner-review-ai.ts</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="cockpit">
       <h2>Cockpit and task history <span class="chip">fork</span></h2>
-      <p>One board on top of FlareMo's tasks, and a history log that outlives the tasks themselves.</p>
+      <p>
+        One board on top of FlareMo's tasks, and a history log that outlives the
+        tasks themselves.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 330" role="img" aria-label="Board columns Backlog, To Do, Doing, Done, with a Dropped list. Below, one task's life: the tasks row disappears when the task is purged, but the event log keeps every event forever.">
+          <svg
+            viewBox="0 0 900 330"
+            role="img"
+            aria-label="Board columns Backlog, To Do, Doing, Done, with a Dropped list. Below, one task's life: the tasks row disappears when the task is purged, but the event log keeps every event forever."
+          >
             <rect x="20" y="20" width="190" height="70" rx="10" class="n" />
             <text x="115" y="50" text-anchor="middle" class="t-h">Backlog</text>
-            <text x="115" y="72" text-anchor="middle" class="t-s">not planned</text>
+            <text x="115" y="72" text-anchor="middle" class="t-s">
+              not planned
+            </text>
             <rect x="250" y="20" width="190" height="70" rx="10" class="n" />
             <text x="345" y="50" text-anchor="middle" class="t-h">To Do</text>
             <text x="345" y="72" text-anchor="middle" class="t-s">planned</text>
-            <rect x="480" y="20" width="190" height="70" rx="10" class="n n-acc" />
+            <rect
+              x="480"
+              y="20"
+              width="190"
+              height="70"
+              rx="10"
+              class="n n-acc"
+            />
             <text x="575" y="50" text-anchor="middle" class="t-h">Doing</text>
-            <text x="575" y="72" text-anchor="middle" class="t-s">in progress</text>
+            <text x="575" y="72" text-anchor="middle" class="t-s">
+              in progress
+            </text>
             <rect x="710" y="20" width="170" height="70" rx="10" class="n" />
             <text x="795" y="50" text-anchor="middle" class="t-h">Done</text>
-            <text x="795" y="72" text-anchor="middle" class="t-s">last 14 days shown</text>
-            <line x1="210" y1="55" x2="246" y2="55" class="a" marker-end="url(#ah)" />
-            <line x1="440" y1="55" x2="476" y2="55" class="a" marker-end="url(#ah)" />
-            <line x1="670" y1="55" x2="706" y2="55" class="a" marker-end="url(#ah)" />
-            <rect x="120" y="110" width="220" height="34" rx="17" class="n dash" />
-            <text x="230" y="132" text-anchor="middle" class="t-s">Dropped · no overdue alerts</text>
-            <line x1="230" y1="90" x2="230" y2="106" class="a dash" marker-end="url(#ah)" />
+            <text x="795" y="72" text-anchor="middle" class="t-s">
+              last 14 days shown
+            </text>
+            <line
+              x1="210"
+              y1="55"
+              x2="246"
+              y2="55"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="440"
+              y1="55"
+              x2="476"
+              y2="55"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="670"
+              y1="55"
+              x2="706"
+              y2="55"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <rect
+              x="120"
+              y="110"
+              width="220"
+              height="34"
+              rx="17"
+              class="n dash"
+            />
+            <text x="230" y="132" text-anchor="middle" class="t-s">
+              Dropped · no overdue alerts
+            </text>
+            <line
+              x1="230"
+              y1="90"
+              x2="230"
+              y2="106"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
 
             <text x="20" y="186" class="t-s t-m">ONE TASK'S LIFE</text>
             <line x1="40" y1="232" x2="860" y2="232" class="line" />
-            <circle cx="60" cy="232" r="6" class="f-acc" /><text x="60" y="214" text-anchor="middle" class="t-s">created</text>
-            <circle cx="190" cy="232" r="6" class="f-acc" /><text x="190" y="214" text-anchor="middle" class="t-s">planned</text>
-            <circle cx="320" cy="232" r="6" class="f-acc" /><text x="320" y="214" text-anchor="middle" class="t-s">effort set</text>
-            <circle cx="450" cy="232" r="6" class="f-acc" /><text x="450" y="214" text-anchor="middle" class="t-s">commented</text>
-            <circle cx="580" cy="232" r="6" class="f-acc" /><text x="580" y="214" text-anchor="middle" class="t-s">done</text>
-            <circle cx="700" cy="232" r="6" class="f-muted" /><text x="700" y="214" text-anchor="middle" class="t-s">deleted</text>
-            <circle cx="790" cy="232" r="7" class="f-warn" /><text x="790" y="214" text-anchor="middle" class="t-s t-warn">purged</text>
+            <circle cx="60" cy="232" r="6" class="f-acc" />
+            <text x="60" y="214" text-anchor="middle" class="t-s">created</text>
+            <circle cx="190" cy="232" r="6" class="f-acc" />
+            <text x="190" y="214" text-anchor="middle" class="t-s">
+              planned
+            </text>
+            <circle cx="320" cy="232" r="6" class="f-acc" />
+            <text x="320" y="214" text-anchor="middle" class="t-s">
+              effort set
+            </text>
+            <circle cx="450" cy="232" r="6" class="f-acc" />
+            <text x="450" y="214" text-anchor="middle" class="t-s">
+              commented
+            </text>
+            <circle cx="580" cy="232" r="6" class="f-acc" />
+            <text x="580" y="214" text-anchor="middle" class="t-s">done</text>
+            <circle cx="700" cy="232" r="6" class="f-muted" />
+            <text x="700" y="214" text-anchor="middle" class="t-s">
+              deleted
+            </text>
+            <circle cx="790" cy="232" r="7" class="f-warn" />
+            <text x="790" y="214" text-anchor="middle" class="t-s t-warn">
+              purged
+            </text>
 
             <text x="40" y="267" class="t-s t-m">tasks row</text>
             <rect x="120" y="256" width="670" height="12" rx="3" class="f-d1" />
             <text x="800" y="267" class="t-warn t-b">✕ gone</text>
             <text x="40" y="299" class="t-s t-m t-fork">event log</text>
-            <rect x="120" y="288" width="740" height="12" rx="3" class="f-fork" />
-            <line x1="860" y1="294" x2="884" y2="294" class="a" marker-end="url(#ah)" />
+            <rect
+              x="120"
+              y="288"
+              width="740"
+              height="12"
+              rx="3"
+              class="f-fork"
+            />
+            <line
+              x1="860"
+              y1="294"
+              x2="884"
+              y2="294"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="790" y="322" class="t-s">kept forever</text>
           </svg>
         </div>
-        <figcaption><b>The data flywheel.</b> <code>planner_task_event</code> has no hard link to the tasks table, so history survives a purge; the purge event keeps the title and project name. Comment events store only an id, never the text. Card moves write no event. History syncs when the cockpit opens and twice a night, around the bin purge.</figcaption>
+        <figcaption>
+          <b>The data flywheel.</b> <code>planner_task_event</code> has no hard
+          link to the tasks table, so history survives a purge; the purge event
+          keeps the title and project name. Comment events store only an id,
+          never the text. Card moves write no event. History syncs when the
+          cockpit opens and twice a night, around the bin purge.
+        </figcaption>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 120" role="img" aria-label="A task's upstream fields live in tasks; the cockpit's extra fields live next to it in planner_task_plan, joined by task id.">
-            <rect x="20" y="20" width="390" height="80" rx="10" class="n n-d1" />
-            <text x="36" y="44" class="t-m t-b">tasks</text><text x="90" y="44" class="t-s">upstream FlareMo</text>
-            <text x="36" y="72">title · status · priority · due date · notes</text>
-            <rect x="490" y="20" width="390" height="80" rx="10" class="n n-fork fill-fork" />
-            <text x="506" y="44" class="t-m t-b">planner_task_plan</text><text x="650" y="44" class="t-s t-fork">fork</text>
-            <text x="506" y="72">start date · effort · board position · goal</text>
-            <line x1="414" y1="60" x2="486" y2="60" class="a" marker-start="url(#ah)" marker-end="url(#ah)" />
+          <svg
+            viewBox="0 0 900 120"
+            role="img"
+            aria-label="A task's upstream fields live in tasks; the cockpit's extra fields live next to it in planner_task_plan, joined by task id."
+          >
+            <rect
+              x="20"
+              y="20"
+              width="390"
+              height="80"
+              rx="10"
+              class="n n-d1"
+            />
+            <text x="36" y="44" class="t-m t-b">tasks</text>
+            <text x="90" y="44" class="t-s">upstream FlareMo</text>
+            <text x="36" y="72">
+              title · status · priority · due date · notes
+            </text>
+            <rect
+              x="490"
+              y="20"
+              width="390"
+              height="80"
+              rx="10"
+              class="n n-fork fill-fork"
+            />
+            <text x="506" y="44" class="t-m t-b">planner_task_plan</text>
+            <text x="650" y="44" class="t-s t-fork">fork</text>
+            <text x="506" y="72">
+              start date · effort · board position · goal
+            </text>
+            <line
+              x1="414"
+              y1="60"
+              x2="486"
+              y2="60"
+              class="a"
+              marker-start="url(#ah)"
+              marker-end="url(#ah)"
+            />
             <text x="450" y="52" text-anchor="middle" class="t-s">task id</text>
           </svg>
         </div>
-        <figcaption>Fork fields sit beside upstream ones, so an upstream update can't break the cockpit. <b>Live since 2026-10-13:</b> the task's Goal field picks from this week's goals instead of projects. Project pickers are gone from the cockpit, but the old project links stay in the database. Code: <code>packages/domain/src/planner/</code>, page <code>apps/web/src/planner/cockpit-page.tsx</code>.</figcaption>
+        <figcaption>
+          Fork fields sit beside upstream ones, so an upstream update can't
+          break the cockpit. <b>Live since 2026-10-13:</b> the task's Goal field
+          picks from this week's goals instead of projects. Project pickers are
+          gone from the cockpit, but the old project links stay in the database.
+          Code: <code>packages/domain/src/planner/</code>, page
+          <code>apps/web/src/planner/cockpit-page.tsx</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="goals">
       <h2>Goals <span class="chip">fork</span></h2>
-      <p>Five levels, each split across four pillars. Tasks point at the goal they serve.</p>
+      <p>
+        Five levels, each split across four pillars. Tasks point at the goal
+        they serve.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 290" role="img" aria-label="The goal cascade: one north star, then year, quarter, month and week goals, each across the pillars of, work, ai and health. Tasks link to a week goal.">
+          <svg
+            viewBox="0 0 900 290"
+            role="img"
+            aria-label="The goal cascade: one north star, then year, quarter, month and week goals, each across the pillars of, work, ai and health. Tasks link to a week goal."
+          >
             <text x="200" y="22" text-anchor="middle" class="t-s t-m">of</text>
-            <text x="370" y="22" text-anchor="middle" class="t-s t-m">work</text>
+            <text x="370" y="22" text-anchor="middle" class="t-s t-m">
+              work
+            </text>
             <text x="540" y="22" text-anchor="middle" class="t-s t-m">ai</text>
-            <text x="710" y="22" text-anchor="middle" class="t-s t-m">health</text>
+            <text x="710" y="22" text-anchor="middle" class="t-s t-m">
+              health
+            </text>
 
             <text x="20" y="57" class="t-b">North star</text>
-            <rect x="120" y="36" width="670" height="32" rx="6" class="n n-acc fill-acc" />
-            <text x="455" y="57" text-anchor="middle" class="t-s">one, no period</text>
+            <rect
+              x="120"
+              y="36"
+              width="670"
+              height="32"
+              rx="6"
+              class="n n-acc fill-acc"
+            />
+            <text x="455" y="57" text-anchor="middle" class="t-s">
+              one, no period
+            </text>
 
             <text x="20" y="101" class="t-b">Year</text>
-            <rect x="120" y="80" width="160" height="32" rx="6" class="n" /><rect x="290" y="80" width="160" height="32" rx="6" class="n" /><rect x="460" y="80" width="160" height="32" rx="6" class="n" /><rect x="630" y="80" width="160" height="32" rx="6" class="n" />
+            <rect x="120" y="80" width="160" height="32" rx="6" class="n" />
+            <rect x="290" y="80" width="160" height="32" rx="6" class="n" />
+            <rect x="460" y="80" width="160" height="32" rx="6" class="n" />
+            <rect x="630" y="80" width="160" height="32" rx="6" class="n" />
             <text x="20" y="145" class="t-b">Quarter</text>
-            <rect x="120" y="124" width="160" height="32" rx="6" class="n" /><rect x="290" y="124" width="160" height="32" rx="6" class="n" /><rect x="460" y="124" width="160" height="32" rx="6" class="n" /><rect x="630" y="124" width="160" height="32" rx="6" class="n" />
+            <rect x="120" y="124" width="160" height="32" rx="6" class="n" />
+            <rect x="290" y="124" width="160" height="32" rx="6" class="n" />
+            <rect x="460" y="124" width="160" height="32" rx="6" class="n" />
+            <rect x="630" y="124" width="160" height="32" rx="6" class="n" />
             <text x="20" y="189" class="t-b">Month</text>
-            <rect x="120" y="168" width="160" height="32" rx="6" class="n" /><rect x="290" y="168" width="160" height="32" rx="6" class="n" /><rect x="460" y="168" width="160" height="32" rx="6" class="n" /><rect x="630" y="168" width="160" height="32" rx="6" class="n" />
+            <rect x="120" y="168" width="160" height="32" rx="6" class="n" />
+            <rect x="290" y="168" width="160" height="32" rx="6" class="n" />
+            <rect x="460" y="168" width="160" height="32" rx="6" class="n" />
+            <rect x="630" y="168" width="160" height="32" rx="6" class="n" />
             <text x="20" y="233" class="t-b">Week</text>
-            <rect x="120" y="212" width="160" height="32" rx="6" class="n n-acc" /><rect x="290" y="212" width="160" height="32" rx="6" class="n n-acc" /><rect x="460" y="212" width="160" height="32" rx="6" class="n n-acc" /><rect x="630" y="212" width="160" height="32" rx="6" class="n n-acc" />
+            <rect
+              x="120"
+              y="212"
+              width="160"
+              height="32"
+              rx="6"
+              class="n n-acc"
+            />
+            <rect
+              x="290"
+              y="212"
+              width="160"
+              height="32"
+              rx="6"
+              class="n n-acc"
+            />
+            <rect
+              x="460"
+              y="212"
+              width="160"
+              height="32"
+              rx="6"
+              class="n n-acc"
+            />
+            <rect
+              x="630"
+              y="212"
+              width="160"
+              height="32"
+              rx="6"
+              class="n n-acc"
+            />
 
-            <rect x="808" y="212" width="80" height="32" rx="6" class="n n-d1" />
+            <rect
+              x="808"
+              y="212"
+              width="80"
+              height="32"
+              rx="6"
+              class="n n-d1"
+            />
             <text x="848" y="233" text-anchor="middle" class="t-b">Tasks</text>
-            <line x1="808" y1="228" x2="794" y2="228" class="a" marker-end="url(#ah)" />
-            <text x="848" y="262" text-anchor="middle" class="t-s t-m">goal_id</text>
-            <text x="120" y="276" class="t-s">each goal: title · lines · draft / active / contested / closed · met / partial / missed</text>
+            <line
+              x1="808"
+              y1="228"
+              x2="794"
+              y2="228"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <text x="848" y="262" text-anchor="middle" class="t-s t-m">
+              goal_id
+            </text>
+            <text x="120" y="276" class="t-s">
+              each goal: title · lines · draft / active / contested / closed ·
+              met / partial / missed
+            </text>
           </svg>
         </div>
-        <figcaption>Goals live in <code>planner_goal</code>, reviewed weeks in <code>planner_week</code>, clashes in <code>planner_goal_flag</code>. Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking a week goal on a task (pillar colours, None first) tints the card and counts the task on that goal's card. A task tied to another week's goal shows "A goal from another week".<br /><b>Live since 2026-10-13 (version 19):</b> the year page of <code>/goals</code> is the Year map, this same grid on screen: pillars as columns, north star to weeks down one page. Goals line up by pillar and period (no parent link). A period's goals in one pillar share one split row, one part per goal, points as chips. Following a pillar shows only that pillar. Weekly goals with no pillar get one row across the columns. A weekly goal opens a pop-up with its tasks and the goals above it.<br /><b>Live since 2026-10-14 (version 22):</b> only the current month and current week rows are coloured; year and quarter goals are plain cards with larger type. Point chips have a grey border, not the pillar colour, and all pillar dots are one small size.<br /><b>Live since 2026-10-14 (version 23):</b> quarters hold only pillar goals. The generic quarter "theme" lines were removed (soft-deleted on live) and the "+" that added them is gone from the Year map and Quarter page; a new quarter goal has no "No pillar" choice.<br /><b>Live since 2026-10-14 (version 24):</b> quarter and month goals show a five-position progress bar instead of point chips (solid = struck point; open and unused positions are grey), and the editor stops them at five points. Clicking a quarter goal lights up its pillar's column and fades the others; a pencil on the card edits it. Cards no longer draw ✓, ◐ or task counts (still on hover). Week chips always show the Monday with its month.</figcaption>
+        <figcaption>
+          Goals live in <code>planner_goal</code>, reviewed weeks in
+          <code>planner_week</code>, clashes in <code>planner_goal_flag</code>.
+          Page: <code>/goals</code>.<br /><b>Live since 2026-10-13:</b> picking
+          a week goal on a task (pillar colours, None first) tints the card and
+          counts the task on that goal's card. A task tied to another week's
+          goal shows "A goal from another week".<br /><b
+            >Live since 2026-10-13 (version 19):</b
+          >
+          the year page of <code>/goals</code> is the Year map, this same grid
+          on screen: pillars as columns, north star to weeks down one page.
+          Goals line up by pillar and period (no parent link). A period's goals
+          in one pillar share one split row, one part per goal, points as chips.
+          Following a pillar shows only that pillar. Weekly goals with no pillar
+          get one row across the columns. A weekly goal opens a pop-up with its
+          tasks and the goals above it.<br /><b
+            >Live since 2026-10-14 (version 22):</b
+          >
+          only the current month and current week rows are coloured; year and
+          quarter goals are plain cards with larger type. Point chips have a
+          grey border, not the pillar colour, and all pillar dots are one small
+          size.<br /><b>Live since 2026-10-14 (version 23):</b> quarters hold
+          only pillar goals. The generic quarter "theme" lines were removed
+          (soft-deleted on live) and the "+" that added them is gone from the
+          Year map and Quarter page; a new quarter goal has no "No pillar"
+          choice.<br /><b>Live since 2026-10-14 (version 24):</b> quarter and
+          month goals show a five-position progress bar instead of point chips
+          (solid = struck point; open and unused positions are grey), and the
+          editor stops them at five points. Clicking a quarter goal lights up
+          its pillar's column and fades the others; a pencil on the card edits
+          it. Cards no longer draw ✓, ◐ or task counts (still on hover). Week
+          chips always show the Monday with its month.<br /><b
+            >Live since 2026-10-14 (version 25):</b
+          >
+          no empty band above a quarter: "Q4" sits beside its cards like a month
+          label, and quarter cards are month-sized. Every box in a row is the
+          same height with bars lined up at the bottom; following one pillar,
+          points are cut at two lines so quarter and month boxes match. The
+          cockpit's week goal cards are plain: no tint, no coloured border, no
+          progress bar (colour only in the dot; the focused card keeps a
+          coloured outline).
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="health">
       <h2>Health tracker <span class="chip">fork</span></h2>
-      <p><b>Live since 2026-10-13</b> (version 17). Nothing new to type: every saved entry is read for training, breathwork and nights out, and the results become rows. No AI; fixed word rules.</p>
+      <p>
+        <b>Live since 2026-10-13</b> (version 17). Nothing new to type: every
+        saved entry is read for training, breathwork and nights out, and the
+        results become rows. No AI; fixed word rules.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 230" role="img" aria-label="Saving a diary entry runs the health reader, which writes rows to health_entry with a history row in health_entry_event. The week strip, the labels under each entry and the Health page read those rows. A nightly sweep re-reads entries from the last three days.">
-            <rect x="20" y="40" width="150" height="56" rx="8" class="n n-acc" />
-            <text x="95" y="64" text-anchor="middle" class="t-b">Diary entry</text>
-            <text x="95" y="82" text-anchor="middle" class="t-s">saved or edited</text>
-            <line x1="170" y1="68" x2="228" y2="68" class="a" marker-end="url(#ah)" />
+          <svg
+            viewBox="0 0 900 230"
+            role="img"
+            aria-label="Saving a diary entry runs the health reader, which writes rows to health_entry with a history row in health_entry_event. The week strip, the labels under each entry and the Health page read those rows. A nightly sweep re-reads entries from the last three days."
+          >
+            <rect
+              x="20"
+              y="40"
+              width="150"
+              height="56"
+              rx="8"
+              class="n n-acc"
+            />
+            <text x="95" y="64" text-anchor="middle" class="t-b">
+              Diary entry
+            </text>
+            <text x="95" y="82" text-anchor="middle" class="t-s">
+              saved or edited
+            </text>
+            <line
+              x1="170"
+              y1="68"
+              x2="228"
+              y2="68"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
-            <rect x="232" y="40" width="190" height="56" rx="8" class="n n-fork fill-fork" />
-            <text x="327" y="64" text-anchor="middle" class="t-b">Health reader</text>
-            <text x="327" y="82" text-anchor="middle" class="t-s">word rules, no AI</text>
-            <line x1="422" y1="68" x2="480" y2="68" class="a" marker-end="url(#ah)" />
+            <rect
+              x="232"
+              y="40"
+              width="190"
+              height="56"
+              rx="8"
+              class="n n-fork fill-fork"
+            />
+            <text x="327" y="64" text-anchor="middle" class="t-b">
+              Health reader
+            </text>
+            <text x="327" y="82" text-anchor="middle" class="t-s">
+              word rules, no AI
+            </text>
+            <line
+              x1="422"
+              y1="68"
+              x2="480"
+              y2="68"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
-            <rect x="484" y="30" width="180" height="76" rx="8" class="n n-d1" />
-            <text x="574" y="54" text-anchor="middle" class="t-b t-m">health_entry</text>
-            <text x="574" y="72" text-anchor="middle" class="t-s">one row per kind per entry</text>
-            <text x="574" y="90" text-anchor="middle" class="t-s t-m">+ health_entry_event</text>
-            <line x1="664" y1="68" x2="722" y2="68" class="a" marker-end="url(#ah)" />
+            <rect
+              x="484"
+              y="30"
+              width="180"
+              height="76"
+              rx="8"
+              class="n n-d1"
+            />
+            <text x="574" y="54" text-anchor="middle" class="t-b t-m">
+              health_entry
+            </text>
+            <text x="574" y="72" text-anchor="middle" class="t-s">
+              one row per kind per entry
+            </text>
+            <text x="574" y="90" text-anchor="middle" class="t-s t-m">
+              + health_entry_event
+            </text>
+            <line
+              x1="664"
+              y1="68"
+              x2="722"
+              y2="68"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
             <rect x="726" y="20" width="160" height="30" rx="6" class="n" />
             <text x="806" y="40" text-anchor="middle">Week strip</text>
@@ -859,71 +2389,194 @@
             <rect x="726" y="88" width="160" height="30" rx="6" class="n" />
             <text x="806" y="108" text-anchor="middle">Health page</text>
 
-            <rect x="232" y="140" width="190" height="44" rx="8" class="n n-soft dash" />
-            <text x="327" y="160" text-anchor="middle" class="t-b">Nightly sweep</text>
-            <text x="327" y="176" text-anchor="middle" class="t-s">last 3 days, gone entries</text>
-            <line x1="327" y1="140" x2="327" y2="100" class="a dash" marker-end="url(#ah)" />
+            <rect
+              x="232"
+              y="140"
+              width="190"
+              height="44"
+              rx="8"
+              class="n n-soft dash"
+            />
+            <text x="327" y="160" text-anchor="middle" class="t-b">
+              Nightly sweep
+            </text>
+            <text x="327" y="176" text-anchor="middle" class="t-s">
+              last 3 days, gone entries
+            </text>
+            <line
+              x1="327"
+              y1="140"
+              x2="327"
+              y2="100"
+              class="a dash"
+              marker-end="url(#ah)"
+            />
 
-            <text x="484" y="150" class="t-s">training: sessions · split · target 3 a week</text>
-            <text x="484" y="170" class="t-s">breath: minutes · days of 7 · target 7</text>
-            <text x="484" y="190" class="t-s">night out: home after midnight · ½ to 03:00, 1 after</text>
-            <text x="484" y="210" class="t-s">budget 12 units a year · × on a label is remembered</text>
+            <text x="484" y="150" class="t-s">
+              training: sessions · split · target 3 a week
+            </text>
+            <text x="484" y="170" class="t-s">
+              breath: minutes · days of 7 · target 7
+            </text>
+            <text x="484" y="190" class="t-s">
+              night out: home after midnight · ½ to 03:00, 1 after
+            </text>
+            <text x="484" y="210" class="t-s">
+              budget 12 units a year · × on a label is remembered
+            </text>
           </svg>
         </div>
-        <figcaption>Tables: <code>health_entry</code>, <code>health_entry_event</code> (append-only), <code>health_target</code>, <code>health_sync_state</code> (migration <code>9010_planner_health.sql</code>). The first visit to the Health page reads the whole diary once. Read by the weekly review: the week's rows and totals against the targets (not the change history). Code: <code>packages/domain/src/health/</code>, <code>apps/web/src/health/</code>, API <code>/api/app/health-tracker</code>. Page: <code>/health</code>. Guide: <code>docs/fork-health-tracker.md</code>.</figcaption>
+        <figcaption>
+          Tables: <code>health_entry</code>,
+          <code>health_entry_event</code> (append-only),
+          <code>health_target</code>, <code>health_sync_state</code> (migration
+          <code>9010_planner_health.sql</code>). The first visit to the Health
+          page reads the whole diary once. Read by the weekly review: the week's
+          rows and totals against the targets (not the change history). Code:
+          <code>packages/domain/src/health/</code>,
+          <code>apps/web/src/health/</code>, API
+          <code>/api/app/health-tracker</code>. Page: <code>/health</code>.
+          Guide: <code>docs/fork-health-tracker.md</code>.
+        </figcaption>
       </figure>
       <figure>
-        <div class="fig" style="padding: 16px 18px;">
-          <p style="margin: 0 0 8px; font-weight: 600;">How to log it</p>
-          <p style="margin: 0 0 10px; color: var(--muted);">There is no form. You write in the diary as usual and the reader looks at the words. These always work:</p>
-          <ul class="list" style="margin-top: 0;">
-            <li><b>Training:</b> <code>#gym push</code>, <code>pull</code>, <code>back</code>, <code>chest</code>, <code>legs</code> or <code>upper</code>; <code>#crossfit</code>; <code>#gym zone 2 bike 20</code> for cardio with minutes.</li>
-            <li><b>Breath:</b> <code>#wimhof 10</code> or <code>#meditation 15</code>. With no number it counts 10 minutes.</li>
-            <li><b>Night out:</b> <code>#out til 0330</code>, <code>#out home 1am</code> or <code>#out bender</code>. Add a day word (<code>friday</code>, <code>yesterday</code>, <code>last night</code>) if the night was not today.</li>
+        <div class="fig" style="padding: 16px 18px">
+          <p style="margin: 0 0 8px; font-weight: 600">How to log it</p>
+          <p style="margin: 0 0 10px; color: var(--muted)">
+            There is no form. You write in the diary as usual and the reader
+            looks at the words. These always work:
+          </p>
+          <ul class="list" style="margin-top: 0">
+            <li>
+              <b>Training:</b> <code>#gym push</code>, <code>pull</code>,
+              <code>back</code>, <code>chest</code>, <code>legs</code> or
+              <code>upper</code>; <code>#crossfit</code>;
+              <code>#gym zone 2 bike 20</code> for cardio with minutes.
+            </li>
+            <li>
+              <b>Breath:</b> <code>#wimhof 10</code> or
+              <code>#meditation 15</code>. With no number it counts 10 minutes.
+            </li>
+            <li>
+              <b>Night out:</b> <code>#out til 0330</code>,
+              <code>#out home 1am</code> or <code>#out bender</code>. Add a day
+              word (<code>friday</code>, <code>yesterday</code>,
+              <code>last night</code>) if the night was not today.
+            </li>
           </ul>
-          <p style="margin: 10px 0 6px; font-weight: 600;">What the reader does</p>
-          <ul class="list" style="margin-top: 0;">
-            <li><b>Every save and edit:</b> the entry is read and gets at most one row per kind, linked to it, plus a history row. Editing updates the rows. Deleting the entry soft-deletes them; restoring it brings them back.</li>
-            <li><b>First visit to /health:</b> reads the whole diary once. A nightly pass re-reads the last 3 days and tidies rows whose entry is gone.</li>
-            <li><b>Plans are ignored:</b> "tomorrow gym" or "no gym today" make nothing. Weekly summaries, vault summary / theme / tracker imports and entries over 1,500 characters are skipped. For 300 to 1,500 characters only a #tag or a clear "done / went" counts.</li>
-            <li><b>Night weight:</b> home before midnight 0, before 03:00 &frac12;, later 1, still out in the morning 1 with a bender flag. With no home time the label shows four buttons (before 00:00, 00 to 03, 03 to 06, morning). Your pick sets the time and marks the row as edited.</li>
-            <li><b>Your word stays:</b> the &times; on a label removes it for good. A re-read never brings back a removed row and never overwrites one you edited.</li>
+          <p style="margin: 10px 0 6px; font-weight: 600">
+            What the reader does
+          </p>
+          <ul class="list" style="margin-top: 0">
+            <li>
+              <b>Every save and edit:</b> the entry is read and gets at most one
+              row per kind, linked to it, plus a history row. Editing updates
+              the rows. Deleting the entry soft-deletes them; restoring it
+              brings them back.
+            </li>
+            <li>
+              <b>First visit to /health:</b> reads the whole diary once. A
+              nightly pass re-reads the last 3 days and tidies rows whose entry
+              is gone.
+            </li>
+            <li>
+              <b>Plans are ignored:</b> "tomorrow gym" or "no gym today" make
+              nothing. Weekly summaries, vault summary / theme / tracker imports
+              and entries over 1,500 characters are skipped. For 300 to 1,500
+              characters only a #tag or a clear "done / went" counts.
+            </li>
+            <li>
+              <b>Night weight:</b> home before midnight 0, before 03:00
+              &frac12;, later 1, still out in the morning 1 with a bender flag.
+              With no home time the label shows four buttons (before 00:00, 00
+              to 03, 03 to 06, morning). Your pick sets the time and marks the
+              row as edited.
+            </li>
+            <li>
+              <b>Your word stays:</b> the &times; on a label removes it for
+              good. A re-read never brings back a removed row and never
+              overwrites one you edited.
+            </li>
           </ul>
         </div>
-        <figcaption>Standard tags are the dependable path; free-text sentences are read too, by fixed word rules, so an odd phrasing can be missed. If a label is wrong, fix it on the label or edit the entry.</figcaption>
+        <figcaption>
+          Standard tags are the dependable path; free-text sentences are read
+          too, by fixed word rules, so an odd phrasing can be missed. If a label
+          is wrong, fix it on the label or edit the entry.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="nightly">
       <h2>Nightly jobs</h2>
-      <p>One housekeeping pass at 03:17 UTC, in this order. One failing step doesn't stop the rest.</p>
+      <p>
+        One housekeeping pass at 03:17 UTC, in this order. One failing step
+        doesn't stop the rest.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 150" role="img" aria-label="Nine nightly steps in order: exports, webhooks, memory upkeep, dreaming, index queue, orphan files, empty bin, old exports and heatmap, notifications.">
+          <svg
+            viewBox="0 0 900 150"
+            role="img"
+            aria-label="Nine nightly steps in order: exports, webhooks, memory upkeep, dreaming, index queue, orphan files, empty bin, old exports and heatmap, notifications."
+          >
             <line x1="50" y1="50" x2="850" y2="50" class="line-strong" />
-            <circle cx="50" cy="50" r="16" class="n n-acc" /><text x="50" y="55" text-anchor="middle" class="t-b">1</text>
-            <text x="50" y="92" text-anchor="middle">Exports</text><text x="50" y="110" text-anchor="middle" class="t-s">removals</text>
-            <circle cx="150" cy="50" r="16" class="n n-acc" /><text x="150" y="55" text-anchor="middle" class="t-b">2</text>
+            <circle cx="50" cy="50" r="16" class="n n-acc" />
+            <text x="50" y="55" text-anchor="middle" class="t-b">1</text>
+            <text x="50" y="92" text-anchor="middle">Exports</text>
+            <text x="50" y="110" text-anchor="middle" class="t-s">
+              removals
+            </text>
+            <circle cx="150" cy="50" r="16" class="n n-acc" />
+            <text x="150" y="55" text-anchor="middle" class="t-b">2</text>
             <text x="150" y="92" text-anchor="middle">Webhooks</text>
-            <circle cx="250" cy="50" r="16" class="n n-acc" /><text x="250" y="55" text-anchor="middle" class="t-b">3</text>
-            <text x="250" y="92" text-anchor="middle">Memory</text><text x="250" y="110" text-anchor="middle" class="t-s">upkeep</text>
-            <circle cx="350" cy="50" r="16" class="n n-ai" /><text x="350" y="55" text-anchor="middle" class="t-b">4</text>
-            <text x="350" y="92" text-anchor="middle">Dreaming</text><text x="350" y="110" text-anchor="middle" class="t-s">+ Mon check</text>
-            <circle cx="450" cy="50" r="16" class="n n-vec" /><text x="450" y="55" text-anchor="middle" class="t-b">5</text>
-            <text x="450" y="92" text-anchor="middle">Index</text><text x="450" y="110" text-anchor="middle" class="t-s">queue</text>
-            <circle cx="550" cy="50" r="16" class="n n-r2" /><text x="550" y="55" text-anchor="middle" class="t-b">6</text>
-            <text x="550" y="92" text-anchor="middle">Orphan files</text><text x="550" y="110" text-anchor="middle" class="t-s">≤ 10,000</text>
-            <circle cx="650" cy="50" r="16" class="n n-warn" /><text x="650" y="55" text-anchor="middle" class="t-b">7</text>
-            <text x="650" y="92" text-anchor="middle">Empty bin</text><text x="650" y="110" text-anchor="middle" class="t-s">&gt; 30 days</text>
-            <circle cx="750" cy="50" r="16" class="n n-acc" /><text x="750" y="55" text-anchor="middle" class="t-b">8</text>
-            <text x="750" y="92" text-anchor="middle">Old exports</text><text x="750" y="110" text-anchor="middle" class="t-s">heatmap</text>
-            <circle cx="850" cy="50" r="16" class="n n-acc" /><text x="850" y="55" text-anchor="middle" class="t-b">9</text>
-            <text x="850" y="92" text-anchor="middle">Notifications</text><text x="850" y="110" text-anchor="middle" class="t-s">on this day</text>
-            <text x="650" y="138" text-anchor="middle" class="t-s t-fork">planner history sync before + after</text>
+            <circle cx="250" cy="50" r="16" class="n n-acc" />
+            <text x="250" y="55" text-anchor="middle" class="t-b">3</text>
+            <text x="250" y="92" text-anchor="middle">Memory</text>
+            <text x="250" y="110" text-anchor="middle" class="t-s">upkeep</text>
+            <circle cx="350" cy="50" r="16" class="n n-ai" />
+            <text x="350" y="55" text-anchor="middle" class="t-b">4</text>
+            <text x="350" y="92" text-anchor="middle">Dreaming</text>
+            <text x="350" y="110" text-anchor="middle" class="t-s">
+              + Mon check
+            </text>
+            <circle cx="450" cy="50" r="16" class="n n-vec" />
+            <text x="450" y="55" text-anchor="middle" class="t-b">5</text>
+            <text x="450" y="92" text-anchor="middle">Index</text>
+            <text x="450" y="110" text-anchor="middle" class="t-s">queue</text>
+            <circle cx="550" cy="50" r="16" class="n n-r2" />
+            <text x="550" y="55" text-anchor="middle" class="t-b">6</text>
+            <text x="550" y="92" text-anchor="middle">Orphan files</text>
+            <text x="550" y="110" text-anchor="middle" class="t-s">
+              ≤ 10,000
+            </text>
+            <circle cx="650" cy="50" r="16" class="n n-warn" />
+            <text x="650" y="55" text-anchor="middle" class="t-b">7</text>
+            <text x="650" y="92" text-anchor="middle">Empty bin</text>
+            <text x="650" y="110" text-anchor="middle" class="t-s">
+              &gt; 30 days
+            </text>
+            <circle cx="750" cy="50" r="16" class="n n-acc" />
+            <text x="750" y="55" text-anchor="middle" class="t-b">8</text>
+            <text x="750" y="92" text-anchor="middle">Old exports</text>
+            <text x="750" y="110" text-anchor="middle" class="t-s">
+              heatmap
+            </text>
+            <circle cx="850" cy="50" r="16" class="n n-acc" />
+            <text x="850" y="55" text-anchor="middle" class="t-b">9</text>
+            <text x="850" y="92" text-anchor="middle">Notifications</text>
+            <text x="850" y="110" text-anchor="middle" class="t-s">
+              on this day
+            </text>
+            <text x="650" y="138" text-anchor="middle" class="t-s t-fork">
+              planner history sync before + after
+            </text>
           </svg>
         </div>
-        <figcaption>Code: <code>apps/worker/src/scheduled-tasks.ts</code>.</figcaption>
+        <figcaption>
+          Code: <code>apps/worker/src/scheduled-tasks.ts</code>.
+        </figcaption>
       </figure>
     </section>
 
@@ -933,152 +2586,502 @@
       <p>Who gets in, with what key, through which door.</p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 250" role="img" aria-label="The browser uses a cookie through /api/app. Memos apps use a personal token through /api/v1. AI agents use a token through /mcp with 22 tools and /memory/mcp with 7 tools. Anyone with a link can read one shared entry.">
+          <svg
+            viewBox="0 0 900 250"
+            role="img"
+            aria-label="The browser uses a cookie through /api/app. Memos apps use a personal token through /api/v1. AI agents use a token through /mcp with 22 tools and /memory/mcp with 7 tools. Anyone with a link can read one shared entry."
+          >
             <text x="20" y="20" class="t-s t-m">WHO</text>
             <text x="220" y="20" class="t-s t-m">KEY</text>
             <text x="420" y="20" class="t-s t-m">DOOR</text>
             <text x="640" y="20" class="t-s t-m">CAN DO</text>
 
-            <rect x="20" y="32" width="160" height="40" rx="8" class="n" /><text x="34" y="57" class="t-b">Browser</text>
-            <rect x="220" y="38" width="150" height="28" rx="14" class="n n-acc" /><text x="295" y="57" text-anchor="middle">cookie</text>
+            <rect x="20" y="32" width="160" height="40" rx="8" class="n" />
+            <text x="34" y="57" class="t-b">Browser</text>
+            <rect
+              x="220"
+              y="38"
+              width="150"
+              height="28"
+              rx="14"
+              class="n n-acc"
+            />
+            <text x="295" y="57" text-anchor="middle">cookie</text>
             <text x="420" y="57" class="t-m">/api/app</text>
             <text x="640" y="57">everything in the app</text>
 
-            <rect x="20" y="86" width="160" height="40" rx="8" class="n" /><text x="34" y="111" class="t-b">Memos apps</text>
-            <rect x="220" y="92" width="150" height="28" rx="14" class="n n-fork" /><text x="295" y="111" text-anchor="middle" class="t-m">memos_pat_…</text>
+            <rect x="20" y="86" width="160" height="40" rx="8" class="n" />
+            <text x="34" y="111" class="t-b">Memos apps</text>
+            <rect
+              x="220"
+              y="92"
+              width="150"
+              height="28"
+              rx="14"
+              class="n n-fork"
+            />
+            <text x="295" y="111" text-anchor="middle" class="t-m">
+              memos_pat_…
+            </text>
             <text x="420" y="111" class="t-m">/api/v1</text>
             <text x="640" y="111">read and write entries</text>
 
-            <rect x="20" y="140" width="160" height="40" rx="8" class="n" /><text x="34" y="165" class="t-b">AI agents</text>
-            <rect x="220" y="146" width="150" height="28" rx="14" class="n n-fork" /><text x="295" y="165" text-anchor="middle" class="t-m">memos_pat_…</text>
-            <text x="420" y="157" class="t-m">/mcp</text><text x="420" y="175" class="t-m">/memory/mcp</text>
-            <text x="640" y="157">22 entry tools</text><text x="640" y="175">7 memory tools</text>
+            <rect x="20" y="140" width="160" height="40" rx="8" class="n" />
+            <text x="34" y="165" class="t-b">AI agents</text>
+            <rect
+              x="220"
+              y="146"
+              width="150"
+              height="28"
+              rx="14"
+              class="n n-fork"
+            />
+            <text x="295" y="165" text-anchor="middle" class="t-m">
+              memos_pat_…
+            </text>
+            <text x="420" y="157" class="t-m">/mcp</text>
+            <text x="420" y="175" class="t-m">/memory/mcp</text>
+            <text x="640" y="157">22 entry tools</text>
+            <text x="640" y="175">7 memory tools</text>
 
-            <rect x="20" y="194" width="160" height="40" rx="8" class="n dash" /><text x="34" y="219" class="t-b">Anyone with link</text>
-            <rect x="220" y="200" width="150" height="28" rx="14" class="n dash" /><text x="295" y="219" text-anchor="middle" class="t-s">none</text>
+            <rect
+              x="20"
+              y="194"
+              width="160"
+              height="40"
+              rx="8"
+              class="n dash"
+            />
+            <text x="34" y="219" class="t-b">Anyone with link</text>
+            <rect
+              x="220"
+              y="200"
+              width="150"
+              height="28"
+              rx="14"
+              class="n dash"
+            />
+            <text x="295" y="219" text-anchor="middle" class="t-s">none</text>
             <text x="420" y="219" class="t-m">/share/…</text>
             <text x="640" y="219">read one shared entry</text>
 
-            <line x1="180" y1="52" x2="216" y2="52" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="52" x2="412" y2="52" class="a" marker-end="url(#ah)" />
-            <line x1="180" y1="106" x2="216" y2="106" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="106" x2="412" y2="106" class="a" marker-end="url(#ah)" />
-            <line x1="180" y1="160" x2="216" y2="160" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="160" x2="412" y2="160" class="a" marker-end="url(#ah)" />
-            <line x1="180" y1="214" x2="216" y2="214" class="a" marker-end="url(#ah)" />
-            <line x1="370" y1="214" x2="412" y2="214" class="a" marker-end="url(#ah)" />
+            <line
+              x1="180"
+              y1="52"
+              x2="216"
+              y2="52"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="52"
+              x2="412"
+              y2="52"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="180"
+              y1="106"
+              x2="216"
+              y2="106"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="106"
+              x2="412"
+              y2="106"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="180"
+              y1="160"
+              x2="216"
+              y2="160"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="160"
+              x2="412"
+              y2="160"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="180"
+              y1="214"
+              x2="216"
+              y2="214"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="370"
+              y1="214"
+              x2="412"
+              y2="214"
+              class="a"
+              marker-end="url(#ah)"
+            />
           </svg>
         </div>
-        <figcaption>Login is Better Auth. Personal tokens can be revoked and last a year at most. Public sign-up is off. Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.</figcaption>
+        <figcaption>
+          Login is Better Auth. Personal tokens can be revoked and last a year
+          at most. Public sign-up is off. Code:
+          <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="fork">
       <h2>Fork rules</h2>
-      <p>Upstream FlareMo merges in regularly. Fork code stays in its own folders and plugs into upstream through tiny hooks.</p>
+      <p>
+        Upstream FlareMo merges in regularly. Fork code stays in its own folders
+        and plugs into upstream through tiny hooks.
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 260" role="img" aria-label="Upstream FlareMo merges into this fork. Inside, upstream code is mostly untouched and connects to fork-owned folders through one-line hooks guarded by tests.">
+          <svg
+            viewBox="0 0 900 260"
+            role="img"
+            aria-label="Upstream FlareMo merges into this fork. Inside, upstream code is mostly untouched and connects to fork-owned folders through one-line hooks guarded by tests."
+          >
             <rect x="20" y="80" width="170" height="80" rx="10" class="n" />
-            <text x="105" y="114" text-anchor="middle" class="t-b">Upstream FlareMo</text>
-            <text x="105" y="134" text-anchor="middle" class="t-s">read-only</text>
-            <line x1="190" y1="120" x2="246" y2="120" class="a" marker-end="url(#ah)" />
+            <text x="105" y="114" text-anchor="middle" class="t-b">
+              Upstream FlareMo
+            </text>
+            <text x="105" y="134" text-anchor="middle" class="t-s">
+              read-only
+            </text>
+            <line
+              x1="190"
+              y1="120"
+              x2="246"
+              y2="120"
+              class="a"
+              marker-end="url(#ah)"
+            />
             <text x="218" y="110" text-anchor="middle" class="t-s">merges</text>
 
-            <rect x="250" y="16" width="630" height="228" rx="12" class="n n-acc" />
+            <rect
+              x="250"
+              y="16"
+              width="630"
+              height="228"
+              rx="12"
+              class="n n-acc"
+            />
             <text x="268" y="42" class="t-h">uyxh20/FlareMo</text>
 
-            <rect x="268" y="58" width="250" height="168" rx="10" class="n-soft" />
+            <rect
+              x="268"
+              y="58"
+              width="250"
+              height="168"
+              rx="10"
+              class="n-soft"
+            />
             <text x="284" y="82" class="t-b">Upstream code</text>
             <text x="284" y="102" class="t-s">mostly untouched</text>
-            <rect x="284" y="118" width="218" height="22" rx="4" class="n" /><text x="294" y="134" class="t-s t-m">router-tree.tsx</text>
-            <rect x="284" y="146" width="218" height="22" rx="4" class="n" /><text x="294" y="162" class="t-s t-m">flaremo-explorer.tsx</text>
-            <rect x="284" y="174" width="218" height="22" rx="4" class="n" /><text x="294" y="190" class="t-s t-m">env.ts · spa-routes …</text>
+            <rect x="284" y="118" width="218" height="22" rx="4" class="n" />
+            <text x="294" y="134" class="t-s t-m">router-tree.tsx</text>
+            <rect x="284" y="146" width="218" height="22" rx="4" class="n" />
+            <text x="294" y="162" class="t-s t-m">flaremo-explorer.tsx</text>
+            <rect x="284" y="174" width="218" height="22" rx="4" class="n" />
+            <text x="294" y="190" class="t-s t-m">env.ts · spa-routes …</text>
 
-            <line x1="502" y1="129" x2="590" y2="110" class="a a-acc" marker-end="url(#ah-acc)" />
-            <line x1="502" y1="157" x2="590" y2="140" class="a a-acc" marker-end="url(#ah-acc)" />
-            <line x1="502" y1="185" x2="590" y2="170" class="a a-acc" marker-end="url(#ah-acc)" />
-            <text x="550" y="214" text-anchor="middle" class="t-s">1-line hooks</text>
-            <text x="550" y="230" text-anchor="middle" class="t-s">guarded by tests</text>
+            <line
+              x1="502"
+              y1="129"
+              x2="590"
+              y2="110"
+              class="a a-acc"
+              marker-end="url(#ah-acc)"
+            />
+            <line
+              x1="502"
+              y1="157"
+              x2="590"
+              y2="140"
+              class="a a-acc"
+              marker-end="url(#ah-acc)"
+            />
+            <line
+              x1="502"
+              y1="185"
+              x2="590"
+              y2="170"
+              class="a a-acc"
+              marker-end="url(#ah-acc)"
+            />
+            <text x="550" y="214" text-anchor="middle" class="t-s">
+              1-line hooks
+            </text>
+            <text x="550" y="230" text-anchor="middle" class="t-s">
+              guarded by tests
+            </text>
 
-            <rect x="594" y="58" width="270" height="168" rx="10" class="n n-fork fill-fork" />
+            <rect
+              x="594"
+              y="58"
+              width="270"
+              height="168"
+              rx="10"
+              class="n n-fork fill-fork"
+            />
             <text x="610" y="82" class="t-b t-fork">Fork-owned</text>
             <text x="610" y="106" class="t-s t-m">apps/web/src/planner/</text>
             <text x="610" y="126" class="t-s t-m">apps/web/src/fork/</text>
-            <text x="610" y="146" class="t-s t-m">packages/domain/src/planner/</text>
+            <text x="610" y="146" class="t-s t-m">
+              packages/domain/src/planner/
+            </text>
             <text x="610" y="166" class="t-s t-m">contracts/fork-brand.ts</text>
             <text x="610" y="186" class="t-s t-m">migrations/9xxx_*.sql</text>
             <text x="610" y="206" class="t-s t-m">scripts/fork/</text>
           </svg>
         </div>
-        <figcaption>The fork adds the "Schizo Diary" name, hides Team projects / Projects / Articles, adds the # tag picker, and the cockpit, goals and review. Fork tables only add, never link to upstream tables. Full list: <code>docs/fork-customizations.md</code>.</figcaption>
+        <figcaption>
+          The fork adds the "Schizo Diary" name, hides Team projects / Projects
+          / Articles, adds the # tag picker, and the cockpit, goals and review.
+          Fork tables only add, never link to upstream tables. Full list:
+          <code>docs/fork-customizations.md</code>.
+        </figcaption>
       </figure>
     </section>
 
     <!-- ============================================================ -->
     <section id="deploys">
       <h2>Dev, prod and deploys</h2>
-      <p>Nothing deploys on push. Live changes only when you say "push to prod".</p>
+      <p>
+        Nothing deploys on push. Live changes only when you say "push to prod".
+      </p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 100" role="img" aria-label="Changes go local, then to dev which is a clone of live, then you try them, then live on your word.">
+          <svg
+            viewBox="0 0 900 100"
+            role="img"
+            aria-label="Changes go local, then to dev which is a clone of live, then you try them, then live on your word."
+          >
             <rect x="20" y="28" width="170" height="56" rx="10" class="n" />
             <text x="105" y="52" text-anchor="middle" class="t-b">Local</text>
-            <text x="105" y="71" text-anchor="middle" class="t-s">checks + build</text>
-            <rect x="250" y="28" width="190" height="56" rx="10" class="n n-acc" />
-            <text x="345" y="52" text-anchor="middle" class="t-b">Dev · flaremo-dev</text>
-            <text x="345" y="71" text-anchor="middle" class="t-s">clone of live data</text>
+            <text x="105" y="71" text-anchor="middle" class="t-s">
+              checks + build
+            </text>
+            <rect
+              x="250"
+              y="28"
+              width="190"
+              height="56"
+              rx="10"
+              class="n n-acc"
+            />
+            <text x="345" y="52" text-anchor="middle" class="t-b">
+              Dev · flaremo-dev
+            </text>
+            <text x="345" y="71" text-anchor="middle" class="t-s">
+              clone of live data
+            </text>
             <rect x="500" y="28" width="150" height="56" rx="10" class="n" />
-            <text x="575" y="61" text-anchor="middle" class="t-b">You try it</text>
-            <rect x="710" y="28" width="170" height="56" rx="10" class="n n-warn fill-warn" />
-            <text x="795" y="52" text-anchor="middle" class="t-b">Live · flaremo</text>
-            <text x="795" y="71" text-anchor="middle" class="t-s">your real data</text>
-            <line x1="190" y1="56" x2="246" y2="56" class="a" marker-end="url(#ah)" />
-            <line x1="440" y1="56" x2="496" y2="56" class="a" marker-end="url(#ah)" />
-            <line x1="650" y1="56" x2="706" y2="56" class="a a-warn" marker-end="url(#ah-warn)" />
-            <text x="678" y="20" text-anchor="middle" class="t-s t-warn">"push to prod"</text>
+            <text x="575" y="61" text-anchor="middle" class="t-b">
+              You try it
+            </text>
+            <rect
+              x="710"
+              y="28"
+              width="170"
+              height="56"
+              rx="10"
+              class="n n-warn fill-warn"
+            />
+            <text x="795" y="52" text-anchor="middle" class="t-b">
+              Live · flaremo
+            </text>
+            <text x="795" y="71" text-anchor="middle" class="t-s">
+              your real data
+            </text>
+            <line
+              x1="190"
+              y1="56"
+              x2="246"
+              y2="56"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="440"
+              y1="56"
+              x2="496"
+              y2="56"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="650"
+              y1="56"
+              x2="706"
+              y2="56"
+              class="a a-warn"
+              marker-end="url(#ah-warn)"
+            />
+            <text x="678" y="20" text-anchor="middle" class="t-s t-warn">
+              "push to prod"
+            </text>
           </svg>
         </div>
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 200" role="img" aria-label="A live deploy checks the code is main, saves a rollback point and bookmark, counts rows, migrates and deploys, then recounts and loads the site. If rows dropped or the site errors, it rolls the Worker back automatically.">
-            <text x="20" y="20" class="t-s t-m">ONE LIVE DEPLOY · scripts/fork/prod-deploy.mjs</text>
+          <svg
+            viewBox="0 0 900 200"
+            role="img"
+            aria-label="A live deploy checks the code is main, saves a rollback point and bookmark, counts rows, migrates and deploys, then recounts and loads the site. If rows dropped or the site errors, it rolls the Worker back automatically."
+          >
+            <text x="20" y="20" class="t-s t-m">
+              ONE LIVE DEPLOY · scripts/fork/prod-deploy.mjs
+            </text>
             <rect x="20" y="36" width="140" height="60" rx="8" class="n" />
-            <text x="90" y="62" text-anchor="middle" class="t-b">Code = main?</text>
-            <text x="90" y="80" text-anchor="middle" class="t-s">else refuse</text>
+            <text x="90" y="62" text-anchor="middle" class="t-b">
+              Code = main?
+            </text>
+            <text x="90" y="80" text-anchor="middle" class="t-s">
+              else refuse
+            </text>
             <rect x="190" y="36" width="160" height="60" rx="8" class="n" />
-            <text x="270" y="62" text-anchor="middle" class="t-b">Save rollback</text>
-            <text x="270" y="80" text-anchor="middle" class="t-s">version + DB bookmark</text>
-            <rect x="380" y="36" width="140" height="60" rx="8" class="n n-d1" />
-            <text x="450" y="62" text-anchor="middle" class="t-b">Count rows</text>
-            <text x="450" y="80" text-anchor="middle" class="t-s">every table</text>
-            <rect x="550" y="36" width="150" height="60" rx="8" class="n n-acc" />
-            <text x="625" y="70" text-anchor="middle" class="t-b">Migrate, deploy</text>
-            <rect x="730" y="36" width="150" height="60" rx="8" class="n n-d1" />
+            <text x="270" y="62" text-anchor="middle" class="t-b">
+              Save rollback
+            </text>
+            <text x="270" y="80" text-anchor="middle" class="t-s">
+              version + DB bookmark
+            </text>
+            <rect
+              x="380"
+              y="36"
+              width="140"
+              height="60"
+              rx="8"
+              class="n n-d1"
+            />
+            <text x="450" y="62" text-anchor="middle" class="t-b">
+              Count rows
+            </text>
+            <text x="450" y="80" text-anchor="middle" class="t-s">
+              every table
+            </text>
+            <rect
+              x="550"
+              y="36"
+              width="150"
+              height="60"
+              rx="8"
+              class="n n-acc"
+            />
+            <text x="625" y="70" text-anchor="middle" class="t-b">
+              Migrate, deploy
+            </text>
+            <rect
+              x="730"
+              y="36"
+              width="150"
+              height="60"
+              rx="8"
+              class="n n-d1"
+            />
             <text x="805" y="62" text-anchor="middle" class="t-b">Recount</text>
-            <text x="805" y="80" text-anchor="middle" class="t-s">+ load the site</text>
-            <line x1="160" y1="66" x2="186" y2="66" class="a" marker-end="url(#ah)" />
-            <line x1="350" y1="66" x2="376" y2="66" class="a" marker-end="url(#ah)" />
-            <line x1="520" y1="66" x2="546" y2="66" class="a" marker-end="url(#ah)" />
-            <line x1="700" y1="66" x2="726" y2="66" class="a" marker-end="url(#ah)" />
+            <text x="805" y="80" text-anchor="middle" class="t-s">
+              + load the site
+            </text>
+            <line
+              x1="160"
+              y1="66"
+              x2="186"
+              y2="66"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="350"
+              y1="66"
+              x2="376"
+              y2="66"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="520"
+              y1="66"
+              x2="546"
+              y2="66"
+              class="a"
+              marker-end="url(#ah)"
+            />
+            <line
+              x1="700"
+              y1="66"
+              x2="726"
+              y2="66"
+              class="a"
+              marker-end="url(#ah)"
+            />
 
-            <rect x="560" y="136" width="150" height="44" rx="22" class="n n-acc fill-acc" />
+            <rect
+              x="560"
+              y="136"
+              width="150"
+              height="44"
+              rx="22"
+              class="n n-acc fill-acc"
+            />
             <text x="635" y="163" text-anchor="middle" class="t-b">Done</text>
-            <rect x="730" y="136" width="150" height="44" rx="22" class="n n-warn fill-warn" />
-            <text x="805" y="156" text-anchor="middle" class="t-b">Auto rollback</text>
-            <text x="805" y="172" text-anchor="middle" class="t-s">Worker only</text>
-            <path d="M 780 96 C 780 116, 640 116, 640 132" class="a a-acc" marker-end="url(#ah-acc)" />
+            <rect
+              x="730"
+              y="136"
+              width="150"
+              height="44"
+              rx="22"
+              class="n n-warn fill-warn"
+            />
+            <text x="805" y="156" text-anchor="middle" class="t-b">
+              Auto rollback
+            </text>
+            <text x="805" y="172" text-anchor="middle" class="t-s">
+              Worker only
+            </text>
+            <path
+              d="M 780 96 C 780 116, 640 116, 640 132"
+              class="a a-acc"
+              marker-end="url(#ah-acc)"
+            />
             <text x="660" y="120" class="t-s">all good</text>
-            <line x1="840" y1="96" x2="840" y2="132" class="a a-warn" marker-end="url(#ah-warn)" />
+            <line
+              x1="840"
+              y1="96"
+              x2="840"
+              y2="132"
+              class="a a-warn"
+              marker-end="url(#ah-warn)"
+            />
             <text x="846" y="118" class="t-s t-warn">rows lost</text>
             <text x="846" y="130" class="t-s t-warn">/ error</text>
-            <text x="20" y="160" class="t-s">Database bookmark kept 7 days (free plan).</text>
-            <text x="20" y="178" class="t-s">Data is never auto-reverted; the bookmark is the way back.</text>
+            <text x="20" y="160" class="t-s">
+              Database bookmark kept 7 days (free plan).
+            </text>
+            <text x="20" y="178" class="t-s">
+              Data is never auto-reverted; the bookmark is the way back.
+            </text>
           </svg>
         </div>
-        <figcaption>The dev clone copies live table by table, replays new migrations as a rehearsal, and fails on any row-count mismatch. Details: <code>docs/fork-dev-environment.md</code>.</figcaption>
+        <figcaption>
+          The dev clone copies live table by table, replays new migrations as a
+          rehearsal, and fails on any row-count mismatch. Details:
+          <code>docs/fork-dev-environment.md</code>.
+        </figcaption>
       </figure>
     </section>
 
@@ -1086,47 +3089,286 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
-        <li><b>Year map: progress bars and lit column</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 24). Quarter and month goals get a five-position progress bar (five points at most); clicking a quarter goal lights up its column; no result marks on cards; week chips always show the month. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>, <code>goals.css</code>, <code>goal-editor.tsx</code>. See <a href="#goals">Goals</a>.</li>
-        <li><b>Quarters: pillar goals only</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 23). The four generic quarter theme lines were soft-deleted on live, and the app no longer offers a way to add one. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>, <code>goals-page.tsx</code>, <code>goal-editor.tsx</code>. See <a href="#goals">Goals</a>.</li>
-        <li><b>Year map: colour only now</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 22). Only the current month and current week rows are coloured; year and quarter goals are plain cards. No migration. Code: <code>apps/web/src/planner/goals.css</code>. See <a href="#goals">Goals</a>.</li>
-        <li><b>Rewrite keeps a goal's details</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 21). Rewriting a goal in Check goals changes only its title: its lines and note stay, and the old title is kept as a struck line. Code: <code>packages/domain/src/planner/review.ts</code>. See <a href="#review">Weekly review</a>.</li>
-        <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
-        <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
-        <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
-        <li><b>Weekly review: health, memories, edit before saving</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 20). The review reads the health tracker and the week's memories, cuts the week at local midnight, checks the plan against next week's own month and year, and lets you edit the summary before saving. See <a href="#review">Weekly review</a>.</li>
-        <li><b>Hiding Wander and On this day</b> <span class="chip">fork</span>. Live since 2026-10-13. Removes both sidebar links and the timeline banner, including its data request. Pages still open by URL; no data deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.</li>
-        <li><b>Long entries no longer look cut off</b>. Live since 2026-10-13. The memos page capped the height of an expanded entry, so long entries looked truncated even though they were saved in full. The fix removes the cap.</li>
+        <li>
+          <b>Compact quarters, plain cockpit cards</b>
+          <span class="chip">fork</span>. Live since 2026-10-14 (version 25).
+          Quarter label beside its month-sized cards (no theme band),
+          equal-height boxes per row, two-line points when following a pillar;
+          cockpit goal cards lose their tint, coloured border and progress bar.
+          No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>,
+          <code>goal-cards.tsx</code>, <code>goals.css</code>. See
+          <a href="#goals">Goals</a>.
+        </li>
+        <li>
+          <b>Year map: progress bars and lit column</b>
+          <span class="chip">fork</span>. Live since 2026-10-14 (version 24).
+          Quarter and month goals get a five-position progress bar (five points
+          at most); clicking a quarter goal lights up its column; no result
+          marks on cards; week chips always show the month. No migration. Code:
+          <code>apps/web/src/planner/year-map.tsx</code>,
+          <code>goals.css</code>, <code>goal-editor.tsx</code>. See
+          <a href="#goals">Goals</a>.
+        </li>
+        <li>
+          <b>Quarters: pillar goals only</b> <span class="chip">fork</span>.
+          Live since 2026-10-14 (version 23). The four generic quarter theme
+          lines were soft-deleted on live, and the app no longer offers a way to
+          add one. No migration. Code:
+          <code>apps/web/src/planner/year-map.tsx</code>,
+          <code>goals-page.tsx</code>, <code>goal-editor.tsx</code>. See
+          <a href="#goals">Goals</a>.
+        </li>
+        <li>
+          <b>Year map: colour only now</b> <span class="chip">fork</span>. Live
+          since 2026-10-14 (version 22). Only the current month and current week
+          rows are coloured; year and quarter goals are plain cards. No
+          migration. Code: <code>apps/web/src/planner/goals.css</code>. See
+          <a href="#goals">Goals</a>.
+        </li>
+        <li>
+          <b>Rewrite keeps a goal's details</b> <span class="chip">fork</span>.
+          Live since 2026-10-14 (version 21). Rewriting a goal in Check goals
+          changes only its title: its lines and note stay, and the old title is
+          kept as a struck line. Code:
+          <code>packages/domain/src/planner/review.ts</code>. See
+          <a href="#review">Weekly review</a>.
+        </li>
+        <li>
+          <b>Goals Year map</b> <span class="chip">fork</span>. Live since
+          2026-10-13 (version 19). Replaces the year heatmap with the whole
+          cascade on one page, pillars as columns; follow one pillar; split rows
+          for goals and their points; weekly goal pop-up with tasks. No
+          migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See
+          <a href="#goals">Goals</a>.
+        </li>
+        <li>
+          <b>Edit a memo's date and time</b> <span class="chip">fork</span>.
+          Live since 2026-10-13 (version 18). A ⋯ menu item on each entry
+          backdates it; the first time is kept. See
+          <a href="#memos">Diary entries</a>.
+        </li>
+        <li>
+          <b>Health tracker</b> <span class="chip">fork</span>. Live since
+          2026-10-13 (version 17). See <a href="#health">Health tracker</a>.
+        </li>
+        <li>
+          <b>Weekly review: health, memories, edit before saving</b>
+          <span class="chip">fork</span>. Live since 2026-10-13 (version 20).
+          The review reads the health tracker and the week's memories, cuts the
+          week at local midnight, checks the plan against next week's own month
+          and year, and lets you edit the summary before saving. See
+          <a href="#review">Weekly review</a>.
+        </li>
+        <li>
+          <b>Hiding Wander and On this day</b> <span class="chip">fork</span>.
+          Live since 2026-10-13. Removes both sidebar links and the timeline
+          banner, including its data request. Pages still open by URL; no data
+          deleted. Code: <code>apps/web/src/fork/sidebar-nav.tsx</code>.
+        </li>
+        <li>
+          <b>Long entries no longer look cut off</b>. Live since 2026-10-13. The
+          memos page capped the height of an expanded entry, so long entries
+          looked truncated even though they were saved in full. The fix removes
+          the cap.
+        </li>
       </ul>
     </section>
 
     <!-- ============================================================ -->
     <section id="changelog">
       <h2>Changelog</h2>
-      <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
+      <p>
+        One line per change. Every branch that merges or ships updates the
+        sections it touches and adds a line here.
+      </p>
       <ul class="log">
-        <li><time>2026-10-14</time><span>Shipped to live (version 24): Year map quarter and month progress bars (five positions, five points at most), clicking a quarter goal lights up its column, no result marks on cards, week chips always show the month. Dev deploy first; no migration; row counts unchanged (3,899).</span></li>
-        <li><time>2026-10-14</time><span>Claude sessions now ask before any raw live write (wrangler deploy, rollback, remote migrations or d1 execute, Time Travel restore); <code>scripts/fork/prod-deploy.mjs</code> stays the unprompted way to ship. Repo setting only, no deploy.</span></li>
-        <li><time>2026-10-14</time><span>Shipped to live (version 23): quarters hold pillar goals only. The four generic quarter theme lines were soft-deleted on live (bookmark taken first; 190 goals, 186 visible after) and the app no longer offers a "+" for them. No migration; row counts unchanged (3,899).</span></li>
-        <li><time>2026-10-14</time><span>Shipped to live (version 22): Year map colours only the current month and week, grey chip borders, one dot size. No migration; row counts unchanged (3,899).</span></li>
-        <li><time>2026-10-14</time><span>Goals Year map: only the current month and week are coloured, year and quarter rows go plain, point chips get a grey border, one dot size (branch fix/goals-highlight-current-only; deployed to dev, not live). No migration.</span></li>
-        <li><time>2026-10-14</time><span>Shipped to live (version 21): Rewrite in Check goals keeps the goal's lines and note and keeps the old title as a struck line (it used to wipe them). No migration.</span></li>
-        <li><time>2026-10-13</time><span>Shipped to live (version 20): weekly review reads health and memories, local-midnight weeks, plan-week goal check, editable summary. No migration; row counts unchanged.</span></li>
-        <li><time>2026-10-13</time><span>Weekly review: reads health and memories, week cut at local midnight, look forward checks the plan week's goals, summary editable before saving (branch feat/review-health-memories-edit; dev first).</span></li>
-        <li><time>2026-10-13</time><span>Shipped to live (version 19): Goals Year map, with pillar follow and split rows. No migration; row counts unchanged.</span></li>
-        <li><time>2026-10-13</time><span>Goals Year map on the /goals year page (branch feat/goals-year-map; deployed to dev, not live). No migration.</span></li>
-        <li><time>2026-10-13</time><span>Shipped to live (version 18): edit a memo's created date and time. No migration; row counts unchanged.</span></li>
-        <li><time>2026-10-13</time><span>Edit a memo's created date and time from the ⋯ menu (branch feat/edit-memo-created-time; dev first).</span></li>
-        <li><time>2026-10-13</time><span>Shipped to live (version 17): health tracker and its four tables (migration 9010).</span></li>
-<li><time>2026-10-13</time><span>Health tracker: added the "How to log it" explainer (tags, rules, night weights, what a re-read keeps).</span></li>
-        <li><time>2026-10-13</time><span>Health tracker: merged into main and deployed to dev; not live yet.</span></li>
-<li><time>2026-10-13</time><span>Health tracker: new section (built, pending on branch feat/health-tracker).</span></li>
-        <li><time>2026-10-13</time><span>Shipped to live (version 16): module tests and data-source registry, week-goal picker on tasks, Wander and On this day hidden, expanded-entry height fix. Pending items now read as live.</span></li>
-        <li><time>2026-10-13</time><span>Cockpit and goals: noted the week-goal picker on tasks (pending on dev).</span></li>
-        <li><time>2026-10-13</time><span>In progress: dropped the raw-logs item; added the expanded-entry height fix (pending).</span></li>
-        <li><time>2026-10-13</time><span>Redrawn diagram-first: every section is now a figure with a short caption. Added the UTC week boundary.</span></li>
-        <li><time>2026-10-13</time><span>In progress: added hiding Wander and On this day (on dev, not merged).</span></li>
-        <li><time>2026-10-13</time><span>Search: named the confirmed cause of the not-indexed entries (import skips the indexing queue).</span></li>
-        <li><time>2026-10-13</time><span>First version, written from the code on main (4ca0c19) and live row counts.</span></li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Shipped to live (version 25): Year map quarter cards month-sized
+            beside their label with no empty band, equal-height boxes per row,
+            two-line points when following a pillar; cockpit goal cards plain
+            (no tint, coloured border or progress bar). QA on the dev build
+            first; no migration; row counts unchanged (3,962).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Shipped to live (version 24): Year map quarter and month progress
+            bars (five positions, five points at most), clicking a quarter goal
+            lights up its column, no result marks on cards, week chips always
+            show the month. Dev deploy first; no migration; row counts unchanged
+            (3,899).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Claude sessions now ask before any raw live write (wrangler deploy,
+            rollback, remote migrations or d1 execute, Time Travel restore);
+            <code>scripts/fork/prod-deploy.mjs</code> stays the unprompted way
+            to ship. Repo setting only, no deploy.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Shipped to live (version 23): quarters hold pillar goals only. The
+            four generic quarter theme lines were soft-deleted on live (bookmark
+            taken first; 190 goals, 186 visible after) and the app no longer
+            offers a "+" for them. No migration; row counts unchanged
+            (3,899).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Shipped to live (version 22): Year map colours only the current
+            month and week, grey chip borders, one dot size. No migration; row
+            counts unchanged (3,899).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Goals Year map: only the current month and week are coloured, year
+            and quarter rows go plain, point chips get a grey border, one dot
+            size (branch fix/goals-highlight-current-only; deployed to dev, not
+            live). No migration.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-14</time
+          ><span
+            >Shipped to live (version 21): Rewrite in Check goals keeps the
+            goal's lines and note and keeps the old title as a struck line (it
+            used to wipe them). No migration.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Shipped to live (version 20): weekly review reads health and
+            memories, local-midnight weeks, plan-week goal check, editable
+            summary. No migration; row counts unchanged.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Weekly review: reads health and memories, week cut at local
+            midnight, look forward checks the plan week's goals, summary
+            editable before saving (branch feat/review-health-memories-edit; dev
+            first).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Shipped to live (version 19): Goals Year map, with pillar follow
+            and split rows. No migration; row counts unchanged.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Goals Year map on the /goals year page (branch feat/goals-year-map;
+            deployed to dev, not live). No migration.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Shipped to live (version 18): edit a memo's created date and time.
+            No migration; row counts unchanged.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Edit a memo's created date and time from the ⋯ menu (branch
+            feat/edit-memo-created-time; dev first).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Shipped to live (version 17): health tracker and its four tables
+            (migration 9010).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Health tracker: added the "How to log it" explainer (tags, rules,
+            night weights, what a re-read keeps).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Health tracker: merged into main and deployed to dev; not live
+            yet.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Health tracker: new section (built, pending on branch
+            feat/health-tracker).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Shipped to live (version 16): module tests and data-source
+            registry, week-goal picker on tasks, Wander and On this day hidden,
+            expanded-entry height fix. Pending items now read as live.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Cockpit and goals: noted the week-goal picker on tasks (pending on
+            dev).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >In progress: dropped the raw-logs item; added the expanded-entry
+            height fix (pending).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Redrawn diagram-first: every section is now a figure with a short
+            caption. Added the UTC week boundary.</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >In progress: added hiding Wander and On this day (on dev, not
+            merged).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >Search: named the confirmed cause of the not-indexed entries
+            (import skips the indexing queue).</span
+          >
+        </li>
+        <li>
+          <time>2026-10-13</time
+          ><span
+            >First version, written from the code on main (4ca0c19) and live row
+            counts.</span
+          >
+        </li>
       </ul>
     </section>
   </main>
