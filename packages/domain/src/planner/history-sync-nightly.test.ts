@@ -52,7 +52,10 @@ describe("plannerSyncAllUsers", () => {
     const theirs = await createTask(rt.db, rt.other, USER, { title: "Theirs" });
 
     const now = new Date(Date.now() + 31 * 86_400_000);
-    expect(await plannerSyncAllUsers(rt.db, now)).toEqual({ users: 2 });
+    expect(await plannerSyncAllUsers(rt.db, now)).toEqual({
+      users: 2,
+      paused: false,
+    });
 
     // The purge: project first, then the standalone sweep.
     await plannerTestRun(
@@ -84,7 +87,28 @@ describe("plannerSyncAllUsers", () => {
     ).toEqual(["created"]);
   });
 
-  it("never throws, even without the planner tables", async () => {
+  it("reports a pause by any one user, so the caller can skip the purge", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await createTask(rt.db, rt.user, USER, { title: "Mine" });
+    await createTask(rt.db, rt.other, USER, { title: "Theirs" });
+    await plannerTestRun(
+      rt.database,
+      "ALTER TABLE task_activity RENAME COLUMN changes TO changes_x",
+    );
+    try {
+      expect(await plannerSyncAllUsers(rt.db, new Date())).toEqual({
+        users: 2,
+        paused: true,
+      });
+    } finally {
+      await plannerTestRun(
+        rt.database,
+        "ALTER TABLE task_activity RENAME COLUMN changes_x TO changes",
+      );
+    }
+  });
+
+  it("never throws, even without the planner tables, and reports that as paused", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     await plannerTestRun(
       rt.database,
@@ -93,6 +117,7 @@ describe("plannerSyncAllUsers", () => {
     try {
       expect(await plannerSyncAllUsers(rt.db, new Date())).toEqual({
         users: 0,
+        paused: true,
       });
     } finally {
       await plannerTestRun(

@@ -329,6 +329,36 @@ describe("goals", () => {
     ).rejects.toThrow(NotFoundError);
   });
 
+  it("refuses to link a task to a goal that is not weekly", async () => {
+    const quarter = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        level: "quarter",
+        periodStart: "2026-10-01",
+        pillar: "work",
+        title: "Land the deal",
+      },
+    });
+    const taskId = await plannerTestInsertTask(rt.database, {
+      id: "tasks/quarter",
+      userId: rt.user.id,
+    });
+    await expect(
+      plannerSetTaskGoal(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId,
+        goalId: quarter.id,
+      }),
+    ).rejects.toThrow(ValidationError);
+    expect(await plannerTestPlan(rt.database, taskId)).toBeUndefined();
+    expect(
+      (await plannerTestEvents(rt.database, taskId)).filter(
+        (event) => event.type === "goal_changed",
+      ),
+    ).toEqual([]);
+  });
+
   it("gives a backlog task a plan row that plans nothing", async () => {
     const goal = await plannerCreateGoal(rt.db, {
       userId: rt.user.id,

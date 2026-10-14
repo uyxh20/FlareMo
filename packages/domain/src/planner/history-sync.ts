@@ -70,6 +70,7 @@ export const plannerRequiredColumns = {
     "created_at",
   ],
   projects: ["id", "user_id", "name", "status", "deleted_at", "created_at"],
+  users: ["id", "status"],
 } as const satisfies Record<string, readonly string[]>;
 
 /** Upstream's `task_activity.action` values, straight from its Drizzle enum. */
@@ -97,6 +98,19 @@ export const plannerSyncBatchSteps = [
   "snapshot",
   "orphan_nodes",
 ] as const;
+
+/**
+ * The mass-purge brake (fork review finding A02). Upstream purges a task only
+ * after it was in the bin for 30 days, and the sync runs nightly right before
+ * that purge, so the snapshot always saw a purged task deleted first. A task
+ * the snapshot last saw live that is now gone from `tasks` means something
+ * other than the trash purge removed it: an upstream table rebuild, a restore
+ * or a bad migration. When more than `rows` such tasks, or at least `min` of
+ * them and more than `share` of the snapshot, would be recorded `purged` in one
+ * sync, the sync pauses instead, before any snapshot, plan or goal-tree row is
+ * deleted. A stray one or two still sync: their `purged` event keeps the title.
+ */
+export const plannerMassPurgeBrake = { rows: 20, min: 5, share: 0.2 } as const;
 
 export type PlannerSyncBatchStep = (typeof plannerSyncBatchSteps)[number];
 
@@ -434,6 +448,38 @@ function buildSyncStatements(
   ];
 }
 
+/**
+ * The reason to pause, or null, when the purge steps would remove tasks the
+ * snapshot last saw live in numbers past `plannerMassPurgeBrake`. A removed
+ * member (whose tasks upstream deletes outright) never trips it.
+ */
+async function findMassPurge(
+  db: FlareMoDb,
+  userId: string,
+): Promise<string | null> {
+  const row = await db.get<{
+    seen: number;
+    vanished: number | null;
+    removed: number;
+  }>(sql`
+    SELECT COUNT(*) AS seen,
+           SUM(CASE WHEN s.deleted_at IS NULL
+             AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.id = s.task_id)
+             THEN 1 ELSE 0 END) AS vanished,
+           (SELECT COUNT(*) FROM users u
+            WHERE u.id = ${userId} AND u.status = 'removed') AS removed
+    FROM planner_task_seen s
+    WHERE s.user_id = ${userId}`);
+  const seen = row?.seen ?? 0;
+  const vanished = row?.vanished ?? 0;
+  if (vanished === 0 || (row?.removed ?? 0) > 0) return null;
+  const { rows, min, share } = plannerMassPurgeBrake;
+  if (vanished <= rows && (vanished < min || vanished <= seen * share)) {
+    return null;
+  }
+  return `mass purge brake: ${vanished} of ${seen} archived tasks vanished without being deleted first; purge steps skipped`;
+}
+
 /** Best effort: the sync must never throw, and neither may its failure report. */
 async function recordPaused(
   db: FlareMoDb,
@@ -513,21 +559,29 @@ export async function plannerSyncHistory(
       return { history: "paused" };
     }
     const warning = await findEnumDrift(db, userId);
+    const statements = buildSyncStatements(db, {
+      userId,
+      nowIso,
+      state: {
+        activityLastId: state?.activityLastId ?? null,
+        activityWatermark: state?.activityWatermark ?? null,
+      },
+      warning,
+    });
 
-    // 2 and 3. Copy activity, update the state, diff the snapshot: one batch,
+    // 2. The mass-purge brake: still copy activity (idempotent, and the state's
+    // watermark stays put so the next sync looks again), but delete nothing.
+    const brake = await findMassPurge(db, userId);
+    if (brake) {
+      await plannerRunBatch(db, statements.slice(0, 1));
+      logPaused(brake);
+      await recordPaused(db, userId, now, brake);
+      return { history: "paused" };
+    }
+
+    // 3 and 4. Copy activity, update the state, diff the snapshot: one batch,
     // so a failure leaves nothing half-written.
-    await plannerRunBatch(
-      db,
-      buildSyncStatements(db, {
-        userId,
-        nowIso,
-        state: {
-          activityLastId: state?.activityLastId ?? null,
-          activityWatermark: state?.activityWatermark ?? null,
-        },
-        warning,
-      }),
-    );
+    await plannerRunBatch(db, statements);
     return { history: "ok" };
   } catch (error) {
     const reason = plannerDescribeError(error);

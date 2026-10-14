@@ -30,7 +30,7 @@ Build defaults (adopted for the build; the owner can change them after QA):
 - **D2 The cockpit lives at `/cockpit`**, beside `/projects` in navigation.
 - **D3 Goals are upstream projects arranged in a tree** (`planner_project_node`). Tasks belong to goals through upstream `tasks.project_id`. A node's `level` is a validated slug (`^[a-z][a-z0-9-]{0,23}$`, for example `area`, `year`, `quarter`, `goal`, `milestone`), so adding a level needs no schema change.
 - **D4 History is a permanent copy of upstream `task_activity`**, plus delete, restore and purge detection by comparing `tasks` with a snapshot. No SQL triggers anywhere.
-- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
+- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added. On a night any user's sync pauses, the task and project purge is skipped, so nothing is purged before it is archived (review finding A01). A sync that would record more than 20 tasks, or at least 5 and more than 20% of the snapshot, as purged although the snapshot last saw them live pauses instead and deletes nothing (`plannerMassPurgeBrake`, finding A02); upstream's trash purge never trips it, because the snapshot always sees a binned task first.
 
 ## 1. Guardrails
 
@@ -634,7 +634,7 @@ What changed:
 
 - **Period chips are gone.** The All / Today / This week / This month row and the period picker in quick add are removed. The board always shows every card. `todo-filter.ts` and its test are deleted.
 - **Quick add and each column's "+" create the task straight into its column.** Quick add creates in Backlog. A To Do "+" sends the To Do marker (below); Doing and Done take no plan.
-- **Carry-over is off the web.** `use-planner-rollover.ts` is deleted and nothing calls `POST /rollover`. The route and `rollover.ts` stay, unused, under the additive-only rule. There are no "Carried ×N" badges and no carry toast. Old `carried_over` events still render with their label, and the actor reads "Automatic" as before.
+- **Carry-over is off the web.** `use-planner-rollover.ts` is deleted and nothing calls `POST /rollover`. Since review finding A05 the route answers 410 Gone after checking the credential, so no client can add `carried_over` events to the permanent archive any more; `rollover.ts` stays, unused, under the additive-only rule. There are no "Carried ×N" badges and no carry toast. Old `carried_over` events still render with their label, and the actor reads "Automatic" as before.
 - **Plan is replaced by Start date.** `planner_task_plan.start_date` (migration `9002_planner_start_date.sql`, a nullable `YYYY-MM-DD` day) sits on the plan row, as the effort does. `PATCH /tasks/:id` takes `start_date` (a day or `null`), and the event is `start_date_changed` `{from, to}` in the same batch. The task panel sets it with the same date control as the due date. The card shows the range: "Oct 8 → Oct 12" with both dates, "Starts Oct 8" with only a start, and the due chip as before with only a due date. Priority and project stay. The plan menu and its chips are gone from the card and the panel.
 - **Created** is a read-only row in the panel, from `tasks.created_at`. The footer keeps "Updated".
 - **Quarter** is derived from the start date, or else the due date.
@@ -645,7 +645,7 @@ Why a `day` horizon and not a new "no period" value: the planner's column rule (
 Known edges, kept on purpose:
 
 - A `start_date` after the due date is accepted. The card then shows the range in the order typed.
-- If someone calls the rollover route by hand, it would carry To Do markers forward day by day and bump `carry_count`. Nothing in the web does that.
+- The rollover route answers 410, so nothing can carry To Do markers forward or bump `carry_count` any more.
 - A Doing → To Do move with no plan writes two events: "Moved to Backlog" (the status change) and then "Moved to To Do" (the marker).
 
 Files: `migrations/9002_planner_start_date.sql`, `packages/db/src/schema/planner.ts`, `packages/contracts/src/planner.ts`, `packages/domain/src/planner/` (`plans.ts`, `board.ts`, `shared.ts`, `rollover.ts` comment), `apps/worker/src/routes/planner-api.ts`, and the web files under `apps/web/src/planner/` (`cockpit-page.tsx`, `board.tsx`, `board-model.ts`, `column-add.ts`, `quick-add.tsx`, `task-card.tsx`, `task-panel-properties.tsx`, `card-dialogs.tsx`, `day-dialog.tsx` (was `plan-picker.tsx`), `history-labels.ts`, `strings.ts`, `use-planner-actions.ts`, `dates.ts`, `panel-model.ts`, `api.ts`). `tests/e2e/cockpit.spec.ts` is updated and written, not run (G8).

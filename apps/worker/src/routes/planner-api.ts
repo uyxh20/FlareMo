@@ -5,7 +5,6 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerDeleteCommentResponse,
   type PlannerHistoryRangeResponse,
-  type PlannerRolloverResponse,
   type PlannerRollupResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
@@ -16,7 +15,6 @@ import {
   plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
-  plannerRolloverSchema,
   plannerRollupQuerySchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
@@ -39,7 +37,6 @@ import {
   plannerReadTaskHistory,
   plannerReadTaskPlan,
   plannerReadTree,
-  plannerRollover,
   plannerSetBoardRank,
   plannerSetEffort,
   plannerSetPlan,
@@ -120,32 +117,29 @@ plannerApi.get(
   },
 );
 
-plannerApi.post(
-  "/rollover",
-  zValidator("json", plannerRolloverSchema),
-  async (c) => {
-    try {
-      const context = await getRequestContext(c);
-      const throttled = await rateLimitGuard(c, "planner", context.user.id);
-      if (throttled) return throttled;
-      const { today } = c.req.valid("json");
-      const now = new Date();
-      plannerAssertToday(today, now);
-      const result: PlannerRolloverResponse = await plannerRollover(
-        context.db,
-        {
-          userId: context.user.id,
-          actor: plannerResolveActor(c, context.credential),
-          today,
-          now,
+// Retired (fork review finding A05). The web no longer calls it, but every call
+// still wrote permanent `carried_over` events to the archive, so a stale client
+// or a PAT could add history that can never be removed. It still checks the
+// credential and the rate limit, then answers 410 Gone. The domain function
+// `plannerRollover` stays, unused, under the additive-only rule.
+plannerApi.post("/rollover", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    return c.json(
+      {
+        error: {
+          message:
+            "Rollover is no longer supported; plan tasks on the board instead.",
         },
-      );
-      return c.json(result);
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  },
-);
+      },
+      410,
+    );
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
 
 // --- Tasks ------------------------------------------------------------------
 
@@ -161,7 +155,7 @@ plannerApi.post(
       plannerAssertToday(body.today, new Date());
       const created = await plannerCreateTask(context.db, {
         user: context.user,
-        actor: plannerResolveActor(c, context.credential),
+        actor: await plannerResolveActor(c, context.credential),
         title: body.title,
         notes: body.notes,
         priority: body.priority,
@@ -254,7 +248,7 @@ plannerApi.patch(
       } = c.req.valid("json");
       plannerAssertToday(today, new Date());
       const { db, user } = context;
-      const actor = plannerResolveActor(c, context.credential);
+      const actor = await plannerResolveActor(c, context.credential);
       const taskId = parseTaskId(c.req.param("id"));
 
       // The last planner step that ran holds the final task and plan, unless an
@@ -387,7 +381,7 @@ plannerApi.post(
       const response: PlannerCommentResponse = {
         comment: await plannerAddComment(context.db, {
           user: context.user,
-          actor: plannerResolveActor(c, context.credential),
+          actor: await plannerResolveActor(c, context.credential),
           taskId: parseTaskId(c.req.param("id")),
           body,
         }),
@@ -411,7 +405,7 @@ plannerApi.patch(
       const response: PlannerCommentResponse = {
         comment: await plannerUpdateComment(context.db, {
           user: context.user,
-          actor: plannerResolveActor(c, context.credential),
+          actor: await plannerResolveActor(c, context.credential),
           commentId: c.req.param("id"),
           body,
         }),
@@ -430,7 +424,7 @@ plannerApi.delete("/comments/:id", async (c) => {
     if (throttled) return throttled;
     await plannerDeleteComment(context.db, {
       user: context.user,
-      actor: plannerResolveActor(c, context.credential),
+      actor: await plannerResolveActor(c, context.credential),
       commentId: c.req.param("id"),
     });
     const response: PlannerDeleteCommentResponse = { ok: true };
