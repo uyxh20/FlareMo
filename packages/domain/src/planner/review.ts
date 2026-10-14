@@ -587,11 +587,17 @@ export type PlannerCommitBody = {
   }>;
 };
 
+/** Lines a goal may hold (plannerGoalLineSchema, at most 24 of 500 characters). */
+const GOAL_LINES_MAX = 24;
+const GOAL_LINE_TEXT_MAX = 500;
+
 /**
  * Settles the flags the owner answered in Check goals. "Keep for now" only
- * marks the flag. A rewrite also replaces the goal the flag pulls against (or,
- * when it names none, the goal it is about): the new title, no lines, active,
- * and no contest note, since the rewrite is what settles it.
+ * marks the flag. A rewrite also retitles the goal the flag pulls against (or,
+ * when it names none, the goal it is about) and makes it active, since the
+ * rewrite is what settles the clash. Nothing else on the goal is lost: its
+ * lines and note stay, and the title it had is kept as a struck line, because
+ * goals keep no other history. Saving the same plan again changes nothing.
  */
 async function settleFlags(
   db: FlareMoDb,
@@ -616,6 +622,25 @@ async function settleFlags(
     )
     .all();
   const byId = new Map(rows.map((row) => [row.id, row]));
+  const targetIds = rows.flatMap((row) => {
+    const target = row.withGoalId ?? row.goalId;
+    return target ? [target] : [];
+  });
+  const targets =
+    targetIds.length > 0
+      ? await db
+          .select()
+          .from(plannerGoal)
+          .where(
+            and(
+              eq(plannerGoal.userId, input.userId),
+              inArray(plannerGoal.id, targetIds),
+              isNull(plannerGoal.deletedAt),
+            ),
+          )
+          .all()
+      : [];
+  const goalsById = new Map(targets.map((goal) => [goal.id, goal]));
   const statements: unknown[] = [];
   for (const entry of input.settled) {
     const flag = byId.get(entry.flag_id);
@@ -632,21 +657,33 @@ async function settleFlags(
         ),
     );
     const target = flag.withGoalId ?? flag.goalId;
+    const goal = target ? goalsById.get(target) : undefined;
     const title = entry.title?.trim();
-    if (entry.state === "rewritten" && target && title) {
+    if (entry.state === "rewritten" && goal && title) {
+      const previous = goal.title.trim();
+      // Already rewritten (the same plan saved again): leave it alone.
+      if (previous === title) continue;
+      const lines =
+        previous && goal.lines.length < GOAL_LINES_MAX
+          ? [
+              ...goal.lines,
+              {
+                text:
+                  previous.length > GOAL_LINE_TEXT_MAX
+                    ? `${previous.slice(0, GOAL_LINE_TEXT_MAX - 1)}…`
+                    : previous,
+                note: `Earlier title, rewritten in Check goals on ${input.nowIso.slice(0, 10)}`,
+                struck: true,
+              },
+            ]
+          : goal.lines;
       statements.push(
         db
           .update(plannerGoal)
-          .set({
-            title,
-            lines: [],
-            status: "active",
-            note: null,
-            updatedAt: input.nowIso,
-          })
+          .set({ title, lines, status: "active", updatedAt: input.nowIso })
           .where(
             and(
-              eq(plannerGoal.id, target),
+              eq(plannerGoal.id, goal.id),
               eq(plannerGoal.userId, input.userId),
               isNull(plannerGoal.deletedAt),
             ),

@@ -855,12 +855,55 @@ describe("the weekly review", () => {
         "SELECT title, lines, status, note FROM planner_goal WHERE id = ?",
         yearWork.id,
       );
-      expect(rewritten).toEqual({
+      // The rewrite retitles the goal and settles the contest, but keeps its
+      // lines and note, and keeps the old title as a struck line.
+      expect({
+        ...rewritten,
+        lines: JSON.parse(rewritten?.lines ?? "[]"),
+      }).toEqual({
         title: "Join Acme from 1 January on a written deal",
-        lines: "[]",
+        lines: [
+          { text: "Grade A title" },
+          {
+            text: "Stay on better terms",
+            note: expect.stringMatching(
+              /^Earlier title, rewritten in Check goals on \d{4}-\d{2}-\d{2}$/,
+            ),
+            struck: true,
+          },
+        ],
         status: "active",
-        note: null,
+        note: "A 6 Oct note says join Acme",
       });
+
+      // Saving the same plan again does not stack another struck line.
+      await commit(
+        body({
+          settled: [
+            {
+              flag_id: "f-rewrite",
+              state: "rewritten",
+              title: "Join Acme from 1 January on a written deal",
+            },
+            { flag_id: "f-keep", state: "kept" },
+          ],
+          flags: [
+            {
+              goal_id: G1,
+              pillar: "work",
+              with_goal_id: yearWork.id,
+              with_label: "Year · Work",
+              why: "Works toward Acme while the year goal said stay.",
+            },
+          ],
+        }),
+      );
+      const [again] = await plannerTestRows<{ lines: string }>(
+        rt.database,
+        "SELECT lines FROM planner_goal WHERE id = ?",
+        yearWork.id,
+      );
+      expect(JSON.parse(again?.lines ?? "[]")).toHaveLength(2);
 
       expect(
         (await plannerReadWeek(rt.db, { userId: rt.user.id, weekStart: W41 }))
