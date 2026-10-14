@@ -383,7 +383,7 @@ export type PlannerWeekHealth = {
       to: string;
       days: number;
       minutes: number;
-      timed_days: number;
+      timed: number;
     } | null;
   }>;
 };
@@ -449,7 +449,7 @@ export async function plannerReadWeekHealth(
               to: goal.to,
               days: goal.days,
               minutes: goal.minutes,
-              timed_days: goal.timed_days,
+              timed: goal.timed,
             }
           : null,
       };

@@ -238,14 +238,14 @@ export function healthShare(value: number, target: number): number {
 
 /**
  * A linked tracker's line on a goal card: "Fasting · 9 days so far · avg 16 h".
- * The average is over the days a length was read, and only for a tracker that
+ * The average is over the entries a length was read for, and only for a tracker that
  * reads lengths.
  */
 export function healthGoalProgressText(progress: HealthGoalProgress): string {
   const s = healthStrings.trackers;
   const parts = [progress.label, s.goalDays(progress.days)];
-  if (progress.measure !== "days" && progress.timed_days > 0) {
-    const average = Math.round(progress.minutes / progress.timed_days);
+  if (progress.measure !== "days" && progress.timed > 0) {
+    const average = Math.round(progress.minutes / progress.timed);
     parts.push(
       s.goalAverage(
         progress.measure === "hours"

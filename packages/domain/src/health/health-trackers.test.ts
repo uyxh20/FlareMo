@@ -318,7 +318,7 @@ describe("health trackers", () => {
       from: `${today.slice(0, 7)}-01`,
       days: 1,
       minutes: 34 * 60,
-      timed_days: 1,
+      timed: 2,
     });
     expect(progress?.to.slice(0, 7)).toBe(today.slice(0, 7));
 

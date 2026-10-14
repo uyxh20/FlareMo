@@ -250,8 +250,8 @@ function trackerLine(
   );
   const goal = tracker.goal;
   const average =
-    goal && tracker.measure !== "days" && goal.timed_days > 0
-      ? `, avg ${trackerLength(tracker.measure, Math.round(goal.minutes / goal.timed_days))}`
+    goal && tracker.measure !== "days" && goal.timed > 0
+      ? `, avg ${trackerLength(tracker.measure, Math.round(goal.minutes / goal.timed))}`
       : "";
   return `- ${tracker.label} (the owner's own tracker): ${plural(tracker.days, "day")} this week${timed ? `, ${trackerLength(tracker.measure, tracker.minutes)} in total` : ""}${days.length ? `. ${days.join("; ")}` : ""}${
     goal

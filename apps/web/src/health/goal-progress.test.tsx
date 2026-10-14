@@ -24,7 +24,7 @@ const FASTING: HealthGoalProgress = {
   to: "2026-12-31",
   days: 9,
   minutes: 9 * 16 * 60 + 60,
-  timed_days: 8,
+  timed: 8,
 };
 
 let mounted: PlannerTestMount | undefined;
@@ -46,7 +46,7 @@ describe("a tracker on its goal's card", () => {
         ...FASTING,
         measure: "minutes",
         minutes: 50,
-        timed_days: 5,
+        timed: 5,
       }),
     ).toBe("Fasting · 9 days so far · avg 10 min");
   });
