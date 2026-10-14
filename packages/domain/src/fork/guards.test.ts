@@ -163,6 +163,33 @@ describe("Claude sessions ask before writing to live", () => {
     "npx wrangler rollback --config wrangler.jsonc",
     "npx wrangler versions deploy --config wrangler.jsonc",
     "npx wrangler d1 time-travel restore flaremo --bookmark x",
+    // The 2026-10-14 review found these slipped past the first rule set.
+    "pnpm migrate:remote",
+    "pnpm deploy",
+    "pnpm run deploy",
+    "pnpm --filter @flaremo/worker deploy",
+    "cd apps/worker && pnpm deploy",
+    "node node_modules/wrangler/bin/wrangler.js deploy --config wrangler.jsonc",
+    "npx wrangler2 deploy",
+    "npx wrangler versions upload",
+    "npx wrangler secret put BETTER_AUTH_SECRET",
+    "npx wrangler secret delete X",
+    "npx wrangler delete --name flaremo",
+    "npx wrangler d1 delete flaremo",
+    "npx wrangler r2 bucket delete flaremo-attachments",
+    "npx wrangler r2 object delete flaremo-attachments/a.png --remote",
+    "npx wrangler d1 export flaremo --remote --output x.sql",
+    "pnpm cf workers deploy",
+    "npx cf d1 execute flaremo --remote",
+    "cf d1 delete flaremo",
+    'curl -X DELETE "https://api.cloudflare.com/client/v4/accounts/x/workers/scripts/flaremo"',
+    'curl "https://api.cloudflare.com/client/v4/accounts/x/d1/database/y" -X PUT',
+  ];
+  const LIVE_WRITE_TOOLS = [
+    "mcp__Cloudflare_Developer_Platform__d1_database_query",
+    "mcp__Cloudflare_Developer_Platform__d1_database_delete",
+    "mcp__Cloudflare_Developer_Platform__r2_bucket_delete",
+    "mcp__Cloudflare_Developer_Platform__kv_namespace_update",
   ];
 
   /** A Bash permission rule as Claude Code reads it: `*` matches any text. */
@@ -195,10 +222,18 @@ describe("Claude sessions ask before writing to live", () => {
     expect(unasked).toEqual([]);
   });
 
+  it("asks before Cloudflare connector tools that write", () => {
+    const ask = settings.permissions?.ask ?? [];
+    expect(LIVE_WRITE_TOOLS.filter((tool) => !ask.includes(tool))).toEqual([]);
+  });
+
   it("leaves the deploy script and local work unprompted", () => {
     const asked = [
       "node scripts/fork/prod-deploy.mjs deploy --confirm flaremo",
       "node scripts/fork/dev-env.mjs deploy",
+      "node scripts/fork/prod-deploy.mjs status",
+      "npx wrangler dev --local",
+      "pnpm dev:hot",
       "npx wrangler d1 migrations apply DB --local",
       "pnpm exec vitest run packages/domain/src/fork",
     ].filter((command) =>
