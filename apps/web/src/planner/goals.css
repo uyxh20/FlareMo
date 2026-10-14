@@ -683,16 +683,10 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 .planner-chip[data-struck] {
   text-decoration: line-through;
 }
-.planner-split[data-strong] {
-  border-color: color-mix(in oklab, var(--planner-p) 60%, var(--border));
-  background: color-mix(in oklab, var(--planner-p) 24%, var(--card));
-}
+/* Year and quarter goals: bigger type, plain card. */
 .planner-split[data-strong] > .planner-u {
   padding: 9px 11px;
   font-size: 13.5px;
-}
-.planner-split[data-strong] > .planner-u + .planner-u {
-  border-color: color-mix(in oklab, var(--planner-p) 45%, var(--border));
 }
 .planner-split[data-strong] .planner-u-t {
   font-weight: 650;
@@ -701,16 +695,24 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
   width: 10px;
   height: 10px;
 }
-.planner-split[data-strong] .planner-u-m {
+/* Only the current month and week are coloured (fork change, 2026-10-14). */
+.planner-split[data-current] {
+  border-color: color-mix(in oklab, var(--planner-p, var(--brand-500)) 60%, var(--border));
+  background: color-mix(in oklab, var(--planner-p, var(--brand-500)) 24%, var(--card));
+}
+.planner-split[data-current] > .planner-u + .planner-u {
+  border-color: color-mix(in oklab, var(--planner-p, var(--brand-500)) 45%, var(--border));
+}
+.planner-split[data-current] .planner-u-t {
+  font-weight: 650;
+}
+.planner-split[data-current] .planner-u-m {
   color: var(--foreground);
   opacity: 0.8;
 }
-.planner-split[data-strong] .planner-chip {
-  border-color: color-mix(in oklab, var(--planner-p) 55%, var(--border));
+.planner-split[data-current] .planner-chip {
+  border-color: color-mix(in oklab, var(--planner-p, var(--brand-500)) 55%, var(--border));
   color: var(--foreground);
-}
-.planner-split[data-current] {
-  border-color: var(--brand-500);
 }
 .planner-u-add {
   justify-content: center;

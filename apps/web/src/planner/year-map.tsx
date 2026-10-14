@@ -532,8 +532,8 @@ function markText(
 
 /**
  * A period's goals in one objective: one row split into equal parts, one per
- * goal. Year and quarter rows are coloured; the current month and week are
- * outlined. `span` lays it across the four columns (goals with no objective).
+ * goal. Year and quarter rows are larger; only the current month and week are
+ * coloured. `span` lays it across the four columns (goals with no objective).
  */
 function Split({
   strong,
