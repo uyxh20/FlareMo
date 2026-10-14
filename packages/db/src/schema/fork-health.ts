@@ -32,8 +32,11 @@ export const healthEntry = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    // training | breath | night_out
-    kind: text("kind", { enum: ["training", "breath", "night_out"] }).notNull(),
+    // training | breath | night_out, or `t:<tracker id>` for a tracker the
+    // owner made in the app (health_tracker, migrations/9011).
+    kind: text("kind")
+      .$type<"training" | "breath" | "night_out" | `t:${string}`>()
+      .notNull(),
     // YYYY-MM-DD, the local day (the evening a night out started).
     day: text("day").notNull(),
     variant: text("variant"),
@@ -111,3 +114,57 @@ export const healthSyncState = sqliteTable("health_sync_state", {
   scannedAt: text("scanned_at").notNull(),
   memoCount: integer("memo_count").notNull().default(0),
 });
+
+// A tracker the owner edits in the app (migrations/9011_planner_health_trackers.sql).
+// A new habit gets its own row (kind `t:<id>`); a built-in kind gets one once
+// the owner adds words to it. Words and blocked words are JSON arrays of lower-case
+// words or phrases, a leading # making a tag. Never hard-deleted: `archived_at`
+// hides it. `goal_id` is planner_goal.id by value.
+export const healthTracker = sqliteTable(
+  "health_tracker",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // t:<id> for the owner's own tracker, or the built-in kind.
+    kind: text("kind")
+      .$type<"training" | "breath" | "night_out" | `t:${string}`>()
+      .notNull(),
+    label: text("label").notNull(),
+    color: text("color").notNull(),
+    measure: text("measure", { enum: ["days", "minutes", "hours"] })
+      .notNull()
+      .default("days"),
+    wordsJson: text("words_json").notNull().default("[]"),
+    blockedJson: text("blocked_json").notNull().default("[]"),
+    goalId: text("goal_id"),
+    builtin: integer("builtin", { mode: "boolean" }).notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    archivedAt: text("archived_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("health_tracker_user_kind_uq").on(table.userId, table.kind),
+  ],
+);
+
+export type HealthTrackerRow = typeof healthTracker.$inferSelect;
+
+// Append-only history of every save of a tracker. Never deleted.
+export const healthTrackerEvent = sqliteTable(
+  "health_tracker_event",
+  {
+    id: text("id").primaryKey(),
+    trackerId: text("tracker_id").notNull(),
+    userId: text("user_id").notNull(),
+    action: text("action", {
+      enum: ["create", "update", "archive", "restore"],
+    }).notNull(),
+    beforeJson: text("before_json"),
+    afterJson: text("after_json"),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    index("health_tracker_event_tracker_idx").on(table.trackerId, table.at),
+  ],
+);

@@ -1,7 +1,9 @@
 import {
   type HealthEntryDto,
-  type HealthKind,
+  type HealthEntryKind,
+  type HealthTrackerDto,
   healthAddDays,
+  healthIsBuiltinKind,
   healthWeekdayOf,
   healthWeekStartOf,
 } from "@flaremo/contracts";
@@ -51,8 +53,23 @@ export function healthVariantLabel(variant: string | null): string {
 }
 
 /** The words on a label chip: "Gym · Back", "Wim Hof · 10 min", "Night out · Fri · home 03:30 · 1". */
-export function healthChipText(entry: HealthEntryDto): string {
+export function healthChipText(
+  entry: HealthEntryDto,
+  trackers?: readonly HealthTrackerDto[],
+): string {
   const s = healthStrings;
+  if (!healthIsBuiltinKind(entry.kind)) {
+    const tracker = trackers?.find((t) => t.kind === entry.kind);
+    const parts = [tracker?.label ?? s.trackers.unknown];
+    if (entry.minutes) {
+      parts.push(
+        tracker?.measure === "hours"
+          ? s.trackers.hours(entry.minutes)
+          : s.chip.minutes(entry.minutes),
+      );
+    }
+    return parts.join(" · ");
+  }
   if (entry.kind === "training") {
     const variant = entry.variant ?? "gym";
     const parts =
@@ -116,7 +133,7 @@ export function healthStripDays(
  */
 export function healthDotState(
   entries: readonly HealthEntryDto[],
-  kind: HealthKind,
+  kind: HealthEntryKind,
   day: string,
 ): { state: HealthDotState; count: number } {
   const here = entries.filter((e) => e.kind === kind && e.day === day);
@@ -139,6 +156,8 @@ export type HealthYearWeek = {
   training: number;
   breath: number;
   out: number;
+  /** Days with an entry, per owner tracker kind. */
+  trackers: Record<string, number>;
   /** After today: drawn as an empty outline. */
   future: boolean;
 };
@@ -148,6 +167,7 @@ type YearDay = {
   training: number;
   breath: number;
   night_out: number | null;
+  trackers?: Record<string, number>;
 };
 
 /** The weeks of a year, Monday to Sunday, each with what its days hold. */
@@ -165,6 +185,7 @@ export function healthYearWeeks(
       training: 0,
       breath: 0,
       out: 0,
+      trackers: {},
       future: start > today,
     });
   }
@@ -174,6 +195,9 @@ export function healthYearWeeks(
     week.training += day.training;
     if (day.breath > 0) week.breath += 1;
     week.out += day.night_out ?? 0;
+    for (const [kind, count] of Object.entries(day.trackers ?? {})) {
+      if (count > 0) week.trackers[kind] = (week.trackers[kind] ?? 0) + 1;
+    }
   }
   return [...byWeek.values()];
 }

@@ -1,9 +1,16 @@
 import type {
+  HealthBuiltinWordsInput,
   HealthEntryDto,
   HealthEntryResponse,
   HealthMemosResponse,
   HealthPatchEntryInput,
   HealthRescanResponse,
+  HealthTrackerDraft,
+  HealthTrackerInput,
+  HealthTrackerPreviewResponse,
+  HealthTrackerSaveResponse,
+  HealthTrackersResponse,
+  HealthTrackerTestResponse,
   HealthWeekResponse,
   HealthYearResponse,
 } from "@flaremo/contracts";
@@ -48,6 +55,54 @@ export function healthRescanRequest() {
   return apiRequest<HealthRescanResponse>(`${HEALTH_API}/rescan`, {
     method: "POST",
   });
+}
+
+// --- Trackers -----------------------------------------------------------------
+
+export function healthFetchTrackers() {
+  return apiRequest<HealthTrackersResponse>(`${HEALTH_API}/trackers`);
+}
+
+export function healthTestTrackerRequest(
+  text: string,
+  draft: HealthTrackerDraft,
+) {
+  return apiRequest<HealthTrackerTestResponse>(`${HEALTH_API}/trackers/test`, {
+    method: "POST",
+    body: JSON.stringify({ text, draft }),
+  });
+}
+
+export function healthPreviewTrackerRequest(draft: HealthTrackerDraft) {
+  return apiRequest<HealthTrackerPreviewResponse>(
+    `${HEALTH_API}/trackers/preview`,
+    { method: "POST", body: JSON.stringify(draft) },
+  );
+}
+
+export function healthCreateTrackerRequest(tracker: HealthTrackerInput) {
+  return apiRequest<HealthTrackerSaveResponse>(`${HEALTH_API}/trackers`, {
+    method: "POST",
+    body: JSON.stringify(tracker),
+  });
+}
+
+/** A built-in kind takes only its words; an owner's tracker takes all of it. */
+export function healthSaveTrackerRequest(
+  id: string,
+  body: HealthTrackerInput | HealthBuiltinWordsInput,
+) {
+  return apiRequest<HealthTrackerSaveResponse>(
+    `${HEALTH_API}/trackers/${encodeURIComponent(id)}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
+export function healthArchiveTrackerRequest(id: string) {
+  return apiRequest<HealthTrackerSaveResponse>(
+    `${HEALTH_API}/trackers/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
 }
 
 // --- One request for a whole page of labels ------------------------------------

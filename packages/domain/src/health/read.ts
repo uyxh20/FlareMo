@@ -1,8 +1,10 @@
 import {
   type HealthEntryDto,
+  type HealthEntryKind,
   type HealthKind,
   type HealthTargetDto,
   type HealthTargetPeriod,
+  type HealthTrackerCount,
   type HealthWeekSummary,
   type HealthYearDay,
   type HealthYearResponse,
@@ -10,6 +12,7 @@ import {
   healthDayOfYear,
   healthDaysInYear,
   healthDefaultTargets,
+  healthIsBuiltinKind,
   healthLocalMoment,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -17,6 +20,7 @@ import { healthEntry, healthTarget } from "@flaremo/db/src/schema/fork-health";
 import { and, asc, between, eq, inArray, isNull } from "drizzle-orm";
 import { parseResourceName } from "../ids";
 import { type HealthEntryRow, healthToDto } from "./rows";
+import { healthReadTrackerKinds } from "./trackers";
 
 // What the health tracker's API reads (fork-owned add-on,
 // docs/fork-health-tracker.md). Nothing here writes. A row counts when it is
@@ -138,6 +142,25 @@ function summarise(
   };
 }
 
+/**
+ * Days and minutes per owner tracker over some rows, one count per live
+ * tracker in its order (a tracker with nothing yet counts 0). Rows of an
+ * archived tracker are not counted.
+ */
+function countTrackers(
+  rows: HealthEntryRow[],
+  kinds: HealthEntryKind[],
+): HealthTrackerCount[] {
+  return kinds.map((kind) => {
+    const own = rows.filter((row) => row.kind === kind);
+    return {
+      kind,
+      days: new Set(own.map((row) => row.day)).size,
+      minutes: own.reduce((sum, row) => sum + (row.minutes ?? 0), 0),
+    };
+  });
+}
+
 /** Seven days from `start`: the entries and the summary against the targets. */
 export async function healthReadWeek(
   db: FlareMoDb,
@@ -148,21 +171,27 @@ export async function healthReadWeek(
   today: string;
   entries: HealthEntryDto[];
   summary: HealthWeekSummary;
+  trackers: HealthTrackerCount[];
 }> {
   const today = healthToday(input.now);
   const start = input.start ?? healthAddDays(today, -6);
   const end = healthAddDays(start, 6);
-  const [rows, targets, yearUsed] = await Promise.all([
+  const [rows, targets, yearUsed, kinds] = await Promise.all([
     readRange(db, input.userId, start, end),
     healthReadTargets(db, input.userId),
     healthReadYearUnits(db, input.userId, Number(end.slice(0, 4))),
+    healthReadTrackerKinds(db, input.userId),
   ]);
+  const shown = rows.filter(
+    (row) => healthIsBuiltinKind(row.kind) || kinds.includes(row.kind),
+  );
   return {
     start,
     end,
     today,
-    entries: rows.map(healthToDto),
+    entries: shown.map(healthToDto),
     summary: summarise(rows, targets, yearUsed),
+    trackers: countTrackers(rows, kinds),
   };
 }
 
@@ -174,9 +203,10 @@ export async function healthReadYear(
 ): Promise<HealthYearResponse> {
   const today = healthToday(input.now);
   const year = input.year ?? Number(today.slice(0, 4));
-  const [rows, targets] = await Promise.all([
+  const [rows, targets, kinds] = await Promise.all([
     readRange(db, input.userId, `${year}-01-01`, `${year}-12-31`),
     healthReadTargets(db, input.userId),
+    healthReadTrackerKinds(db, input.userId),
   ]);
   const byDay = new Map<string, HealthYearDay>();
   const day = (key: string): HealthYearDay => {
@@ -189,16 +219,20 @@ export async function healthReadYear(
         night_out: null,
         has_night: false,
         needs_check: false,
+        trackers: {},
       };
       byDay.set(key, entry);
     }
     return entry;
   };
   for (const row of rows) {
+    if (!healthIsBuiltinKind(row.kind) && !kinds.includes(row.kind)) continue;
     const entry = day(row.day);
     if (row.kind === "training") entry.training += 1;
     else if (row.kind === "breath") entry.breath += 1;
-    else {
+    else if (row.kind !== "night_out") {
+      entry.trackers[row.kind] = (entry.trackers[row.kind] ?? 0) + 1;
+    } else {
       entry.has_night = true;
       if (row.needsCheck) entry.needs_check = true;
       if (row.units !== null) {
@@ -234,6 +268,7 @@ export async function healthReadYear(
         rows.filter((row) => row.kind === "breath").map((row) => row.day),
       ).size,
     },
+    trackers: countTrackers(rows, kinds),
     needs_check_entries: nights
       .filter((row) => row.needsCheck)
       .map(healthToDto),

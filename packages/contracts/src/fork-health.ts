@@ -20,6 +20,19 @@ export const FORK_HEALTH_TIME_ZONE = "Europe/Copenhagen";
 export const healthKinds = ["training", "breath", "night_out"] as const;
 export type HealthKind = (typeof healthKinds)[number];
 
+/** The kind of a tracker the owner made in the app: `t:` and its id. */
+export type HealthTrackerKind = `t:${string}`;
+/** What a health_entry row is: a built-in kind or an owner's tracker. */
+export type HealthEntryKind = HealthKind | HealthTrackerKind;
+
+export function healthIsBuiltinKind(kind: string): kind is HealthKind {
+  return (healthKinds as readonly string[]).includes(kind);
+}
+
+export function healthIsTrackerKind(kind: string): kind is HealthTrackerKind {
+  return /^t:[a-z0-9]{6,24}$/.test(kind);
+}
+
 export const healthTrainingVariants = [
   "crossfit",
   "push",
@@ -264,6 +277,12 @@ export function healthLocalDayStart(
 // --- HTTP API --------------------------------------------------------------
 
 export const healthKindSchema = z.enum(healthKinds);
+export const healthEntryKindSchema = z.custom<HealthEntryKind>(
+  (value) =>
+    typeof value === "string" &&
+    (healthIsBuiltinKind(value) || healthIsTrackerKind(value)),
+  "Expected a health kind.",
+);
 export const healthDaySchema = z
   .string()
   .refine(healthIsDay, "Expected a calendar day as YYYY-MM-DD.");
@@ -273,7 +292,7 @@ export const healthHomeAtSchema = z
 
 export const healthEntryDtoSchema = z.object({
   id: z.string(),
-  kind: healthKindSchema,
+  kind: healthEntryKindSchema,
   day: healthDaySchema,
   variant: z.string().nullable(),
   minutes: z.number().int().nullable(),
@@ -356,12 +375,24 @@ export const healthWeekSummarySchema = z.object({
 });
 export type HealthWeekSummary = z.infer<typeof healthWeekSummarySchema>;
 
+/** One owner tracker's count over a span of days (a week or a year). */
+export const healthTrackerCountSchema = z.object({
+  kind: healthEntryKindSchema,
+  /** Days with at least one entry. */
+  days: z.number().int(),
+  /** Minutes summed over the span (hours trackers store minutes too). */
+  minutes: z.number().int(),
+});
+export type HealthTrackerCount = z.infer<typeof healthTrackerCountSchema>;
+
 export const healthWeekResponseSchema = z.object({
   start: healthDaySchema,
   end: healthDaySchema,
   today: healthDaySchema,
   entries: z.array(healthEntryDtoSchema),
   summary: healthWeekSummarySchema,
+  /** The owner's own trackers in the seven days, in their order. */
+  trackers: z.array(healthTrackerCountSchema),
 });
 export type HealthWeekResponse = z.infer<typeof healthWeekResponseSchema>;
 
@@ -378,6 +409,8 @@ export const healthYearDaySchema = z.object({
   /** Whether a night this day is a night out at all (units may be 0). */
   has_night: z.boolean(),
   needs_check: z.boolean(),
+  /** Entries of the owner's own trackers this day, by kind. */
+  trackers: z.record(z.string(), z.number().int()),
 });
 export type HealthYearDay = z.infer<typeof healthYearDaySchema>;
 
@@ -400,6 +433,8 @@ export const healthYearResponseSchema = z.object({
     training: z.number().int(),
     breath_days: z.number().int(),
   }),
+  /** The owner's own trackers over the year, in their order. */
+  trackers: z.array(healthTrackerCountSchema),
   /** The nights of the year still waiting for a home time, oldest first. */
   needs_check_entries: z.array(healthEntryDtoSchema),
 });
@@ -449,3 +484,195 @@ export const healthRescanResponseSchema = z.object({
   removed: z.number().int(),
 });
 export type HealthRescanResponse = z.infer<typeof healthRescanResponseSchema>;
+
+// --- Trackers the owner edits ------------------------------------------------
+//
+// A tracker is a habit the diary is read for, with words the owner sets in the
+// app (docs/fork-health-tracker.md, "Trackers"). The three built-in kinds keep
+// their fixed reader and take extra words and blocked words on top; a new
+// tracker is read only by its words. Targets stay on goals: a tracker counts,
+// and the goal it links to says how much is enough.
+
+export const healthTrackerColors = [
+  "green",
+  "pink",
+  "blue",
+  "amber",
+  "red",
+  "slate",
+] as const;
+export type HealthTrackerColor = (typeof healthTrackerColors)[number];
+
+export const healthTrackerMeasures = ["days", "minutes", "hours"] as const;
+export type HealthTrackerMeasure = (typeof healthTrackerMeasures)[number];
+
+/** Most trackers an owner can have live at once (built-ins not counted). */
+export const healthMaxTrackers = 12;
+/** Most words (and, separately, blocked words) on one tracker. */
+export const healthMaxTrackerWords = 40;
+
+/**
+ * A few of the words each built-in reader looks for, shown greyed out in the
+ * app so the owner knows what is already covered. Display only: the reader
+ * itself is packages/domain/src/health/parse.ts.
+ */
+export const healthBuiltinWords: Record<HealthKind, readonly string[]> = {
+  training: [
+    "#gym",
+    "#crossfit",
+    "gym",
+    "push day",
+    "legs",
+    "bench",
+    "zone 2",
+    "run",
+  ],
+  breath: ["#wimhof", "#meditation", "wim hof", "meditated", "breathwork"],
+  night_out: [
+    "#out",
+    "night out",
+    "went out",
+    "bender",
+    "clubbing",
+    "home at…",
+  ],
+};
+
+/**
+ * A word as the reader stores it: trimmed, lower case, single spaces, curly
+ * quotes straight. A leading # makes it a tag. Empty when nothing is left.
+ */
+export function healthNormaliseTrackerWord(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^#\s+/, "#");
+}
+
+const trackerWordSchema = z
+  .string()
+  .transform(healthNormaliseTrackerWord)
+  .pipe(
+    z
+      .string()
+      .min(2, "A word needs at least two characters.")
+      .max(40, "A word can have at most 40 characters.")
+      .refine((word) => word !== "#", "A tag needs a name."),
+  );
+
+const trackerWordsSchema = z
+  .array(trackerWordSchema)
+  .max(healthMaxTrackerWords)
+  .transform((words) => [...new Set(words)]);
+
+export const healthTrackerDtoSchema = z.object({
+  /** A short random id, or the built-in kind itself. */
+  id: z.string(),
+  /** What its entries carry as `kind`: the built-in kind, or `t:<id>`. */
+  kind: healthEntryKindSchema,
+  label: z.string(),
+  color: z.enum(healthTrackerColors).nullable(),
+  measure: z.enum(healthTrackerMeasures),
+  words: z.array(z.string()),
+  blocked: z.array(z.string()),
+  goal_id: z.string().nullable(),
+  builtin: z.boolean(),
+  /** For a built-in: a few of the words its fixed reader already knows. */
+  fixed_words: z.array(z.string()),
+  updated_at: z.string().nullable(),
+});
+export type HealthTrackerDto = z.infer<typeof healthTrackerDtoSchema>;
+
+export const healthTrackersResponseSchema = z.object({
+  trackers: z.array(healthTrackerDtoSchema),
+});
+export type HealthTrackersResponse = z.infer<
+  typeof healthTrackersResponseSchema
+>;
+
+/** A new tracker, or the whole new state of one (built-ins: words only). */
+export const healthTrackerInputSchema = z.object({
+  label: z.string().trim().min(1).max(40),
+  color: z.enum(healthTrackerColors),
+  measure: z.enum(healthTrackerMeasures),
+  words: trackerWordsSchema,
+  blocked: trackerWordsSchema,
+  goal_id: z.string().min(1).max(64).nullable(),
+});
+export type HealthTrackerInput = z.infer<typeof healthTrackerInputSchema>;
+
+/** A built-in kind's extra words and blocked words. */
+export const healthBuiltinWordsInputSchema = z.object({
+  words: trackerWordsSchema,
+  blocked: trackerWordsSchema,
+});
+export type HealthBuiltinWordsInput = z.infer<
+  typeof healthBuiltinWordsInputSchema
+>;
+
+/** A draft to preview or test: an existing tracker's id (or none), and its words. */
+export const healthTrackerDraftSchema = z.object({
+  /** The tracker being edited: a built-in kind, a tracker id, or absent for a new one. */
+  id: z.string().min(1).max(32).optional(),
+  measure: z.enum(healthTrackerMeasures).default("days"),
+  words: trackerWordsSchema,
+  blocked: trackerWordsSchema,
+});
+export type HealthTrackerDraft = z.infer<typeof healthTrackerDraftSchema>;
+
+export const healthTrackerPreviewResponseSchema = z.object({
+  /** Days that would be counted and are not now. */
+  added: z.number().int(),
+  /** Days counted now that would stop being counted (hidden, never deleted). */
+  removed: z.number().int(),
+  /** Days that would change but stay as they are because the owner fixed or removed them. */
+  kept: z.number().int(),
+  /** Days counted before and after. */
+  unchanged: z.number().int(),
+  /** Up to 30 of the added and removed days, newest first. */
+  added_days: z.array(healthDaySchema),
+  removed_days: z.array(healthDaySchema),
+  memos: z.number().int(),
+});
+export type HealthTrackerPreviewResponse = z.infer<
+  typeof healthTrackerPreviewResponseSchema
+>;
+
+export const healthTrackerTestSchema = z.object({
+  text: z.string().min(1).max(1500),
+  draft: healthTrackerDraftSchema,
+});
+export type HealthTrackerTestInput = z.infer<typeof healthTrackerTestSchema>;
+
+export const healthTrackerTestReasons = [
+  "counted",
+  "no_word",
+  "blocked",
+  "plan",
+  "negated",
+  "long",
+] as const;
+export type HealthTrackerTestReason = (typeof healthTrackerTestReasons)[number];
+
+export const healthTrackerTestResponseSchema = z.object({
+  reason: z.enum(healthTrackerTestReasons),
+  /** The matched word as written in the sentence, when one matched. */
+  match: z.string().nullable(),
+  /** Relative to the day the sentence is written: 0 that day, -1 the day before. */
+  day_offset: z.number().int().nullable(),
+  minutes: z.number().int().nullable(),
+});
+export type HealthTrackerTestResponse = z.infer<
+  typeof healthTrackerTestResponseSchema
+>;
+
+/** What a save returns: the trackers and what the re-read of the diary changed. */
+export const healthTrackerSaveResponseSchema = z.object({
+  trackers: z.array(healthTrackerDtoSchema),
+  rescan: healthRescanResponseSchema,
+});
+export type HealthTrackerSaveResponse = z.infer<
+  typeof healthTrackerSaveResponseSchema
+>;

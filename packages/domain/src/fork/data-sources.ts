@@ -724,6 +724,25 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "When the diary was first read for health entries",
     uses: plumbing("health tracker bookkeeping"),
   },
+  {
+    id: "health_tracker",
+    table: "health_tracker",
+    module: "health",
+    kind: "bookkeeping",
+    owner: "fork",
+    holds:
+      "The owner's trackers: name, colour, the words and tags that count, blocked words and the linked goal",
+    uses: plumbing("health tracker settings"),
+  },
+  {
+    id: "health_tracker_event",
+    table: "health_tracker_event",
+    module: "health",
+    kind: "history",
+    owner: "fork",
+    holds: "Every save of a tracker, append-only",
+    uses: plumbing("health tracker settings history"),
+  },
 
   // --- Account, settings and plumbing --------------------------------------
   UPSTREAM_SYSTEM("users", "account", "The owner's profile"),

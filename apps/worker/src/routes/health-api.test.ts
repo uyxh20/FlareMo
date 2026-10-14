@@ -3,12 +3,18 @@ import {
   type HealthMemosResponse,
   type HealthRescanResponse,
   type HealthTargetsResponse,
+  type HealthTrackerPreviewResponse,
+  type HealthTrackerSaveResponse,
+  type HealthTrackersResponse,
   type HealthWeekResponse,
   type HealthYearResponse,
   healthEntryResponseSchema,
   healthMemosResponseSchema,
   healthRescanResponseSchema,
   healthTargetsResponseSchema,
+  healthTrackerPreviewResponseSchema,
+  healthTrackerSaveResponseSchema,
+  healthTrackersResponseSchema,
   healthWeekResponseSchema,
   healthYearResponseSchema,
 } from "@flaremo/contracts";
@@ -40,7 +46,18 @@ import { bootstrapAndSignIn } from "../test-support/sign-in";
 const ORIGIN = "http://flaremo.test";
 const API = "/api/app/health-tracker";
 
+const FASTING = {
+  label: "Fasting",
+  color: "green",
+  measure: "hours",
+  words: ["#fast", "Fasted"],
+  blocked: [],
+  goal_id: null,
+};
+
 const RESET_TABLES = [
+  "health_tracker_event",
+  "health_tracker",
   "health_entry_event",
   "health_entry",
   "health_target",
@@ -204,6 +221,24 @@ describe("health API", () => {
         path: "/targets",
         body: { targets: [{ kind: "training", period: "week", amount: 4 }] },
       },
+      { method: "GET", path: "/trackers" },
+      { method: "POST", path: "/trackers", body: FASTING },
+      {
+        method: "POST",
+        path: "/trackers/test",
+        body: { text: "fasted 16h", draft: { words: ["fasted"], blocked: [] } },
+      },
+      {
+        method: "POST",
+        path: "/trackers/preview",
+        body: { words: ["fasted"], blocked: [] },
+      },
+      {
+        method: "PUT",
+        path: "/trackers/training",
+        body: { words: ["hyrox"], blocked: [] },
+      },
+      { method: "DELETE", path: "/trackers/none" },
     ] as const;
 
   // ===========================================================================
@@ -258,6 +293,7 @@ describe("health API", () => {
       );
       expect(after).toEqual({ dismissed: 0, variant: "crossfit" });
       expect(await rows("SELECT * FROM health_target")).toEqual([]);
+      expect(await rows("SELECT * FROM health_tracker")).toEqual([]);
     });
 
     it("lets a cookie session read without an Origin", async () => {
@@ -336,6 +372,7 @@ describe("health API", () => {
           night_out: null,
           has_night: false,
           needs_check: false,
+          trackers: {},
         },
       ]);
     });
@@ -495,6 +532,92 @@ describe("health API", () => {
       ]) {
         const response = await send("PUT", `${API}/targets`, { targets });
         expect(response.status, JSON.stringify(targets)).toBe(400);
+      }
+    });
+  });
+
+  describe("trackers", () => {
+    it("creates a tracker, reads the diary with it and lists it", async () => {
+      await writeMemo("Fasted 18h, felt clear");
+      const saved = onTheWire(
+        healthTrackerSaveResponseSchema,
+        await body<HealthTrackerSaveResponse>(
+          send("POST", `${API}/trackers`, FASTING),
+          201,
+        ),
+      );
+      const fasting = saved.trackers.find((tracker) => !tracker.builtin);
+      expect(fasting).toMatchObject({
+        label: "Fasting",
+        words: ["#fast", "fasted"],
+        color: "green",
+      });
+      expect(saved.rescan.created).toBe(1);
+      const current = await week();
+      expect(current.trackers).toEqual([
+        { kind: fasting?.kind, days: 1, minutes: 1080 },
+      ]);
+      const listed = onTheWire(
+        healthTrackersResponseSchema,
+        await body<HealthTrackersResponse>(send("GET", `${API}/trackers`)),
+      );
+      expect(listed.trackers.map((tracker) => tracker.label)).toEqual([
+        "Training",
+        "Breath",
+        "Nights out",
+        "Fasting",
+      ]);
+
+      const archived = await body<HealthTrackerSaveResponse>(
+        send("DELETE", `${API}/trackers/${fasting?.id}`),
+      );
+      expect(archived.rescan.removed).toBe(1);
+      expect((await week()).trackers).toEqual([]);
+    });
+
+    it("previews and tests without writing anything", async () => {
+      await writeMemo("OMAD today");
+      const preview = onTheWire(
+        healthTrackerPreviewResponseSchema,
+        await body<HealthTrackerPreviewResponse>(
+          send("POST", `${API}/trackers/preview`, {
+            measure: "days",
+            words: ["omad"],
+            blocked: [],
+          }),
+        ),
+      );
+      expect(preview).toMatchObject({ added: 1, removed: 0, memos: 1 });
+      const tested = await body<{ reason: string }>(
+        send("POST", `${API}/trackers/test`, {
+          text: "no omad today",
+          draft: { words: ["omad"], blocked: [] },
+        }),
+      );
+      expect(tested.reason).toBe("negated");
+      expect(await rows("SELECT * FROM health_tracker")).toEqual([]);
+    });
+
+    it("gives a built-in extra words, and refuses a bad tracker", async () => {
+      await writeMemo("hyrox done");
+      await body(
+        send("PUT", `${API}/trackers/training`, {
+          words: ["hyrox"],
+          blocked: [],
+        }),
+      );
+      const [row] = await rows<{ kind: string }>(
+        "SELECT kind FROM health_entry WHERE deleted_at IS NULL",
+      );
+      expect(row?.kind).toBe("training");
+      for (const bad of [
+        { ...FASTING, words: [] },
+        { ...FASTING, label: "" },
+        { ...FASTING, color: "purple" },
+        { ...FASTING, goal_id: "no-such-goal" },
+      ]) {
+        const response = await send("POST", `${API}/trackers`, bad);
+        expect(response.status, JSON.stringify(bad)).toBe(400);
       }
     });
   });

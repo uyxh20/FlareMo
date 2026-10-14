@@ -47,6 +47,76 @@ export const healthStrings = {
     failed: "Could not save that. Try again.",
   },
 
+  trackers: {
+    title: "Trackers",
+    hint: "The words each one looks for in your diary.",
+    unknown: "Tracker",
+    add: "New tracker",
+    newName: "New tracker",
+    builtin: "built-in",
+    name: "Name",
+    color: "Colour",
+    colorName: (color: string) => `Colour: ${color}`,
+    counts: "Counts",
+    measures: {
+      days: "days",
+      minutes: "days + minutes",
+      hours: "days + hours",
+    } as Record<string, string>,
+    words: "Counts when an entry says",
+    fixedWords: "Already read",
+    fixedHint: "built in, always on",
+    blocked: "Never counts",
+    addWord: "Add a word or #tag",
+    addBlocked: "Add a word",
+    addButton: "Add",
+    removeWord: (word: string) => `Remove ${word}`,
+    goal: "Feeds goal",
+    noGoal: "No goal",
+    goalHint: "The target is set on the goal.",
+    test: "Test a sentence",
+    testPlaceholder: "Type a sentence as you'd write it",
+    testReason: {
+      counted: "Counted",
+      no_word: "None of the words is in it.",
+      blocked: "It has a blocked word.",
+      plan: "Reads as a plan, not something done.",
+      negated: "Says it didn't happen.",
+      long: "A long entry needs a #tag or a done word.",
+    } as Record<string, string>,
+    testDay: (offset: number) => (offset < 0 ? "the day before" : "that day"),
+    preview: "Preview changes",
+    previewing: "Reading the diary…",
+    previewTitle: (memos: number) => `Checked all ${memos} diary entries`,
+    previewAdded: (count: number) =>
+      `${count} more ${count === 1 ? "entry counts" : "entries count"}`,
+    previewRemoved: (count: number) =>
+      `${count} ${count === 1 ? "entry no longer counts" : "entries no longer count"}`,
+    previewKept: (count: number) =>
+      `${count} kept as you fixed ${count === 1 ? "it" : "them"}`,
+    previewNone: "Nothing in the diary changes.",
+    apply: "Apply",
+    applying: "Saving…",
+    back: "Back",
+    cancel: "Cancel",
+    archive: "Remove tracker",
+    archiveConfirm: "Remove it? Its days are hidden, never deleted.",
+    archiveYes: "Remove",
+    saved: (created: number, removed: number) =>
+      `Saved. ${created} new, ${removed} removed.`,
+    failed: "Could not save that. Try again.",
+    needsWord: "Add at least one word.",
+    needsName: "Give it a name.",
+    hours: (minutes: number) => {
+      const hours = Math.round((minutes / 60) * 10) / 10;
+      return `${hours} h`;
+    },
+    weekNote: (days: number) => `${days} ${days === 1 ? "day" : "days"}`,
+    weekHours: (minutes: number) =>
+      `${Math.round((minutes / 60) * 10) / 10} h in total`,
+    weekMinutes: (minutes: number) => `${minutes} min in total`,
+  },
+
   answers: [
     { label: "Before 00:00", homeAt: "23:30" },
     { label: "00–03", homeAt: "01:30" },

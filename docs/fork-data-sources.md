@@ -79,6 +79,8 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `health_entry_event` | health | history | – | – | – | – | – | **gap** | yes |
 | `health_target` | health | bookkeeping | – | – | – | – | – | – | yes |
 | `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | yes |
+| `health_tracker` | health | bookkeeping | – | – | – | – | – | – | yes |
+| `health_tracker_event` | health | history | – | – | – | – | – | – | yes |
 | `articles` | articles | content | – | – | – | – | – | – | yes |
 
 System tables, none of which reach a consumer except the backup: `shortcuts`, `users`, `auth_users`, `auth_sessions`, `auth_accounts`, `auth_verifications`, `auth_apikeys`, `auth_user_links`, `auth_bootstrap`, `auth_organizations`, `auth_members`, `auth_invitations`, `settings`, `voice_service_config`, `integration_config`, `usage_counters`, `memos_webhooks`, `memos_webhook_events`, `memos_webhook_deliveries`, `push_subscriptions`, `memos_notifications`, `data_tasks`, `member_removal_jobs`.

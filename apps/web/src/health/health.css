@@ -40,6 +40,60 @@
   --k: var(--health-out);
   --k-ink: var(--health-out-ink);
 }
+/* The owner's own trackers pick one of six colours (healthTrackerColors). */
+:root {
+  --health-t-green: oklch(0.6 0.13 145);
+  --health-t-green-ink: oklch(0.42 0.11 145);
+  --health-t-pink: oklch(0.62 0.16 0);
+  --health-t-pink-ink: oklch(0.45 0.15 0);
+  --health-t-blue: oklch(0.58 0.14 250);
+  --health-t-blue-ink: oklch(0.42 0.13 250);
+  --health-t-amber: oklch(0.72 0.14 80);
+  --health-t-amber-ink: oklch(0.48 0.11 75);
+  --health-t-red: oklch(0.58 0.18 25);
+  --health-t-red-ink: oklch(0.45 0.16 25);
+  --health-t-slate: oklch(0.55 0.03 250);
+  --health-t-slate-ink: oklch(0.4 0.03 250);
+}
+.dark {
+  --health-t-green: oklch(0.74 0.13 145);
+  --health-t-green-ink: oklch(0.85 0.1 145);
+  --health-t-pink: oklch(0.74 0.14 0);
+  --health-t-pink-ink: oklch(0.86 0.1 0);
+  --health-t-blue: oklch(0.72 0.12 250);
+  --health-t-blue-ink: oklch(0.85 0.09 250);
+  --health-t-amber: oklch(0.8 0.13 80);
+  --health-t-amber-ink: oklch(0.88 0.1 80);
+  --health-t-red: oklch(0.7 0.16 25);
+  --health-t-red-ink: oklch(0.84 0.1 25);
+  --health-t-slate: oklch(0.72 0.03 250);
+  --health-t-slate-ink: oklch(0.85 0.02 250);
+}
+.health-kind-t-green {
+  --k: var(--health-t-green);
+  --k-ink: var(--health-t-green-ink);
+}
+.health-kind-t-pink {
+  --k: var(--health-t-pink);
+  --k-ink: var(--health-t-pink-ink);
+}
+.health-kind-t-blue {
+  --k: var(--health-t-blue);
+  --k-ink: var(--health-t-blue-ink);
+}
+.health-kind-t-amber {
+  --k: var(--health-t-amber);
+  --k-ink: var(--health-t-amber-ink);
+}
+.health-kind-t-red {
+  --k: var(--health-t-red);
+  --k-ink: var(--health-t-red-ink);
+}
+.health-kind-t-slate {
+  --k: var(--health-t-slate);
+  --k-ink: var(--health-t-slate-ink);
+}
+
 [class*="health-kind-"] {
   --k-soft: color-mix(in oklab, var(--k) var(--health-soft), transparent);
 }
@@ -108,4 +162,20 @@
   background: transparent;
   box-shadow: inset 0 0 0 1px
     color-mix(in oklab, var(--muted-foreground) 14%, transparent);
+}
+
+/* --- The trackers panel ------------------------------------------------------ */
+
+.health-swatch {
+  background: var(--k);
+}
+.health-word {
+  background: var(--k-soft);
+  color: var(--k-ink);
+}
+.health-diff-added {
+  background: var(--k);
+}
+.health-diff-removed {
+  background: color-mix(in oklab, var(--destructive) 70%, transparent);
 }

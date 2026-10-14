@@ -1,26 +1,43 @@
 import {
   type HealthEntryResponse,
+  type HealthKind,
   type HealthMemosResponse,
   type HealthRescanResponse,
   type HealthTargetsResponse,
+  type HealthTrackerPreviewResponse,
+  type HealthTrackerSaveResponse,
+  type HealthTrackersResponse,
+  type HealthTrackerTestResponse,
   type HealthWeekResponse,
   type HealthYearResponse,
+  healthBuiltinWordsInputSchema,
+  healthIsBuiltinKind,
   healthMemosQuerySchema,
   healthPatchEntrySchema,
   healthSetTargetsSchema,
+  healthTrackerDraftSchema,
+  healthTrackerInputSchema,
+  healthTrackerTestSchema,
   healthWeekQuerySchema,
   healthYearQuerySchema,
 } from "@flaremo/contracts";
 import {
+  healthArchiveTracker,
+  healthCreateTracker,
   healthDismissEntry,
   healthEnsureScanned,
+  healthListTrackers,
   healthPatchEntry,
+  healthPreviewTracker,
   healthReadMemos,
   healthReadTargets,
   healthReadWeek,
   healthReadYear,
   healthRescan,
+  healthSetBuiltinWords,
   healthSetTargets,
+  healthTestTracker,
+  healthUpdateTracker,
 } from "@flaremo/domain/src/health";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
@@ -202,3 +219,137 @@ healthApi.put(
     }
   },
 );
+
+// --- Trackers ----------------------------------------------------------------
+//
+// The owner's own trackers and the built-ins' extra words (docs/fork-health-
+// tracker.md, "Trackers"). Every save re-reads the whole diary so the rows match
+// the new words at once; the preview reads it too but writes nothing.
+
+healthApi.get("/trackers", async (c) => {
+  try {
+    const { db, user } = await getRequestContext(c);
+    const response: HealthTrackersResponse = {
+      trackers: await healthListTrackers(db, user.id),
+    };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// Why one sentence counts or not. Pure: reads nothing.
+healthApi.post(
+  "/trackers/test",
+  zValidator("json", healthTrackerTestSchema),
+  async (c) => {
+    try {
+      await getRequestContext(c);
+      const response: HealthTrackerTestResponse = healthTestTracker(
+        c.req.valid("json"),
+      );
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// What saving a draft would change, read from the whole diary. Writes nothing.
+healthApi.post(
+  "/trackers/preview",
+  zValidator("json", healthTrackerDraftSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "health", context.user.id);
+      if (throttled) return throttled;
+      const response: HealthTrackerPreviewResponse = await healthPreviewTracker(
+        context.db,
+        { userId: context.user.id, draft: c.req.valid("json") },
+      );
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+async function savedResponse(
+  db: Parameters<typeof healthRescan>[0],
+  userId: string,
+): Promise<HealthTrackerSaveResponse> {
+  const rescan = await healthRescan(db, userId);
+  return { trackers: await healthListTrackers(db, userId), rescan };
+}
+
+healthApi.post(
+  "/trackers",
+  zValidator("json", healthTrackerInputSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "health", context.user.id);
+      if (throttled) return throttled;
+      await healthCreateTracker(context.db, {
+        userId: context.user.id,
+        tracker: c.req.valid("json"),
+      });
+      return c.json(await savedResponse(context.db, context.user.id), 201);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// A built-in kind (training, breath, night_out) takes only words; anything else
+// is one of the owner's trackers and takes the whole tracker.
+healthApi.put("/trackers/:id", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "health", context.user.id);
+    if (throttled) return throttled;
+    const id = c.req.param("id");
+    const body: unknown = await c.req.json().catch(() => null);
+    if (healthIsBuiltinKind(id)) {
+      const parsed = healthBuiltinWordsInputSchema.safeParse(body);
+      if (!parsed.success) {
+        return c.json({ error: { message: parsed.error.message } }, 400);
+      }
+      await healthSetBuiltinWords(context.db, {
+        userId: context.user.id,
+        kind: id as HealthKind,
+        words: parsed.data,
+      });
+    } else {
+      const parsed = healthTrackerInputSchema.safeParse(body);
+      if (!parsed.success) {
+        return c.json({ error: { message: parsed.error.message } }, 400);
+      }
+      await healthUpdateTracker(context.db, {
+        userId: context.user.id,
+        id,
+        tracker: parsed.data,
+      });
+    }
+    return c.json(await savedResponse(context.db, context.user.id));
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// Archives a tracker; its rows are hidden by the re-read, never deleted.
+healthApi.delete("/trackers/:id", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "health", context.user.id);
+    if (throttled) return throttled;
+    await healthArchiveTracker(context.db, {
+      userId: context.user.id,
+      id: c.req.param("id"),
+    });
+    return c.json(await savedResponse(context.db, context.user.id));
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});

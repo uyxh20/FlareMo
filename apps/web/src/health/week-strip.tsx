@@ -1,4 +1,8 @@
-import type { HealthEntryDto, HealthKind } from "@flaremo/contracts";
+import type {
+  HealthEntryDto,
+  HealthEntryKind,
+  HealthKind,
+} from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -13,6 +17,11 @@ import {
 } from "./model";
 import { healthQueryKeys } from "./query-keys";
 import { healthStrings } from "./strings";
+import {
+  healthKindClass,
+  healthOwnTrackers,
+  useHealthTrackers,
+} from "./trackers";
 import "./health.css";
 
 // The week strip on top of the diary timeline (fork-owned add-on,
@@ -42,11 +51,13 @@ const STATE_TEXT: Record<HealthDotState, string> = {
 function Dot({
   entries,
   kind,
+  kindClass,
   day,
   weekday,
 }: {
   entries: readonly HealthEntryDto[];
-  kind: HealthKind;
+  kind: HealthEntryKind;
+  kindClass: string;
   day: string;
   weekday: string;
 }) {
@@ -54,10 +65,7 @@ function Dot({
   const text = STATE_TEXT[state];
   return (
     <span
-      className={cn(
-        "flex h-5 items-center justify-center",
-        `health-kind-${kind}`,
-      )}
+      className={cn("flex h-5 items-center justify-center", kindClass)}
       data-day={day}
       data-kind={kind}
       data-state={state}
@@ -72,6 +80,7 @@ function Dot({
 
 export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
   const queryClient = useQueryClient();
+  const trackers = useHealthTrackers().data?.trackers;
   const query = useQuery({
     queryKey: healthQueryKeys.strip("last7"),
     queryFn: () => healthFetchWeek(),
@@ -107,6 +116,7 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
   if (query.isError || !query.data) return null;
 
   const { start, today, entries, summary } = query.data;
+  const own = healthOwnTrackers(trackers);
   const days = healthStripDays(start, today);
   const counts: Record<HealthKind, string> = {
     training: `${summary.training.sessions}/${summary.training.target}`,
@@ -143,7 +153,22 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
             entries={entries}
             key={row.kind}
             kind={row.kind}
+            kindClass={`health-kind-${row.kind}`}
             label={row.label}
+          />
+        ))}
+        {own.map((tracker) => (
+          <RowCells
+            count={String(
+              query.data.trackers.find((count) => count.kind === tracker.kind)
+                ?.days ?? 0,
+            )}
+            days={days}
+            entries={entries}
+            key={tracker.kind}
+            kind={tracker.kind}
+            kindClass={healthKindClass(tracker.kind, trackers)}
+            label={tracker.label}
           />
         ))}
       </div>
@@ -153,12 +178,14 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
 
 function RowCells({
   kind,
+  kindClass,
   label,
   days,
   entries,
   count,
 }: {
-  kind: HealthKind;
+  kind: HealthEntryKind;
+  kindClass: string;
   label: string;
   days: ReturnType<typeof healthStripDays>;
   entries: readonly HealthEntryDto[];
@@ -173,6 +200,7 @@ function RowCells({
           entries={entries}
           key={day.day}
           kind={kind}
+          kindClass={kindClass}
           weekday={day.weekday}
         />
       ))}

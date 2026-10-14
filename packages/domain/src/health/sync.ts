@@ -1,6 +1,8 @@
 import {
-  type HealthKind,
+  type HealthEntryKind,
   type HealthRescanResponse,
+  type HealthTrackerDraft,
+  type HealthTrackerPreviewResponse,
   healthKinds,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -10,12 +12,22 @@ import {
   healthSyncState,
 } from "@flaremo/db/src/schema/fork-health";
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import { type HealthParsedEntry, healthParseMemo } from "./parse";
+import {
+  type HealthParseConfig,
+  type HealthParsedEntry,
+  healthParseMemo,
+} from "./parse";
 import {
   type HealthEntryRow,
   type HealthWrite,
   healthWriteStatements,
 } from "./rows";
+import {
+  healthConfigWithDraft,
+  healthEmptyPreview,
+  healthReadParseConfig,
+  healthReadTrackerRows,
+} from "./trackers";
 
 // The health tracker's sync (fork-owned add-on, docs/fork-health-tracker.md):
 // turns what the parser reads in a memo into health_entry rows.
@@ -58,14 +70,20 @@ export function healthMemoIsLive(memo: {
   return LIVE_STATUSES.includes(memo.status) && memo.deletedAt === null;
 }
 
-function parseLive(memo: HealthMemoInput): HealthParsedEntry[] {
+export function healthParseLive(
+  memo: HealthMemoInput,
+  config: HealthParseConfig,
+): HealthParsedEntry[] {
   if (!healthMemoIsLive(memo)) return [];
-  return healthParseMemo({
-    content: memo.content,
-    createdAt: memo.createdAt,
-    tags: memo.payload?.tags,
-    source: memo.source,
-  });
+  return healthParseMemo(
+    {
+      content: memo.content,
+      createdAt: memo.createdAt,
+      tags: memo.payload?.tags,
+      source: memo.source,
+    },
+    config,
+  );
 }
 
 function sameValues(row: HealthEntryRow, parsed: HealthParsedEntry): boolean {
@@ -125,7 +143,14 @@ export function healthPlanMemoSync(input: {
   const { existing, parsed, now } = input;
   const newId = input.newId ?? (() => crypto.randomUUID());
   const writes: HealthWrite[] = [];
-  for (const kind of healthKinds as readonly HealthKind[]) {
+  // The built-in kinds, then every tracker kind the memo has a row of or now
+  // reads as: a tracker that was archived or lost a word has its row removed.
+  const kinds = new Set<HealthEntryKind>([
+    ...healthKinds,
+    ...existing.map((entry) => entry.kind),
+    ...parsed.map((entry) => entry.kind),
+  ]);
+  for (const kind of kinds) {
     const row = primaryRow(existing.filter((entry) => entry.kind === kind));
     const read = parsed.find((entry) => entry.kind === kind);
     if (read && !row) {
@@ -250,7 +275,10 @@ export async function healthSyncMemo(
   now: Date = new Date(),
 ): Promise<HealthSyncCounts> {
   const at = now.toISOString();
-  const parsed = parseLive(memo);
+  const parsed = healthParseLive(
+    memo,
+    await healthReadParseConfig(db, memo.userId),
+  );
   for (let attempt = 0; attempt < 2; attempt++) {
     const existing = await readMemoRows(db, memo.userId, memo.id);
     const writes = healthPlanMemoSync({
@@ -353,7 +381,7 @@ async function readScanMemos(
   });
 }
 
-async function readRowsForMemos(
+export async function healthReadRowsForMemos(
   db: FlareMoDb,
   userId: string,
   memoIds: string[],
@@ -387,11 +415,12 @@ async function syncMemos(
   userId: string,
   list: ScannedMemo[],
   at: string,
+  config: HealthParseConfig,
 ): Promise<HealthSyncCounts> {
   let total: HealthSyncCounts = { created: 0, updated: 0, removed: 0 };
   for (let start = 0; start < list.length; start += MEMO_CHUNK) {
     const chunk = list.slice(start, start + MEMO_CHUNK);
-    const existing = await readRowsForMemos(
+    const existing = await healthReadRowsForMemos(
       db,
       userId,
       chunk.map((memo) => memo.id),
@@ -401,7 +430,7 @@ async function syncMemos(
         memoId: memo.id,
         userId,
         existing: existing.get(memo.id) ?? [],
-        parsed: parseLive(memo),
+        parsed: healthParseLive(memo, config),
         now: at,
       }),
     );
@@ -454,7 +483,7 @@ export async function healthSweepGoneMemos(
 }
 
 /** Every memo of a user, oldest first, in pages so a big diary stays bounded. */
-async function* scanPages(
+export async function* healthScanPages(
   db: FlareMoDb,
   userId: string,
 ): AsyncGenerator<ScannedMemo[]> {
@@ -487,9 +516,10 @@ export async function healthRescan(
   const at = now.toISOString();
   let counts: HealthSyncCounts = { created: 0, updated: 0, removed: 0 };
   let memoCount = 0;
-  for await (const page of scanPages(db, userId)) {
+  const config = await healthReadParseConfig(db, userId);
+  for await (const page of healthScanPages(db, userId)) {
     memoCount += page.length;
-    counts = addCounts(counts, await syncMemos(db, userId, page, at));
+    counts = addCounts(counts, await syncMemos(db, userId, page, at, config));
   }
   counts.removed += await healthSweepGoneMemos(db, userId, now);
   await db
@@ -579,7 +609,13 @@ export async function healthNightlySweep(
         and(eq(memos.userId, userId), gte(memos.updatedAt, since)),
         1000,
       );
-      const counts = await syncMemos(db, userId, recent, now.toISOString());
+      const counts = await syncMemos(
+        db,
+        userId,
+        recent,
+        now.toISOString(),
+        await healthReadParseConfig(db, userId),
+      );
       const removed = await healthSweepGoneMemos(db, userId, now);
       total = {
         users: total.users + 1,
@@ -599,4 +635,59 @@ export async function healthNightlySweep(
     );
     return empty;
   }
+}
+
+// --- Preview ---------------------------------------------------------------------
+
+const PREVIEW_DAYS = 30;
+
+/**
+ * What saving a draft tracker would change, without writing anything: the whole
+ * diary is read with the draft and compared, for that one kind, to the rows
+ * there now. A row the owner removed stays removed; one they fixed by hand
+ * counts as kept.
+ */
+export async function healthPreviewTracker(
+  db: FlareMoDb,
+  input: { userId: string; draft: HealthTrackerDraft },
+): Promise<HealthTrackerPreviewResponse> {
+  const rows = await healthReadTrackerRows(db, input.userId);
+  const { kind, config } = healthConfigWithDraft(rows, input.draft);
+  const preview = healthEmptyPreview();
+  const added = new Set<string>();
+  const removed = new Set<string>();
+  for await (const page of healthScanPages(db, input.userId)) {
+    preview.memos += page.length;
+    const existing = await healthReadRowsForMemos(
+      db,
+      input.userId,
+      page.map((memo) => memo.id),
+    );
+    for (const memo of page) {
+      const row = primaryRow(
+        (existing.get(memo.id) ?? []).filter((entry) => entry.kind === kind),
+      );
+      const read = healthParseLive(memo, config).find(
+        (entry) => entry.kind === kind,
+      );
+      const live = row && row.deletedAt === null;
+      if (row?.dismissed) continue;
+      if (read && !live) {
+        preview.added += 1;
+        added.add(read.day);
+      } else if (read && row) {
+        if (row.day === read.day || !row.edited) preview.unchanged += 1;
+        else preview.kept += 1;
+      } else if (!read && live) {
+        // A gone signal removes even an edited row (see healthPlanMemoSync).
+        preview.removed += 1;
+        removed.add(row.day);
+      }
+    }
+  }
+  const newest = (days: Set<string>) =>
+    [...days].sort((a, b) => (a < b ? 1 : -1)).slice(0, PREVIEW_DAYS);
+  preview.added_days = newest(added);
+  preview.removed_days = newest(removed);
+  return preview;
 }

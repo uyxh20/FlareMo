@@ -1,6 +1,7 @@
 import {
   type HealthEntryDto,
-  type HealthKind,
+  type HealthEntryKind,
+  type HealthTrackerDto,
   healthLocalMoment,
 } from "@flaremo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -31,6 +32,12 @@ import {
 } from "./model";
 import { healthQueryKeys } from "./query-keys";
 import { healthStrings } from "./strings";
+import {
+  healthKindClass,
+  healthOwnTrackers,
+  useHealthTrackers,
+} from "./trackers";
+import { HealthTrackersPanel } from "./trackers-panel";
 import "./health.css";
 
 // The Health page at /health (fork-owned add-on, docs/fork-health-tracker.md):
@@ -77,13 +84,15 @@ function Bar({ share }: { share: number }) {
 
 function Tile({
   kind,
+  kindClass = `health-kind-${kind}`,
   title,
   big,
   of,
   note,
   share,
 }: {
-  kind: HealthKind;
+  kind: HealthEntryKind;
+  kindClass?: string;
   title: string;
   big: string;
   of?: number;
@@ -94,7 +103,7 @@ function Tile({
     <div
       className={cn(
         "flex flex-col gap-2 rounded-xl border border-border/50 bg-card/60 p-4",
-        `health-kind-${kind}`,
+        kindClass,
       )}
       data-kind={kind}
       data-testid="health-tile"
@@ -120,6 +129,7 @@ function Tile({
 }
 
 function WeekSection() {
+  const trackers = useHealthTrackers().data?.trackers;
   const query = useQuery({
     queryKey: healthQueryKeys.week("last7"),
     queryFn: () => healthFetchWeek(),
@@ -171,6 +181,28 @@ function WeekSection() {
           note={s.outNote(healthFormatUnits(summary.night_out.units))}
           title={s.outTile}
         />
+        {healthOwnTrackers(trackers).map((tracker) => {
+          const count = query.data.trackers.find(
+            (item) => item.kind === tracker.kind,
+          );
+          const minutes = count?.minutes ?? 0;
+          return (
+            <Tile
+              big={String(count?.days ?? 0)}
+              key={tracker.kind}
+              kind={tracker.kind}
+              kindClass={healthKindClass(tracker.kind, trackers)}
+              note={
+                minutes > 0 && tracker.measure === "hours"
+                  ? healthStrings.trackers.weekHours(minutes)
+                  : minutes > 0 && tracker.measure === "minutes"
+                    ? healthStrings.trackers.weekMinutes(minutes)
+                    : healthStrings.trackers.weekNote(count?.days ?? 0)
+              }
+              title={tracker.label}
+            />
+          );
+        })}
       </div>
     </Section>
   );
@@ -222,11 +254,33 @@ function NeedsCheck({
   );
 }
 
-const GRID_ROWS: Array<{ kind: HealthKind; full: number }> = [
-  { kind: "training", full: 3 },
-  { kind: "breath", full: 7 },
-  { kind: "night_out", full: 2 },
-];
+type GridRow = {
+  kind: HealthEntryKind;
+  label: string;
+  kindClass: string;
+  full: number;
+};
+
+const GRID_ROWS: GridRow[] = (["training", "breath", "night_out"] as const).map(
+  (kind) => ({
+    kind,
+    label: healthStrings.kind[kind],
+    kindClass: `health-kind-${kind}`,
+    full: kind === "training" ? 3 : kind === "breath" ? 7 : 2,
+  }),
+);
+
+function gridRowsWith(trackers: readonly HealthTrackerDto[] | undefined) {
+  return [
+    ...GRID_ROWS,
+    ...healthOwnTrackers(trackers).map((tracker) => ({
+      kind: tracker.kind,
+      label: tracker.label,
+      kindClass: healthKindClass(tracker.kind, trackers),
+      full: 7,
+    })),
+  ];
+}
 
 function YearGrid({
   year,
@@ -237,6 +291,7 @@ function YearGrid({
   today: string;
   days: Parameters<typeof healthYearWeeks>[1];
 }) {
+  const trackers = useHealthTrackers().data?.trackers;
   const weeks = healthYearWeeks(year, days, today);
   const marks = healthMonthMarks(weeks);
   const columns = `repeat(${weeks.length}, minmax(0.875rem, 1fr))`;
@@ -261,14 +316,11 @@ function YearGrid({
             );
           })}
         </div>
-        {GRID_ROWS.map((row) => {
-          const label = healthStrings.kind[row.kind];
+        {gridRowsWith(trackers).map((row) => {
+          const label = row.label;
           return (
             <div
-              className={cn(
-                "flex items-center gap-2",
-                `health-kind-${row.kind}`,
-              )}
+              className={cn("flex items-center gap-2", row.kindClass)}
               key={row.kind}
               role="img"
               aria-label={s.gridLabel(label)}
@@ -286,13 +338,15 @@ function YearGrid({
                       ? week.training
                       : row.kind === "breath"
                         ? week.breath
-                        : week.out;
+                        : row.kind === "night_out"
+                          ? week.out
+                          : (week.trackers[row.kind] ?? 0);
                   const text =
                     row.kind === "training"
                       ? s.sessions(value)
-                      : row.kind === "breath"
-                        ? s.days(value)
-                        : s.units(healthFormatUnits(value));
+                      : row.kind === "night_out"
+                        ? s.units(healthFormatUnits(value))
+                        : s.days(value);
                   return (
                     <span
                       className="health-cell aspect-square"
@@ -472,6 +526,7 @@ export function HealthPage() {
       <div className="flex flex-col gap-6 py-2" data-testid="health-page">
         <WeekSection />
         <YearSections year={year} />
+        <HealthTrackersPanel />
         <RereadButton />
       </div>
     </WorkspaceLayout>

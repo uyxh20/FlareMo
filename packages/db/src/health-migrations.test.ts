@@ -12,6 +12,8 @@ import {
   healthEntryEvent,
   healthSyncState,
   healthTarget,
+  healthTracker,
+  healthTrackerEvent,
 } from "./schema/fork-health";
 import { applyFlaremoMigrations } from "./test-migrations";
 
@@ -57,6 +59,22 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
   ],
   health_target: [],
   health_sync_state: [],
+  health_tracker: [
+    {
+      name: "health_tracker_user_kind_uq",
+      unique: true,
+      partial: false,
+      columns: ["user_id", "kind"],
+    },
+  ],
+  health_tracker_event: [
+    {
+      name: "health_tracker_event_tracker_idx",
+      unique: false,
+      partial: false,
+      columns: ["tracker_id", "at"],
+    },
+  ],
 };
 
 const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
@@ -64,6 +82,8 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   health_entry_event: healthEntryEvent,
   health_target: healthTarget,
   health_sync_state: healthSyncState,
+  health_tracker: healthTracker,
+  health_tracker_event: healthTrackerEvent,
 };
 
 const HEALTH_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -100,7 +120,7 @@ describe("health migration", () => {
     await mf.dispose();
   });
 
-  it("creates the four health tables", async () => {
+  it("creates the six health tables", async () => {
     const tables = await rows<{ name: string }>(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'health%' ORDER BY name",
     );

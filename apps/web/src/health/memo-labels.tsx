@@ -13,6 +13,7 @@ import {
 import { healthChipText, healthChipTitle } from "./model";
 import { healthQueryKeys } from "./query-keys";
 import { healthStrings } from "./strings";
+import { healthKindClass, useHealthTrackers } from "./trackers";
 import "./health.css";
 
 // The labels under a memo card (fork-owned add-on, docs/fork-health-tracker.md):
@@ -66,12 +67,13 @@ function Chip({
   busy: boolean;
   onDismiss: () => void;
 }) {
-  const text = healthChipText(entry);
+  const trackers = useHealthTrackers().data?.trackers;
+  const text = healthChipText(entry, trackers);
   return (
     <span
       className={cn(
         "health-chip inline-flex max-w-full items-center gap-0.5 rounded-full py-0.5 pr-1 pl-2.5 text-xs font-medium",
-        `health-kind-${entry.kind}`,
+        healthKindClass(entry.kind, trackers),
       )}
       data-kind={entry.kind}
       data-testid="health-chip"

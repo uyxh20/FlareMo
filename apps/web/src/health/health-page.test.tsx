@@ -12,13 +12,21 @@ import {
   plannerTestMount,
 } from "@/planner/test-render";
 import {
+  healthCreateTrackerRequest,
+  healthFetchTrackers,
   healthFetchWeek,
   healthFetchYear,
   healthPatchEntryRequest,
+  healthPreviewTrackerRequest,
   healthRescanRequest,
+  healthTestTrackerRequest,
 } from "./api";
 import { HealthPage } from "./health-page";
-import { healthTestEntry, healthTestNight } from "./test-fixtures";
+import {
+  healthTestEntry,
+  healthTestNight,
+  healthTestTrackers,
+} from "./test-fixtures";
 
 // The Health page: the week against its targets, the night-out budget and pace,
 // the nights that need a home time, the year grid and the re-read button. The
@@ -42,12 +50,23 @@ vi.mock("./api", async (importOriginal) => ({
   healthFetchYear: vi.fn(),
   healthPatchEntryRequest: vi.fn(),
   healthRescanRequest: vi.fn(),
+  healthFetchTrackers: vi.fn(),
+  healthPreviewTrackerRequest: vi.fn(),
+  healthCreateTrackerRequest: vi.fn(),
+  healthTestTrackerRequest: vi.fn(),
+}));
+vi.mock("@/planner/goals-api", () => ({
+  plannerFetchGoalsYear: vi.fn().mockResolvedValue({ goals: [] }),
 }));
 
 const fetchWeek = vi.mocked(healthFetchWeek);
 const fetchYear = vi.mocked(healthFetchYear);
 const patch = vi.mocked(healthPatchEntryRequest);
 const rescan = vi.mocked(healthRescanRequest);
+const fetchTrackers = vi.mocked(healthFetchTrackers);
+const previewTracker = vi.mocked(healthPreviewTrackerRequest);
+const createTracker = vi.mocked(healthCreateTrackerRequest);
+const testTracker = vi.mocked(healthTestTrackerRequest);
 
 const NEEDS = healthTestNight({
   id: "n9",
@@ -72,6 +91,7 @@ const WEEK: HealthWeekResponse = {
       year_used: 6,
     },
   },
+  trackers: [{ kind: "t:fast00000001", days: 2, minutes: 2040 }],
 };
 
 const YEAR: HealthYearResponse = {
@@ -85,6 +105,7 @@ const YEAR: HealthYearResponse = {
       night_out: null,
       has_night: false,
       needs_check: false,
+      trackers: { "t:fast00000001": 1 },
     },
   ],
   night_out: {
@@ -97,6 +118,7 @@ const YEAR: HealthYearResponse = {
     needs_check: 1,
   },
   totals: { training: 31, breath_days: 140 },
+  trackers: [{ kind: "t:fast00000001", days: 9, minutes: 9000 }],
   needs_check_entries: [NEEDS],
 };
 
@@ -123,6 +145,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fetchWeek.mockResolvedValue(WEEK);
   fetchYear.mockResolvedValue(YEAR);
+  fetchTrackers.mockResolvedValue({ trackers: healthTestTrackers() });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -145,7 +168,11 @@ describe("the Health page", () => {
       "training",
       "breath",
       "night_out",
+      "t:fast00000001",
     ]);
+    expect(tiles[3]?.textContent).toContain("Fasting");
+    expect(tiles[3]?.textContent).toContain("34 h in total");
+    expect(tiles[3]?.className).toContain("health-kind-t-green");
     expect(tiles[0]?.textContent).toContain("2 of 3 sessions");
     expect(tiles[1]?.textContent).toContain("5 of 7 days");
     expect(tiles[2]?.textContent).toContain("1½ in the last 7 days");
@@ -191,11 +218,16 @@ describe("the Health page", () => {
     ).toBeNull();
   });
 
-  it("draws the year as three rows of weeks", async () => {
+  it("draws the year as a row of weeks per tracker", async () => {
     const container = await show();
     const grid = container.querySelector('[data-testid="health-year-grid"]');
     const rows = grid?.querySelectorAll('[role="img"]');
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
+    expect(
+      rows?.[3]
+        ?.querySelector('.health-cell[title^="Fasting, week of 12 Oct"]')
+        ?.getAttribute("title"),
+    ).toBe("Fasting, week of 12 Oct: 1 day");
     expect(rows?.[0]?.querySelectorAll(".health-cell")).toHaveLength(53);
     // The week of 12 October holds one session and one breath day.
     const cell = rows?.[0]?.querySelector(
@@ -232,4 +264,124 @@ describe("the Health page", () => {
       "Could not read the diary. Try again.",
     );
   });
+
+  describe("the trackers panel", () => {
+    const panel = (container: HTMLElement) =>
+      container.querySelector('[data-testid="health-trackers"]');
+    const button = (container: HTMLElement, text: string) =>
+      Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === text,
+      );
+
+    it("lists every tracker and keeps the editor closed", async () => {
+      const container = await show();
+      const pills = panel(container)?.querySelectorAll(
+        '[data-testid="health-tracker-pill"]',
+      );
+      expect(Array.from(pills ?? []).map((p) => p.textContent)).toEqual([
+        "Training",
+        "Breath",
+        "Nights out",
+        "Fasting",
+      ]);
+      expect(
+        container.querySelector('[data-testid="health-tracker-editor"]'),
+      ).toBeNull();
+    });
+
+    it("opens a tracker calmly: no preview button and no tester until asked", async () => {
+      const container = await show();
+      plannerTestClick(button(container, "Fasting"));
+      await settle();
+      const editor = container.querySelector(
+        '[data-testid="health-tracker-editor"]',
+      );
+      expect(editor?.textContent).toContain("#fast");
+      expect(editor?.textContent).not.toContain("Target");
+      expect(
+        container.querySelector('[data-testid="health-preview-button"]'),
+      ).toBeNull();
+      expect(
+        container.querySelector('[data-testid="health-tester"]'),
+      ).toBeNull();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-open-tester"]'),
+      );
+      await settle();
+      expect(
+        container.querySelector('[data-testid="health-tester"]'),
+      ).not.toBeNull();
+      expect(testTracker).not.toHaveBeenCalled();
+    });
+
+    it("previews a new tracker against the diary, then applies it", async () => {
+      previewTracker.mockResolvedValue({
+        added: 12,
+        removed: 0,
+        kept: 0,
+        unchanged: 0,
+        added_days: ["2026-10-12"],
+        removed_days: [],
+        memos: 579,
+      });
+      createTracker.mockResolvedValue({
+        trackers: healthTestTrackers(),
+        rescan: { memos: 579, created: 12, updated: 0, removed: 0 },
+      });
+      const container = await show();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-new-tracker"]'),
+      );
+      await settle();
+      const name = container.querySelector<HTMLInputElement>(
+        '[data-testid="health-tracker-name"]',
+      );
+      const word = container.querySelector<HTMLInputElement>(
+        '[data-testid="health-add-word"]',
+      );
+      await act(async () => {
+        typeInto(name, "Cold plunge");
+        typeInto(word, "#plunge");
+      });
+      plannerTestClick(button(container, "Add"));
+      await settle();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-preview-button"]'),
+      );
+      await settle();
+      expect(previewTracker).toHaveBeenCalledWith({
+        id: undefined,
+        measure: "days",
+        words: ["#plunge"],
+        blocked: [],
+      });
+      expect(
+        container.querySelector('[data-testid="health-preview"]')?.textContent,
+      ).toContain("12 more entries count");
+      plannerTestClick(container.querySelector('[data-testid="health-apply"]'));
+      await settle();
+      expect(createTracker).toHaveBeenCalledWith({
+        label: "Cold plunge",
+        color: "green",
+        measure: "days",
+        words: ["#plunge"],
+        blocked: [],
+        goal_id: null,
+      });
+      expect(
+        container.querySelector('[data-testid="health-tracker-editor"]'),
+      ).toBeNull();
+    });
+  });
 });
+
+/** Sets a React-controlled input's value the way typing does. */
+function typeInto(input: HTMLInputElement | null, value: string) {
+  if (!input) throw new Error("no input");
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}

@@ -197,6 +197,7 @@ describe("health read and write", () => {
         night_out: null,
         has_night: false,
         needs_check: false,
+        trackers: {},
       });
       expect(year.days.find((day) => day.day === "2026-10-10")).toMatchObject({
         night_out: null,

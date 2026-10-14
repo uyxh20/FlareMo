@@ -13,4 +13,5 @@ export const healthQueryKeys = {
   stripAll: ["health", "strip"] as const,
   week: (start: string) => ["health", "week", start] as const,
   year: (year: number) => ["health", "year", year] as const,
+  trackers: ["health", "trackers"] as const,
 } as const;

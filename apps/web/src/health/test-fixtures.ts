@@ -1,4 +1,4 @@
-import type { HealthEntryDto } from "@flaremo/contracts";
+import type { HealthEntryDto, HealthTrackerDto } from "@flaremo/contracts";
 
 // Entries for the health tests (not imported by the app). The notes they stand
 // for are invented.
@@ -35,4 +35,42 @@ export function healthTestNight(
     variant: null,
     ...overrides,
   });
+}
+
+/** The tracker list as the server sends it: the built-ins, then Fasting. */
+export function healthTestTrackers(): HealthTrackerDto[] {
+  const builtin = (
+    kind: "training" | "breath" | "night_out",
+    label: string,
+  ): HealthTrackerDto => ({
+    id: kind,
+    kind,
+    label,
+    color: null,
+    measure: kind === "breath" ? "minutes" : "days",
+    words: [],
+    blocked: [],
+    goal_id: null,
+    builtin: true,
+    fixed_words: ["#gym"],
+    updated_at: null,
+  });
+  return [
+    builtin("training", "Training"),
+    builtin("breath", "Breath"),
+    builtin("night_out", "Nights out"),
+    {
+      id: "fast00000001",
+      kind: "t:fast00000001",
+      label: "Fasting",
+      color: "green",
+      measure: "hours",
+      words: ["#fast", "fasted"],
+      blocked: [],
+      goal_id: null,
+      builtin: false,
+      fixed_words: [],
+      updated_at: "2026-10-12T18:00:00.000Z",
+    },
+  ];
 }

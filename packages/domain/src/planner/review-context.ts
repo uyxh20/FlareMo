@@ -1,6 +1,8 @@
 import {
   type HealthEntryDto,
+  type HealthKind,
   type HealthWeekSummary,
+  healthIsBuiltinKind,
   healthLocalDayStart,
   type PlannerGoalDto,
   type PlannerPillar,
@@ -364,6 +366,12 @@ export type PlannerWeekHealth = {
 
 const HEALTH_FEEL_CHARS = 160;
 
+function isBuiltinEntry(
+  entry: HealthEntryDto,
+): entry is HealthEntryDto & { kind: HealthKind } {
+  return healthIsBuiltinKind(entry.kind);
+}
+
 /** The health tracker's view of the reviewed week (Monday to Sunday, local days). */
 export async function plannerReadWeekHealth(
   db: FlareMoDb,
@@ -374,7 +382,9 @@ export async function plannerReadWeekHealth(
     start: input.weekStart,
   });
   return {
-    entries: week.entries.map((entry) => ({
+    // Only the three built-in kinds: the owner's own trackers stay out of the
+    // review while its changes are on hold (docs/fork-health-tracker.md).
+    entries: week.entries.filter(isBuiltinEntry).map((entry) => ({
       kind: entry.kind,
       day: entry.day,
       variant: entry.variant,

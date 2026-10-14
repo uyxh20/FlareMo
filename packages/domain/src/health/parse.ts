@@ -1,6 +1,10 @@
 import {
   type HealthBreathVariant,
+  type HealthEntryKind,
   type HealthKind,
+  type HealthTrackerKind,
+  type HealthTrackerMeasure,
+  type HealthTrackerTestReason,
   type HealthTrainingVariant,
   healthAddDays,
   healthDefaultBreathMinutes,
@@ -37,8 +41,29 @@ export type HealthParseInput = {
   source?: string | null;
 };
 
+/** One tracker the owner made in the app, as the reader needs it. */
+export type HealthParseTracker = {
+  kind: HealthTrackerKind;
+  measure: HealthTrackerMeasure;
+  /** Normalised words or phrases; a leading # makes a tag. */
+  words: readonly string[];
+  blocked: readonly string[];
+};
+
+/**
+ * What the owner set in the app: their own trackers, and extra words and
+ * blocked words for the built-in kinds. Absent or empty, the reader is exactly
+ * the fixed one.
+ */
+export type HealthParseConfig = {
+  trackers?: readonly HealthParseTracker[];
+  builtins?: Partial<
+    Record<HealthKind, { words: readonly string[]; blocked: readonly string[] }>
+  >;
+};
+
 export type HealthParsedEntry = {
-  kind: HealthKind;
+  kind: HealthEntryKind;
   /** The local day, `YYYY-MM-DD`. */
   day: string;
   variant: HealthTrainingVariant | HealthBreathVariant | null;
@@ -527,7 +552,10 @@ function clausesOf(sentence: string): string[] {
  * breath, night_out. Never throws on odd text; an unparseable `createdAt`
  * throws, as it is a caller bug.
  */
-export function healthParseMemo(input: HealthParseInput): HealthParsedEntry[] {
+export function healthParseMemo(
+  input: HealthParseInput,
+  config: HealthParseConfig = {},
+): HealthParsedEntry[] {
   if (healthMemoIsSkipped(input)) return [];
   const long = input.content.length >= healthLongMemoChars;
   const text = normalise(healthStripTimestampPrefix(input.content));
@@ -641,5 +669,263 @@ export function healthParseMemo(input: HealthParseInput): HealthParsedEntry[] {
   }
   if (breath) entries.push(breath);
   if (night) entries.push(night);
-  return entries;
+
+  const context: WordContext = {
+    text,
+    sentences,
+    long,
+    tags: input.tags ?? [],
+    sessionDay,
+  };
+
+  // The owner's extra words for a built-in kind: only when its own reader found
+  // nothing, so they add, never replace.
+  const builtins = config.builtins ?? {};
+  for (const kind of ["training", "breath", "night_out"] as const) {
+    const extra = builtins[kind];
+    if (!extra || entries.some((entry) => entry.kind === kind)) continue;
+    const hit = findWord(context, extra.words, kind === "night_out");
+    if (!hit.found) continue;
+    if (kind === "night_out") {
+      const read = readNight(hit.sentence, text);
+      entries.push({
+        kind,
+        day: nightDay(hit.sentence, text, entry.day, entry.hour),
+        variant: null,
+        minutes: null,
+        homeAt: read.homeAt,
+        units: read.units,
+        bender: read.bender,
+        needsCheck: read.needsCheck,
+        feel: null,
+      });
+    } else {
+      entries.push({
+        kind,
+        day: hit.day,
+        variant: null,
+        minutes:
+          kind === "breath"
+            ? breathMinutes(hit.sentence, hit.sentence.length)
+            : durationMinutes(hit.sentence),
+        homeAt: null,
+        units: null,
+        bender: false,
+        needsCheck: false,
+        feel,
+      });
+    }
+  }
+
+  for (const tracker of config.trackers ?? []) {
+    const hit = findWord(context, tracker.words, false);
+    if (!hit.found) continue;
+    entries.push({
+      kind: tracker.kind,
+      day: hit.day,
+      variant: null,
+      minutes: trackerMinutes(tracker.measure, hit.sentence),
+      homeAt: null,
+      units: null,
+      bender: false,
+      needsCheck: false,
+      feel,
+    });
+  }
+
+  // A blocked word anywhere in the entry stops that kind counting it.
+  return entries.filter((found) => {
+    const blocked = healthIsBuiltinKindLocal(found.kind)
+      ? builtins[found.kind]?.blocked
+      : config.trackers?.find((tracker) => tracker.kind === found.kind)
+          ?.blocked;
+    return !blocked || !hasAnyWord(text, input.tags ?? [], blocked);
+  });
+}
+
+// --- The owner's words -------------------------------------------------------------
+//
+// A tracker's words are read with the same care as the built-in keywords: a
+// sentence that is a plan ("tomorrow I'll start fasting") or a denial ("no
+// fasting today") does not count, a long entry needs a tag or a done word, and
+// "yesterday" moves the day back. A tag matches the hashtag in the text or the
+// memo's own tag.
+
+function healthIsBuiltinKindLocal(kind: string): kind is HealthKind {
+  return kind === "training" || kind === "breath" || kind === "night_out";
+}
+
+const wordPatterns = new Map<string, RegExp>();
+
+/** The pattern for one normalised word or tag, global so every place is tried. */
+function wordPattern(word: string): RegExp {
+  let pattern = wordPatterns.get(word);
+  if (!pattern) {
+    const escaped = normalise(word).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    pattern = word.startsWith("#")
+      ? new RegExp(`(?<![\\w])${escaped}(?![\\w-])`, "g")
+      : new RegExp(`(?<![\\w#])${escaped}(?![\\w])`, "g");
+    wordPatterns.set(word, pattern);
+  }
+  pattern.lastIndex = 0;
+  return pattern;
+}
+
+function memoHasTag(tags: readonly string[], word: string): boolean {
+  if (!word.startsWith("#")) return false;
+  const name = word.slice(1);
+  return tags.some((tag) => tag.replace(/^#/, "").toLowerCase() === name);
+}
+
+function hasAnyWord(
+  text: string,
+  tags: readonly string[],
+  words: readonly string[],
+): boolean {
+  return words.some(
+    (word) => memoHasTag(tags, word) || wordPattern(word).test(text),
+  );
+}
+
+type WordContext = {
+  text: string;
+  sentences: string[];
+  long: boolean;
+  tags: readonly string[];
+  sessionDay: (sentence: string) => string;
+};
+
+type WordHit =
+  | { found: true; sentence: string; day: string; match: string }
+  | { found: false; reason: Exclude<HealthTrackerTestReason, "counted"> };
+
+/**
+ * The first sentence where one of `words` says something happened. `night`
+ * uses the night-out reading of a plan ("tonight" is a day word there).
+ */
+function findWord(
+  context: WordContext,
+  words: readonly string[],
+  night: boolean,
+): WordHit {
+  let reason: Exclude<HealthTrackerTestReason, "counted"> = "no_word";
+  for (const sentence of context.sentences) {
+    const planned =
+      (night ? PLAN_FOR_NIGHT : PLAN).test(sentence) && !DONE.test(sentence);
+    for (const word of words) {
+      for (const match of sentence.matchAll(wordPattern(word))) {
+        const index = match.index ?? 0;
+        if (planned) {
+          reason = "plan";
+          continue;
+        }
+        if (negatedAt(sentence, index, match[0].length)) {
+          reason = "negated";
+          continue;
+        }
+        const explicit = word.startsWith("#");
+        if (context.long && !explicit && !DONE.test(sentence)) {
+          reason = "long";
+          continue;
+        }
+        return {
+          found: true,
+          sentence,
+          day: context.sessionDay(sentence),
+          match: match[0],
+        };
+      }
+    }
+  }
+  // A memo tag with no hashtag in the text: the whole entry is the session.
+  if (reason === "no_word") {
+    const tag = words.find((word) => memoHasTag(context.tags, word));
+    if (tag) {
+      return {
+        found: true,
+        sentence: context.text,
+        day: context.sessionDay(context.text),
+        match: tag,
+      };
+    }
+  }
+  return { found: false, reason };
+}
+
+/** Hours written as `16h`, `18 hours`, `1.5 hrs`, or a fasting window `16:8`. */
+function hoursOf(text: string): number | null {
+  const plain = /\b(\d{1,2}(?:[.,]\d)?)\s*(?:h|hrs?|hours?)\b/.exec(text);
+  if (plain) {
+    const hours = Number((plain[1] ?? "").replace(",", "."));
+    if (hours > 0 && hours <= 96) return hours;
+  }
+  // An eating window: 16:8 is a 16 hour fast.
+  for (const window of text.matchAll(/\b(\d{1,2}):(\d{1,2})\b/g)) {
+    const fast = Number(window[1]);
+    const eat = Number(window[2]);
+    if (fast >= 12 && fast + eat === 24) return fast;
+  }
+  return null;
+}
+
+function trackerMinutes(
+  measure: HealthTrackerMeasure,
+  sentence: string,
+): number | null {
+  if (measure === "minutes") return durationMinutes(sentence);
+  if (measure === "hours") {
+    const hours = hoursOf(sentence);
+    return hours === null ? null : Math.round(hours * 60);
+  }
+  return null;
+}
+
+/**
+ * Why one text does or does not count for a tracker's words: the app's
+ * "try a sentence" box. Reads the text as an entry written now.
+ */
+export function healthExplainTracker(input: {
+  text: string;
+  measure: HealthTrackerMeasure;
+  words: readonly string[];
+  blocked: readonly string[];
+  night?: boolean;
+}): {
+  reason: HealthTrackerTestReason;
+  match: string | null;
+  dayOffset: number | null;
+  minutes: number | null;
+} {
+  const text = normalise(healthStripTimestampPrefix(input.text));
+  const sentences = sentencesOf(text);
+  const retro = RETRO.test(text);
+  const hit = findWord(
+    {
+      text,
+      sentences,
+      long: input.text.length >= healthLongMemoChars,
+      tags: [],
+      sessionDay: (sentence) =>
+        !retro && /\byesterday\b/.test(sentence) ? "-1" : "0",
+    },
+    input.words,
+    input.night ?? false,
+  );
+  if (!hit.found) {
+    return { reason: hit.reason, match: null, dayOffset: null, minutes: null };
+  }
+  if (input.blocked.length > 0 && hasAnyWord(text, [], input.blocked)) {
+    return {
+      reason: "blocked",
+      match: hit.match,
+      dayOffset: null,
+      minutes: null,
+    };
+  }
+  return {
+    reason: "counted",
+    match: hit.match,
+    dayOffset: Number(hit.day),
+    minutes: trackerMinutes(input.measure, hit.sentence),
+  };
 }

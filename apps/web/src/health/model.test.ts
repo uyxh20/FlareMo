@@ -11,7 +11,11 @@ import {
   healthWeekdayShort,
   healthYearWeeks,
 } from "./model";
-import { healthTestEntry, healthTestNight } from "./test-fixtures";
+import {
+  healthTestEntry,
+  healthTestNight,
+  healthTestTrackers,
+} from "./test-fixtures";
 
 describe("units", () => {
   it("writes halves the way people do", () => {
@@ -33,6 +37,16 @@ describe("days", () => {
 });
 
 describe("chip text", () => {
+  it("names an owner's tracker by its label, with hours", () => {
+    const entry = healthTestEntry({
+      kind: "t:fast00000001",
+      variant: null,
+      minutes: 960,
+    });
+    expect(healthChipText(entry, healthTestTrackers())).toBe("Fasting · 16 h");
+    expect(healthChipText({ ...entry, minutes: null }, [])).toBe("Tracker");
+  });
+
   it("names a training session by its variant", () => {
     expect(healthChipText(healthTestEntry({ variant: "gym" }))).toBe("Gym");
     expect(healthChipText(healthTestEntry({ variant: "back" }))).toBe(

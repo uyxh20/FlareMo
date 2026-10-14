@@ -25,6 +25,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   healthFetchWeek: vi.fn(),
+  healthFetchTrackers: vi.fn().mockResolvedValue({ trackers: [] }),
 }));
 
 const fetchWeek = vi.mocked(healthFetchWeek);
@@ -65,6 +66,7 @@ const WEEK: HealthWeekResponse = {
       year_used: 3.5,
     },
   },
+  trackers: [],
 };
 
 let mounted: PlannerTestMount | undefined;

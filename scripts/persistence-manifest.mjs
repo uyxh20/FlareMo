@@ -73,6 +73,9 @@ export const RESTORE_TABLES = [
   "health_entry_event",
   "health_target",
   "health_sync_state",
+  // Trackers the owner edits in the app (migrations/9011_planner_health_trackers.sql).
+  "health_tracker",
+  "health_tracker_event",
 ];
 
 // Derived tables that must not be restored verbatim, because a stale copy

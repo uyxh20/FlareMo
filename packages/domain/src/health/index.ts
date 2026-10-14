@@ -12,4 +12,5 @@ export * from "./parse";
 export * from "./read";
 export * from "./rows";
 export * from "./sync";
+export * from "./trackers";
 export * from "./write";
