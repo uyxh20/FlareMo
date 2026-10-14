@@ -557,7 +557,7 @@ function Split({
   );
 }
 
-/** One part of a split row: a dot, the goal's heading, its mark, its points as chips. */
+/** One part of a split row: the goal's heading, its mark, its points as chips. */
 function MapUnit({
   goal,
   mark,
@@ -587,7 +587,6 @@ function MapUnit({
       onClick={onClick}
     >
       <span className="planner-u-h">
-        <i aria-hidden="true" className="planner-dot" />
         <span className="planner-u-t">{head}</span>
         {shown && (
           <span

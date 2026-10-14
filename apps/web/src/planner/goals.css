@@ -587,10 +587,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
     transform 0.12s,
     border-color 0.12s;
 }
-.planner-u .planner-dot {
-  width: 7px;
-  height: 7px;
-}
 .planner-u-t {
   display: -webkit-box;
   min-width: 0;
@@ -690,10 +686,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 }
 .planner-split[data-strong] .planner-u-t {
   font-weight: 650;
-}
-.planner-split[data-strong] .planner-dot {
-  width: 10px;
-  height: 10px;
 }
 /* Only the current month and week are coloured (fork change, 2026-10-14). */
 .planner-split[data-current] {
