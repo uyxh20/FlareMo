@@ -3,8 +3,6 @@ import {
   type PlannerHorizon,
   plannerHorizons,
   plannerIsValidDayKey,
-  plannerIsValidLevel,
-  plannerLevelPattern,
   plannerNextPeriodStart,
   plannerPeriodStart,
   plannerQuarterLabel,
@@ -478,52 +476,6 @@ describe("plannerTodayWithinBounds", () => {
     expect(
       plannerTodayWithinBounds("2026-10-05", Number.POSITIVE_INFINITY),
     ).toBe(false);
-  });
-});
-
-describe("plannerIsValidLevel", () => {
-  it("accepts lowercase slugs of 1 to 24 characters", () => {
-    for (const level of [
-      "area",
-      "year",
-      "quarter",
-      "goal",
-      "milestone",
-      "a",
-      "q1",
-      "key-result",
-      "a-b-c",
-      `a${"b".repeat(23)}`,
-    ]) {
-      expect(plannerIsValidLevel(level), level).toBe(true);
-    }
-  });
-
-  it("rejects everything else", () => {
-    for (const level of [
-      "",
-      "1a",
-      "-a",
-      "A",
-      "Goal",
-      "go al",
-      "go_al",
-      "go.al",
-      "gôal",
-      "goal\n",
-      " goal",
-      `a${"b".repeat(24)}`,
-      null,
-      undefined,
-      5,
-      ["goal"],
-    ]) {
-      expect(plannerIsValidLevel(level), String(level)).toBe(false);
-    }
-  });
-
-  it("exposes the pattern for request schemas", () => {
-    expect(plannerLevelPattern.source).toBe("^[a-z][a-z0-9-]{0,23}$");
   });
 });
 

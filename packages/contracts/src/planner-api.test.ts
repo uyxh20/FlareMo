@@ -33,17 +33,11 @@ import {
   plannerPlanInputSchema,
   plannerRolloverResponseSchema,
   plannerRolloverSchema,
-  plannerRollupQuerySchema,
-  plannerRollupResponseSchema,
   plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
   plannerTaskPlanResponseSchema,
-  plannerTreeNodeDtoSchema,
-  plannerTreeNodeResponseSchema,
-  plannerTreeResponseSchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
-  plannerUpdateTreeNodeSchema,
 } from "./planner";
 import type { TaskDto } from "./projects";
 
@@ -522,10 +516,7 @@ describe("planner API request schemas", () => {
 
   describe("range queries", () => {
     it("accept a day or a span and reject a reversed or invalid range", () => {
-      for (const schema of [
-        plannerHistoryRangeQuerySchema,
-        plannerRollupQuerySchema,
-      ]) {
+      for (const schema of [plannerHistoryRangeQuerySchema]) {
         expect(
           schema.safeParse({ from: "2026-10-01", to: "2026-10-07" }).success,
         ).toBe(true);
@@ -545,86 +536,6 @@ describe("planner API request schemas", () => {
         ]) {
           expect(schema.safeParse(bad).success).toBe(false);
         }
-      }
-    });
-  });
-
-  describe("plannerUpdateTreeNodeSchema", () => {
-    it("accepts each field alone, and null to clear all but the sort order", () => {
-      for (const change of [
-        { parent_project_id: "projects/a" },
-        { parent_project_id: null },
-        { level: "quarter" },
-        { level: "a" },
-        { level: "milestone-2" },
-        { level: "a".repeat(24) },
-        { level: null },
-        { period_start: "2026-10-01" },
-        { period_start: null },
-        { period_end: "2026-12-31" },
-        { period_end: null },
-        { sort_order: 3 },
-        { sort_order: -1 },
-        { sort_order: 0 },
-      ]) {
-        expect(plannerUpdateTreeNodeSchema.safeParse(change).success).toBe(
-          true,
-        );
-      }
-    });
-
-    it("keeps null as null, so a null parent can clear and an omitted one cannot", () => {
-      const cleared = plannerUpdateTreeNodeSchema.parse({
-        parent_project_id: null,
-        level: null,
-      });
-      expect(cleared.parent_project_id).toBeNull();
-      expect(cleared.level).toBeNull();
-      const untouched = plannerUpdateTreeNodeSchema.parse({ sort_order: 1 });
-      expect("parent_project_id" in untouched).toBe(false);
-      expect("level" in untouched).toBe(false);
-    });
-
-    it("rejects an empty update", () => {
-      const result = plannerUpdateTreeNodeSchema.safeParse({});
-      expect(result.success).toBe(false);
-      expect(messages(result)).toContain("At least one field must be updated.");
-    });
-
-    it("rejects a bad level, with the slug rule in the message", () => {
-      for (const level of [
-        "Quarter",
-        "QUARTER",
-        "1st",
-        "-goal",
-        "has space",
-        "under_score",
-        "",
-        "a".repeat(25),
-        5,
-      ]) {
-        const result = plannerUpdateTreeNodeSchema.safeParse({ level });
-        expect(result.success).toBe(false);
-      }
-      expect(
-        messages(
-          plannerUpdateTreeNodeSchema.safeParse({ level: "Quarter" }),
-        )[0],
-      ).toContain("lowercase slug");
-    });
-
-    it("rejects bad dates, a fractional order, an empty parent and unknown keys", () => {
-      for (const bad of [
-        { period_start: "2026-02-30" },
-        { period_end: "end of year" },
-        { sort_order: 1.5 },
-        { sort_order: "1" },
-        { parent_project_id: "" },
-        { parent_project_id: "   " },
-        { name: "Renamed" },
-        { sort_order: 1, typo: true },
-      ]) {
-        expect(plannerUpdateTreeNodeSchema.safeParse(bad).success).toBe(false);
       }
     });
   });
@@ -695,25 +606,6 @@ const EVENT = {
   occurred_at: "2026-10-07T09:00:00.000Z",
   created_at: "2026-10-07T09:00:00.000Z",
 } as const;
-
-const NODE = {
-  id: "projects/a",
-  name: "Home",
-  status: "active",
-  parent_project_id: null,
-  level: "area",
-  period_start: null,
-  period_end: null,
-  sort_order: 0,
-} as const;
-
-const COUNTS = {
-  open_tasks: 2,
-  done_tasks: 1,
-  planned_in_range: 2,
-  done_in_range: 1,
-  carried_in_range: 0,
-};
 
 describe("planner API response schemas", () => {
   it("describe a board, with the dropped column only when present", () => {
@@ -859,42 +751,6 @@ describe("planner API response schemas", () => {
     ).toBe(false);
   });
 
-  it("describe the tree, one node and a roll-up", () => {
-    expect(plannerTreeNodeDtoSchema.parse(NODE)).toEqual(NODE);
-    expect(plannerTreeResponseSchema.parse({ nodes: [NODE] })).toEqual({
-      nodes: [NODE],
-    });
-    expect(plannerTreeNodeResponseSchema.parse({ node: NODE })).toEqual({
-      node: NODE,
-    });
-    expect(
-      plannerTreeNodeDtoSchema.safeParse({ ...NODE, status: "deleted" })
-        .success,
-    ).toBe(false);
-
-    const rollup = {
-      project_id: "projects/a",
-      from: "2026-10-01",
-      to: "2026-10-31",
-      nodes: [
-        {
-          id: "projects/a",
-          name: "Home",
-          parent_project_id: null,
-          level: "area",
-          depth: 0,
-          ...COUNTS,
-        },
-      ],
-      total: COUNTS,
-    };
-    expect(plannerRollupResponseSchema.parse(rollup)).toEqual(rollup);
-    expect(
-      plannerRollupResponseSchema.safeParse({ ...rollup, total: undefined })
-        .success,
-    ).toBe(false);
-  });
-
   const COMMENT = {
     id: "5b0e6a6c-6c0f-4d3a-9a52-1f3f0f0c2f11",
     task_id: "tasks/1",
@@ -926,14 +782,13 @@ describe("planner API response schemas", () => {
     ).toBe(false);
   });
 
-  it("describe the task panel's detail: task, plan with effort, project with its path, comments", () => {
+  it("describe the task panel's detail: task, plan with effort, project, comments", () => {
     const detail = {
       task: { ...TASK, notes: "Some notes" },
       plan: { ...PLAN, effort: 3.5 },
       project: {
         id: "projects/marathon",
         name: "Run a marathon",
-        ancestors: [{ id: "projects/health", name: "Health" }],
       },
       comments: [COMMENT],
     };
@@ -949,11 +804,11 @@ describe("planner API response schemas", () => {
         missing,
       ).toBe(false);
     }
-    // A project needs its path, even when it is empty.
+    // A project needs its name.
     expect(
       plannerTaskDetailResponseSchema.safeParse({
         ...bare,
-        project: { id: "projects/home", name: "Home" },
+        project: { id: "projects/home" },
       }).success,
     ).toBe(false);
   });
@@ -986,7 +841,6 @@ describe("planner API response schemas", () => {
     expectTypeOf<PlannerTaskDetailResponse["project"]>().toEqualTypeOf<{
       id: string;
       name: string;
-      ancestors: Array<{ id: string; name: string }>;
     } | null>();
     expectTypeOf<PlannerCommentDto>().toEqualTypeOf<
       z.infer<typeof plannerCommentDtoSchema>

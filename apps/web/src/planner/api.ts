@@ -7,7 +7,6 @@ import type {
   PlannerTaskDetailResponse,
   PlannerTaskHistoryResponse,
   PlannerTaskPlanResponse,
-  PlannerTreeResponse,
   PlannerUpdateTaskInput,
 } from "@flaremo/contracts";
 import type { Task } from "@/api";
@@ -111,11 +110,6 @@ export function plannerFetchTaskHistory(taskId: string) {
   return apiRequest<PlannerTaskHistoryResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/history`,
   );
-}
-
-/** The goal tree: every live project with its parent, for the goals' paths. */
-export function plannerFetchTree() {
-  return apiRequest<PlannerTreeResponse>(`${PLANNER_API}/tree`);
 }
 
 /** Adds a comment to a task. The server trims the text and keeps 1 to 5000 characters. */

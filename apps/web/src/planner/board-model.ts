@@ -327,20 +327,6 @@ export function plannerPredictPriority(
   return { ...card, priority, updated_at: now.toISOString() };
 }
 
-/** Moving a task to another goal (or to none): its project and the name the card shows. */
-export function plannerPredictProject(
-  card: PlannerBoardCard,
-  project: { id: string; name: string } | null,
-  now: Date,
-): PlannerBoardCard {
-  return {
-    ...card,
-    project_id: project?.id ?? null,
-    project_name: project?.name ?? null,
-    updated_at: now.toISOString(),
-  };
-}
-
 /** The weekly goal the task serves, or null; it never moves the card. */
 export function plannerPredictGoal(
   card: PlannerBoardCard,

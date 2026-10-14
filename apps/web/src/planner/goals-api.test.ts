@@ -25,7 +25,6 @@ import {
   plannerStreamCoach,
   plannerStreamMemo,
   plannerUpdateGoalRequest,
-  plannerUpdateWeekRequest,
 } from "./goals-api";
 
 // Sunday 11 October 2026: the review looks back on the week of Monday 5 October.
@@ -168,14 +167,6 @@ describe("goals and weeks", () => {
     );
     expect(calls[2]?.init.method).toBe("DELETE");
     expect(calls[2]?.init.body).toBeUndefined();
-  });
-
-  it("patches a week's record by its Monday, a null score clearing it", async () => {
-    const calls = stubFetch(200, { week: {} });
-    await plannerUpdateWeekRequest(WEEK, { auth: 4.5, ach: null });
-    expect(calls[0]?.url).toBe("/api/app/planner/weeks/2026-10-05");
-    expect(calls[0]?.init.method).toBe("PATCH");
-    expect(bodyOf(calls[0])).toEqual({ auth: 4.5, ach: null });
   });
 });
 

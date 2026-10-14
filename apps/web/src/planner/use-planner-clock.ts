@@ -5,8 +5,8 @@ import { todayKey } from "@/lib/calendar-date";
 // docs/planning-cockpit-implementation-plan.md, section 4): the client's local
 // calendar day, which the server accepts within one day of its own UTC date. It is
 // state, not a constant, because a cockpit left open overnight must notice that
-// the day changed: the page re-runs rollover for the new day, and everything
-// that is "today" moves with it.
+// the day changed: the board is read again for the new day, and everything that
+// is "today" moves with it.
 
 /** Milliseconds from `now` to two seconds past the next local midnight. */
 export function plannerMsUntilMidnight(now: Date): number {

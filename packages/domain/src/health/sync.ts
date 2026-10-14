@@ -4,6 +4,7 @@ import {
   type HealthTrackerDraft,
   type HealthTrackerPreviewResponse,
   healthKinds,
+  healthMaxMemoChars,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { memos } from "@flaremo/db";
@@ -349,8 +350,8 @@ async function readScanMemos(
       deletedAt: memos.deletedAt,
       source: memos.source,
       tags: sql<string | null>`json_extract(${memos.payload}, '$.tags')`,
-      content: sql<string>`CASE WHEN length(${memos.content}) <= 1500 THEN ${memos.content} ELSE '' END`,
-      length: sql<number>`length(${memos.content})`,
+      // A memo over the limit comes back blank, which reads as no entries.
+      content: sql<string>`CASE WHEN length(${memos.content}) <= ${healthMaxMemoChars} THEN ${memos.content} ELSE '' END`,
     })
     .from(memos)
     .where(where)
@@ -375,8 +376,7 @@ async function readScanMemos(
       deletedAt: row.deletedAt,
       source: row.source,
       payload: { tags },
-      // A memo over the limit is never read; keep it from being parsed.
-      content: row.length > 1500 ? "x".repeat(1501) : row.content,
+      content: row.content,
     };
   });
 }

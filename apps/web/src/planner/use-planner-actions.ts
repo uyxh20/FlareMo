@@ -5,7 +5,6 @@ import type {
   PlannerPlanInput,
   PlannerTaskDetailResponse,
   PlannerTaskPlanResponse,
-  PlannerTaskProject,
   TaskPriority,
 } from "@flaremo/contracts";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
@@ -31,7 +30,6 @@ import {
   plannerPredictMove,
   plannerPredictPlan,
   plannerPredictPriority,
-  plannerPredictProject,
   plannerPredictStartDate,
   plannerPredictTitle,
   plannerPredictUndrop,
@@ -97,11 +95,6 @@ export type PlannerActions = {
   /** The panel's title: trimmed by the server like any upstream title. */
   setTitle: (card: PlannerBoardCard, title: string) => void;
   setPriority: (card: PlannerBoardCard, priority: TaskPriority) => void;
-  /** The panel's goal: a project with its path above it, or null for none. */
-  setProject: (
-    card: PlannerBoardCard,
-    project: PlannerTaskProject | null,
-  ) => void;
   /** The panel's goal: one of the cockpit week's goals, or null for none. */
   setGoal: (card: PlannerBoardCard, goalId: string | null) => void;
   /** The panel's effort estimate, 0 to 999 with at most one decimal, or null. */
@@ -195,8 +188,6 @@ export function usePlannerActions(input: {
         failure: string;
         /** Whether the change can put the card out of sight. Default true. */
         reveal?: boolean;
-        /** The project name the card shows after the edit; default: the one it had. */
-        projectName?: string | null;
         /** Place the predicted card here in its column (a drag-and-drop move). */
         position?: PlannerMovePosition;
       },
@@ -240,9 +231,7 @@ export function usePlannerActions(input: {
             const answered = plannerCardFromTask(
               response.task,
               response.plan,
-              options.projectName === undefined
-                ? card.project_name
-                : options.projectName,
+              card.project_name,
             );
             // The neighbours still hold the keys the prediction gave them, which
             // the server's key for this card does not fit; keep the predicted one
@@ -364,7 +353,6 @@ export function usePlannerActions(input: {
                   },
                   today,
                   text(),
-                  "phrase",
                 )?.label
               : null;
             return label
@@ -423,22 +411,6 @@ export function usePlannerActions(input: {
             plannerPredictPriority(current, priority, new Date()),
           request: () => plannerUpdateTaskRequest(card.id, { today, priority }),
           failure: text().toast.priorityFailed,
-          reveal: false,
-        });
-      },
-
-      setProject: (card, project) => {
-        void edit(card, {
-          predict: (current) =>
-            plannerPredictProject(current, project, new Date()),
-          predictDetail: (detail) => ({ ...detail, project }),
-          request: () =>
-            plannerUpdateTaskRequest(card.id, {
-              today,
-              project_id: project?.id ?? null,
-            }),
-          projectName: project?.name ?? null,
-          failure: text().toast.goalFailed,
           reveal: false,
         });
       },

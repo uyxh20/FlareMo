@@ -10,11 +10,11 @@ Everything here is in the fork's own files. The upstream files carry only a few 
 
 A note is read at save time and again by a nightly safety net (see "Keeping it in step"). The reader is a pure, deterministic function (`packages/domain/src/health/parse.ts`); nothing is sent to a model.
 
-| Kind        | What it looks for                                                                          | Row holds                                                    |
-| ----------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| `training`  | A gym, CrossFit, push, pull, back, chest, legs, upper-body or cardio session that was done | `variant`, optional `minutes` (cardio), optional `feel` word |
-| `breath`    | Wim Hof or meditation, with minutes when given (10 when not)                               | `variant` (`wim_hof`, `meditation`), `minutes`               |
-| `night_out` | A night out, with the time the owner got home when the note says one                       | `home_at`, `units`, `bender`, `needs_check`                  |
+| Kind | What it looks for | Row holds |
+| --- | --- | --- |
+| `training` | A gym, CrossFit, push, pull, back, chest, legs, upper-body or cardio session that was done | `variant`, optional `minutes` (cardio), optional `feel` word |
+| `breath` | Wim Hof or meditation, with minutes when given (10 when not) | `variant` (`wim_hof`, `meditation`), `minutes` |
+| `night_out` | A night out, with the time the owner got home when the note says one | `home_at`, `units`, `bender`, `needs_check` |
 
 A plan is not a session: "tomorrow gym", "going to the gym later" and "no gym today" produce nothing. A note with a skip tag (`vault-summary`, `vault-theme`, `vault-thinking`, `vault-tracker`, `seed`, `agent-memory`), one written by the weekly review, or one longer than 1500 characters is never read. A note of 300 to 1500 characters is read only when it carries an explicit tag or a "done" word next to the keyword.
 
@@ -33,24 +33,18 @@ New trackers show as a tile in the last 7 days, a row in the year grid and the w
 
 ### Which day a note belongs to
 
-Days are local days in `Europe/Copenhagen` (`FORK_HEALTH_TIME_ZONE`), computed with `Intl`, not the machine's zone. A training or breath note belongs to the day it was written. A night belongs to the day the evening **started**:
-
-- "tonight", "this evening", or a note written from 14:00 on belongs to that day;
-- "last night", "yesterday", or a note written before 14:00 belongs to the day before;
-- a weekday name ("Friday night") belongs to the most recent such weekday.
-
-A leading timestamp such as `[2026-10-09 23:40]` is stripped before reading.
+Days are local days in `Europe/Copenhagen` (`FORK_HEALTH_TIME_ZONE`), computed with `Intl`, not the machine's zone. A training or breath note belongs to the day it was written. A night belongs to the day the evening started. The exact rules (day words, weekday names, the cut-off hour, and the stripping of a leading timestamp) are defined by the `CASES` table in `packages/domain/src/health/parse.test.ts`, with the `healthLocalMoment` and `healthStripTimestampPrefix` tests beside it. Read that table, not this page, when in doubt.
 
 ### Night units
 
 The unit is decided by when the owner got home:
 
-| Home                                      | Units | Notes                         |
-| ----------------------------------------- | ----- | ----------------------------- |
-| Before 00:00                              | 0     | A social evening, not counted |
-| 00:00 to 02:59                            | 0.5   |                               |
-| 03:00 to 05:59                            | 1     |                               |
-| 06:00 or later, or "morning", or a bender | 1     | `bender = true`               |
+| Home | Units | Notes |
+| --- | --- | --- |
+| Before 00:00 | 0 | A social evening, not counted |
+| 00:00 to 02:59 | 0.5 |  |
+| 03:00 to 05:59 | 1 |  |
+| 06:00 or later, or "morning", or a bender | 1 | `bender = true` |
 
 A bare hour 7 to 11 after "til" or "until" is taken as the evening (`til 9` is 21:00). A note with a night out but no time and no bender gets `needs_check = true` and `units = null`: it is shown as a dashed ring, and the chip asks "home when?".
 
@@ -58,14 +52,14 @@ A bare hour 7 to 11 after "til" or "until" is taken as the evening (`til 9` is 2
 
 Created by `migrations/9010_planner_health.sql` and `9011_planner_health_trackers.sql` (hand-written, additive, not in the Drizzle journal, no foreign keys to upstream tables, like the planner's `9NNN` files). The Drizzle mirror is `packages/db/src/schema/fork-health.ts`, which is deliberately **not** in the schema barrel.
 
-| Table                  | Holds                                                                                                                                                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `health_entry`         | One row per memo and kind (a unique partial index enforces it). `deleted_at` and `dismissed` are soft; `edited` marks an owner's hand edit.                                                                                    |
-| `health_entry_event`   | Append-only history, written in the same D1 batch as each row change.                                                                                                                                                          |
-| `health_target`        | The owner's targets. Defaults when empty: training 3 a week, breath 7 a week, night out 12 units a year.                                                                                                                       |
-| `health_sync_state`    | The marker that the first full read of the diary happened.                                                                                                                                                                     |
-| `health_tracker`       | The owner's trackers (`migrations/9011_planner_health_trackers.sql`): kind `t:<id>` or a built-in kind, name, colour, what it counts, words and blocked words (JSON), linked goal (`planner_goal.id` by value), `archived_at`. |
-| `health_tracker_event` | Append-only history of every save of a tracker, written in the same batch.                                                                                                                                                     |
+| Table | Holds |
+| --- | --- |
+| `health_entry` | One row per memo and kind (a unique partial index enforces it). `deleted_at` and `dismissed` are soft; `edited` marks an owner's hand edit. |
+| `health_entry_event` | Append-only history, written in the same D1 batch as each row change. |
+| `health_target` | The owner's targets. Defaults when empty: training 3 a week, breath 7 a week, night out 12 units a year. Empty on live (counted 14 Oct 2026); the route that set it was removed, and the table is kept. |
+| `health_sync_state` | The marker that the first full read of the diary happened. |
+| `health_tracker` | The owner's trackers (`migrations/9011_planner_health_trackers.sql`): kind `t:<id>` or a built-in kind, name, colour, what it counts, words and blocked words (JSON), linked goal (`planner_goal.id` by value), `archived_at`. |
+| `health_tracker_event` | Append-only history of every save of a tracker, written in the same batch. |
 
 All six are in `RESTORE_TABLES` in `scripts/persistence-manifest.mjs`, so backups and restores include them (`pnpm persistence:check`).
 
@@ -82,22 +76,22 @@ History is never hard-deleted. A memo that goes to the trash soft-deletes its ro
 
 Mounted at `/api/app/health-tracker` (not `/api/app/health`, which is upstream's instance-info endpoint). Cookie session or PAT, same Origin rules as the rest of `/api/app/*`. Contracts are in `packages/contracts/src/fork-health.ts`; routes in `apps/worker/src/routes/health-api.ts`.
 
-| Method and path                | Does                                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------------------------- |
-| `GET /week?start=`             | Seven days (the last seven when `start` is absent): entries and a summary against targets.   |
-| `GET /year?year=`              | The year: per-day cells, night-out budget and pace, totals, nights that need a check.        |
-| `GET /memos?ids=a,b,c`         | The labels of up to 100 memos in one request (the timeline's batch).                         |
-| `PATCH /entries/:id`           | Fix a row: `home_at`, `variant`, `minutes` or `day`. Marks it `edited`.                      |
-| `POST /entries/:id/dismiss`    | Remove a label.                                                                              |
-| `POST /rescan`                 | Read the whole diary again. Returns counts of notes read and rows created, changed, removed. |
-| `GET /targets`, `PUT /targets` | Read and set the targets.                                                                    |
-| `GET /goals`                   | Each tracker linked to a goal, counted over the goal's period up to today.                   |
-| `GET /trackers`                | Every tracker: the three built-ins first, then the owner's own.                              |
-| `POST /trackers`               | A new tracker; re-reads the diary and returns the trackers and what changed.                 |
-| `PUT /trackers/:id`            | Save a tracker (a built-in id takes only `words` and `blocked`); re-reads the diary.         |
-| `DELETE /trackers/:id`         | Archive a tracker; re-reads the diary.                                                       |
-| `POST /trackers/preview`       | What a draft would change across the whole diary. Writes nothing.                            |
-| `POST /trackers/test`          | Whether one sentence counts for a draft, and why not.                                        |
+| Method and path | Does |
+| --- | --- |
+| `GET /week?start=` | Seven days (the last seven when `start` is absent): entries and a summary against targets. |
+| `GET /year?year=` | The year: per-day cells, night-out budget and pace, totals, nights that need a check. |
+| `GET /memos?ids=a,b,c` | The labels of up to 100 memos in one request (the timeline's batch). |
+| `PATCH /entries/:id` | Fix a row: `home_at`, `variant`, `minutes` or `day`. Marks it `edited`. |
+| `POST /entries/:id/dismiss` | Remove a label. |
+| `POST /rescan` | Read the whole diary again. Returns counts of notes read and rows created, changed, removed. |
+| `GET /targets` | Read the targets (always the defaults: nothing sets them any more). |
+| `GET /goals` | Each tracker linked to a goal, counted over the goal's period up to today. |
+| `GET /trackers` | Every tracker: the three built-ins first, then the owner's own. |
+| `POST /trackers` | A new tracker; re-reads the diary and returns the trackers and what changed. |
+| `PUT /trackers/:id` | Save a tracker (a built-in id takes only `words` and `blocked`); re-reads the diary. |
+| `DELETE /trackers/:id` | Archive a tracker; re-reads the diary. |
+| `POST /trackers/preview` | What a draft would change across the whole diary. Writes nothing. |
+| `POST /trackers/test` | Whether one sentence counts for a draft, and why not. |
 
 ## What shows in the app
 

@@ -9,7 +9,6 @@ import {
   plannerPredictMove,
   plannerPredictPlan,
   plannerPredictPriority,
-  plannerPredictProject,
 } from "./board-model";
 import {
   plannerCardFromDetail,
@@ -22,8 +21,6 @@ import {
   plannerIsPendingComment,
   plannerLastTouched,
   plannerPendingCommentId,
-  plannerProjectPathLabel,
-  plannerProjectPaths,
   plannerTaskIdFromParam,
   plannerTaskParamFromId,
 } from "./panel-model";
@@ -85,7 +82,7 @@ describe("plannerCardFromDetail", () => {
       detail({
         task: { ...TASK, project_id: "projects/p1", priority: "high" },
         plan: PLAN,
-        project: { id: "projects/p1", name: "Website", ancestors: [] },
+        project: { id: "projects/p1", name: "Website" },
       }),
     );
     expect(card).toMatchObject({
@@ -221,13 +218,12 @@ describe("plannerDetailWithCard", () => {
     expect(after.task.id).toBe(TASK.id);
   });
 
-  it("keeps the project's path while it is the same project, and drops it for another", () => {
+  it("keeps the project while it is the same project, and follows the card to another", () => {
     const withPath = detail({
       task: { ...TASK, project_id: "projects/p1" },
       project: {
         id: "projects/p1",
         name: "Run a marathon",
-        ancestors: [{ id: "projects/p0", name: "Health" }],
       },
     });
     const sameProject = plannerPredictPriority(
@@ -239,21 +235,21 @@ describe("plannerDetailWithCard", () => {
       withPath.project,
     );
 
-    const moved = plannerPredictProject(
-      plannerCardFromDetail(withPath),
-      { id: "projects/p2", name: "Home" },
-      NOW,
-    );
+    const moved = {
+      ...plannerCardFromDetail(withPath),
+      project_id: "projects/p2",
+      project_name: "Home",
+    };
     expect(plannerDetailWithCard(withPath, moved)).toMatchObject({
       task: { project_id: "projects/p2" },
-      project: { id: "projects/p2", name: "Home", ancestors: [] },
+      project: { id: "projects/p2", name: "Home" },
     });
 
-    const cleared = plannerPredictProject(
-      plannerCardFromDetail(withPath),
-      null,
-      NOW,
-    );
+    const cleared = {
+      ...plannerCardFromDetail(withPath),
+      project_id: null,
+      project_name: null,
+    };
     const after = plannerDetailWithCard(withPath, cleared);
     expect(after.project).toBeNull();
     expect(after.task.project_id).toBeNull();
@@ -358,93 +354,6 @@ describe("comments in the detail", () => {
     plannerDetailWithoutComment(before, "c1");
     plannerDetailReplacingComment(before, "c1", comment("c9"));
     expect(JSON.stringify(before)).toBe(snapshot);
-  });
-});
-
-describe("plannerProjectPaths", () => {
-  const node = (id: string, name: string, parent: string | null = null) => ({
-    id,
-    name,
-    parent_project_id: parent,
-  });
-
-  it("gives each project the names above it, root first", () => {
-    const paths = plannerProjectPaths([
-      node("health", "Health"),
-      node("marathon", "Run a marathon", "health"),
-      node("plan", "Training plan", "marathon"),
-      node("home", "Home"),
-    ]);
-    expect(paths.get("health")).toEqual({
-      id: "health",
-      name: "Health",
-      ancestors: [],
-    });
-    expect(paths.get("plan")).toEqual({
-      id: "plan",
-      name: "Training plan",
-      ancestors: [
-        { id: "health", name: "Health" },
-        { id: "marathon", name: "Run a marathon" },
-      ],
-    });
-    expect(paths.get("home")?.ancestors).toEqual([]);
-    expect(paths.size).toBe(4);
-  });
-
-  it("ends a walk at a parent that is not in the list", () => {
-    const paths = plannerProjectPaths([node("child", "Child", "binned")]);
-    expect(paths.get("child")?.ancestors).toEqual([]);
-  });
-
-  it("ends a walk on a cycle instead of looping", () => {
-    const paths = plannerProjectPaths([
-      node("a", "A", "b"),
-      node("b", "B", "a"),
-    ]);
-    expect(paths.get("a")?.ancestors).toEqual([{ id: "b", name: "B" }]);
-    expect(paths.get("b")?.ancestors).toEqual([{ id: "a", name: "A" }]);
-    // A project that is its own parent is a root.
-    expect(
-      plannerProjectPaths([node("self", "Self", "self")]).get("self")
-        ?.ancestors,
-    ).toEqual([]);
-  });
-
-  it("is empty for no projects", () => {
-    expect(plannerProjectPaths([]).size).toBe(0);
-  });
-});
-
-describe("plannerProjectPathLabel", () => {
-  it("joins the goals above and the project with a chevron", () => {
-    expect(
-      plannerProjectPathLabel({
-        name: "Run a marathon",
-        ancestors: [{ id: "health", name: "Health" }],
-      }),
-    ).toBe("Health › Run a marathon");
-    expect(
-      plannerProjectPathLabel({
-        name: "Training plan",
-        ancestors: [
-          { id: "a", name: "Health" },
-          { id: "b", name: "Run a marathon" },
-        ],
-      }),
-    ).toBe("Health › Run a marathon › Training plan");
-  });
-
-  it("is just the name for a root, and takes another separator", () => {
-    expect(plannerProjectPathLabel({ name: "Home", ancestors: [] })).toBe(
-      "Home",
-    );
-    expect(
-      plannerProjectPathLabel(
-        { name: "B", ancestors: [{ id: "a", name: "A" }] },
-        " / ",
-      ),
-    ).toBe("A / B");
   });
 });
 

@@ -288,7 +288,6 @@ export function plannerOnTarget(week: {
 //   POST   /goals                            201 PlannerGoalResponse
 //   PATCH  /goals/:id                        PlannerGoalResponse
 //   DELETE /goals/:id                        PlannerOkResponse
-//   PATCH  /weeks/:weekStart                 PlannerWeekResponse
 //   GET    /review?today[&week]              PlannerReviewResponse
 //   GET    /review/status?today              PlannerReviewStatusResponse
 //   PATCH  /review/:week/state               PlannerReviewStateResponse
@@ -406,21 +405,6 @@ export const plannerGoalsQuerySchema = z.object({
     .transform(Number),
   today: daySchema,
 });
-
-/** A week's record. A null score clears it; the week reads as not scored. */
-export const plannerUpdateWeekSchema = z
-  .strictObject({
-    auth: plannerScoreSchema.nullable().optional(),
-    ach: plannerScoreSchema.nullable().optional(),
-    note: z.string().trim().max(2000).nullable().optional(),
-    question: z.string().trim().max(500).nullable().optional(),
-    verdict: z.string().trim().max(1000).nullable().optional(),
-    memo_id: idSchema.nullable().optional(),
-  })
-  .refine(
-    (value) => Object.values(value).some((field) => field !== undefined),
-    "At least one field must be updated.",
-  );
 
 export const plannerReviewQuerySchema = z.object({
   today: daySchema,
@@ -818,7 +802,6 @@ export type PlannerAiStreamLine =
 export type PlannerGoalLine = z.infer<typeof plannerGoalLineSchema>;
 export type PlannerCreateGoalInput = z.input<typeof plannerCreateGoalSchema>;
 export type PlannerUpdateGoalInput = z.input<typeof plannerUpdateGoalSchema>;
-export type PlannerUpdateWeekInput = z.input<typeof plannerUpdateWeekSchema>;
 export type PlannerSaveReviewStateInput = z.input<
   typeof plannerSaveReviewStateSchema
 >;

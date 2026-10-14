@@ -11,7 +11,7 @@ FlareMo 使用 Git tag 和 GitHub Release 发布版本。仓库有瘦 CI（forma
 3. **测试门禁**：默认只跑与改动直接相关的定向用例（单个 Vitest 文件 / 单个 e2e spec），提交前过 `pnpm format`。全量 `pnpm verify`（13 步：持久化清单 + format:check + lint/typecheck + Vitest + 构建 + E2E）**只在维护者明确要求时执行**，发版也不需要；`pnpm release --verify` 可按需开启。**新增文件先过 `pnpm format`**（biome 会拦未格式化文件）。
 4. **发版准备**：更新 `CHANGELOG.md`（新增 `## vX.Y.Z` 小节，写清升级影响、Cloudflare 资源变化、Memos 兼容面变化），统一 bump 版本号——根 package.json + 全部 `apps/*`、`packages/*` 的 package.json，外加 `packages/contracts/src/openapi.ts` 的 `FLAREMO_API_VERSION`——提交 `chore(release): prepare vX.Y.Z` 并推送 main。
 5. **发版**：`pnpm release vX.Y.Z`（脚本要求工作区干净且 `HEAD == origin/main`），依次执行 deploy:dry-run、打 tag、推 tag、用 CHANGELOG 小节创建 GitHub Release。全量门禁默认跳过，需要时用 `pnpm release vX.Y.Z --verify`。
-6. **部署**：上游部署由维护者本地手动执行 `pnpm deploy`（自动应用远端 D1 migration；本地需 ≥32 字符的 `BETTER_AUTH_SECRET` 环境变量，CI 环境降级为警告，见 [deploy.md](./deploy.md)）。不存在 push 触发的上游自动部署；现有自托管 fork/deployment repository 可通过受控 push 到 `main` 或 `workflow_dispatch` 执行部署 workflow。
+6. **部署**：上游部署由维护者本地手动执行 `pnpm deploy`（自动应用远端 D1 migration；本地需 ≥32 字符的 `BETTER_AUTH_SECRET` 环境变量，CI 环境降级为警告，见 [deploy.md](./deploy.md)）。不存在 push 触发的上游自动部署；本 fork 已删除部署 workflow，同样不会自动部署，只通过 `scripts/fork/prod-deploy.mjs` 手动发布。
 
 ## 版本号
 

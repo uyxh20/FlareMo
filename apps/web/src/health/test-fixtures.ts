@@ -17,11 +17,6 @@ export function healthTestEntry(
     bender: false,
     needs_check: false,
     feel: null,
-    source: "memo",
-    memo_id: "m1",
-    edited: false,
-    created_at: "2026-10-12T18:00:00.000Z",
-    updated_at: "2026-10-12T18:00:00.000Z",
     ...overrides,
   };
 }

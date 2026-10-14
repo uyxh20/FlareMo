@@ -102,7 +102,6 @@ export function PlannerChoice<T extends string>({
   options,
   onChange,
   disabled = false,
-  className,
 }: {
   label: string;
   /** The pressed choice, or null when none is. */
@@ -110,13 +109,9 @@ export function PlannerChoice<T extends string>({
   options: ReadonlyArray<{ value: T; label: ReactNode; className?: string }>;
   onChange: (value: T) => void;
   disabled?: boolean;
-  className?: string;
 }) {
   return (
-    <fieldset
-      aria-label={label}
-      className={cn("flex min-w-0 flex-wrap gap-1.5", className)}
-    >
+    <fieldset aria-label={label} className="flex min-w-0 flex-wrap gap-1.5">
       {options.map((option) => (
         <button
           aria-pressed={option.value === value}
@@ -140,14 +135,12 @@ export function PlannerChoice<T extends string>({
 /** A goal's title and its points: bullets, or chips when every point is short. */
 export function PlannerGoalBody({
   goal,
-  className,
 }: {
   goal: Pick<PlannerGoalDto, "title" | "lines">;
-  className?: string;
 }) {
   const chips = plannerLinesAsChips(goal);
   return (
-    <div className={cn("flex min-w-0 flex-col gap-2.5", className)}>
+    <div className="flex min-w-0 flex-col gap-2.5">
       {goal.title && (
         <p className="text-[15px] leading-snug font-semibold">{goal.title}</p>
       )}

@@ -17,10 +17,7 @@ import { usePlannerStrings } from "./strings";
 // docs/planning-cockpit-implementation-plan.md, section 5): the card menu's
 // "Set due date…" asks for a day here. (The plan menu is gone, section 13.x.)
 
-/**
- * One date, asked for in a small dialog. A plan cannot start before today, so
- * "Pick a day…" passes `min`; a due date can be any day.
- */
+/** One date, asked for in a small dialog; a due date can be any day. */
 export function PlannerDayDialog({
   open,
   onOpenChange,
@@ -28,7 +25,6 @@ export function PlannerDayDialog({
   description,
   confirmLabel,
   initial,
-  min,
   onConfirm,
 }: {
   open: boolean;
@@ -37,7 +33,6 @@ export function PlannerDayDialog({
   description: string;
   confirmLabel: string;
   initial: string | null;
-  min?: string;
   onConfirm: (day: string) => void;
 }) {
   const strings = usePlannerStrings();
@@ -48,7 +43,7 @@ export function PlannerDayDialog({
     if (open) setDay(initial ?? "");
   }, [open, initial]);
 
-  const valid = plannerIsValidDayKey(day) && (min === undefined || day >= min);
+  const valid = plannerIsValidDayKey(day);
   const confirm = () => {
     if (!valid) return;
     onConfirm(day);
@@ -64,7 +59,6 @@ export function PlannerDayDialog({
         </DialogHeader>
         <Field label={strings.dayDialog.dayLabel}>
           <Input
-            min={min}
             type="date"
             value={day}
             onChange={(event) => setDay(event.target.value)}

@@ -8,7 +8,6 @@ import {
   plannerFetchTask,
   plannerFetchTaskDetail,
   plannerFetchTaskHistory,
-  plannerFetchTree,
   plannerFitsKeepalive,
   plannerIsRateLimited,
   plannerKeepaliveMaxBytes,
@@ -201,12 +200,6 @@ describe("the task panel's requests", () => {
     // Three bytes each: 10,922 of them are 32,766 bytes, 10,923 are 32,769.
     expect(plannerFitsKeepalive("€".repeat(10_922))).toBe(true);
     expect(plannerFitsKeepalive("€".repeat(10_923))).toBe(false);
-  });
-
-  it("reads the goal tree", async () => {
-    const calls = stubFetch(200, { nodes: [] });
-    await plannerFetchTree();
-    expect(calls[0]?.url).toBe("/api/app/planner/tree");
   });
 
   it("adds a comment to a task by its bare id, sending only the text", async () => {

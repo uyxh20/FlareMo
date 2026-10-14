@@ -5,15 +5,15 @@ copy of the live data, so a new commit (an upstream upgrade, the planner
 add-on) is tested on real rows before it goes live. Fork-only tooling:
 `scripts/fork/dev-env.mjs`.
 
-|                               | Live                                            | Dev                                                     |
-| ----------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
-| Worker                        | `flaremo`                                       | `flaremo-dev`                                           |
-| D1                            | `flaremo`                                       | `flaremo-dev`                                           |
-| R2                            | `flaremo-attachments`                           | `flaremo-dev-attachments`                               |
-| Queues                        | `flaremo-member-removal`, `flaremo-data-export` | `flaremo-dev-member-removal`, `flaremo-dev-data-export` |
-| Vectorize (1024 dims, cosine) | `flaremo-memos`, `flaremo-memories`             | `flaremo-dev-memos`, `flaremo-dev-memories`             |
-| Rate-limit namespace          | `1001`                                          | `2001`                                                  |
-| URL                           | `https://flaremo.ulysse-ha-19.workers.dev`      | `https://flaremo-dev.ulysse-ha-19.workers.dev`          |
+|  | Live | Dev |
+| --- | --- | --- |
+| Worker | `flaremo` | `flaremo-dev` |
+| D1 | `flaremo` | `flaremo-dev` |
+| R2 | `flaremo-attachments` | `flaremo-dev-attachments` |
+| Queues | `flaremo-member-removal`, `flaremo-data-export` | `flaremo-dev-member-removal`, `flaremo-dev-data-export` |
+| Vectorize (1024 dims, cosine) | `flaremo-memos`, `flaremo-memories` | `flaremo-dev-memos`, `flaremo-dev-memories` |
+| Rate-limit namespace | `1001` | `2001` |
+| URL | `https://flaremo.ulysse-ha-19.workers.dev` | `https://flaremo-dev.ulysse-ha-19.workers.dev` |
 
 ## Safety
 
@@ -46,7 +46,6 @@ Workers Scripts edit rights. Nothing prints the environment.
 ## Commands
 
 ```bash
-node scripts/fork/dev-env.mjs config      # local: write the dev wrangler config
 node scripts/fork/dev-env.mjs provision   # create dev resources and secrets
 node scripts/fork/dev-env.mjs clone       # copy live data, rehearse migrations
 node scripts/fork/dev-env.mjs deploy      # build, migrate, deploy the dev Worker
@@ -106,7 +105,6 @@ node scripts/fork/prod-deploy.mjs status                    # read-only
 node scripts/fork/prod-deploy.mjs deploy --dry-run          # everything except the writes
 node scripts/fork/prod-deploy.mjs deploy --confirm flaremo  # the real thing
 node scripts/fork/prod-deploy.mjs rollback --confirm flaremo
-node scripts/fork/prod-deploy.mjs config                    # just rebuild wrangler.jsonc
 ```
 
 `deploy` refuses unless HEAD equals `origin/main` and the tree is clean. Steps:

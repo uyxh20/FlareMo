@@ -82,7 +82,7 @@ const PLAN = {
 const DETAIL: PlannerTaskDetailResponse = {
   task: TASK,
   plan: PLAN,
-  project: { id: "projects/web", name: "Website relaunch", ancestors: [] },
+  project: { id: "projects/web", name: "Website relaunch" },
   comments: [],
 };
 
@@ -314,72 +314,6 @@ describe("an edit made from the panel", () => {
     actions.setEffort(card, 9);
     await flush();
     expect(detail()?.plan?.effort).toBe(4);
-  });
-
-  it("moves the task to another project on both views, with the path asked for", async () => {
-    const card = seed();
-    const home = {
-      id: "projects/home",
-      name: "Home",
-      ancestors: [{ id: "projects/life", name: "Life" }],
-    };
-    const request = pendingRequest<PlannerTaskPlanResponse>();
-    update.mockReturnValue(request.promise);
-
-    actions.setProject(card, home);
-    await flush();
-
-    expect(update).toHaveBeenCalledWith(TASK_ID, {
-      today: TODAY,
-      project_id: "projects/home",
-    });
-    expect(boardCard()).toMatchObject({
-      project_id: "projects/home",
-      project_name: "Home",
-    });
-    expect(detail()?.project).toEqual(home);
-    expect(detail()?.task.project_id).toBe("projects/home");
-
-    request.resolve({
-      task: { ...TASK, project_id: "projects/home" },
-      plan: PLAN,
-    });
-    await flush();
-    // The answer has no project name: the card keeps the new one, not the old.
-    expect(boardCard()?.project_name).toBe("Home");
-    expect(detail()?.project).toEqual(home);
-  });
-
-  it("takes the task out of its project with null", async () => {
-    const card = seed();
-    update.mockResolvedValue({
-      task: { ...TASK, project_id: null },
-      plan: PLAN,
-    });
-    actions.setProject(card, null);
-    await flush();
-    expect(update).toHaveBeenCalledWith(TASK_ID, {
-      today: TODAY,
-      project_id: null,
-    });
-    expect(boardCard()).toMatchObject({ project_id: null, project_name: null });
-    expect(detail()?.project).toBeNull();
-  });
-
-  it("puts a project back after a refusal, name and path included", async () => {
-    const card = seed();
-    update.mockRejectedValue(new ApiError("No such project", 404));
-    actions.setProject(card, {
-      id: "projects/gone",
-      name: "Gone",
-      ancestors: [],
-    });
-    await flush();
-    expect(boardCard()).toMatchObject({
-      project_id: "projects/web",
-      project_name: "Website relaunch",
-    });
-    expect(detail()?.project).toEqual(DETAIL.project);
   });
 
   it("ties the task to a weekly goal on both views before the server answers", async () => {

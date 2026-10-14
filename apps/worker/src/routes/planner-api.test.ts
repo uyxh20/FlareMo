@@ -6,12 +6,9 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerHistoryRangeResponse,
   type PlannerRolloverResponse,
-  type PlannerRollupResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
-  type PlannerTreeNodeResponse,
-  type PlannerTreeResponse,
   plannerBoardResponseSchema,
   plannerColumnSchema,
   plannerCommentBodyMax,
@@ -22,12 +19,9 @@ import {
   plannerHistoryRangeResponseSchema,
   plannerPeriodStart,
   plannerRolloverResponseSchema,
-  plannerRollupResponseSchema,
   plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
   plannerTaskPlanResponseSchema,
-  plannerTreeNodeResponseSchema,
-  plannerTreeResponseSchema,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { createDb } from "@flaremo/db";
@@ -400,11 +394,7 @@ describe("planner API", () => {
   // --- the endpoints, for the credential tables --------------------------------
 
   /** Every route with a body that is valid, so a failure comes from auth alone. */
-  const endpoints = (
-    taskId = "tasks/none",
-    projectId = "projects/none",
-    commentId = "none",
-  ) => {
+  const endpoints = (taskId = "tasks/none", commentId = "none") => {
     const range = `from=${TODAY}&to=${TODAY}`;
     return [
       { method: "GET", path: `/board?today=${TODAY}` },
@@ -434,20 +424,11 @@ describe("planner API", () => {
       },
       { method: "DELETE", path: `/comments/${commentId}` },
       { method: "GET", path: `/history?${range}` },
-      { method: "GET", path: "/tree" },
-      {
-        method: "PATCH",
-        path: `/tree/${bare(projectId)}`,
-        body: { level: "area" },
-      },
-      { method: "GET", path: `/tree/${bare(projectId)}/rollup?${range}` },
     ] as const;
   };
 
-  const mutations = (taskId?: string, projectId?: string, commentId?: string) =>
-    endpoints(taskId, projectId, commentId).filter(
-      (entry) => entry.method !== "GET",
-    );
+  const mutations = (taskId?: string, commentId?: string) =>
+    endpoints(taskId, commentId).filter((entry) => entry.method !== "GET");
 
   // ===========================================================================
   // Authentication and the Origin rules
@@ -499,10 +480,9 @@ describe("planner API", () => {
 
     it("refuses a cookie-session state change without FlareMo's Origin, and applies it with one", async () => {
       const task = await createTask("Origin check");
-      const projectId = await createProject("Origin project");
       const comment = await createComment(task.id, "Origin comment");
 
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const label = `${entry.method} ${entry.path}`;
         for (const origin of [
           undefined,
@@ -534,7 +514,7 @@ describe("planner API", () => {
       ).toEqual([{ body: "Origin comment", deleted_at: null }]);
 
       // The same requests with the right Origin go through.
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -560,7 +540,6 @@ describe("planner API", () => {
       for (const entry of endpoints(task.id).filter(
         (e) => e.method === "GET",
       )) {
-        if (entry.path.includes("/tree/")) continue; // needs a real project
         const response = await request("GET", `${API}${entry.path}`, {
           headers: { cookie: ctx.cookie },
         });
@@ -783,9 +762,7 @@ describe("planner API", () => {
   describe("validation", () => {
     it("answers 400 and writes nothing for a bad horizon, day, level, column and key", async () => {
       const task = await createTask("Untouched");
-      const projectId = await createProject("Untouched project");
       const taskPath = `${API}/tasks/${bare(task.id)}`;
-      const treePath = `${API}/tree/${bare(projectId)}`;
       const eventsBefore = await count("planner_task_event");
 
       const bad: Array<[string, string, unknown]> = [
@@ -844,14 +821,6 @@ describe("planner API", () => {
         ["PATCH", taskPath, { today: TODAY, title: "   " }],
         ["PATCH", taskPath, { today: TODAY, due_at: "tomorrow" }],
         ["POST", `${API}/tasks`, { title: "   ", today: TODAY }],
-        // the goal tree
-        ["PATCH", treePath, { level: "Quarter" }],
-        ["PATCH", treePath, { level: "1st" }],
-        ["PATCH", treePath, { level: "a".repeat(25) }],
-        ["PATCH", treePath, {}],
-        ["PATCH", treePath, { period_start: "2026-02-30" }],
-        ["PATCH", treePath, { sort_order: 1.5 }],
-        ["PATCH", treePath, { name: "Renamed" }],
         ["POST", `${API}/rollover`, { today: TODAY, extra: 1 }],
       ];
       for (const [method, path, requestBody] of bad) {
@@ -888,7 +857,6 @@ describe("planner API", () => {
       );
       expect(notJson.status).toBe(400);
 
-      const projectId = await createProject("Ranged project");
       const day = TODAY;
       for (const query of [
         // the board
@@ -903,8 +871,6 @@ describe("planner API", () => {
         `${API}/history?from=${day}`,
         `${API}/history?from=${shiftDay(day, 1)}&to=${day}`,
         `${API}/history?from=2026-02-30&to=${day}`,
-        `${API}/tree/${bare(projectId)}/rollup?from=${shiftDay(day, 1)}&to=${day}`,
-        `${API}/tree/${bare(projectId)}/rollup?from=${day}`,
       ]) {
         expect((await send("GET", query)).status, query).toBe(400);
       }
@@ -2000,411 +1966,6 @@ describe("planner API", () => {
   });
 
   // ===========================================================================
-  // The goal tree
-  // ===========================================================================
-
-  describe("goal tree", () => {
-    const patchNode = (projectId: string, change: Record<string, unknown>) =>
-      send("PATCH", `${API}/tree/${bare(projectId)}`, change);
-
-    const nodeOk = async (projectId: string, change: Record<string, unknown>) =>
-      onTheWire(
-        plannerTreeNodeResponseSchema,
-        await body<PlannerTreeNodeResponse>(patchNode(projectId, change)),
-      ).node;
-
-    const tree = async () =>
-      onTheWire(
-        plannerTreeResponseSchema,
-        await body<PlannerTreeResponse>(send("GET", `${API}/tree`)),
-      ).nodes;
-
-    it("lists every live project, a root with no level until it is given one", async () => {
-      const area = await createProject("Area");
-      await createProject("Loose project");
-
-      const nodes = await tree();
-      expect(nodes).toHaveLength(2);
-      expect(nodes.find((node) => node.id === area)).toEqual({
-        id: area,
-        name: "Area",
-        status: "active",
-        parent_project_id: null,
-        level: null,
-        period_start: null,
-        period_end: null,
-        sort_order: 0,
-      });
-    });
-
-    it("nests projects with level, period and order, and merges them into the list", async () => {
-      const area = await createProject("Health");
-      const goal = await createProject("Run a marathon");
-      const milestone = await createProject("Half marathon");
-
-      expect(await nodeOk(area, { level: "area" })).toMatchObject({
-        id: area,
-        level: "area",
-        parent_project_id: null,
-      });
-      expect(
-        await nodeOk(goal, {
-          parent_project_id: area,
-          level: "goal",
-          period_start: "2026-01-01",
-          period_end: "2026-12-31",
-          sort_order: 2,
-        }),
-      ).toEqual({
-        id: goal,
-        name: "Run a marathon",
-        status: "active",
-        parent_project_id: area,
-        level: "goal",
-        period_start: "2026-01-01",
-        period_end: "2026-12-31",
-        sort_order: 2,
-      });
-      await nodeOk(milestone, {
-        parent_project_id: goal,
-        level: "milestone",
-      });
-
-      const nodes = await tree();
-      const parents = Object.fromEntries(
-        nodes.map((node) => [node.name, node.parent_project_id]),
-      );
-      expect(parents).toEqual({
-        Health: null,
-        "Run a marathon": area,
-        "Half marathon": goal,
-      });
-      // Ordered by sort_order, then creation.
-      expect(nodes.map((node) => node.name)).toEqual([
-        "Health",
-        "Half marathon",
-        "Run a marathon",
-      ]);
-    });
-
-    it("keeps a field you leave out, clears one you send as null, and keeps the children", async () => {
-      const area = await createProject("Area");
-      const goal = await createProject("Goal");
-      const task = await createProject("Task project");
-      await nodeOk(goal, {
-        parent_project_id: area,
-        level: "goal",
-        period_start: "2026-01-01",
-        period_end: "2026-03-31",
-        sort_order: 4,
-      });
-      await nodeOk(task, { parent_project_id: goal });
-
-      // Only the order changes: parent, level and period stay.
-      expect(await nodeOk(goal, { sort_order: 9 })).toMatchObject({
-        parent_project_id: area,
-        level: "goal",
-        period_start: "2026-01-01",
-        period_end: "2026-03-31",
-        sort_order: 9,
-      });
-      // Null clears: the level and the period go, the parent stays.
-      expect(
-        await nodeOk(goal, {
-          level: null,
-          period_start: null,
-          period_end: null,
-        }),
-      ).toMatchObject({
-        parent_project_id: area,
-        level: null,
-        period_start: null,
-        period_end: null,
-        sort_order: 9,
-      });
-      // A null parent makes it a root, and its own child stays under it.
-      expect(await nodeOk(goal, { parent_project_id: null })).toMatchObject({
-        parent_project_id: null,
-      });
-      const nodes = await tree();
-      expect(nodes.find((node) => node.id === task)?.parent_project_id).toBe(
-        goal,
-      );
-      // Upserting the parent never nulls its children (no INSERT OR REPLACE).
-      await nodeOk(goal, { level: "goal" });
-      expect(
-        (await tree()).find((node) => node.id === task)?.parent_project_id,
-      ).toBe(goal);
-    });
-
-    it("refuses a cycle with 409, a project as its own parent included", async () => {
-      const a = await createProject("A");
-      const b = await createProject("B");
-      const c = await createProject("C");
-      await nodeOk(b, { parent_project_id: a });
-      await nodeOk(c, { parent_project_id: b });
-
-      await domainError(
-        patchNode(a, { parent_project_id: c }),
-        409,
-        "ancestor",
-      );
-      await domainError(patchNode(a, { parent_project_id: b }), 409);
-      await domainError(
-        patchNode(a, { parent_project_id: a }),
-        409,
-        "own parent",
-      );
-
-      // Nothing moved.
-      expect(
-        (await tree()).find((node) => node.id === a)?.parent_project_id,
-      ).toBeNull();
-    });
-
-    it("refuses a tree deeper than six levels with 400", async () => {
-      const ids: string[] = [];
-      for (let depth = 1; depth <= 7; depth += 1) {
-        ids.push(await createProject(`Depth ${depth}`));
-      }
-      for (let depth = 1; depth < 6; depth += 1) {
-        await nodeOk(ids[depth] as string, {
-          parent_project_id: ids[depth - 1] as string,
-        });
-      }
-      // The sixth level is allowed; the seventh is not.
-      await domainError(
-        patchNode(ids[6] as string, { parent_project_id: ids[5] as string }),
-        400,
-        "6 levels",
-      );
-    });
-
-    it("accepts a bare or a namespaced project id in the path and the body", async () => {
-      const area = await createProject("Area");
-      const goal = await createProject("Goal");
-      const viaPath = await body<PlannerTreeNodeResponse>(
-        send("PATCH", `${API}/tree/${encodeURIComponent(goal)}`, {
-          parent_project_id: bare(area),
-        }),
-      );
-      expect(viaPath.node.parent_project_id).toBe(area);
-    });
-
-    it("is a 404 for a project that is missing, binned or someone else's, as itself or as a parent", async () => {
-      const mine = await createProject("Mine");
-      const binned = await createProject("Binned");
-      await body(send("DELETE", `/api/app/projects/${bare(binned)}`));
-      const member = await createMember();
-      const theirs = await body<{ project: { id: string } }>(
-        member.asMember("POST", "/api/app/projects", { name: "Theirs" }),
-        201,
-      );
-
-      await domainError(
-        patchNode("projects/no-such-project", { level: "area" }),
-        404,
-      );
-      await domainError(patchNode(binned, { level: "area" }), 404);
-      await domainError(patchNode(mine, { parent_project_id: binned }), 404);
-      await domainError(
-        patchNode(mine, { parent_project_id: "projects/none" }),
-        404,
-      );
-      // Someone else's project, as the target or as the parent.
-      await domainError(
-        member.asMember("PATCH", `${API}/tree/${bare(mine)}`, {
-          level: "area",
-        }),
-        404,
-      );
-      await domainError(
-        member.asMember("PATCH", `${API}/tree/${bare(theirs.project.id)}`, {
-          parent_project_id: mine,
-        }),
-        404,
-      );
-      await domainError(
-        patchNode(mine, { parent_project_id: theirs.project.id }),
-        404,
-      );
-
-      // None of it left a node row.
-      expect(await count("planner_project_node")).toBe(0);
-    });
-
-    it("lists only the caller's live projects", async () => {
-      const mine = await createProject("Mine");
-      const binned = await createProject("Binned");
-      await body(send("DELETE", `/api/app/projects/${bare(binned)}`));
-      const member = await createMember();
-      await body(
-        member.asMember("POST", "/api/app/projects", { name: "Theirs" }),
-        201,
-      );
-
-      expect((await tree()).map((node) => node.id)).toEqual([mine]);
-      const theirs = await body<PlannerTreeResponse>(
-        member.asMember("GET", `${API}/tree`),
-      );
-      expect(theirs.nodes.map((node) => node.name)).toEqual(["Theirs"]);
-    });
-  });
-
-  // ===========================================================================
-  // GET /tree/:projectId/rollup
-  // ===========================================================================
-
-  describe("goal tree roll-up", () => {
-    it("counts a project and everything beneath it, per node and in total", async () => {
-      const area = await createProject("Area");
-      const goal = await createProject("Goal");
-      const milestone = await createProject("Milestone");
-      const sibling = await createProject("Not in the tree");
-      await body(send("PATCH", `${API}/tree/${bare(area)}`, { level: "area" }));
-      await body(
-        send("PATCH", `${API}/tree/${bare(goal)}`, {
-          parent_project_id: area,
-          level: "goal",
-        }),
-      );
-      await body(
-        send("PATCH", `${API}/tree/${bare(milestone)}`, {
-          parent_project_id: goal,
-          level: "milestone",
-        }),
-      );
-
-      await createTask("In the area", {
-        project_id: area,
-        plan: { horizon: "day", day: TODAY },
-      });
-      const finished = await createTask("In the goal, finished", {
-        project_id: goal,
-        plan: { horizon: "week", day: TODAY },
-      });
-      await patchTaskOk(finished.id, { column: "done" });
-      await createTask("In the goal, open", { project_id: goal });
-      const dropped = await createTask("In the milestone, dropped", {
-        project_id: milestone,
-        plan: { horizon: "day", day: TODAY },
-      });
-      await patchTaskOk(dropped.id, { dropped: true });
-      await createTask("In the milestone, open", {
-        project_id: milestone,
-        plan: { horizon: "month", day: TODAY },
-      });
-      await createTask("Elsewhere", { project_id: sibling });
-      await createTask("No project");
-
-      // Wide enough for every plan whatever today is: a month plan starts on the
-      // 1st, up to 30 days back, and a week plan on the Monday before today.
-      const from = shiftDay(TODAY, -35);
-      const to = shiftDay(TODAY, 35);
-      const rollup = onTheWire(
-        plannerRollupResponseSchema,
-        await body<PlannerRollupResponse>(
-          send("GET", `${API}/tree/${bare(area)}/rollup?from=${from}&to=${to}`),
-        ),
-      );
-
-      expect(rollup).toMatchObject({ project_id: area, from, to });
-      // Parents before children, with their depth.
-      expect(
-        rollup.nodes.map((node) => [node.name, node.depth, node.level]),
-      ).toEqual([
-        ["Area", 0, "area"],
-        ["Goal", 1, "goal"],
-        ["Milestone", 2, "milestone"],
-      ]);
-      const counts = (name: string) => {
-        const { open_tasks, done_tasks, planned_in_range, done_in_range } =
-          rollup.nodes.find((node) => node.name === name) ?? {};
-        return { open_tasks, done_tasks, planned_in_range, done_in_range };
-      };
-      expect(counts("Area")).toEqual({
-        open_tasks: 1,
-        done_tasks: 0,
-        planned_in_range: 1,
-        done_in_range: 0,
-      });
-      expect(counts("Goal")).toEqual({
-        open_tasks: 1,
-        done_tasks: 1,
-        planned_in_range: 1,
-        done_in_range: 1,
-      });
-      // The dropped task is in no count.
-      expect(counts("Milestone")).toEqual({
-        open_tasks: 1,
-        done_tasks: 0,
-        planned_in_range: 1,
-        done_in_range: 0,
-      });
-      expect(rollup.total).toMatchObject({
-        open_tasks: 3,
-        done_tasks: 1,
-        planned_in_range: 3,
-        done_in_range: 1,
-        carried_in_range: 0,
-      });
-      // Asking from the goal drops the area and what is not beneath it.
-      const fromGoal = await body<PlannerRollupResponse>(
-        send(
-          "GET",
-          `${API}/tree/${bare(goal)}/rollup?from=${TODAY}&to=${TODAY}`,
-        ),
-      );
-      expect(fromGoal.nodes.map((node) => node.name)).toEqual([
-        "Goal",
-        "Milestone",
-      ]);
-      expect(fromGoal.nodes[0]?.depth).toBe(0);
-    });
-
-    it("counts carries in the range", async () => {
-      const goal = await createProject("Goal");
-      await createTask("Carried", {
-        project_id: goal,
-        plan: { horizon: "day", day: TODAY },
-      });
-      await body(
-        send("POST", `${API}/rollover`, { today: shiftDay(TODAY, 1) }),
-      );
-
-      const rollup = await body<PlannerRollupResponse>(
-        send(
-          "GET",
-          `${API}/tree/${bare(goal)}/rollup?from=${TODAY}&to=${shiftDay(TODAY, 1)}`,
-        ),
-      );
-      expect(rollup.total.carried_in_range).toBe(1);
-      expect(rollup.nodes[0]?.carried_in_range).toBe(1);
-    });
-
-    it("is a 404 for a project that is missing, binned or someone else's", async () => {
-      const mine = await createProject("Mine");
-      const binned = await createProject("Binned");
-      await body(send("DELETE", `/api/app/projects/${bare(binned)}`));
-      const member = await createMember();
-      const query = `from=${TODAY}&to=${TODAY}`;
-
-      await domainError(
-        send("GET", `${API}/tree/projects%2Fno-such-project/rollup?${query}`),
-        404,
-      );
-      await domainError(
-        send("GET", `${API}/tree/${bare(binned)}/rollup?${query}`),
-        404,
-      );
-      await domainError(
-        member.asMember("GET", `${API}/tree/${bare(mine)}/rollup?${query}`),
-        404,
-      );
-    });
-  });
-
-  // ===========================================================================
   // The task panel: detail, effort, create in a column, comments
   // ===========================================================================
 
@@ -2417,15 +1978,8 @@ describe("planner API", () => {
     ) as PlannerTaskDetailResponse;
 
   describe("GET /tasks/:id", () => {
-    it("returns the whole task with its plan, effort, goal path and comments", async () => {
-      const health = await createProject("Health");
+    it("returns the whole task with its plan, effort, goal and comments", async () => {
       const marathon = await createProject("Run a marathon");
-      await body(
-        send("PATCH", `${API}/tree/${bare(marathon)}`, {
-          parent_project_id: health,
-          level: "goal",
-        }),
-      );
       const task = await createTask("Train for it", {
         notes: "Long run on Sunday",
         priority: "high",
@@ -2459,7 +2013,6 @@ describe("planner API", () => {
       expect(detail.project).toEqual({
         id: marathon,
         name: "Run a marathon",
-        ancestors: [{ id: health, name: "Health" }],
       });
       expect(detail.comments.map((c) => [c.id, c.body, c.task_id])).toEqual([
         [first.id, "First", task.id],
@@ -2478,16 +2031,6 @@ describe("planner API", () => {
       ]);
       expect(detail).toMatchObject({ plan: null, project: null, comments: [] });
       expect(detail.task.notes).toBeNull();
-    });
-
-    it("gives a project that has no node an empty path", async () => {
-      const home = await createProject("Home");
-      const task = await createTask("Chore", { project_id: home });
-      expect((await detailOk(task.id)).project).toEqual({
-        id: home,
-        name: "Home",
-        ancestors: [],
-      });
     });
 
     it("reads a backlog task that holds only an effort: a plan with no horizon", async () => {
@@ -3383,7 +2926,6 @@ describe("planner API", () => {
   describe("rate limiting", () => {
     it("throttles every mutation in the planner bucket, per user, before it writes anything", async () => {
       const task = await createTask("Throttled");
-      const projectId = await createProject("Throttled project");
       const keys: string[] = [];
       const limitedEnv = {
         ...ctx.env,
@@ -3396,7 +2938,7 @@ describe("planner API", () => {
       } as Env;
 
       const comment = await createComment(task.id, "Throttled comment");
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -3423,7 +2965,7 @@ describe("planner API", () => {
 
       // Reads are not throttled.
       keys.length = 0;
-      for (const entry of endpoints(task.id, projectId, comment.id).filter(
+      for (const entry of endpoints(task.id, comment.id).filter(
         (e) => e.method === "GET",
       )) {
         const response = await request("GET", `${API}${entry.path}`, {
@@ -3500,17 +3042,14 @@ describe("planner API", () => {
           error: { message: "Not found" },
         });
       }
-      // There is no PUT: the tree uses PATCH, as the CORS allow-list needs.
-      const put = await send("PUT", `${API}/tree/projects%2Fnone`, {
-        level: "area",
-      });
+      // There is no PUT: task edits use PATCH, as the CORS allow-list needs.
+      const put = await send("PUT", `${API}/tasks/x`, { title: "x" });
       expect(put.status).toBe(404);
     });
 
     it("is covered by the API's CORS rules, PATCH and DELETE included", async () => {
       for (const [method, path] of [
         ["PATCH", `${API}/tasks/x`],
-        ["PATCH", `${API}/tree/x`],
         ["PATCH", `${API}/comments/x`],
         ["DELETE", `${API}/comments/x`],
         ["POST", `${API}/tasks/x/comments`],
@@ -3534,7 +3073,7 @@ describe("planner API", () => {
         );
       }
       // An untrusted origin gets no allow header.
-      const refused = await request("OPTIONS", `${API}/tree/x`, {
+      const refused = await request("OPTIONS", `${API}/tasks/x`, {
         headers: {
           origin: "https://untrusted.example",
           "access-control-request-method": "PATCH",

@@ -29,7 +29,7 @@ pnpm format
 
 ## 生产部署
 
-生产部署由维护者在本地手动执行；上游仓库不配置 push 或 CI 自动生产部署。现有自托管 fork/deployment repository 可通过 `deploy-cloudflare.yml` 的受控 push 到 `main` 或 `workflow_dispatch` 执行，不改变上游发布策略。
+生产部署由维护者在本地手动执行；上游仓库不配置 push 或 CI 自动生产部署。本 fork 已删除 `deploy-cloudflare.yml`，同样不会自动部署，只通过 `scripts/fork/prod-deploy.mjs` 手动发布。
 
 ```bash
 pnpm run deploy

@@ -12,7 +12,6 @@ import {
   plannerReviewStateResponseSchema,
   plannerReviewStatusResponseSchema,
   plannerReviewWeekFor,
-  plannerWeekResponseSchema,
   plannerWeekStartOf,
 } from "@flaremo/contracts";
 import { applyPlannerMigrations } from "@flaremo/db/src/planner-migrations";
@@ -265,17 +264,8 @@ describe("planner goals and weekly review API", () => {
     await body(call("PATCH", `/goals/${created.id}`, { title: "Gone" }), 404);
   });
 
-  it("records a week's scores in half steps", async () => {
-    const week = onTheWire(
-      plannerWeekResponseSchema,
-      await body(call("PATCH", `/weeks/${REVIEW_WEEK}`, { auth: 4, ach: 3.5 })),
-    ).week;
-    expect(week).toMatchObject({ auth: 4, ach: 3.5, source: "review" });
-    await body(call("PATCH", `/weeks/${REVIEW_WEEK}`, { auth: 4.2 }), 400);
-    await body(
-      call("PATCH", `/weeks/${plannerAddDays(REVIEW_WEEK, 1)}`, { auth: 4 }),
-      400,
-    );
+  it("has no route that writes a week's record", async () => {
+    await body(call("PATCH", `/weeks/${REVIEW_WEEK}`, { auth: 4 }), 404);
   });
 
   it("sends the cockpit's week and its goals with the board", async () => {
@@ -761,7 +751,7 @@ describe("planner goals and weekly review API", () => {
           `data: ${JSON.stringify({ choices: [{ delta: { content: "decided?" } }] })}`,
           "data: [DONE]",
         ];
-        return new Response(chunks.join("\n\n") + "\n\n", {
+        return new Response(`${chunks.join("\n\n")}\n\n`, {
           headers: { "content-type": "text/event-stream" },
         });
       }

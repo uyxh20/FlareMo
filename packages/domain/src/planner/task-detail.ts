@@ -7,24 +7,16 @@ import { taskToDto } from "../tasks";
 import { type PlannerCommentDto, plannerReadComments } from "./comments";
 import { type PlannerPlanDto, plannerPlanToDto } from "./plans";
 import { plannerLoadPlan, plannerNormalizeTaskId } from "./shared";
-import { plannerReadTree } from "./tree";
 
 // The task panel's read (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): everything one task
 // shows when its card is opened, in one response.
 
-/** The goal a task belongs to, with the path of goals above it. */
+/** The goal a task belongs to. */
 export type PlannerTaskProject = {
   /** Upstream's project id. */
   id: string;
   name: string;
-  /**
-   * The projects above it in the goal tree, the root first and ending with its
-   * own parent; empty for a root or a project with no node row. The walk stops
-   * at the first ancestor that is not a live project, the way the tree reads a
-   * child of a binned parent as a root.
-   */
-  ancestors: Array<{ id: string; name: string }>;
 };
 
 /** One task as the panel shows it. */
@@ -38,13 +30,9 @@ export type PlannerTaskDetail = {
   comments: PlannerCommentDto[];
 };
 
-// A walk up the goal tree stops here even on damaged data with a cycle.
-const WALK_CAP = 50;
-
 /**
- * The project's name and the path above it. The project itself is read from
- * `projects` (the board does the same, so a name never disappears from a card);
- * the path comes from the goal tree.
+ * The project's id and name, read from `projects` (the board does the same, so
+ * a name never disappears from a card).
  */
 async function readProject(
   db: FlareMoDb,
@@ -56,27 +44,12 @@ async function readProject(
     .from(projects)
     .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
     .get();
-  if (!project) return null;
-
-  const byId = new Map(
-    (await plannerReadTree(db, { userId })).map((node) => [node.id, node]),
-  );
-  const ancestors: PlannerTaskProject["ancestors"] = [];
-  const seen = new Set([project.id]);
-  let parentId = byId.get(project.id)?.parent_project_id ?? null;
-  while (parentId !== null && !seen.has(parentId) && seen.size <= WALK_CAP) {
-    const parent = byId.get(parentId);
-    if (!parent) break;
-    ancestors.unshift({ id: parent.id, name: parent.name });
-    seen.add(parent.id);
-    parentId = parent.parent_project_id;
-  }
-  return { id: project.id, name: project.name, ancestors };
+  return project ?? null;
 }
 
 /**
  * One of the caller's live tasks with its plan (effort included), its goal and
- * the goal's path, and its comments. A task that is missing, in the recycle bin
+ * its comments. A task that is missing, in the recycle bin
  * or someone else's is a 404, exactly like upstream's own task read.
  */
 export async function plannerReadTaskDetail(

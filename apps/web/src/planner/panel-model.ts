@@ -3,8 +3,6 @@ import type {
   PlannerCommentDto,
   PlannerPlanDto,
   PlannerTaskDetailResponse,
-  PlannerTaskProject,
-  PlannerTreeNodeDto,
   TaskDto,
 } from "@flaremo/contracts";
 import { plannerCardFromTask } from "./board-model";
@@ -82,14 +80,12 @@ export function plannerDetailWithCard(
             : (before?.updated_at ?? card.updated_at),
         };
 
-  // The project keeps its path while it is the same project; a different one
-  // starts without a path until the server's answer (or the caller) gives it.
   const project =
     card.project_id === null
       ? null
       : detail.project?.id === card.project_id
         ? detail.project
-        : { id: card.project_id, name: card.project_name ?? "", ancestors: [] };
+        : { id: card.project_id, name: card.project_name ?? "" };
 
   return { ...detail, task, plan, project };
 }
@@ -170,49 +166,6 @@ export function plannerDetailWithoutComment(
     ...detail,
     comments: detail.comments.filter((entry) => entry.id !== commentId),
   };
-}
-
-// --- Goals -------------------------------------------------------------------
-
-type PathNode = Pick<PlannerTreeNodeDto, "id" | "name" | "parent_project_id">;
-
-// A walk up the tree stops here even on a damaged tree that has a cycle.
-const WALK_CAP = 50;
-
-/**
- * Every project's goal path from the tree: its own name and the names above it,
- * root first, as the task detail's `project` carries it. A parent that is not in
- * the list (binned, or outside it) ends the walk, and so does a cycle.
- */
-export function plannerProjectPaths(
-  nodes: readonly PathNode[],
-): Map<string, PlannerTaskProject> {
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const paths = new Map<string, PlannerTaskProject>();
-  for (const node of nodes) {
-    const ancestors: PlannerTaskProject["ancestors"] = [];
-    const seen = new Set([node.id]);
-    let parentId = node.parent_project_id;
-    while (parentId !== null && !seen.has(parentId) && seen.size <= WALK_CAP) {
-      const parent = byId.get(parentId);
-      if (!parent) break;
-      ancestors.unshift({ id: parent.id, name: parent.name });
-      seen.add(parent.id);
-      parentId = parent.parent_project_id;
-    }
-    paths.set(node.id, { id: node.id, name: node.name, ancestors });
-  }
-  return paths;
-}
-
-/** "Health › Run a marathon": the goals above, then the project itself. */
-export function plannerProjectPathLabel(
-  project: Pick<PlannerTaskProject, "name" | "ancestors">,
-  separator = " › ",
-): string {
-  return [...project.ancestors.map((entry) => entry.name), project.name].join(
-    separator,
-  );
 }
 
 // --- When it was last touched ------------------------------------------------

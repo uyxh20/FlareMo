@@ -19,8 +19,6 @@ import type {
   PlannerReviewStateResponse,
   PlannerReviewStatusResponse,
   PlannerUpdateGoalInput,
-  PlannerUpdateWeekInput,
-  PlannerWeekResponse,
 } from "@flaremo/contracts";
 import {
   ApiError,
@@ -75,17 +73,6 @@ export function plannerDeleteGoalRequest(goalId: string) {
   return apiRequest<PlannerOkResponse>(
     `${PLANNER_API}/goals/${encodeURIComponent(goalId)}`,
     { method: "DELETE" },
-  );
-}
-
-/** One week's record: its scores, note, question or verdict. */
-export function plannerUpdateWeekRequest(
-  weekStart: string,
-  input: PlannerUpdateWeekInput,
-) {
-  return apiRequest<PlannerWeekResponse>(
-    `${PLANNER_API}/weeks/${encodeURIComponent(weekStart)}`,
-    { method: "PATCH", body: JSON.stringify(input) },
   );
 }
 

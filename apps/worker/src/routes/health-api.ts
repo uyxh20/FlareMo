@@ -15,7 +15,6 @@ import {
   healthIsBuiltinKind,
   healthMemosQuerySchema,
   healthPatchEntrySchema,
-  healthSetTargetsSchema,
   healthTrackerDraftSchema,
   healthTrackerInputSchema,
   healthTrackerTestSchema,
@@ -37,7 +36,6 @@ import {
   healthReadYear,
   healthRescan,
   healthSetBuiltinWords,
-  healthSetTargets,
   healthTestTracker,
   healthUpdateTracker,
 } from "@flaremo/domain/src/health";
@@ -199,28 +197,6 @@ healthApi.post("/rescan", async (c) => {
     return jsonError(c, error);
   }
 });
-
-healthApi.put(
-  "/targets",
-  zValidator("json", healthSetTargetsSchema),
-  async (c) => {
-    try {
-      const context = await getRequestContext(c);
-      const throttled = await rateLimitGuard(c, "health", context.user.id);
-      if (throttled) return throttled;
-      await healthSetTargets(context.db, {
-        userId: context.user.id,
-        ...c.req.valid("json"),
-      });
-      const response: HealthTargetsResponse = {
-        targets: await healthReadTargets(context.db, context.user.id),
-      };
-      return c.json(response);
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  },
-);
 
 // --- Trackers ----------------------------------------------------------------
 //

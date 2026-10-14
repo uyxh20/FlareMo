@@ -231,14 +231,6 @@ export function plannerGoalProgress(
   };
 }
 
-/** The goal a card belongs to, if it is one of `goals` (the week the cards show). */
-export function plannerCardGoal(
-  card: Pick<PlannerBoardCard, "goal_id">,
-  goals: ReadonlyMap<string, PlannerGoalDto>,
-): PlannerGoalDto | null {
-  return card.goal_id ? (goals.get(card.goal_id) ?? null) : null;
-}
-
 /** A goal's text in one line: its title, or its points joined. */
 export function plannerGoalText(
   goal: Pick<PlannerGoalDto, "title" | "lines">,

@@ -103,18 +103,17 @@ export type PlannerPlanPoint = {
 };
 
 export type PlannerPlanLabel = {
-  /** What the chip or phrase says. */
+  /** What the phrase says. */
   label: string;
   /** The exact period, for a tooltip. */
   title: string;
 };
 
 /**
- * Words for a plan, relative to `today`, or null for no plan. In `chip` style
- * ("Today", "Tomorrow", "Wed 8", "This week", "Next week", "Oct") it is a card's
- * horizon chip; in `phrase` style it reads inside a sentence ("today", "this
- * week"). A history event passes the day it happened as `today`, so "Planned for
- * this week" keeps meaning the week it was planned in.
+ * Words for a plan, relative to `today`, or null for no plan, as they read
+ * inside a sentence ("today", "this week"). A history event passes the day it
+ * happened as `today`, so "Planned for this week" keeps meaning the week it was
+ * planned in.
  *
  * - day: today, tomorrow and yesterday by name; the next few days by weekday and
  *   date ("Wed 8"); anything else by month and day ("Oct 14"). A past day is
@@ -126,11 +125,10 @@ export function plannerPlanLabel(
   plan: PlannerPlanPoint,
   today: string,
   strings: PlannerStrings,
-  style: "chip" | "phrase" = "chip",
 ): PlannerPlanLabel | null {
   if (plan.horizon === null || plan.period_start === null) return null;
   const locale = strings.intlLocale;
-  const words = strings.plan[style];
+  const words = strings.plan.phrase;
   const start = plan.period_start;
   const otherYear = !sameYear(start, today);
 
@@ -161,7 +159,7 @@ export function plannerPlanLabel(
               : words.weekOf(plannerMonthDay(start, locale, otherYear));
       return {
         label,
-        title: strings.plan.chip.weekOf(plannerMonthDay(start, locale, true)),
+        title: strings.plan.weekTitle(plannerMonthDay(start, locale, true)),
       };
     }
     case "month":

@@ -141,7 +141,7 @@ Clones the repository into your GitHub account and provisions D1, R2, Queues, an
 
 ### Method 2: GitHub Action (self-hosted fork)
 
-On your fork, **Deploy to Cloudflare** runs on push to `main` and on a manual Actions run: provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
+In a deployment repository that has the **Deploy to Cloudflare** workflow, run it manually from Actions to provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. This fork deleted that workflow, so pushes to `main` deploy nothing; it ships only through `scripts/fork/prod-deploy.mjs`. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
 
 ### Method 3: Deploy with an AI Agent (Recommended)
 

@@ -10,7 +10,7 @@ import {
   vi,
 } from "vitest";
 import { NotFoundError, ValidationError } from "../errors";
-import { createProject, deleteProject } from "../projects";
+import { createProject } from "../projects";
 import {
   createTask,
   deleteTask,
@@ -39,11 +39,9 @@ import {
   plannerTestEvents,
   plannerTestFailBatch,
   plannerTestInsertComment,
-  plannerTestInsertNode,
   plannerTestPlan,
   plannerTestRuntime,
 } from "./test-support";
-import { plannerUpsertProjectNode } from "./tree";
 
 // The task panel's domain functions (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): reading one task
@@ -834,101 +832,14 @@ describe("planner task panel", () => {
       });
     });
 
-    it("returns the project with an empty path when it has no node row", async () => {
+    it("returns the project's id and name", async () => {
       const home = await createProject(rt.db, rt.user, { name: "Home" });
       const task = await newTask("In a project", { project_id: home.id });
 
       expect((await read(task.id)).project).toEqual({
         id: home.id,
         name: "Home",
-        ancestors: [],
       });
-    });
-
-    it("returns the path above the project, the root first", async () => {
-      const health = await createProject(rt.db, rt.user, { name: "Health" });
-      const marathon = await createProject(rt.db, rt.user, {
-        name: "Run a marathon",
-      });
-      const training = await createProject(rt.db, rt.user, {
-        name: "Training plan",
-      });
-      await plannerUpsertProjectNode(rt.db, {
-        userId: rt.user.id,
-        projectId: marathon.id,
-        parentProjectId: health.id,
-        level: "goal",
-      });
-      await plannerUpsertProjectNode(rt.db, {
-        userId: rt.user.id,
-        projectId: training.id,
-        parentProjectId: marathon.id,
-        level: "milestone",
-      });
-      const deep = await newTask("Deep", { project_id: training.id });
-      const mid = await newTask("Mid", { project_id: marathon.id });
-      const top = await newTask("Top", { project_id: health.id });
-
-      expect((await read(deep.id)).project).toEqual({
-        id: training.id,
-        name: "Training plan",
-        ancestors: [
-          { id: health.id, name: "Health" },
-          { id: marathon.id, name: "Run a marathon" },
-        ],
-      });
-      expect((await read(mid.id)).project?.ancestors).toEqual([
-        { id: health.id, name: "Health" },
-      ]);
-      expect((await read(top.id)).project?.ancestors).toEqual([]);
-    });
-
-    it("stops the path at an ancestor that is in the recycle bin, like the tree does", async () => {
-      const area = await createProject(rt.db, rt.user, { name: "Area" });
-      const goal = await createProject(rt.db, rt.user, { name: "Goal" });
-      await plannerUpsertProjectNode(rt.db, {
-        userId: rt.user.id,
-        projectId: goal.id,
-        parentProjectId: area.id,
-      });
-      const task = await newTask("Under the goal", { project_id: goal.id });
-      expect((await read(task.id)).project?.ancestors).toEqual([
-        { id: area.id, name: "Area" },
-      ]);
-
-      await deleteProject(rt.db, rt.user, area.id);
-
-      expect((await read(task.id)).project).toEqual({
-        id: goal.id,
-        name: "Goal",
-        ancestors: [],
-      });
-    });
-
-    it("ends the walk on a damaged tree that has a cycle", async () => {
-      const a = await createProject(rt.db, rt.user, { name: "A" });
-      const b = await createProject(rt.db, rt.user, { name: "B" });
-      await plannerTestInsertNode(rt.database, {
-        projectId: b.id,
-        userId: rt.user.id,
-      });
-      await plannerTestInsertNode(rt.database, {
-        projectId: a.id,
-        userId: rt.user.id,
-        parentProjectId: b.id,
-      });
-      await rt.database
-        .prepare(
-          "UPDATE planner_project_node SET parent_project_id = ? WHERE project_id = ?",
-        )
-        .bind(a.id, b.id)
-        .run();
-      const task = await newTask("In a cycle", { project_id: a.id });
-
-      const { project } = await read(task.id);
-
-      expect(project?.name).toBe("A");
-      expect(project?.ancestors).toEqual([{ id: b.id, name: "B" }]);
     });
 
     it("returns the comments, oldest first, without the deleted ones", async () => {

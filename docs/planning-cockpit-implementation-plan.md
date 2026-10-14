@@ -1,9 +1,7 @@
 # Planning cockpit — implementation plan (v3, reuse-first)
 
-Status: v3, 2026-10-04, re-audited (section 12). The owner gave the go-ahead to build and wants it on the dev deployment for QA. v3 replaces the audited v2: history copies the upstream activity log (no triggers), goals are upstream projects in a tree, and the board reuses upstream components. Every v2 audit finding that still applies is kept (section 12).
+Status: built and live (v3 design, 2026-10-04, with later additions in sections 13 and 14). History copies the upstream activity log (no triggers), goals are weekly goals (the first design's project tree was removed on 14 Oct 2026), and the board reuses upstream components.
 
-- Executor: Sonnet subagents, one step group at a time. The orchestrator reviews and pushes each commit.
-- Requirements: `docs/planning-cockpit-requirements.md`.
 - Canonical project doc (live status, decisions, build tracker, log): https://claude.ai/artifact/7nTJJXwmQALMZjtAPP4JhZ
 - Base: upstream v0.22.0, merged into the fork as `a904b7f`.
 
@@ -18,7 +16,7 @@ Status: v3, 2026-10-04, re-audited (section 12). The owner gave the go-ahead to 
 - **Plan date and due date are separate.**
   - Plan: horizon (`day` | `week` | `month`) plus a period start, in planner tables.
   - Due: upstream `tasks.due_at`, unchanged, so overdue reminders keep working.
-- **Weekly and monthly review is not in v1** ("Next"). There is no goal UI in v1, but the backend supports a goal tree.
+- **Weekly and monthly review is not in v1** ("Next"). There is no goal UI in v1. (A goal tree over upstream projects was built in v1 and removed on 14 Oct 2026, after weekly goals replaced it; its table stays.)
 - **Fresh start from Notion.** No importer.
 - **Cloudflare only, no new services.** Same Worker and D1, with no new bindings, crons, queues or secrets.
 - **Isolated add-on.** No change to upstream tables, columns or the Drizzle journal; upstream files are touched only at the section 7 hook-ins.
@@ -28,9 +26,9 @@ Build defaults (adopted for the build; the owner can change them after QA):
 
 - **D1 Dropping a task clears its `due_at`** through upstream `updateTask`. The old value stays in history, and the dropped task stops sending overdue alerts.
 - **D2 The cockpit lives at `/cockpit`**, beside `/projects` in navigation.
-- **D3 Goals are upstream projects arranged in a tree** (`planner_project_node`). Tasks belong to goals through upstream `tasks.project_id`. A node's `level` is a validated slug (`^[a-z][a-z0-9-]{0,23}$`, for example `area`, `year`, `quarter`, `goal`, `milestone`), so adding a level needs no schema change.
+- **D3 Goals are upstream projects arranged in a tree** (`planner_project_node`). Superseded: weekly goals replaced it (T8), and the tree code was removed on 14 Oct 2026. Tasks belong to goals through upstream `tasks.project_id`. A node's `level` is a validated slug (`^[a-z][a-z0-9-]{0,23}$`, for example `area`, `year`, `quarter`, `goal`, `milestone`), so adding a level needs no schema change.
 - **D4 History is a permanent copy of upstream `task_activity`**, plus delete, restore and purge detection by comparing `tasks` with a snapshot. No SQL triggers anywhere.
-- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
+- **Sync timing**: history syncs whenever the board is fetched (the GET runs it) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
 
 ## 1. Guardrails
 
@@ -103,79 +101,16 @@ Upstream rebuilds tables with `PRAGMA foreign_keys=OFF; … DROP TABLE tasks …
 
 `packages/db/src/schema/planner.ts` defines the five tables with Drizzle. It is not in the barrel; import it as `@flaremo/db/src/schema/planner`. Its header records the `db:generate` exception.
 
-```sql
--- migrations/9000_planner_init.sql — fork-owned, hand-written; never edit once applied (add 9001_…).
-CREATE TABLE `planner_task_plan` (
-  `task_id` text PRIMARY KEY NOT NULL,             -- upstream tasks.id, no FK (G10)
-  `user_id` text NOT NULL,
-  `horizon` text,                                  -- day | week | month | NULL (backlog)
-  `period_start` text,                             -- YYYY-MM-DD; NULL iff horizon is NULL
-  `carry_count` integer NOT NULL DEFAULT 0,
-  `dropped_at` text,
-  `created_at` text NOT NULL,
-  `updated_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE INDEX `planner_task_plan_user_period_idx` ON `planner_task_plan` (`user_id`,`horizon`,`period_start`);
---> statement-breakpoint
-CREATE TABLE `planner_task_event` (
-  `id` integer PRIMARY KEY AUTOINCREMENT NOT NULL, -- tie-breaker only
-  `user_id` text NOT NULL,
-  `task_id` text NOT NULL,                         -- no FK: history outlives the task
-  `task_title` text,                               -- snapshot at copy time
-  `type` text NOT NULL,                            -- see "Event types"
-  `data` text NOT NULL DEFAULT '{}',               -- JSON
-  `source` text NOT NULL,                          -- 'activity' | 'sync' | 'planner'
-  `source_ref` text,                               -- idempotency key for activity/sync events
-  `actor_type` text,                               -- user | agent | NULL
-  `actor_name` text,
-  `occurred_at` text NOT NULL,                     -- when it happened (source timestamp)
-  `created_at` text NOT NULL                       -- when it was archived
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `planner_task_event_source_ref_uq` ON `planner_task_event` (`source`,`source_ref`) WHERE `source_ref` IS NOT NULL;
---> statement-breakpoint
-CREATE INDEX `planner_task_event_task_idx` ON `planner_task_event` (`task_id`,`occurred_at`);
---> statement-breakpoint
-CREATE INDEX `planner_task_event_user_idx` ON `planner_task_event` (`user_id`,`occurred_at`);
---> statement-breakpoint
-CREATE TABLE `planner_task_seen` (                 -- snapshot used to detect delete/restore/purge
-  `task_id` text PRIMARY KEY NOT NULL,
-  `user_id` text NOT NULL,
-  `title` text NOT NULL,
-  `status` text NOT NULL,
-  `project_id` text,
-  `deleted_at` text,
-  `last_seen_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE INDEX `planner_task_seen_user_idx` ON `planner_task_seen` (`user_id`);
---> statement-breakpoint
-CREATE TABLE `planner_sync_state` (
-  `user_id` text PRIMARY KEY NOT NULL,
-  `activity_watermark` text,                       -- max task_activity.created_at copied
-  `activity_last_id` integer,                      -- max task_activity.id seen (may drop after an upstream rebuild)
-  `last_sync_at` text,
-  `status` text NOT NULL DEFAULT 'ok',             -- ok | paused
-  `paused_reason` text
-);
---> statement-breakpoint
-CREATE TABLE `planner_project_node` (              -- goal tree over upstream projects
-  `project_id` text PRIMARY KEY NOT NULL,          -- upstream projects.id, no FK (G10)
-  `user_id` text NOT NULL,
-  `parent_project_id` text REFERENCES `planner_project_node`(`project_id`) ON DELETE SET NULL,
-  `level` text,                                    -- validated slug (D3) or NULL
-  `period_start` text,
-  `period_end` text,
-  `sort_order` integer NOT NULL DEFAULT 0,
-  `created_at` text NOT NULL,
-  `updated_at` text NOT NULL
-);
---> statement-breakpoint
-CREATE INDEX `planner_project_node_user_parent_idx` ON `planner_project_node` (`user_id`,`parent_project_id`,`sort_order`);
-```
+The tables, hand-written in `migrations/9000_planner_init.sql` (the file is the schema reference; later `900x` files add columns and tables):
 
-A project with no node row is a root with no level. Setting a parent creates the parent's node row if needed.
+- `planner_task_plan`: one row per planned task, keyed by upstream `tasks.id` with no FK (G10): horizon, period start, carry count, dropped time.
+- `planner_task_event`: the permanent history archive. A unique index on (`source`, `source_ref`) where `source_ref` is set makes copying idempotent. History outlives the task, so there is no FK.
+- `planner_task_seen`: the snapshot used to detect delete, restore and purge.
+- `planner_sync_state`: per-user watermark, last id, last sync time, and `ok` or `paused` with a reason.
+- `planner_project_node`: the old goal tree over upstream projects, with a self-referencing parent (`ON DELETE SET NULL`), a level slug, a period and a sort order. Nothing reads it since the tree code was removed (14 Oct 2026); the table stays under the additive-only rule, and the history sync still deletes the rows of purged projects.
+
+Statements are separated by `--> statement-breakpoint`.
+
 
 ## 4. Behaviour
 
@@ -192,15 +127,14 @@ They live in `packages/contracts/src/planner.ts`, shared by the worker and the w
 - The client sends `today`, its local date.
 - The server accepts it only within its own UTC date ±1 day; anything else gets a 400.
 - New plans can't start before the current period for their horizon.
-- The cockpit re-runs rollover on `visibilitychange` once the local date has changed.
 
 ### Event types
 
-| Source                                  | Types                                                                                                                      | Actor                      |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| `activity`: copied from `task_activity` | upstream `action` values as they are (e.g. `created`, `updated`, `status_changed`, …), with `changes` JSON in `data`       | yes, from the activity row |
-| `sync`: detected by snapshot diff       | `deleted`, `restored`, `purged`, and `created` for a task first seen with no activity `created` event (e.g. bundle import) | none                       |
-| `planner`: written by planner code      | `planned`, `replanned`, `unplanned`, `carried_over`, `dropped`, `undropped`                                                | yes, from the request      |
+| Source | Types | Actor |
+| --- | --- | --- |
+| `activity`: copied from `task_activity` | upstream `action` values as they are (e.g. `created`, `updated`, `status_changed`, …), with `changes` JSON in `data` | yes, from the activity row |
+| `sync`: detected by snapshot diff | `deleted`, `restored`, `purged`, and `created` for a task first seen with no activity `created` event (e.g. bundle import) | none |
+| `planner`: written by planner code | `planned`, `replanned`, `unplanned`, `carried_over`, `dropped`, `undropped` | yes, from the request |
 
 "Completed" means a `status_changed` to `done`. Upstream `changes` holds only the new status (`packages/domain/src/tasks.ts`), so "reopened" (a change away from `done`) is derived later over the archived events with `LAG`. The executor must read upstream's real `action` enum and `changes` shape before mapping.
 
@@ -258,6 +192,8 @@ Both need the cockpit to stay unopened across the event. The first also needs 30
 
 ### Rollover (v2 audit M2): `POST /api/app/planner/rollover {today}`
 
+The web stopped calling rollover in v1.2 (section 13.x); the route and service stay. The board GET runs the history sync.
+
 1. Run the history sync. Whatever it returns, continue.
 2. Run one D1 batch of two statements sharing a predicate. The predicate selects a plan whose horizon is set, `dropped_at` is NULL, whose task exists, isn't deleted and isn't `done`, and whose `period_start` is before the target period.
    - Target period: `CASE horizon WHEN 'day' THEN :day WHEN 'week' THEN :week ELSE :month END`.
@@ -283,16 +219,16 @@ The response is `{ history, carried }`.
 
 ### Column moves (v2 audit m10)
 
-| From → To                | Effect                                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------------------- |
-| Backlog → To Do          | Plan = this week (default); `planned` event                                                       |
-| To Do → Backlog          | Plan cleared; `unplanned` event                                                                   |
-| Backlog or To Do → Doing | Status `in_progress`; plan kept                                                                   |
-| any → Done               | Status `done`; plan kept for history                                                              |
-| Doing → To Do            | Status `todo`; with no plan (or a NULL horizon), plan = this week                                 |
-| Doing or Done → Backlog  | Status `todo`; plan cleared                                                                       |
-| Done → To Do             | Status `todo` (reopened); if the plan is missing, has a NULL horizon or is past, plan = this week |
-| Done → Doing             | Status `in_progress`                                                                              |
+| From → To | Effect |
+| --- | --- |
+| Backlog → To Do | Plan = this week (default); `planned` event |
+| To Do → Backlog | Plan cleared; `unplanned` event |
+| Backlog or To Do → Doing | Status `in_progress`; plan kept |
+| any → Done | Status `done`; plan kept for history |
+| Doing → To Do | Status `todo`; with no plan (or a NULL horizon), plan = this week |
+| Doing or Done → Backlog | Status `todo`; plan cleared |
+| Done → To Do | Status `todo` (reopened); if the plan is missing, has a NULL horizon or is past, plan = this week |
+| Done → Doing | Status `in_progress` |
 
 - **Status changes** go through upstream `updateTask`, which logs its own activity.
 - **The card menu** offers "Move to…" plus plan choices: Today, Tomorrow, This week, Next week, This month, Next month, or a picked day.
@@ -317,17 +253,6 @@ If step 2 fails, the endpoint returns 201 `{task, plan: null, plan_error}`. The 
   - Not atomic: a step that fails leaves the earlier ones applied, because task rows may change only through upstream services.
 - `GET /tasks/:id/history` — sync first, then events ordered by `occurred_at`, then `id`, newest first.
 - `GET /history?from&to` — the user's events in a range, after a sync.
-- `GET /tree` — non-deleted projects merged with their node rows. A child whose parent project is soft-deleted shows as a root.
-- `PATCH /tree/:projectId` — upserts the node: `{parent_project_id, level, period_start, period_end, sort_order}`. Use PATCH, not PUT: the Worker's CORS `allowMethods` has no PUT (`apps/worker/src/index.ts`).
-  - Checks that the project, and the parent if one is given, belong to the user.
-  - Upserts with `ON CONFLICT(project_id) DO UPDATE`. Never use `INSERT OR REPLACE`: it deletes the row, which sets every child's parent to NULL through the self-FK.
-  - Rejects cycles inside the write itself (`… WHERE NOT EXISTS (WITH RECURSIVE ancestors …)`) rather than read-then-write.
-  - Depth is capped at 6. The check counts the new parent's depth plus the height of the subtree being moved.
-- `GET /tree/:projectId/rollup?from&to` — `WITH RECURSIVE … UNION` (not `UNION ALL`, so a stray cycle can't loop) over the subtree. It excludes deleted tasks and dropped plans, and counts per node and in total:
-  - open and done tasks (by `tasks.project_id`)
-  - planned in range (plans with `period_start` in range)
-  - done in range (`completed_at` in range)
-  - carried in range (`carried_over` events with `occurred_at` in range)
 
 ### Route conventions
 
@@ -353,90 +278,21 @@ New files live under `apps/web/src/planner/`.
     - If `TaskCard` can't take the extra chips, build a `PlannerTaskCard` from the same exported pieces rather than editing upstream.
 - **`board.tsx`**: dnd-kit, modelled on `pages/projects/board.tsx`, with touch sensors, plus the "Move to…" menu so moves work on a phone.
 - **`plan-picker.tsx` and `history-sheet.tsx`**: the history sheet is a per-task timeline from the archive, showing who and when.
-- **On open**: the page runs rollover once, then fetches the board.
+- **On open**: the page fetches the board, and the board GET runs the history sync. The web no longer calls rollover (v1.2).
 - **After any mutation**: invalidate `["planner"]`, upstream's task query keys and `["projects"]`.
 
 ## 6. Tests
 
-- **Contracts**:
-  - period helpers: Monday rule, UTC, DST, month ends, leap day
-  - the bounds on `today`
-  - the level slug
-- **Domain**, using the pattern in `packages/domain/src/projects.test.ts` (`createTestRuntime` lives in `apps/worker` and isn't usable here) plus `applyPlannerMigrations`, deep-imported from `@flaremo/db/src/planner-migrations`:
-  - history sync:
-    - activity copy with actor
-    - idempotency: a second run adds no events and no snapshot writes, checked with `meta.changes`
-    - the 30-second debounce
-    - the overlap window
-    - delete, restore and purge detection
-    - created then deleted between syncs
-    - deleted, restored, deleted again
-    - bundle-import back-dated activity is archived
-    - `created` for a task without activity
-    - title snapshot after purge
-  - compatibility: with a required column missing from a table copy, the sync returns `paused` and upstream task writes still succeed
-  - failure injection: a thrown D1 error inside the sync returns `paused`, and rollover step 2 and the board still work
-  - tree: an upsert of a parent keeps its children's `parent_project_id`; moving a subtree respects depth including its height; a forced cycle doesn't loop the roll-up
-  - rebuild survival: a 0025-shaped `tasks` rebuild through the batch path leaves planner tables and the archive intact, and the next sync records the gap honestly
-  - rollover: idempotent, and two concurrent batches give one carry each
-  - board: grouping, filters, the cap
-  - tree: cycle and depth rejection, and roll-ups
-- **Worker**:
-  - every endpoint with real auth, as in `tasks-api.test.ts`, including 401 and the Origin rules
-  - the upstream-flows suite (`apps/worker/src/routes/planner-upstream-compat.test.ts`) with the planner installed:
-    - task create, update, status change, delete and restore, reorder
-    - project delete, restore and purge, plus `hardDeleteExpiredTasks`
-    - member removal
-    - overdue notifications
-    - convert-to-task
-  - Assert that upstream results are unchanged and the expected archive events appear after a sync.
-- **Web**: unit tests for column grouping, the transition table and labels.
-- **E2E**: `tests/e2e/cockpit.spec.ts` covers the deep link, the anonymous redirect, the nav link and quick add (v1.1 adds the column "+" and task panel cases, section 13). Register it by adding `cockpit` to the `memo-ui` `testMatch` regex in `playwright.config.ts`. Written, not run (G8).
+- Every planner module has its own test file beside it; run them by path (`packages/contracts/src/planner*.test.ts`, `packages/domain/src/planner`, `apps/worker/src/routes/planner-*.test.ts`, `apps/web/src/planner`).
+- Domain tests follow `packages/domain/src/projects.test.ts` and apply the planner migrations with `applyPlannerMigrations` from `@flaremo/db/src/planner-migrations`; `createTestRuntime` lives in `apps/worker` and is not usable there.
+- `apps/worker/src/routes/planner-upstream-compat.test.ts` runs upstream task, project and notification flows with the planner installed and asserts upstream results are unchanged.
+- `tests/e2e/cockpit.spec.ts` is registered in the `memo-ui` project but written, not run (G8).
 
 ## 7. Hook-in edits (the only upstream files touched)
 
-1. **`apps/worker/src/index.ts`**: `mountLazyRoute(app, "/api/app/planner", …)` loading `./routes/planner-api`, placed before `app.route("/api/app", appApi)`. Follow the neighbouring `mountLazyRoute` calls exactly. `scripts/startup-graph.mjs` is a report, not a gate: run it and confirm `planner-api` and `packages/domain/src/planner` aren't in the startup graph.
-2. **`packages/contracts/src/index.ts`**: append `export * from "./planner";`.
-3. **`scripts/persistence-manifest.mjs`**: append the planner tables to `RESTORE_TABLES`: the five from `9000`, and `planner_task_comment` from `9001` (v1.1). `pnpm persistence:check` must pass.
-4. **`apps/web/src/router-tree.tsx`**: a lazy `CockpitPage` and a `cockpitRoute` with the literal `path: "/cockpit"`, registered beside `teamProjectsRoute`. v1.1 adds one import and `validateSearch: plannerCockpitSearch` on that route (the `?task=` address, section 13); the validator lives in `planner/cockpit-search.ts`.
-5. **`apps/worker/src/spa-routes.ts`**: add `"/cockpit"`.
-6. **`apps/web/src/components/flaremo-explorer.tsx`**: an import plus `<PlannerNavLink/>` after the team-projects link.
-7. **`playwright.config.ts`**: append `cockpit` to the `memo-ui` `testMatch` regex.
-8. **`apps/web/public/sw.js`**: add `cockpit` to `privateRoutes`.
-9. **Goals and the weekly review** extend items 3, 4, 5, 7 and 8, and add six optional settings to `apps/worker/src/env.ts`. Each one is listed in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
+The cockpit edits a few upstream files and nothing else (G7). The fork-wide table of upstream files with a hook-in is [fork-customizations.md](fork-customizations.md); the goals and weekly review additions are covered there too and in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md). Until that table lists every cockpit row, these are the files: `apps/worker/src/index.ts` (lazy mount of `/api/app/planner`), `packages/contracts/src/index.ts`, `scripts/persistence-manifest.mjs` (`RESTORE_TABLES`), `apps/web/src/router-tree.tsx`, `apps/worker/src/spa-routes.ts`, `apps/web/src/components/flaremo-explorer.tsx`, `playwright.config.ts`, `apps/web/public/sw.js` and `apps/worker/src/env.ts`.
 
-New fork-owned files:
-
-- `packages/db/src/schema/planner.ts`
-- `packages/db/src/planner-migrations.ts`
-- `migrations/9000_planner_init.sql`
-- `packages/contracts/src/planner.ts`
-- `packages/domain/src/planner/*`
-- `apps/worker/src/routes/planner-api.ts`
-- `apps/worker/src/routes/planner-*.test.ts`
-- `apps/web/src/planner/*`
-- `tests/e2e/cockpit.spec.ts`
-
-## 8. Steps
-
-Each step group ends with targeted tests green, `pnpm format`, the guard command and one or more commits on local `main`. The orchestrator reviews and pushes.
-
-- **A. Baseline, schema and migration** (steps 0 and 1):
-  - Set `planner-base` to the `main` SHA at the start, record it in section 11, and create it as a local tag.
-  - Schema, `9000_planner_init.sql`, `applyPlannerMigrations`, the manifest entries and the period contracts, with tests.
-  - Confirm locally that Wrangler applies the unjournaled `9000` file after `0033`, using a temp `--persist-to` directory.
-- **B. History sync and domain services** (steps 2 and 3): sync, plans, rollover, board, tree and roll-ups, plus the upstream-flows suite.
-- **C. Routes** (step 4): `planner-api.ts`, the lazy mount and the API tests.
-- **D. Web** (step 5): the cockpit page and the hook-ins.
-  - unit tests and `pnpm --filter @flaremo/web typecheck`
-  - the e2e spec, written
-  - check the page by eye in a local dev server at desktop and phone width
-- **E. Docs and dev deploy** (steps 6 and 7):
-  - this runbook and the requirements status
-  - deploy to `flaremo-dev` with `scripts/fork/dev-env.mjs`, from a clean worktree at the pushed commit
-  - smoke-test, then the owner runs QA
-
-Live is deployed by hand only after the owner's QA.
+Everything else is fork-owned and lives in planner-named paths (`schema/planner.ts`, `planner-migrations.ts`, `migrations/9xxx_planner_*.sql`, `contracts/src/planner*`, `domain/src/planner/`, `routes/planner-*`, `web/src/planner/`, `tests/e2e/cockpit.spec.ts`).
 
 ## 9. Runbook
 
@@ -447,82 +303,13 @@ Live is deployed by hand only after the owner's QA.
 - **Removing a team member**: planner rows have no foreign key to `users`. Delete them by `user_id` by hand; not needed for a single user.
 - **Upstream note**: migration 0025's rebuild ran inside a batch, so upstream's own `task_activity` rows were wiped when it deployed. This is an upstream issue, and it's why the archive exists.
 
-## 10. Checklist
+## 10. Guard command
 
-Guard command (run before every commit). It must print only section 7 hook-in files:
+Run this before every commit. It must print only the hook-in files listed in section 7:
 
 ```sh
 git diff --name-only planner-base..HEAD | grep -v -E '^(docs/planning-cockpit|docs/fork-|scripts/fork/|packages/db/src/schema/planner\.ts|packages/db/src/planner-|migrations/9[0-9]{3}_planner_|packages/contracts/src/planner|packages/domain/src/planner/|apps/worker/src/routes/planner-|apps/web/src/planner/|tests/e2e/(cockpit|goals-review)\.spec\.ts)'
 ```
-
-Conformance:
-
-- [ ] The guard prints only section 7 files
-- [ ] No foreign key from a planner table to an upstream table; no SQL triggers
-- [ ] Applied `9xxx` files are unedited; migrations are additive only
-- [ ] `schema/planner.ts` is not in the barrel; no `pnpm db:generate`
-- [ ] No new Wrangler bindings, crons, queues or secrets
-- [ ] Task rows change only through upstream domain services
-- [ ] Each planner mutation writes its event in the same batch
-- [ ] Every planner export is prefixed with `planner` or `Planner`
-- [ ] Columns are Backlog · To Do · Doing · Done; plan and due dates stay separate
-- [ ] Monday week start and UTC date maths everywhere
-- [ ] Text at least 12px, Ember tokens, no new gradient CTA
-- [ ] Targeted tests green; `pnpm format` clean
-
-Progress:
-
-- [x] A Baseline, schema and migration
-- [x] B History sync and domain services
-- [x] C Routes
-- [x] D Web cockpit
-- [ ] E Docs and dev deploy
-- [x] v1.1 Column "+" and task panel (section 13)
-
-Acceptance:
-
-- `/cockpit` shows Backlog, To Do, Doing and Done with real tasks on desktop and phone. Adding, moving, re-planning, setting a due date and dropping all work.
-- Unfinished planned tasks move into the current period with "carried ×N". Two concurrent rollovers give one carry each.
-- Task history shows every change with its actor where upstream records one, including edits from `/projects` and the API. It survives purges and upstream table rebuilds.
-- The tree API handles a nested project tree with roll-ups (tested).
-- `/projects`, overdue reminders, convert-to-task and member removal behave as before; the compat suite is green.
-
-## 11. Log
-
-- planner-base: 80287b09aba4003b977bbcbdb6d19d8a1b41f12e (2026-10-04)
-- v1.1 task panel (section 13): built 2026-10-06 on `main` at `cd24c41980892a13edb6dab96121b41da2116e3e`, as one branch of commits (data, contracts and API, web, e2e and docs, then the dev-env test fixture and a polish pass). The guard still prints only the eight hook-in files.
-- Goals and the weekly review (migration 9005): built 2026-10-10 on `feat/goals-weekly-review`. See [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
-
-## 12. Audit resolution
-
-v2 (2026-10-04) findings that still apply in v3:
-
-- **B1**: no foreign keys to upstream tables; explicit joins; purge clean-up; rebuild-survival test.
-- **M2**: set-based rollover.
-- **M3**: Monday week start and UTC maths.
-- **M5**: the e2e spec is registered.
-- **M6**: the upstream-flows suite.
-- **Minor**: m2 (export prefixes, deep import), m7 (rate-limit bucket), m8 (board query), m9 (create fallback), m10 (transition table), m11 (date bounds), m13 (invalidate `projects`), m14 (`sw.js`), m15 (header comments) and m17 (minimal explorer edit, literal route path).
-
-v2 findings that v3 removes by design:
-
-- **M1 trigger hazards** and **M4 actor capture**: there are no triggers, and the actor comes from the copied activity rows.
-
-v3 focused re-audit (Opus, 2026-10-04) found 0 blockers, 4 major and 6 minor issues. All were adopted above:
-
-- **Major 1**: the delete and restore predicates now cover tasks not live at the last sync, run restored before deleted, list the new gap, and have tests.
-- **Major 2**: the `activity_last_id` plus watermark selection catches back-dated import activity; `source_ref` has no id.
-- **Major 3**: the sync never throws (try/catch, `paused` with a reason), callers always continue, it uses `ON CONFLICT DO NOTHING` instead of `OR IGNORE`, and there's a failure-injection test.
-- **Major 4**: `scripts/fork/dev-env.mjs` computes migration levels per track (upstream `0NNN` versus fork `9NNN_planner_`), with unit tests.
-- **Minor**:
-  - conditional snapshot upsert and a 30-second debounce
-  - `occurred_at` and `data` semantics, a `created` baseline, and `previous_due_at` on `dropped`
-  - a wider compatibility check (projects, enum drift, an `other` bucket)
-  - tree upsert, cycle, depth and `UNION` rules, plus roll-up exclusions
-  - board precedence for dropped and undrop placement
-  - mechanics: guard regex, deep import, startup-graph as a report, PATCH for `/tree`, the domain test pattern, a `resolveActor` copy, and JS/`strftime` time maths
-
-The verified-OK list is in the canonical doc log.
 
 ## 13. v1.1 task panel
 
@@ -555,35 +342,21 @@ Built 2026-10-06. The owner asked for the Notion-style task experience: a "+" in
 
 Hand-written, unjournaled, additive, no foreign keys, no triggers. Wrangler applies it after `9000`; vitest applies it through `applyPlannerMigrations`. It is also safe for the previous release: the new column is nullable and nothing old reads the new table.
 
-```sql
-ALTER TABLE `planner_task_plan` ADD COLUMN `effort` real;
---> statement-breakpoint
-CREATE TABLE `planner_task_comment` (
-  `id` text PRIMARY KEY NOT NULL,                  -- a random UUID, not namespaced
-  `user_id` text NOT NULL,
-  `task_id` text NOT NULL,                         -- upstream tasks.id, no FK (G10)
-  `body` text NOT NULL,                            -- trimmed, 1 to 5000 characters
-  `created_at` text NOT NULL,
-  `updated_at` text NOT NULL,
-  `deleted_at` text
-);
---> statement-breakpoint
-CREATE INDEX `planner_task_comment_task_idx` ON `planner_task_comment` (`task_id`,`created_at`);
-```
+It adds the nullable `planner_task_plan.effort` and the `planner_task_comment` table (soft delete, no foreign keys); see the migration file for the columns.
 
 `planner_task_comment` joins the restore manifest (`RESTORE_TABLES`), and `planner-upstream-compat.test.ts` now expects six planner tables.
 
 ### API changes, under `/api/app/planner`
 
-| Route                      | Change                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /tasks/:id`           | New. `{ task, plan, project, comments }`: the whole upstream task (notes included), its plan with `effort` (`null` when there is no plan row; a row with a null horizon only holds an effort), its goal as `{ id, name, ancestors }` with the live ancestors from the goal tree, root first, and its comments oldest first without the deleted ones. 404 for a missing, binned or another user's task. |
-| `PATCH /tasks/:id`         | Gains `effort`: a number from 0 to 999 with at most one decimal, or `null` to clear. Applied after `column` or `plan` and before a drop. It never moves the task and is allowed on a dropped one.                                                                                                                                                                                                      |
-| `POST /tasks`              | Gains `column`. `backlog` refuses a plan (400), `todo` requires one (400), `doing` and `done` take an optional plan. Without `column` it behaves as before.                                                                                                                                                                                                                                            |
-| `GET /tasks/:id/comments`  | New. `{ comments }`, oldest first.                                                                                                                                                                                                                                                                                                                                                                     |
-| `POST /tasks/:id/comments` | New. `{ body }`, answering 201 `{ comment }`.                                                                                                                                                                                                                                                                                                                                                          |
-| `PATCH /comments/:id`      | New. `{ body }`, answering `{ comment }` with a later `updated_at`.                                                                                                                                                                                                                                                                                                                                    |
-| `DELETE /comments/:id`     | New. A soft delete, answering `{ ok: true }`. It is a real DELETE: the API's CORS allow-list already has it.                                                                                                                                                                                                                                                                                           |
+| Route | Change |
+| --- | --- |
+| `GET /tasks/:id` | New. `{ task, plan, project, comments }`: the whole upstream task (notes included), its plan with `effort` (`null` when there is no plan row; a row with a null horizon only holds an effort), its goal as `{ id, name }`, and its comments oldest first without the deleted ones. 404 for a missing, binned or another user's task. |
+| `PATCH /tasks/:id` | Gains `effort`: a number from 0 to 999 with at most one decimal, or `null` to clear. Applied after `column` or `plan` and before a drop. It never moves the task and is allowed on a dropped one. |
+| `POST /tasks` | Gains `column`. `backlog` refuses a plan (400), `todo` requires one (400), `doing` and `done` take an optional plan. Without `column` it behaves as before. |
+| `GET /tasks/:id/comments` | New. `{ comments }`, oldest first. |
+| `POST /tasks/:id/comments` | New. `{ body }`, answering 201 `{ comment }`. |
+| `PATCH /comments/:id` | New. `{ body }`, answering `{ comment }` with a later `updated_at`. |
+| `DELETE /comments/:id` | New. A soft delete, answering `{ ok: true }`. It is a real DELETE: the API's CORS allow-list already has it. |
 
 - **Comment rules**: the text is trimmed and must be 1 to 5000 characters. Another user's task or comment is a 404. Comment writes use the same `planner` rate-limit bucket as every other mutation, and the same Origin rules.
 - **New event types** (source `planner`, written in the same batch as the change, M3): `effort_changed` with `{ from, to }`, and `commented`, `comment_edited` and `comment_deleted`, which carry only `{ comment_id }`. A comment's text never enters the history archive. The history labels read "Effort set to 3.5", "Effort cleared" (with "Was 2"), "Comment added", "Comment edited" and "Comment deleted".
@@ -598,28 +371,11 @@ CREATE INDEX `planner_task_comment_task_idx` ON `planner_task_comment` (`task_id
 - **T5 The panel reads one endpoint.** `GET /tasks/:id` carries everything the panel shows, so opening a task is one request. The board's card still leaves `notes` out.
 - **T6 Notes are upstream's `notes` field**, saved through `PATCH /tasks/:id` (empty notes are `null`). There is no second copy.
 - **T7 Quarter is derived, not stored**: the calendar quarter (UTC maths) of the plan's period start, else of the due date, shown as "Q4 2026". It cannot be edited; planning or setting a due date changes it.
-- **T8 Goal is the weekly goal (`planner_task_plan.goal_id`), since 2026-10-13.** The owner retired projects as goals: the menu lists the cockpit week's open goals and writes `goal_id` through `PATCH /tasks/:id`, and the project chip is gone from the cards. Upstream's `project_id` is kept on every task, untouched; `setProject` is left in the actions, unused, so turning projects back on is a UI change only. Before that date the menu listed live projects by their goal path from the tree; see `docs/planning-cockpit-goals-review.md`.
+- **T8 Goal is the weekly goal (`planner_task_plan.goal_id`), since 2026-10-13.** The owner retired projects as goals: the menu lists the cockpit week's open goals and writes `goal_id` through `PATCH /tasks/:id`, and the project chip is gone from the cards. Upstream's `project_id` is kept on every task, untouched; `setProject` was removed from the actions on 14 Oct 2026 (it had no caller); the card menu's Edit… form can still set a project. Before that date the menu listed live projects by their goal path from the tree; see `docs/planning-cockpit-goals-review.md`.
 - **T9 The address is the panel's state.** `?task=<bare id>` (without `tasks/`), read by `usePlannerTaskParam` and validated by `plannerCockpitSearch`. The route's `validateSearch` is one line in `router-tree.tsx`, which is why the validator is a fork-owned module and not inline.
 - **T10 One optimistic engine for the board and the panel.** Every edit patches the board's cache and the open panel's cached detail together, rolls both back with a toast when the server refuses, and refreshes (`["planner"]`, upstream's task keys and `["projects"]`) only once the last change in flight has settled. Edits made in the panel are silent on success, because the panel shows the new value in place; the board's own actions still toast.
 - **T11 Autosave rules** (`use-planner-autosave.ts`, tested with fake timers): a change that is the same once trimmed is never sent; two saves never overlap, and typing during a save sends one more with the newest text; saves the typing timer starts are at least 5 s apart, counted from the start of the previous save, so autosave makes about 12 a minute at most and typing leaves room for moves and comments in the shared 30-a-minute `planner` write bucket (a pause that ends inside the gap is held, never dropped; a blur, Retry, closing the panel and the page being hidden all ignore the gap and save at once); the cost of the gap is text still waiting for it when the page goes away, so a hidden page (`visibilitychange`, which covers a tab or app switch and most tab closes) and `pagehide` save at once as a `keepalive` request (a body over 32 KB, half of the 64 KB browsers allow for keepalive, goes as an ordinary request), which is best effort: on a tab or app switch the page stays alive and the save completes, but when the page is navigated away or closed the browser may still drop the request (observed in headless Chromium with the app's service worker controlling the page, `keepalive` or not), so the last few seconds of typing can still be lost on a close; a failed save keeps the text and is retried by the next edit (after the gap), the next blur or Retry; the server's value is adopted only while nothing is unsaved; closing the panel saves what is left.
 - **T12 Click versus drag.** The card's click handler ignores clicks that start inside a button, link, field, label or menu (including portaled menu items, which are React children but not DOM children of the card). Pending cards are inert. Escape inside a field of the panel (title, effort, due date, a comment being edited) belongs to the field: it never closes the panel.
-
-### Files
-
-All under `apps/web/src/planner/` unless noted.
-
-- **Add**: `column-composer.tsx`, `column-add.ts`, `task-panel.tsx`, `task-panel-properties.tsx`, `task-panel-notes.tsx`, `task-panel-comments.tsx`, `use-planner-autosave.ts`, `use-task-param.ts`, `cockpit-search.ts`, `panel-model.ts`, `effort.ts`, `history-timeline.tsx` (the timeline the History sheet and the panel share).
-- **Change**: `board.tsx`, `task-card.tsx`, `dropped-list.tsx`, `board-model.ts`, `use-planner-actions.ts` (adds `setTitle`, `setPriority`, `setProject`, `setEffort`, `createIn`), `plan-picker.tsx` (`PlannerPlanMenuItems`, shared by the card menu and the panel), `history-labels.ts`, `history-sheet.tsx`, `api.ts`, `query-keys.ts`, `strings.ts`, `cockpit-page.tsx`.
-- **Elsewhere**: `migrations/9001_planner_task_details.sql`, `packages/db/src/schema/planner.ts`, `packages/domain/src/planner/` (`comments.ts`, `task-detail.ts`, effort and create-in-column in `plans.ts`), `packages/contracts/src/planner.ts`, `apps/worker/src/routes/planner-api.ts`, and the two hook-in lines above.
-
-### Tests
-
-- **Domain and db**: `comments.test.ts`, `task-panel.test.ts` (detail, effort, create-in-column) and the 9001 cases in `planner-migrations.test.ts` (including applying 9001 on top of a 9000 database that has rows).
-- **Dev environment script** (`scripts/fork/dev-env.test.mjs`): the planner-track fixture now copies only upstream's migrations next to its stand-in planner file (the real 9001 alters a table the stand-in lacks), and a new case runs the fork's real files through the clone: production at 9000, this checkout adds 9001, so dev gets production's data and then rehearses 9001.
-- **Contracts and worker**: the effort, comment, column and detail schemas; the endpoint table, Origin, rate-limit and CORS tests extended to the new routes; new suites for detail, effort, create-in-column and comments (happy paths, 401, 404 for another user's records, 400 validation, PAT).
-- **Web**, with the network replaced and the real query cache: `use-planner-actions.test.tsx` (optimistic edits on both views, rollback, create-in-column); `board-interactions.test.tsx` (real dnd-kit click versus drag, the "+" buttons and composer, per-column and per-chip add targets); `task-card.test.tsx`; `task-panel.test.tsx` (loading, 404, error, every property, menus, title, effort, due date, dropped banner, history, footer); `task-panel-notes.test.tsx` (fake timers); `task-panel-comments.test.tsx`; `use-task-param.test.tsx` (a real router on an in-memory history); `use-planner-autosave.test.ts`; and the pure modules (`panel-model`, `effort`, `column-add`, `history-labels`, `api`).
-- **E2E** (`tests/e2e/cockpit.spec.ts`, written, not run, G8): a column's "+" adds into that column; the composer's close rules; a click opens the panel and Escape closes it; a click on a chip opens it while the ⋯ menu does not; the link, the back button and closing a linked panel; a link to a missing task; notes saved and kept after a reload; a comment sent, kept and deleted after a confirmation; properties saved while the card follows; a drag does not open the panel. Both languages are matched. While the panel is open the board behind it is hidden from the accessibility tree (the sheet is modal), so the cases close the panel before they look at the board.
-- Unit tests caught one bug before it shipped: in the title and effort fields Esc put the saved text back, but the blur it caused ran the save with the text as last rendered, so the text Esc discarded was saved. A ref now tells the save it is reverting.
 
 ### Not in v1.1
 
@@ -648,8 +404,6 @@ Known edges, kept on purpose:
 - If someone calls the rollover route by hand, it would carry To Do markers forward day by day and bump `carry_count`. Nothing in the web does that.
 - A Doing → To Do move with no plan writes two events: "Moved to Backlog" (the status change) and then "Moved to To Do" (the marker).
 
-Files: `migrations/9002_planner_start_date.sql`, `packages/db/src/schema/planner.ts`, `packages/contracts/src/planner.ts`, `packages/domain/src/planner/` (`plans.ts`, `board.ts`, `shared.ts`, `rollover.ts` comment), `apps/worker/src/routes/planner-api.ts`, and the web files under `apps/web/src/planner/` (`cockpit-page.tsx`, `board.tsx`, `board-model.ts`, `column-add.ts`, `quick-add.tsx`, `task-card.tsx`, `task-panel-properties.tsx`, `card-dialogs.tsx`, `day-dialog.tsx` (was `plan-picker.tsx`), `history-labels.ts`, `strings.ts`, `use-planner-actions.ts`, `dates.ts`, `panel-model.ts`, `api.ts`). `tests/e2e/cockpit.spec.ts` is updated and written, not run (G8).
-
 ## 14. Drag to re-rank (migration 9004)
 
 The owner's request (2026-10-08): drag the to-do items and re-rank them. Every column (Backlog, To Do, Doing, Done) can be reordered by drag and drop, and a card dropped from another column lands at the spot it was dropped on.
@@ -670,5 +424,3 @@ The owner's request (2026-10-08): drag the to-do items and re-rank them. Every c
 **Web.** `@dnd-kit/sortable`: each column is a `SortableContext`, so cards move aside while one is carried inside its own column; carrying a card over another column draws a line where it will land. Two-step collision (the column under the pointer, then the nearest card in it). Dropping inside a column asks for a reorder, dropping on another column's card asks for a move with a place, dropping on an empty column is the plain move. Optimistic: the card is on the board at its place at once; a refused request puts both columns back as they were. Sensors: the mouse (6 px), the touch long press (400 ms, unchanged) and now the keyboard: focus a card, Space lifts it, arrows move it (sortable coordinates), Space drops, Escape cancels. The card itself is the keyboard handle, so keys pressed on the buttons inside it keep their meaning. A card still waiting for the server can be neither dragged nor dropped next to.
 
 **Not done.** The Other bucket and the Dropped list are not reorderable. Nothing re-ranks on the server when the history sync runs (it never touches the plan row's rank).
-
-Files: `migrations/9004_planner_board_rank.sql`, `packages/db/src/schema/planner.ts`, `packages/contracts/src/planner.ts` and `planner-rank.ts`, `packages/domain/src/planner/board-rank.ts` (and `board.ts`, `plans.ts`), `apps/worker/src/routes/planner-api.ts`, `apps/web/src/planner/` (`board.tsx`, `board-model.ts`, `use-planner-actions.ts`, `strings.ts`). `tests/e2e/cockpit.spec.ts` has three new cases, written, not run (G8).

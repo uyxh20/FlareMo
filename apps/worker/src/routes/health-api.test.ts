@@ -218,11 +218,6 @@ describe("health API", () => {
       },
       { method: "POST", path: `/entries/${entryId}/dismiss` },
       { method: "POST", path: "/rescan" },
-      {
-        method: "PUT",
-        path: "/targets",
-        body: { targets: [{ kind: "training", period: "week", amount: 4 }] },
-      },
       { method: "GET", path: "/goals" },
       { method: "GET", path: "/trackers" },
       { method: "POST", path: "/trackers", body: FASTING },
@@ -316,10 +311,7 @@ describe("health API", () => {
       ).toBe(200);
       expect(
         (
-          await request("PUT", `${API}/targets`, {
-            body: {
-              targets: [{ kind: "night_out", period: "year", amount: 10 }],
-            },
+          await request("POST", `${API}/rescan`, {
             headers: bearer,
           })
         ).status,
@@ -373,8 +365,6 @@ describe("health API", () => {
           training: 1,
           breath: 1,
           night_out: null,
-          has_night: false,
-          needs_check: false,
           trackers: {},
         },
       ]);
@@ -452,7 +442,6 @@ describe("health API", () => {
         home_at: "04:30",
         units: 1,
         needs_check: false,
-        edited: true,
       });
       const summary = (await week()).summary.night_out;
       expect(summary).toMatchObject({ units: 1, needs_check: 0, year_used: 1 });
@@ -503,7 +492,7 @@ describe("health API", () => {
   });
 
   describe("targets", () => {
-    it("starts at the defaults and keeps what is set", async () => {
+    it("starts at the defaults", async () => {
       const first = onTheWire(
         healthTargetsResponseSchema,
         await body<HealthTargetsResponse>(send("GET", `${API}/targets`)),
@@ -513,29 +502,13 @@ describe("health API", () => {
         ["breath", "week", 7],
         ["night_out", "year", 12],
       ]);
-      const saved = await body<HealthTargetsResponse>(
-        send("PUT", `${API}/targets`, {
-          targets: [{ kind: "training", period: "week", amount: 4 }],
-        }),
-      );
-      expect(saved.targets[0]).toEqual({
-        kind: "training",
-        period: "week",
-        amount: 4,
-        is_default: false,
-      });
-      expect((await week()).summary.training.target).toBe(4);
     });
 
-    it("refuses a target that does not exist", async () => {
-      for (const targets of [
-        [{ kind: "training", period: "year", amount: 100 }],
-        [{ kind: "breath", period: "week", amount: -1 }],
-        [],
-      ]) {
-        const response = await send("PUT", `${API}/targets`, { targets });
-        expect(response.status, JSON.stringify(targets)).toBe(400);
-      }
+    it("has no route that sets them", async () => {
+      const response = await send("PUT", `${API}/targets`, {
+        targets: [{ kind: "training", period: "week", amount: 4 }],
+      });
+      expect(response.status).toBe(404);
     });
   });
 
