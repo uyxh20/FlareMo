@@ -1,6 +1,7 @@
 import {
   type HealthEntryDto,
   type HealthEntryKind,
+  type HealthGoalProgress,
   type HealthTrackerDto,
   healthAddDays,
   healthIsBuiltinKind,
@@ -233,4 +234,25 @@ export function healthMonthMarks(
 export function healthShare(value: number, target: number): number {
   if (target <= 0) return value > 0 ? 1 : 0;
   return Math.max(0, Math.min(1, value / target));
+}
+
+/**
+ * A linked tracker's line on a goal card: "Fasting · 9 days so far · avg 16 h".
+ * The average is over the days a length was read, and only for a tracker that
+ * reads lengths.
+ */
+export function healthGoalProgressText(progress: HealthGoalProgress): string {
+  const s = healthStrings.trackers;
+  const parts = [progress.label, s.goalDays(progress.days)];
+  if (progress.measure !== "days" && progress.timed_days > 0) {
+    const average = Math.round(progress.minutes / progress.timed_days);
+    parts.push(
+      s.goalAverage(
+        progress.measure === "hours"
+          ? s.hours(average)
+          : healthStrings.chip.minutes(average),
+      ),
+    );
+  }
+  return parts.join(" · ");
 }

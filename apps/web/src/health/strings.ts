@@ -115,6 +115,9 @@ export const healthStrings = {
     weekHours: (minutes: number) =>
       `${Math.round((minutes / 60) * 10) / 10} h in total`,
     weekMinutes: (minutes: number) => `${minutes} min in total`,
+    goalDays: (days: number) => `${days} ${days === 1 ? "day" : "days"} so far`,
+    goalAverage: (length: string) => `avg ${length}`,
+    goalLabel: (label: string) => `Tracked: ${label}`,
   },
 
   answers: [

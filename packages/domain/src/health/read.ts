@@ -1,6 +1,7 @@
 import {
   type HealthEntryDto,
   type HealthEntryKind,
+  type HealthGoalProgress,
   type HealthKind,
   type HealthTargetDto,
   type HealthTargetPeriod,
@@ -14,13 +15,15 @@ import {
   healthDefaultTargets,
   healthIsBuiltinKind,
   healthLocalMoment,
+  healthTrackerColors,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { healthEntry, healthTarget } from "@flaremo/db/src/schema/fork-health";
+import { plannerGoal } from "@flaremo/db/src/schema/planner";
 import { and, asc, between, eq, inArray, isNull } from "drizzle-orm";
 import { parseResourceName } from "../ids";
 import { type HealthEntryRow, healthToDto } from "./rows";
-import { healthReadTrackerKinds } from "./trackers";
+import { healthReadTrackerKinds, healthReadTrackerRows } from "./trackers";
 
 // What the health tracker's API reads (fork-owned add-on,
 // docs/fork-health-tracker.md). Nothing here writes. A row counts when it is
@@ -313,4 +316,102 @@ export async function healthReadMemos(
     }
   }
   return result;
+}
+
+// --- Goal progress -------------------------------------------------------------
+
+/** The last day of a goal's period, from its first day. */
+function periodEnd(level: string, start: string): string | null {
+  const [year, month] = start.split("-").map(Number) as [number, number];
+  const lastOfMonth = (y: number, m: number) => {
+    const date = new Date(Date.UTC(y, m, 0));
+    return date.toISOString().slice(0, 10);
+  };
+  switch (level) {
+    case "year":
+      return `${year}-12-31`;
+    case "quarter":
+      return lastOfMonth(year, month + 2);
+    case "month":
+      return lastOfMonth(year, month);
+    case "week":
+      return healthAddDays(start, 6);
+    default:
+      return null;
+  }
+}
+
+/**
+ * Each live tracker linked to a goal, counted over that goal's period up to
+ * today. A tracker whose goal is gone, or has no period, is left out.
+ */
+export async function healthReadGoalProgress(
+  db: FlareMoDb,
+  input: { userId: string; now?: Date },
+): Promise<HealthGoalProgress[]> {
+  const linked = (await healthReadTrackerRows(db, input.userId)).filter(
+    (row) =>
+      !healthIsBuiltinKind(row.kind) &&
+      row.archivedAt === null &&
+      row.goalId !== null,
+  );
+  if (linked.length === 0) return [];
+  const goalIds = [...new Set(linked.map((row) => row.goalId as string))];
+  const goals = await db
+    .select({
+      id: plannerGoal.id,
+      level: plannerGoal.level,
+      periodStart: plannerGoal.periodStart,
+    })
+    .from(plannerGoal)
+    .where(
+      and(
+        eq(plannerGoal.userId, input.userId),
+        isNull(plannerGoal.deletedAt),
+        inArray(plannerGoal.id, goalIds),
+      ),
+    )
+    .all();
+  const today = healthToday(input.now);
+  const progress: HealthGoalProgress[] = [];
+  for (const row of [...linked].sort(
+    (a, b) => a.sortOrder - b.sortOrder || (a.createdAt < b.createdAt ? -1 : 1),
+  )) {
+    const goal = goals.find((candidate) => candidate.id === row.goalId);
+    const from = goal?.periodStart ?? null;
+    const to = goal && from ? periodEnd(goal.level, from) : null;
+    if (!goal || !from || !to) continue;
+    const until = to < today ? to : today;
+    const entries =
+      from > until
+        ? []
+        : await db
+            .select({ day: healthEntry.day, minutes: healthEntry.minutes })
+            .from(healthEntry)
+            .where(
+              and(
+                visible(input.userId),
+                eq(healthEntry.kind, row.kind),
+                between(healthEntry.day, from, until),
+              ),
+            )
+            .all();
+    const timed = entries.filter((entry) => (entry.minutes ?? 0) > 0);
+    progress.push({
+      goal_id: goal.id,
+      level: goal.level as HealthGoalProgress["level"],
+      kind: row.kind,
+      label: row.label,
+      color: (healthTrackerColors as readonly string[]).includes(row.color)
+        ? (row.color as HealthGoalProgress["color"])
+        : "green",
+      measure: row.measure,
+      from,
+      to,
+      days: new Set(entries.map((entry) => entry.day)).size,
+      minutes: entries.reduce((sum, entry) => sum + (entry.minutes ?? 0), 0),
+      timed_days: new Set(timed.map((entry) => entry.day)).size,
+    });
+  }
+  return progress;
 }

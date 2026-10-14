@@ -1,13 +1,19 @@
 import type { HealthTrackerInput } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMemo } from "../memos-write";
+import { plannerCreateGoal } from "../planner/goals";
 import {
   type PlannerTestRuntime,
   plannerTestRows,
   plannerTestRuntime,
 } from "../planner/test-support";
 import { healthParseMemo } from "./parse";
-import { healthReadWeek, healthReadYear, healthToday } from "./read";
+import {
+  healthReadGoalProgress,
+  healthReadWeek,
+  healthReadYear,
+  healthToday,
+} from "./read";
 import { healthPreviewTracker, healthRescan } from "./sync";
 import {
   healthArchiveTracker,
@@ -128,6 +134,7 @@ describe("health trackers", () => {
         "health_entry_event",
         "health_entry",
         "health_sync_state",
+        "planner_goal",
         "memos",
       ].map((table) => rt.database.prepare(`DELETE FROM ${table}`)),
     );
@@ -280,7 +287,48 @@ describe("health trackers", () => {
     ).rejects.toThrow(/blocked/);
   });
 
-  it("leaves the weekly review's entries to the built-in kinds", async () => {
+  it("counts a linked tracker over its goal's period for the goal card", async () => {
+    const today = healthToday();
+    const goal = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        level: "month",
+        periodStart: today,
+        pillar: "health",
+        title: "Fast 16 h most days",
+        lines: [],
+      },
+    });
+    const created = await healthCreateTracker(rt.db, {
+      userId: rt.user.id,
+      tracker: { ...fasting, goal_id: goal.id },
+    });
+    await write("Fasted 18h");
+    await write("Fasted 16h again, second note");
+    const [progress, ...rest] = await healthReadGoalProgress(rt.db, {
+      userId: rt.user.id,
+    });
+    expect(rest).toEqual([]);
+    expect(progress).toMatchObject({
+      goal_id: goal.id,
+      level: "month",
+      kind: created.kind,
+      label: "Fasting",
+      measure: "hours",
+      from: `${today.slice(0, 7)}-01`,
+      days: 1,
+      minutes: 34 * 60,
+      timed_days: 1,
+    });
+    expect(progress?.to.slice(0, 7)).toBe(today.slice(0, 7));
+
+    await healthArchiveTracker(rt.db, { userId: rt.user.id, id: created.id });
+    expect(await healthReadGoalProgress(rt.db, { userId: rt.user.id })).toEqual(
+      [],
+    );
+  });
+
+  it("gives the weekly review the owner's trackers beside the built-in kinds", async () => {
     await healthCreateTracker(rt.db, { userId: rt.user.id, tracker: fasting });
     await write("Fasted 18h, crossfit done");
     const { plannerReadWeekHealth } = await import("../planner/review-context");
@@ -290,5 +338,15 @@ describe("health trackers", () => {
       weekStart: today,
     });
     expect(week.entries.map((entry) => entry.kind)).toEqual(["training"]);
+    expect(week.trackers).toEqual([
+      {
+        label: "Fasting",
+        measure: "hours",
+        days: 1,
+        minutes: 1080,
+        entries: [{ day: today, minutes: 1080, feel: null }],
+        goal: null,
+      },
+    ]);
   });
 });

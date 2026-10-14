@@ -2,6 +2,7 @@ import type {
   HealthBuiltinWordsInput,
   HealthEntryDto,
   HealthEntryResponse,
+  HealthGoalProgressResponse,
   HealthMemosResponse,
   HealthPatchEntryInput,
   HealthRescanResponse,
@@ -58,6 +59,11 @@ export function healthRescanRequest() {
 }
 
 // --- Trackers -----------------------------------------------------------------
+
+/** Each tracker linked to a goal, counted over the goal's period. */
+export function healthFetchGoalProgress() {
+  return apiRequest<HealthGoalProgressResponse>(`${HEALTH_API}/goals`);
+}
 
 export function healthFetchTrackers() {
   return apiRequest<HealthTrackersResponse>(`${HEALTH_API}/trackers`);

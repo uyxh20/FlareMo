@@ -676,3 +676,35 @@ export const healthTrackerSaveResponseSchema = z.object({
 export type HealthTrackerSaveResponse = z.infer<
   typeof healthTrackerSaveResponseSchema
 >;
+
+/**
+ * A tracker's progress inside the period of the goal it is linked to (a year,
+ * quarter, month or week goal), counted up to today. The goal itself holds the
+ * target as text; this is only the count the goal card shows beside it.
+ */
+export const healthGoalProgressSchema = z.object({
+  goal_id: z.string(),
+  kind: healthEntryKindSchema,
+  label: z.string(),
+  color: z.enum(healthTrackerColors),
+  measure: z.enum(healthTrackerMeasures),
+  /** The goal's level: year, quarter, month or week. */
+  level: z.enum(["year", "quarter", "month", "week"]),
+  /** The goal's period, first and last day. */
+  from: healthDaySchema,
+  to: healthDaySchema,
+  /** Days with at least one entry. */
+  days: z.number().int(),
+  /** Minutes summed over the period. */
+  minutes: z.number().int(),
+  /** Days with a length read, the average's divisor. */
+  timed_days: z.number().int(),
+});
+export type HealthGoalProgress = z.infer<typeof healthGoalProgressSchema>;
+
+export const healthGoalProgressResponseSchema = z.object({
+  progress: z.array(healthGoalProgressSchema),
+});
+export type HealthGoalProgressResponse = z.infer<
+  typeof healthGoalProgressResponseSchema
+>;

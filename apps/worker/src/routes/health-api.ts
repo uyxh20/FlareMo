@@ -1,5 +1,6 @@
 import {
   type HealthEntryResponse,
+  type HealthGoalProgressResponse,
   type HealthKind,
   type HealthMemosResponse,
   type HealthRescanResponse,
@@ -29,6 +30,7 @@ import {
   healthListTrackers,
   healthPatchEntry,
   healthPreviewTracker,
+  healthReadGoalProgress,
   healthReadMemos,
   healthReadTargets,
   healthReadWeek,
@@ -225,6 +227,21 @@ healthApi.put(
 // The owner's own trackers and the built-ins' extra words (docs/fork-health-
 // tracker.md, "Trackers"). Every save re-reads the whole diary so the rows match
 // the new words at once; the preview reads it too but writes nothing.
+
+// Each tracker linked to a goal, counted over that goal's period: what the
+// goal cards on the Goals page show beside the goal's own words.
+healthApi.get("/goals", async (c) => {
+  try {
+    const { db, user } = await getRequestContext(c);
+    await healthEnsureScanned(db, user.id);
+    const response: HealthGoalProgressResponse = {
+      progress: await healthReadGoalProgress(db, { userId: user.id }),
+    };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
 
 healthApi.get("/trackers", async (c) => {
   try {

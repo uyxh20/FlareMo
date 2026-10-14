@@ -269,6 +269,7 @@ describe("health and memories in the context", () => {
         year_used: 5,
       },
     },
+    trackers: [],
   };
 
   it("gives the tracker's week with targets, days and bender nights", () => {
@@ -291,10 +292,55 @@ describe("health and memories in the context", () => {
   it("says an empty tracker week is unrecorded, and skips a tracker it could not read", () => {
     const empty = plannerReviewContextBlock({
       ...CONTEXT,
-      health: { entries: [], summary: health.summary },
+      health: { entries: [], summary: health.summary, trackers: [] },
     });
     expect(empty).toContain("Nothing was logged in the tracker this week.");
     expect(plannerReviewContextBlock(CONTEXT)).not.toContain("Health tracker");
+  });
+
+  it("gives the owner's own trackers with their linked goal's progress", () => {
+    const block = plannerReviewContextBlock({
+      ...CONTEXT,
+      health: {
+        entries: [],
+        summary: health.summary,
+        trackers: [
+          {
+            label: "Fasting",
+            measure: "hours",
+            days: 2,
+            minutes: 34 * 60,
+            entries: [
+              { day: "2026-10-05", minutes: 16 * 60, feel: null },
+              { day: "2026-10-07", minutes: 18 * 60, feel: "easy" },
+            ],
+            goal: {
+              level: "quarter",
+              from: "2026-10-01",
+              to: "2026-12-31",
+              days: 5,
+              minutes: 85 * 60,
+              timed_days: 5,
+            },
+          },
+          {
+            label: "Cold shower",
+            measure: "days",
+            days: 0,
+            minutes: 0,
+            entries: [],
+            goal: null,
+          },
+        ],
+      },
+    });
+    expect(block).toContain(
+      '- Fasting (the owner\'s own tracker): 2 days this week, 34 h in total. Mon 5 Oct 16 h; Wed 7 Oct 18 h ("easy"). Linked to the quarter goal; 2026-10-01 to 2026-12-31 so far: 5 days, avg 17 h.',
+    );
+    expect(block).toContain(
+      "- Cold shower (the owner's own tracker): 0 days this week",
+    );
+    expect(block).not.toContain("Nothing was logged");
   });
 
   it("lists the week's memories as conclusions, marking unconfirmed ones", () => {

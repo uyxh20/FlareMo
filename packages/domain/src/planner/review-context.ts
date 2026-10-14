@@ -39,7 +39,8 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { healthReadWeek } from "../health/read";
+import { healthReadGoalProgress, healthReadWeek } from "../health/read";
+import { healthListTrackers } from "../health/trackers";
 import {
   plannerReadGoalsById,
   plannerReadNorthStar,
@@ -362,9 +363,38 @@ export type PlannerWeekHealth = {
     >
   >;
   summary: HealthWeekSummary;
+  /**
+   * The owner's own trackers (fasting, say), each with its week and, when it
+   * is linked to a goal, how far it has got in that goal's period.
+   */
+  trackers: Array<{
+    label: string;
+    measure: "days" | "minutes" | "hours";
+    days: number;
+    minutes: number;
+    entries: Array<{
+      day: string;
+      minutes: number | null;
+      feel: string | null;
+    }>;
+    goal: {
+      level: string;
+      from: string;
+      to: string;
+      days: number;
+      minutes: number;
+      timed_days: number;
+    } | null;
+  }>;
 };
 
 const HEALTH_FEEL_CHARS = 160;
+
+function shortFeel(feel: string | null): string | null {
+  return feel
+    ? feel.replace(/\s+/g, " ").trim().slice(0, HEALTH_FEEL_CHARS) || null
+    : null;
+}
 
 function isBuiltinEntry(
   entry: HealthEntryDto,
@@ -377,13 +407,14 @@ export async function plannerReadWeekHealth(
   db: FlareMoDb,
   input: { userId: string; weekStart: string },
 ): Promise<PlannerWeekHealth> {
-  const week = await healthReadWeek(db, {
-    userId: input.userId,
-    start: input.weekStart,
-  });
+  const [week, trackers, progress] = await Promise.all([
+    healthReadWeek(db, { userId: input.userId, start: input.weekStart }),
+    healthListTrackers(db, input.userId),
+    healthReadGoalProgress(db, { userId: input.userId }),
+  ]);
+  const own = trackers.filter((tracker) => !tracker.builtin);
   return {
-    // Only the three built-in kinds: the owner's own trackers stay out of the
-    // review while its changes are on hold (docs/fork-health-tracker.md).
+    // The built-in kinds here; the owner's own trackers under `trackers`.
     entries: week.entries.filter(isBuiltinEntry).map((entry) => ({
       kind: entry.kind,
       day: entry.day,
@@ -393,12 +424,36 @@ export async function plannerReadWeekHealth(
       units: entry.units,
       bender: entry.bender,
       needs_check: entry.needs_check,
-      feel: entry.feel
-        ? entry.feel.replace(/\s+/g, " ").trim().slice(0, HEALTH_FEEL_CHARS) ||
-          null
-        : null,
+      feel: shortFeel(entry.feel),
     })),
     summary: week.summary,
+    trackers: own.map((tracker) => {
+      const count = week.trackers.find((item) => item.kind === tracker.kind);
+      const goal = progress.find((item) => item.kind === tracker.kind);
+      return {
+        label: tracker.label,
+        measure: tracker.measure,
+        days: count?.days ?? 0,
+        minutes: count?.minutes ?? 0,
+        entries: week.entries
+          .filter((entry) => entry.kind === tracker.kind)
+          .map((entry) => ({
+            day: entry.day,
+            minutes: entry.minutes,
+            feel: shortFeel(entry.feel),
+          })),
+        goal: goal
+          ? {
+              level: goal.level,
+              from: goal.from,
+              to: goal.to,
+              days: goal.days,
+              minutes: goal.minutes,
+              timed_days: goal.timed_days,
+            }
+          : null,
+      };
+    }),
   };
 }
 
