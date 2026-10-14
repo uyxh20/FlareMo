@@ -697,8 +697,8 @@ export const healthGoalProgressSchema = z.object({
   days: z.number().int(),
   /** Minutes summed over the period. */
   minutes: z.number().int(),
-  /** Days with a length read, the average's divisor. */
-  timed_days: z.number().int(),
+  /** Entries with a length read, the average's divisor (one fast, say). */
+  timed: z.number().int(),
 });
 export type HealthGoalProgress = z.infer<typeof healthGoalProgressSchema>;
 

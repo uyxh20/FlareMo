@@ -320,7 +320,7 @@ describe("health and memories in the context", () => {
               to: "2026-12-31",
               days: 5,
               minutes: 85 * 60,
-              timed_days: 5,
+              timed: 5,
             },
           },
           {

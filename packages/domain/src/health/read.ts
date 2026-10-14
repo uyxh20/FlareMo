@@ -410,7 +410,7 @@ export async function healthReadGoalProgress(
       to,
       days: new Set(entries.map((entry) => entry.day)).size,
       minutes: entries.reduce((sum, entry) => sum + (entry.minutes ?? 0), 0),
-      timed_days: new Set(timed.map((entry) => entry.day)).size,
+      timed: timed.length,
     });
   }
   return progress;
