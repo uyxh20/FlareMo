@@ -478,6 +478,9 @@ const messages = {
   "auth.password": "كلمة المرور",
   "auth.signIn": "تسجيل الدخول",
   "auth.signingIn": "جارٍ تسجيل الدخول…",
+  "auth.confirmingSession": "تم تسجيل الدخول، جارٍ فتح مساحة العمل…",
+  "auth.sessionNotStored":
+    "نجح تسجيل الدخول، لكن المتصفح لم يحفظ الجلسة. تحقق من عدم حظر ملفات تعريف الارتباط لهذا الموقع، ثم أعد المحاولة.",
   "auth.loginFailed":
     "فشل تسجيل الدخول. تحقق من اسم المستخدم وكلمة المرور ثم أعد المحاولة.",
   "auth.statusUnavailable":
