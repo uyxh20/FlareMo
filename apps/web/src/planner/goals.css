@@ -691,10 +691,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 .planner-split[data-strong] .planner-u-t {
   font-weight: 650;
 }
-.planner-split[data-strong] .planner-dot {
-  width: 10px;
-  height: 10px;
-}
 /* Only the current month and week are coloured (fork change, 2026-10-14). */
 .planner-split[data-current] {
   border-color: color-mix(in oklab, var(--planner-p, var(--brand-500)) 60%, var(--border));
