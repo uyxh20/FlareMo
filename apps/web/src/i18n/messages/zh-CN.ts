@@ -448,6 +448,9 @@ const messages = {
   "auth.password": "密码",
   "auth.signIn": "登录",
   "auth.signingIn": "正在登录…",
+  "auth.confirmingSession": "已登录，正在进入工作区…",
+  "auth.sessionNotStored":
+    "登录已通过，但浏览器未能保存登录状态；请检查是否禁用了本站 Cookie 后重试。",
   "auth.loginFailed": "登录失败，请检查用户名和密码后重试。",
   "auth.statusUnavailable": "无法读取当前认证状态，请检查网络后重试。",
   "auth.setupUnavailable": "初始化暂不可用，请稍后重试或联系管理员。",
