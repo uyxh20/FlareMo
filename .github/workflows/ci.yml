@@ -82,3 +82,11 @@ jobs:
 
       - name: Unit tests
         run: pnpm test
+
+      # Fork: the deploy and dev-environment scripts guard live data, so their
+      # tests and the persistence manifest check run here too.
+      - name: Fork script tests
+        run: node --test scripts/fork/*.test.mjs
+
+      - name: Persistence manifest check
+        run: pnpm persistence:check

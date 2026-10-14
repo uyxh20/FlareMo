@@ -100,7 +100,7 @@ jobs:
             exit 0
           fi
 
-          pr_body="A new stable FlareMo release is available. Review the release notes and merge this pull request to let Cloudflare Workers Builds deploy it.
+          pr_body="A new stable FlareMo release is available. Review the release notes and merge this pull request. Merging does not deploy: rehearse on dev with scripts/fork/dev-env.mjs, then ship with node scripts/fork/prod-deploy.mjs.
 
           Release notes: https://github.com/${UPSTREAM_REPOSITORY}/releases/tag/${target_version}"
           gh pr create \

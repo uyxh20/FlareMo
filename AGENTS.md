@@ -2,6 +2,18 @@
 
 这份文件给 Codex、Claude Code、Cursor Agent 等自动化编码工具使用。目标是让 Agent 能稳定理解、修改、验证和部署 FlareMo。
 
+## Fork: shipping to live (Schizo Diary)
+
+This fork has no deploy-on-push and no Workers Builds: merging to `main` ships nothing. Live (Worker `flaremo`, D1 `flaremo`) changes only through the deploy script, and only when the owner says "push to prod":
+
+```bash
+node scripts/fork/prod-deploy.mjs deploy --dry-run         # read-only rehearsal
+node scripts/fork/prod-deploy.mjs deploy --confirm flaremo  # bookmark, build, counts, migrate, deploy, checks, auto-rollback
+node scripts/fork/prod-deploy.mjs rollback --confirm flaremo [--version <id>]
+```
+
+Never use `pnpm deploy`, `pnpm migrate:remote`, raw `wrangler deploy` / `d1 ... --remote` / `secret` / `delete`, the `cf` CLI or the Cloudflare MCP write tools against live: they skip the Time Travel bookmark, the row-count check and the rollback. `.claude/settings.json` makes each of them ask first. Rehearse on dev with `node scripts/fork/dev-env.mjs` (see `docs/fork-dev-environment.md`).
+
 ## 项目定位
 
 FlareMo 是一个 Cloudflare 原生的个人知识管理系统：
@@ -50,11 +62,11 @@ dev:hot 下额外启用 **React Grab**（`apps/web/src/dev/react-grab.ts`）：�
 
 已知小限制：组件栈里的文件名只有基名（`input.tsx` 而非完整路径）——Vite dev 的 sourcemap `sources` 本身就只发布基名，拾取器只是如实转述。靠组件名 + 行列号 + CSS 选择器足以定位。
 
-生产部署（Fork 注意：本 fork 不用 `pnpm deploy`，见文末 “Fork (Schizo Diary) rules”）：
+生产部署（fork：只用 `node scripts/fork/prod-deploy.mjs`，见上方 "Fork: shipping to live"；不要用 `pnpm deploy`）：
 
 ```bash
 pnpm deploy:dry-run
-pnpm deploy
+node scripts/fork/prod-deploy.mjs deploy --dry-run
 ```
 
 `pnpm verify` 是 13 步全量门禁（含 e2e），**只在维护者明确要求时执行**（发版也不需要）。
@@ -116,7 +128,7 @@ issue -> branch -> PR 流程只用于：对外贡献者、维护者明确要求�
 
 - 改动涉及的测试必须绿：只跑该改动相关的 vitest 文件（e2e 见上：opt-in，不主动跑）。
 - 提交前跑一次 `pnpm format`（很快）。
-- 部署不需要先跑全量门禁：直接部署（`scripts/fork/prod-deploy.mjs` 不跑 verify），迁移、构建和线上冒烟仍由部署脚本执行。
+- 部署不需要先跑全量门禁：fork 用 `node scripts/fork/prod-deploy.mjs` 部署（不跑 verify），迁移、构建、行数核对和线上冒烟由该脚本执行。
 - 全量 `pnpm verify` 只在维护者明确要求时执行；发版脚本（`pnpm release`）默认不跑，`--verify` 可按需开启。
 
 涉及部署、Wrangler、D1、R2 或 Access 的改动，建议跑 `pnpm deploy:dry-run`。
@@ -138,17 +150,10 @@ issue -> branch -> PR 流程只用于：对外贡献者、维护者明确要求�
 - `docs/semantic-search.md`：语义搜索、Vectorize 和 Workers AI 的边界。
 - `ROADMAP.md`：稳定方向和公开任务池。
 
-## Fork (Schizo Diary) rules
+## Fork (Schizo Diary): other rules
 
-This repository is a personal fork of FlareMo ("Schizo Diary"). The sections above are upstream's and are written for upstream; where they disagree with this section, this section wins for the fork.
+This repository is a personal fork of FlareMo ("Schizo Diary"). The sections above are upstream's and are written for upstream; where they disagree with this section or with "Fork: shipping to live" at the top, the fork sections win.
 
-- **There is no auto-deploy.** The fork's deploy workflow (`.github/workflows/deploy-cloudflare.yml`) was removed on 2026-10-04. Pushing or merging to `main` ships nothing. Only `ci.yml` (nightly, pull requests, manual) and `flaremo-update.yml` (weekly upstream check) exist. Do not recreate a deploy workflow, and do not use `cloudflare/wrangler-action`.
-- **Production deploys** go through one script, never `pnpm deploy` or raw `wrangler deploy`:
-  - `node scripts/fork/prod-deploy.mjs status` (read-only)
-  - `node scripts/fork/prod-deploy.mjs deploy --dry-run`
-  - `node scripts/fork/prod-deploy.mjs deploy --confirm flaremo` (HEAD must equal `origin/main`, clean tree)
-  - `node scripts/fork/prod-deploy.mjs rollback --confirm flaremo`
-  - `.claude/settings.json` asks before any raw live write (`wrangler deploy`, `rollback`, `secret`, remote D1 migrations or `execute`, Time Travel restore, R2 writes, `cf`, Cloudflare API writes and the Cloudflare connector's write tools).
 - **Dev environment**: a separate `flaremo-dev` deployment with a copy of live data, driven by `node scripts/fork/dev-env.mjs`. Test a change there before shipping. See `docs/fork-dev-environment.md`.
 - **Fork migrations** are the hand-written `migrations/9xxx_*.sql` files. They are additive and not in the Drizzle journal, and applied ones are frozen by hash. Never apply an untracked migration file.
 - **Keep upstream diffs small.** Fork logic goes in fork-owned files; an upstream file gets only the smallest hook-in. Every upstream file the fork changed is listed in `docs/fork-customizations.md`, "Upstream files with a hook-in". Update that table in the same change when you touch another upstream file.

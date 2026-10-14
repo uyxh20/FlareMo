@@ -87,7 +87,8 @@ const DEV_CONFIG_HEADER = [
  *
  * Every resource name gets the flaremo-dev prefix, absolute paths replace the
  * relative ones (the config lives outside the repo root), the public URL points
- * at the dev origin, and outbound email/push vars are forced empty. The result
+ * at the dev origin, outbound email/push vars are forced empty and embedding is
+ * off unless asked for (dev shares the free plan's daily AI allowance). The result
  * is verified with assertConfigDevOnly before it is returned, and the builder
  * refuses an example it does not fully understand (an unreviewed top-level key
  * could bind to a production resource).
@@ -99,6 +100,7 @@ export function buildDevConfig({
   publicUrl = DEV.publicUrl,
   trustedOrigins = [],
   ratelimitNamespaceId = DEV.ratelimitNamespaceId,
+  embeddingProvider = "none",
   migrationsDir,
 }) {
   const example = parseConfigText(exampleText, "wrangler.jsonc.example");
@@ -195,6 +197,12 @@ export function buildDevConfig({
   for (const key of [...OUTBOUND_VARS, "FLAREMO_DEPLOY_REPOSITORY"]) {
     if (key in exampleVars) set(["vars", key], "");
   }
+  if (!["none", "workers-ai", "http"].includes(embeddingProvider)) {
+    throw new Error(
+      `Unknown embedding provider "${embeddingProvider}" (use none, workers-ai or http).`,
+    );
+  }
+  set(["vars", "FLAREMO_EMBEDDING_PROVIDER"], embeddingProvider);
 
   text = `${DEV_CONFIG_HEADER}${text}`;
   const built = parseConfigText(text, "generated dev config");

@@ -333,6 +333,10 @@ export class DevEnv {
         clean(options.ratelimitNamespaceId) ??
         clean(this.env.FLAREMO_DEV_RATELIMIT_NAMESPACE_ID) ??
         DEV.ratelimitNamespaceId,
+      // Off unless asked: dev shares the free plan's daily Workers AI and
+      // Vectorize allowance with live, and a clone re-embeds the whole diary.
+      embeddingProvider:
+        clean(this.env.FLAREMO_DEV_EMBEDDING_PROVIDER) ?? "none",
     };
   }
 
@@ -878,9 +882,9 @@ export class DevEnv {
 
   deploy(options = {}) {
     const dryRun = Boolean(options.dryRun);
-    const settings = this.resolveSettings(options, {
-      allowPlaceholder: dryRun,
-    });
+    // The dev D1 id is looked up by its fixed name (read-only `d1 list`), so
+    // a wiped .wrangler/fork-dev/state.json no longer needs --d1-id.
+    const settings = this.resolveSettings(options, { allowPlaceholder: true });
     this.writeConfig(settings);
     if (options.skipBuild) {
       this.log("Skipping the web build (--skip-build)");
@@ -896,13 +900,13 @@ export class DevEnv {
         "\n--dry-run: not applying migrations or setting secrets (both need Cloudflare)",
       );
     } else {
-      this.requireRealD1Id();
       this.step("check the dev D1", () => {
         if (!this.syncDevD1()) {
           throw new Error(
             `D1 ${DEV.d1Name} does not exist: run provision first.`,
           );
         }
+        this.requireRealD1Id();
       });
       this.step("Worker secrets", () => this.ensureSecrets());
       this.step("apply pending migrations to dev", () =>
@@ -983,9 +987,7 @@ export class DevEnv {
   }
 
   startCloneRun(options) {
-    this.writeConfig(
-      this.resolveSettings(options, { allowPlaceholder: false }),
-    );
+    this.writeConfig(this.resolveSettings(options, { allowPlaceholder: true }));
     const stamp = this.now().toISOString().replaceAll(/[:.]/g, "-");
     const dumpDir = join(this.paths.backupsDir, `fork-dev-${stamp}`);
     return {
@@ -1000,10 +1002,10 @@ export class DevEnv {
   }
 
   verifyCloneTargets(run) {
-    this.requireRealD1Id();
     if (!this.syncDevD1()) {
       throw new Error(`D1 ${DEV.d1Name} does not exist: run provision first.`);
     }
+    this.requireRealD1Id();
     run.prodTarget = this.verifyProdTarget();
     run.summary.prodTarget = run.prodTarget;
   }
@@ -1472,6 +1474,10 @@ Options
   --keep-dump                  clone: keep the exported data file (credential hashes).
   --with-prod                  status: also read production's latest migration.
   -h, --help                   Show this help.
+
+Embedding is off on dev (FLAREMO_EMBEDDING_PROVIDER "none"): dev shares the free
+plan's daily AI allowance with live. To test search on dev, set
+FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai before deploy.
 
 Auth: wrangler reads CLOUDFLARE_API_TOKEN. The script passes
 CLOUDFLARE_API_TOKEN, else CLOUDFLARE_API, else the placeholder "proxy-injected"

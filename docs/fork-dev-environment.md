@@ -85,8 +85,13 @@ third-party credentials. `--include-side-effect-tables` copies them.
   copied, so the same PATs work against the dev URL.
 - The dev URL is public, like live's, and sits behind no Cloudflare Access
   policy unless you add one for its hostname.
-- The daily cron (`17 3 * * *`) runs on dev too, including embedding work on
-  Workers AI for the fresh Vectorize indexes.
+- The daily cron (`17 3 * * *`) runs on dev too, but embedding is off on dev
+  (`FLAREMO_EMBEDDING_PROVIDER` is `"none"` in the generated config): dev shares
+  the free plan's daily Workers AI and Vectorize allowance with live, and a
+  clone would re-embed the whole diary. To test search on dev, set
+  `FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai` before `deploy`.
+- `deploy` and `clone` find the dev D1 by its name (`flaremo-dev`), so a wiped
+  `.wrangler/fork-dev/state.json` no longer needs `--d1-id`.
 - The import briefly makes the dev D1 unavailable (wrangler warns about it).
 - If a clone fails after the import, run `clone` again: the import clears the
   tables first. A dev already upgraded needs `--reset`.
@@ -107,32 +112,39 @@ node scripts/fork/prod-deploy.mjs deploy --confirm flaremo  # the real thing
 node scripts/fork/prod-deploy.mjs rollback --confirm flaremo
 ```
 
-`deploy` refuses unless HEAD equals `origin/main`, the tree is clean, and
-`migrations/` holds exactly the `.sql` files committed on `origin/main` (wrangler
-applies every file in that folder, tracked or not). It checks the folder again
-right before applying migrations. When it ends it deletes the generated root
-`wrangler.jsonc`, which points at live. Steps:
-rebuild the gitignored root `wrangler.jsonc` from `wrangler.jsonc.example` plus
-the live Worker's vars (checked to name only production resources) -> note the
-live version as the rollback target -> save a D1 Time Travel bookmark ->
-baseline `COUNT(*)` per table -> build -> apply pending migrations -> `wrangler
-deploy --keep-vars` -> re-count and fetch `/` and `/openapi.json`. If a table
-lost rows (sessions, tokens and similar short-lived tables are only noted) or
-the site errors, the Worker is rolled back automatically. Migrations and data
-are never reverted automatically; the bookmark is printed for that. Only counts
-are read from live D1, and var values are masked in wrangler output.
+`deploy` refuses unless HEAD equals `origin/main`, the tree is clean, and every
+`.sql` in `migrations/` is committed (wrangler would apply an untracked one).
+Steps: rebuild the gitignored root `wrangler.jsonc` from `wrangler.jsonc.example`
+plus the live Worker's vars (checked to name only production resources; it
+refuses if live has a binding the example lacks, and notes vars that would come
+back with the example's default) -> note the live version as the rollback
+target -> save a D1 Time Travel bookmark -> build the web app and the Worker
+bundle (`wrangler deploy --dry-run`), so a build error stops before any write ->
+baseline `COUNT(*)` per table -> apply pending migrations -> re-count, and stop
+before the deploy if a table lost rows -> `wrangler deploy --keep-vars` ->
+re-count and fetch `/`, `/openapi.json` and `/feed.xml` (which reads D1), with a
+timeout and a few retries. If a table lost rows (only the short-lived tables
+listed in `EPHEMERAL_TABLES` are just noted) or the site errors, the Worker is
+rolled back automatically. If that rollback itself fails, the script says live
+is on the new version and prints the exact manual command. Migrations and data
+are never reverted automatically; the bookmark is printed for that. The root
+`wrangler.jsonc` is put back the way it was afterwards (removed if it was a
+leftover pointing at live). Only counts are read from live D1, and var values
+are masked in wrangler output.
 
-Tests: `node --test scripts/fork/prod-deploy.test.mjs`.
+`rollback` restores the newest earlier deployment that is not live and that the
+script did not already roll back from (a version that failed its checks).
+`--version <id>` picks one explicitly.
 
-This script is the way to ship. The repo's `.claude/settings.json` makes a
-Claude session ask first before any raw live write, because those skip every
-safeguard above: any `wrangler … deploy` (also `wrangler.js` and other bin
-names), `versions upload`, `rollback`, `delete`, `secret`, remote `d1
-migrations apply`, `d1 execute` or `d1 export`, `d1 time-travel restore`,
-remote `r2 object` commands, `pnpm migrate:remote`, `pnpm deploy`, the worker
-package's `deploy`, the `cf` CLI, `curl` with `-X DELETE/PUT/PATCH` to
-`api.cloudflare.com`, and the Cloudflare connector's query, create, update and
-delete tools. A plain `POST` to the Cloudflare API is not matched (D1 reads use
-it too), so the deploy script stays the only sanctioned way to change live. The script itself is not prompted: it carries its own `--confirm
-flaremo`. `packages/domain/src/fork/guards.test.ts` fails if a later edit
-allows a raw live write again.
+Tests: `node --test scripts/fork/prod-deploy.test.mjs` (pure helpers plus the
+whole deploy and rollback flow against a fake Cloudflare account). CI runs them
+with the other fork script tests.
+
+The script is the way to ship. The repo's `.claude/settings.json` makes a Claude
+session ask first before every route that can write to live: raw wrangler
+deploys, versions, rollbacks, `--remote` commands, secrets, deletes, Vectorize
+and queue commands; `pnpm deploy` / `migrate:remote`; the `cf` CLI; direct calls
+to `api.cloudflare.com`; the Cloudflare MCP tools that can write; and the
+script's own real `deploy` / `rollback --confirm flaremo`. Its `--dry-run` and
+`status` stay unprompted. `packages/domain/src/fork/guards.test.ts` fails if a
+later edit lets one of these through.
