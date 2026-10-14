@@ -30,7 +30,7 @@ Build defaults (adopted for the build; the owner can change them after QA):
 - **D2 The cockpit lives at `/cockpit`**, beside `/projects` in navigation.
 - **D3 Goals are upstream projects arranged in a tree** (`planner_project_node`). Tasks belong to goals through upstream `tasks.project_id`. A node's `level` is a validated slug (`^[a-z][a-z0-9-]{0,23}$`, for example `area`, `year`, `quarter`, `goal`, `milestone`), so adding a level needs no schema change.
 - **D4 History is a permanent copy of upstream `task_activity`**, plus delete, restore and purge detection by comparing `tasks` with a snapshot. No SQL triggers anywhere.
-- **Sync timing**: history syncs on cockpit open (rollover) and before history reads. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
+- **Sync timing**: history syncs when the board is read (`GET` board) and before history reads. The web no longer calls rollover. The existing daily scheduled maintenance also syncs every user right before and right after upstream's trash purge (`plannerSyncAllUsers`, two hook-in lines in `apps/worker/src/scheduled-tasks.ts`), so a task deleted while the cockpit stays shut is still archived. No new cron is added.
 
 ## 1. Guardrails
 
@@ -192,7 +192,7 @@ They live in `packages/contracts/src/planner.ts`, shared by the worker and the w
 - The client sends `today`, its local date.
 - The server accepts it only within its own UTC date ±1 day; anything else gets a 400.
 - New plans can't start before the current period for their horizon.
-- The cockpit re-runs rollover on `visibilitychange` once the local date has changed.
+- The cockpit refetches the board on `visibilitychange` once the local date has changed (the board read does the history sync; the web no longer calls rollover).
 
 ### Event types
 
@@ -353,7 +353,7 @@ New files live under `apps/web/src/planner/`.
     - If `TaskCard` can't take the extra chips, build a `PlannerTaskCard` from the same exported pieces rather than editing upstream.
 - **`board.tsx`**: dnd-kit, modelled on `pages/projects/board.tsx`, with touch sensors, plus the "Move to…" menu so moves work on a phone.
 - **`plan-picker.tsx` and `history-sheet.tsx`**: the history sheet is a per-task timeline from the archive, showing who and when.
-- **On open**: the page runs rollover once, then fetches the board.
+- **On open**: the page fetches the board, and the board read syncs the history. (It ran rollover first until 2026-10-08; see "Carry-over is off the web" below.)
 - **After any mutation**: invalidate `["planner"]`, upstream's task query keys and `["projects"]`.
 
 ## 6. Tests
@@ -393,7 +393,9 @@ New files live under `apps/web/src/planner/`.
 - **Web**: unit tests for column grouping, the transition table and labels.
 - **E2E**: `tests/e2e/cockpit.spec.ts` covers the deep link, the anonymous redirect, the nav link and quick add (v1.1 adds the column "+" and task panel cases, section 13). Register it by adding `cockpit` to the `memo-ui` `testMatch` regex in `playwright.config.ts`. Written, not run (G8).
 
-## 7. Hook-in edits (the only upstream files touched)
+## 7. Hook-in edits (the planner's upstream edits)
+
+The fork's complete list of changed upstream files, including the planner ones below, is in [fork-customizations.md](fork-customizations.md), "Upstream files with a hook-in". Do not rely on any line counts in this section.
 
 1. **`apps/worker/src/index.ts`**: `mountLazyRoute(app, "/api/app/planner", …)` loading `./routes/planner-api`, placed before `app.route("/api/app", appApi)`. Follow the neighbouring `mountLazyRoute` calls exactly. `scripts/startup-graph.mjs` is a report, not a gate: run it and confirm `planner-api` and `packages/domain/src/planner` aren't in the startup graph.
 2. **`packages/contracts/src/index.ts`**: append `export * from "./planner";`.

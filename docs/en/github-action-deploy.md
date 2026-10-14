@@ -1,5 +1,7 @@
 # Deploy FlareMo with GitHub Actions
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](../fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on push to `main` and on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
 
 Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs: GitHub stores those form values in the run record. Keep auth secrets in repository **Settings → Secrets**. Keep mail credentials in the Cloudflare Worker secret store (`wrangler secret put`).

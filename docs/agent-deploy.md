@@ -1,5 +1,7 @@
 # Agent 部署 Runbook
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](./fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 这份文档给自动化 Agent 使用。目标是让 Agent 能在不依赖 GitHub CI 的情况下完成验证、部署和回归检查。
 
 ## 前置条件

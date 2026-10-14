@@ -50,7 +50,7 @@ dev:hot 下额外启用 **React Grab**（`apps/web/src/dev/react-grab.ts`）：�
 
 已知小限制：组件栈里的文件名只有基名（`input.tsx` 而非完整路径）——Vite dev 的 sourcemap `sources` 本身就只发布基名，拾取器只是如实转述。靠组件名 + 行列号 + CSS 选择器足以定位。
 
-生产部署：
+生产部署（Fork 注意：本 fork 不用 `pnpm deploy`，见文末 “Fork (Schizo Diary) rules”）：
 
 ```bash
 pnpm deploy:dry-run
@@ -79,7 +79,7 @@ pnpm deploy:dry-run
 - 凭据相关的 Origin 契约必须保持不变：cookie session 的状态变更请求（包括 `POST`、`PATCH`、`DELETE` 等非安全方法）必须携带并精确匹配 `FLAREMO_PUBLIC_URL` 或 `FLAREMO_TRUSTED_ORIGINS`；PAT 请求可以省略 Origin，但一旦携带也必须精确匹配同一 allowlist，否则返回 `403`。不要用 wildcard、`Referer` 或 Cloudflare Access headers 替代 Origin 校验。
 - 不得把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET`、初始密码、cookie 或 `memos_pat_` 明文写进代码、文档、migration、issue、PR、日志或聊天；生产 secret 只能通过 Wrangler secret 或 Cloudflare 控制台安全配置。
 - `Temp/` 是参考仓库目录，不能提交。
-- 使用 GitHub Actions 时允许三类 workflow：`.github/workflows/ci.yml`（瘦 CI：format / lint / typecheck / 单元测试，兜底与外部 PR 门禁）、`.github/workflows/flaremo-update.yml`（只服务自部署用户自己的部署仓库，同步上游 Release 并创建升级 PR）、以及 `.github/workflows/deploy-cloudflare.yml`（自托管 fork 的 Worker 发布：push 到 `main` 与 `workflow_dispatch`，用 `cloudflare/wrangler-action`；上游 `realchendahuang/FlareMo` 不跑）。不跑 E2E 进 CI；全量门禁 `pnpm verify` 只在维护者明确要求时于本地执行（发版也不需要）。不重新启用 Dependabot 或 Workers Builds。邮件密钥（`RESEND_API_KEY`）只放 Worker secret store，不要放进 GitHub Actions secrets。
+- 使用 GitHub Actions 时允许三类 workflow：`.github/workflows/ci.yml`（瘦 CI：format / lint / typecheck / 单元测试，兜底与外部 PR 门禁）、`.github/workflows/flaremo-update.yml`（只服务自部署用户自己的部署仓库，同步上游 Release 并创建升级 PR）、以及 `.github/workflows/deploy-cloudflare.yml`（自托管 fork 的 Worker 发布：push 到 `main` 与 `workflow_dispatch`，用 `cloudflare/wrangler-action`；上游 `realchendahuang/FlareMo` 不跑）。（Fork 注意：该 workflow 已于 2026-10-04 在本 fork 删除，当前只有 ci.yml 和 flaremo-update.yml；见文末 “Fork (Schizo Diary) rules”。）不跑 E2E 进 CI；全量门禁 `pnpm verify` 只在维护者明确要求时于本地执行（发版也不需要）。不重新启用 Dependabot 或 Workers Builds。邮件密钥（`RESEND_API_KEY`）只放 Worker secret store，不要放进 GitHub Actions secrets。
 - 改路由、守卫、导航行为时必须同步补 e2e 用例（2026-09-10 事故教训：v0.15.3 守卫重构后门禁拦不住匿名首页无限加载，因为 e2e 只覆盖了深度链接没覆盖 `/`；门禁的有效性 = 测试覆盖率）。**补用例 ≠ 主动跑**：写进仓库即可，跑不跑由维护者决定。
 - 敏捷开发节奏（2026-09-16 维护者定调）：小步快跑，验证只跑与改动直接相关的定向用例（单个 Vitest 文件 / e2e spec）。**全量门禁 `pnpm verify` 只在维护者明确要求时执行——发版、部署、日常提交都不跑**。质量底线不变：改动涉及的测试必须绿、`pnpm format` 通过。
 
@@ -116,7 +116,7 @@ issue -> branch -> PR 流程只用于：对外贡献者、维护者明确要求�
 
 - 改动涉及的测试必须绿：只跑该改动相关的 vitest 文件（e2e 见上：opt-in，不主动跑）。
 - 提交前跑一次 `pnpm format`（很快）。
-- 部署不需要先跑全量门禁：直接部署（`deploy-kosx.mjs` 默认已跳过 verify），迁移、构建和线上冒烟仍由部署脚本执行。
+- 部署不需要先跑全量门禁：直接部署（`deploy-kosx.mjs` 默认已跳过 verify）（Fork 注意：本 fork 仓库里没有 `deploy-kosx.mjs`，用 `scripts/fork/prod-deploy.mjs`，见文末 “Fork (Schizo Diary) rules”），迁移、构建和线上冒烟仍由部署脚本执行。
 - 全量 `pnpm verify` 只在维护者明确要求时执行；发版脚本（`pnpm release`）默认不跑，`--verify` 可按需开启。
 
 涉及部署、Wrangler、D1、R2 或 Access 的改动，建议跑 `pnpm deploy:dry-run`。
@@ -137,3 +137,21 @@ issue -> branch -> PR 流程只用于：对外贡献者、维护者明确要求�
 - `docs/design-system.md`：Ember 设计系统（色彩、字体、动效、组件和文案约定）。
 - `docs/semantic-search.md`：语义搜索、Vectorize 和 Workers AI 的边界。
 - `ROADMAP.md`：稳定方向和公开任务池。
+
+## Fork (Schizo Diary) rules
+
+This repository is a personal fork of FlareMo ("Schizo Diary"). The sections above are upstream's and are written for upstream; where they disagree with this section, this section wins for the fork.
+
+- **There is no auto-deploy.** The fork's deploy workflow (`.github/workflows/deploy-cloudflare.yml`) was removed on 2026-10-04. Pushing or merging to `main` ships nothing. Only `ci.yml` (nightly, pull requests, manual) and `flaremo-update.yml` (weekly upstream check) exist. Do not recreate a deploy workflow, and do not use `cloudflare/wrangler-action`.
+- **Production deploys** go through one script, never `pnpm deploy` or raw `wrangler deploy`:
+  - `node scripts/fork/prod-deploy.mjs status` (read-only)
+  - `node scripts/fork/prod-deploy.mjs deploy --dry-run`
+  - `node scripts/fork/prod-deploy.mjs deploy --confirm flaremo` (HEAD must equal `origin/main`, clean tree)
+  - `node scripts/fork/prod-deploy.mjs rollback --confirm flaremo`
+  - `.claude/settings.json` asks before any raw live write (`wrangler deploy`, `rollback`, remote D1 migrations or `execute`, Time Travel restore).
+- **Dev environment**: a separate `flaremo-dev` deployment with a copy of live data, driven by `node scripts/fork/dev-env.mjs`. Test a change there before shipping. See `docs/fork-dev-environment.md`.
+- **Fork migrations** are the hand-written `migrations/9xxx_*.sql` files. They are additive and not in the Drizzle journal, and applied ones are frozen by hash. Never apply an untracked migration file.
+- **Keep upstream diffs small.** Fork logic goes in fork-owned files; an upstream file gets only the smallest hook-in. Every upstream file the fork changed is listed in `docs/fork-customizations.md`, "Upstream files with a hook-in". Update that table in the same change when you touch another upstream file.
+- **README files**: do not edit `README.md` for the fork. Every README change must be mirrored into seven translations (rule above), and it is upstream's file. Deploy guidance for the fork lives here and in the fork docs.
+- **Fork docs**: start with `docs/fork-customizations.md` (what is customized, hook-ins, and the "Where things live" directory map). Then, as needed: `docs/fork-dev-environment.md` (dev and prod deploy), `docs/fork-data-sources.md` (which data reaches which feature), `docs/fork-health-tracker.md`, `docs/planning-cockpit-implementation-plan.md`, `docs/planning-cockpit-goals-review.md` and `docs/planning-cockpit-requirements.md`.
+- No diary text, secrets or tokens in docs, tests or commit messages.

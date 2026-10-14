@@ -141,7 +141,7 @@ What protects each part today, what this branch added, and what is worth adding 
 | search | `embedding-outbox.test.ts`, `semantic-search.test.ts` | Every way in reaches both indexes (`search-reach.test.ts`); import gap pinned as `it.fails` | Same for imported memories |
 | memory | `memory*.test.ts` | Memory reads exactly the tables marked for it | Dreaming skips AI-written summaries and trashed entries |
 | cockpit | `planner-api`, `history-sync`, `board`, `plans`, migrations suites | Archive never deleted or rewritten; nightly-sync and API mount hook-ins | Seeded property test that the archive never shrinks over random task operations |
-| goals and review | `review.test.ts`, `review-prompts.test.ts`, the diary fit | Probes for goals, weeks, flags, reviews, task notes and comments; snapshot of exactly what the model sees (`__snapshots__/`) | Month, quarter and year boundaries for the look forward check; 200-row limits keep the newest rows |
+| goals and review | `review.test.ts`, `review-prompts.test.ts`, the diary fit | Probes for goals, weeks, flags, reviews, task notes and comments; snapshot of exactly what the model sees (`__snapshots__/`) | 200-row limits keep the newest rows |
 | ops and deploy | `dev-env.test.mjs`, `prod-deploy.test.mjs` (pure helpers, not run by `pnpm test`) | Applied 9NNN migrations are frozen by hash (G12) | Fakes for the deploy and rollback flow; run `scripts/fork/*.test.mjs` from `pnpm test` |
 
 ## Checks
@@ -150,7 +150,7 @@ What protects each part today, what this branch added, and what is worth adding 
 pnpm exec vitest run packages/domain/src/fork
 ```
 
-Five files, about 30 seconds, no network and no model calls:
+Five files, about a minute (51 seconds on the last run), no network and no model calls:
 
 - `data-sources.test.ts`: every table is listed; backup, search and memory agree with the code; migrations are on a track the tests apply; this page is current.
 - `data-reach.test.ts`: each content source reaches exactly the consumers marked `yes`, and one user's data never reaches another user's review or export.

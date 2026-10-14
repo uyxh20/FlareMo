@@ -1,5 +1,7 @@
 # 发版规则
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](./fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 FlareMo 使用 Git tag 和 GitHub Release 发布版本。仓库有瘦 CI（format / lint / typecheck / 单元测试）作为 push 与外部 PR 的快速门禁，但它不跑 E2E、不做部署；发布前默认按改动执行定向检查，完整门禁仅在维护者明确要求时于本地执行。用户部署仓库中的更新 workflow 只消费这里发布的正式 Release。
 
 ## 标准流程（runbook）

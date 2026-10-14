@@ -72,7 +72,7 @@ Notion import or sync. Shared or multi-user tasks.
   - `planner_goal`: an adjacency-list tree with `parent_id`, `kind`, period, status and order.
   - `planner_task_event`: append-only, with no foreign key to `tasks` and a title snapshot.
 - Goal roll-ups use SQLite `WITH RECURSIVE`. A closure table is the scale-up path if trees get large.
-- Separate migration track: own Drizzle config and output folder (for example `migrations-planner/`) with its own migrations table, applied by the fork's `deploy-cloudflare.yml`. `drizzle.config.ts` writes into `migrations/` with a shared `_journal.json`, so fork migrations numbered `0030` and up would collide with upstream's next ones. Verify Wrangler support in a spike.
+- Separate migration track: own Drizzle config and output folder (for example `migrations-planner/`) with its own migrations table, applied by the fork's `deploy-cloudflare.yml` (historical: that workflow was removed on 2026-10-04; fork migrations are the hand-written `migrations/9xxx` files and ship with `scripts/fork/prod-deploy.mjs`). `drizzle.config.ts` writes into `migrations/` with a shared `_journal.json`, so fork migrations numbered `0030` and up would collide with upstream's next ones. Verify Wrangler support in a spike.
 - History capture: changes made through upstream screens reach only upstream `task_activity`, where delete and restore are not logged. Preferred option:
   - Use SQLite triggers on `tasks` for raw changes, re-applied idempotently on every deploy because an upstream table rebuild drops them.
   - Write semantic events such as planned and carried over from add-on code.

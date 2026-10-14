@@ -1,5 +1,7 @@
 # 用 GitHub Action 部署 FlareMo
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](./fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 这份教程面向**自己的部署仓库**（FlareMo 的 fork 或副本）。Workflow 是 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 以及手动 `Run workflow` 时发布。上游仓库 `realchendahuang/FlareMo` 不会执行这个 job。`cloudflare/wrangler-action` 负责远端 D1 migration 和 `wrangler deploy`。
 
 不要把 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET`、`RESEND_API_KEY` 写进 workflow 文件、issue、PR 或聊天，也不要放进 `workflow_dispatch` 输入框：GitHub 会把启动表单明文记在运行记录里。认证密钥只放在仓库 **Settings → Secrets**；邮件密钥只放在 Cloudflare Worker secret store（`wrangler secret put`）。

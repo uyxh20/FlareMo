@@ -1,5 +1,7 @@
 # 部署 FlareMo
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](./fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 FlareMo 部署到 Cloudflare Workers。Worker 同时承载前端静态资源和 API，D1 保存主数据，R2 保存附件。
 
 ## 一键部署（社区支持）

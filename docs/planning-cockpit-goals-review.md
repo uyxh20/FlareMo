@@ -90,7 +90,7 @@ From the interview and the decision cards (2026-10-09 and 10):
 - **No backfill.** Old weekly-goal results are not filled in after the fact, so past weeks are judged by score alone.
 - **Four objectives,** each with its own colour (`goals.css`): Objective Function (`of`), Work, AI Chops (`ai`) and Health.
 - **Score floors:** Authenticity 4 and Achievement 3.5 (`plannerScoreFloors`).
-- **Weeks** are ISO weeks starting on Monday, with day keys read as UTC, the same as the cockpit.
+- **Weeks** are ISO weeks starting on Monday, with day keys read as UTC, the same as the cockpit. The weekly review's own week window is cut at local midnight in Europe/Copenhagen (see "The model" below).
 
 ## Data: `migrations/9005_planner_goals_review.sql`
 
@@ -163,7 +163,7 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 | `goals-page.tsx`, `goal-editor.tsx`, `goals-ui.tsx`                               | The Goals page, the goal editor and their shared pieces.                                                                                                                       |
 | `year-map.tsx`, `year-map-model.ts`                                               | The Year map, the Goals page's year, and the plain functions it is laid out by.                                                                                                |
 | `goal-cards.tsx`                                                                  | The cockpit's goal cards. `board.tsx`, `task-card.tsx` and `cockpit-page.tsx` add the tint and the focus.                                                                      |
-| `review-page.tsx`                                                                 | The weekly review: state, saves and model calls.                                                                                                                               |
+| `review-page.tsx`                                                                 | The weekly review: state, saves and model calls. Not unit-tested (only the opt-in e2e covers it); the tested logic is in `review-model.ts`.                                    |
 | `review-back.tsx`, `review-charts.tsx`, `review-sheet.tsx`, `review-markdown.tsx` | Look back's chat, the score charts, the memo sheet and a small Markdown renderer. It renders to React elements, never to HTML.                                                 |
 | `review-forward.tsx`                                                              | Look forward's four steps.                                                                                                                                                     |
 | `review-model.ts`, `goals-model.ts`                                               | Pure state and helpers, with tests.                                                                                                                                            |
@@ -174,16 +174,16 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 
 ## Upstream files with a hook-in
 
-These are this feature's only edits outside planner paths:
+These are this feature's edits outside planner paths. Line counts are left out because they go stale; the full list of upstream files the fork changes is in [fork-customizations.md](fork-customizations.md), "Upstream files with a hook-in".
 
-| File                               | Hook-in                                                                                                                                | Lines   |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `apps/web/src/router-tree.tsx`     | Imports the two validators, adds two lazy pages and the `/goals` and `/weekly-review` routes, and registers them after `cockpitRoute`. | +51     |
-| `apps/worker/src/spa-routes.ts`    | `"/goals"` and `"/weekly-review"`.                                                                                                     | +2      |
-| `apps/web/public/sw.js`            | The same two paths in the private navigations.                                                                                         | +2      |
-| `apps/worker/src/env.ts`           | The six optional review settings above.                                                                                                | +14     |
-| `scripts/persistence-manifest.mjs` | The four new tables in `RESTORE_TABLES`.                                                                                               | +9 / -4 |
-| `playwright.config.ts`             | `goals-review` in the `memo-ui` project's `testMatch`.                                                                                 | +1 / -1 |
+| File                               | Hook-in                                                                                                                                |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/router-tree.tsx`     | Imports the two validators, adds two lazy pages and the `/goals` and `/weekly-review` routes, and registers them after `cockpitRoute`. |
+| `apps/worker/src/spa-routes.ts`    | `"/goals"` and `"/weekly-review"`.                                                                                                     |
+| `apps/web/public/sw.js`            | The same two paths in the private navigations.                                                                                         |
+| `apps/worker/src/env.ts`           | The six optional review settings above.                                                                                                |
+| `scripts/persistence-manifest.mjs` | The four new tables in `RESTORE_TABLES`.                                                                                               |
+| `playwright.config.ts`             | `goals-review` in the `memo-ui` project's `testMatch`.                                                                                 |
 
 The guard command in section 10 of the implementation plan allows `tests/e2e/goals-review.spec.ts` alongside the cockpit spec.
 
@@ -202,6 +202,6 @@ pnpm exec playwright test --project=memo-ui tests/e2e/goals-review.spec.ts
 
 ## Deploy and rollback
 
-- **Order:** local, then `flaremo-dev` (`node scripts/fork/dev-env.mjs deploy`, which applies 9005), then the owner tries it, then live on the owner's word.
+- **Order:** local, then `flaremo-dev` (`node scripts/fork/dev-env.mjs deploy`, which applies 9005), then the owner tries it, then live on the owner's word with `node scripts/fork/prod-deploy.mjs deploy --confirm flaremo` (there is no auto-deploy).
 - **Rollback:** revert the feature's commits. 9005 is additive, so the previous release runs on the new schema unchanged. If the tables must go, drop them in this order: `planner_goal_flag`, `planner_review`, `planner_week`, `planner_goal`. `planner_task_plan.goal_id` can stay.
 - **Upstream sync:** keep both sides in the hook-in files above, then run the checks.

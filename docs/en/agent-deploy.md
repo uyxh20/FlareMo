@@ -1,5 +1,7 @@
 # Agent Deployment Runbook
 
+> **Fork note:** this fork (Schizo Diary) has no deploy workflow. `.github/workflows/deploy-cloudflare.yml` was removed on 2026-10-04, so nothing deploys on push to `main` and merging an upgrade PR publishes nothing. Production ships with `node scripts/fork/prod-deploy.mjs` and the dev copy with `node scripts/fork/dev-env.mjs`; see [fork-dev-environment.md](../fork-dev-environment.md). The text below is upstream's and describes upstream's workflow.
+
 This runbook is for Codex, Claude Code, Cursor Agent, and other command-capable coding agents.
 
 ## Preconditions
