@@ -275,6 +275,7 @@ function forward(
     question: null,
     edited: false,
     prefilled: true,
+    knownGoalIds: [],
     ...overrides,
   };
 }
@@ -1438,6 +1439,7 @@ describe("Look forward: the plan's goals", () => {
       question: null,
       edited: false,
       prefilled: false,
+      knownGoalIds: [saved.id],
     });
   });
 
@@ -1743,6 +1745,7 @@ describe("Look forward: tasks and the To Do count", () => {
     expect(after).toEqual({
       ...plan,
       question: "Did I call both leads?",
+      knownGoalIds: [work.id],
       toBacklog: [],
       tasks: [
         { ...plan.tasks[0], source: "todo" },
@@ -1857,6 +1860,48 @@ describe("Look forward: tasks and the To Do count", () => {
       { ref: newRef, goal_id: work.id, task_id: made.id },
     ]);
     expect(plannerCommitSchema.safeParse(again).error).toBeUndefined();
+  });
+
+  it("only lets Save week remove the goals the plan started from or saved", () => {
+    const loaded = goal({ level: "week", period_start: PLAN_WEEK });
+    const dropped = goal({ level: "week", period_start: PLAN_WEEK });
+    const r = review({ plan_goals: [loaded, dropped] });
+    const start = plannerNewForwardState(r);
+    expect(start.knownGoalIds).toEqual([loaded.id, dropped.id]);
+
+    // The owner drops one goal and adds one; the save names both it saw.
+    const added = planGoal({ pillar: "health", title: "Run twice" });
+    const plan: PlannerForwardState = {
+      ...start,
+      goals: [...start.goals.filter((g) => g.id !== dropped.id), added],
+    };
+    const sent = plannerCommitInput(plan, "", [], TODAY);
+    expect(sent.known_goal_ids).toEqual([loaded.id, dropped.id]);
+    expect(plannerCommitSchema.safeParse(sent).error).toBeUndefined();
+    const saved = plannerAfterCommit(plan, sent, {}, "");
+    expect(saved.knownGoalIds).toEqual([loaded.id, dropped.id, added.id]);
+
+    // Reopened after a goal was added on the Goals page: the new goal is in the
+    // fresh plan_goals but not in what the plan knew about.
+    const later = goal({ level: "week", period_start: PLAN_WEEK });
+    const reopenedFrom = review({ plan_goals: [loaded, later] });
+    const state = JSON.parse(
+      JSON.stringify({ ...plannerNewReviewState(r), forward: saved }),
+    ) as unknown;
+    const reopened = plannerRestoreReviewState(state, reopenedFrom).forward;
+    expect(reopened.knownGoalIds).not.toContain(later.id);
+    expect(
+      plannerCommitInput(reopened, "", [], TODAY).known_goal_ids,
+    ).not.toContain(later.id);
+
+    // A review saved before the list existed knows only its own goals.
+    const { knownGoalIds: _dropped, ...older } = saved;
+    const legacy = JSON.parse(
+      JSON.stringify({ ...plannerNewReviewState(r), forward: older }),
+    ) as unknown;
+    expect(
+      plannerRestoreReviewState(legacy, reopenedFrom).forward.knownGoalIds,
+    ).toEqual(saved.goals.map((g) => g.id));
   });
 
   it("offers the cards no goal has yet, To Do cards being sent back listed under Backlog", () => {
@@ -2183,6 +2228,7 @@ describe("Look forward: the check and the save", () => {
         },
       ],
       to_backlog: [],
+      known_goal_ids: [],
       question: "Did I close them?",
       settled: [],
       flags: [],

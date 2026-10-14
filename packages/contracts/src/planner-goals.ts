@@ -512,13 +512,18 @@ export const plannerFlagInputSchema = z.strictObject({
 /**
  * Look forward is saved: the next week's goals and tasks, the cards that go back
  * to Backlog, the question for the next review, the settled flags and what the
- * conflict check found. The plan replaces the week's goals: a weekly goal of that
- * week that is not in `goals` is removed.
+ * conflict check found. The plan replaces the goals the page knew about: a
+ * weekly goal of that week that is in `known_goal_ids` but not in `goals` is
+ * removed. Any other goal of the week (one added on the Goals page while the
+ * review was open) is left alone, and so are its tasks.
  */
 export const plannerCommitSchema = z
   .strictObject({
     today: daySchema,
     goals: z.array(plannerPlanGoalSchema).max(12),
+    // The plan week's goals the page started from, plus any it saved since.
+    // Left out, nothing outside `goals` is removed.
+    known_goal_ids: z.array(z.uuid()).max(100).optional(),
     tasks: z.array(plannerPlanTaskSchema).max(40),
     to_backlog: z.array(idSchema).max(100),
     question: z.string().trim().max(500).nullable(),

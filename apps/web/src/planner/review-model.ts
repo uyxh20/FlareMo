@@ -165,6 +165,12 @@ export type PlannerForwardState = {
   edited: boolean;
   /** The board's cards that already serve the plan's goals were added. */
   prefilled: boolean;
+  /**
+   * The plan week's goals this plan started from, plus the ones it saved since.
+   * Save week only removes these, so a goal added on the Goals page while the
+   * review was open survives.
+   */
+  knownGoalIds: string[];
 };
 
 export type PlannerReviewState = {
@@ -790,6 +796,7 @@ export function plannerNewForwardState(
     question: null,
     edited: false,
     prefilled: false,
+    knownGoalIds: review.plan_goals.map((goal) => goal.id),
   };
 }
 
@@ -924,7 +931,7 @@ export function plannerTodoCount(
  */
 export function plannerAfterCommit(
   forward: PlannerForwardState,
-  sent: Pick<PlannerCommitInput, "tasks" | "to_backlog">,
+  sent: Pick<PlannerCommitInput, "goals" | "tasks" | "to_backlog">,
   created: Record<string, string>,
   question: string,
 ): PlannerForwardState {
@@ -936,6 +943,12 @@ export function plannerAfterCommit(
   return {
     ...forward,
     question,
+    knownGoalIds: [
+      ...new Set([
+        ...forward.knownGoalIds,
+        ...sent.goals.map((goal) => goal.id),
+      ]),
+    ],
     toBacklog: forward.toBacklog.filter(
       (id) => !moved.has(id) && !planned.has(id),
     ),
@@ -1129,6 +1142,7 @@ export function plannerCommitInput(
     to_backlog: forward.toBacklog
       .filter((id) => !planned.has(id))
       .slice(0, 100),
+    known_goal_ids: forward.knownGoalIds.slice(0, 100),
     question: question.trim() ? question.trim().slice(0, MAX_QUESTION) : null,
     settled: plannerSettledInput(forward),
     flags,
@@ -1256,6 +1270,11 @@ export function plannerRestoreReviewState(
       toBacklog: isStrings(restored.forward.toBacklog)
         ? restored.forward.toBacklog
         : [],
+      // Never the fresh list: that would name goals added since the review
+      // started. A review saved before this field knew only its own goals.
+      knownGoalIds: isStrings(restored.forward.knownGoalIds)
+        ? restored.forward.knownGoalIds
+        : goals.map((goal) => goal.id),
       step:
         typeof restored.forward.step === "number" &&
         restored.forward.step >= 1 &&

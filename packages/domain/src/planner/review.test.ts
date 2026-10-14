@@ -8,7 +8,12 @@ import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import { plannerReadBoard } from "./board";
-import { plannerCreateGoal, plannerReadWeek, plannerUpsertWeek } from "./goals";
+import {
+  plannerCreateGoal,
+  plannerReadWeek,
+  plannerSetTaskGoal,
+  plannerUpsertWeek,
+} from "./goals";
 import {
   type PlannerCommitBody,
   type PlannerLookBackBody,
@@ -942,6 +947,7 @@ describe("the weekly review", () => {
       // The second goal and its task leave the plan.
       const changed = await commit(
         body({
+          known_goal_ids: [G1, G2],
           goals: [
             { id: G1, pillar: "work", title: "Get the terms in writing" },
           ],
@@ -970,6 +976,64 @@ describe("the weekly review", () => {
         { from: null, to: G2 },
         { from: G2, to: null },
       ]);
+    });
+
+    it("keeps a goal added while the review was open, and its tasks", async () => {
+      await seedBoard();
+      await commit();
+      // Added on the Goals page after the review loaded, with a task linked.
+      const added = await weekGoal(W42, "health", "Three runs");
+      await plannerTestInsertTask(rt.database, {
+        id: "tasks/e-run",
+        userId: rt.user.id,
+        title: "e-run",
+        status: "todo",
+        createdAt: "2026-10-01T08:00:00.000Z",
+      });
+      await plannerSetTaskGoal(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: "tasks/e-run",
+        goalId: added.id,
+      });
+
+      // The page saves again with the goals it knew about: G2 leaves the plan.
+      await commit(
+        body({
+          known_goal_ids: [G1, G2],
+          goals: [{ id: G1, pillar: "work", title: "Get the terms in writing" }],
+          tasks: [{ ref: "t1", goal_id: G1, task_id: "tasks/c-backlog" }],
+        }),
+      );
+      const live = await plannerTestRows(
+        rt.database,
+        "SELECT id FROM planner_goal WHERE level = 'week' AND period_start = ? AND deleted_at IS NULL ORDER BY id",
+        W42,
+      );
+      expect(live.map((row) => row.id).sort()).toEqual([G1, added.id].sort());
+      expect(await plannerTestPlan(rt.database, "tasks/e-run")).toMatchObject({
+        goal_id: added.id,
+      });
+      expect(await plannerTestPlan(rt.database, "tasks/b-keep")).toMatchObject({
+        goal_id: null,
+      });
+
+      // A save that names no known goals removes nothing outside the plan.
+      await commit(
+        body({
+          goals: [{ id: G1, pillar: "work", title: "Get the terms in writing" }],
+          tasks: [],
+        }),
+      );
+      expect(
+        await count(
+          "SELECT COUNT(*) AS n FROM planner_goal WHERE id = ? AND deleted_at IS NULL",
+          added.id,
+        ),
+      ).toBe(1);
+      expect(await plannerTestPlan(rt.database, "tasks/e-run")).toMatchObject({
+        goal_id: added.id,
+      });
     });
 
     it("puts the question chosen in Look forward into the summary memo", async () => {

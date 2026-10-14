@@ -565,6 +565,8 @@ export type PlannerCommitBody = {
     pillar: PlannerPillar | null;
     title: string;
   }>;
+  /** The plan week's goals the page knew about; only these can be removed. */
+  known_goal_ids?: readonly string[];
   tasks: ReadonlyArray<{
     ref: string;
     goal_id: string;
@@ -697,9 +699,10 @@ async function settleFlags(
 /**
  * Makes the plan's goals the week's weekly goals, in the plan's order: new ids
  * are created, known ones updated (and restored if an earlier save removed
- * them), and the week's other weekly goals are removed. An id that belongs to
- * someone else, or to a goal of another level or week, is refused before
- * anything is written.
+ * them), and the goals the page knew about but left out of the plan are
+ * removed. A goal the page never saw (added on the Goals page while the review
+ * was open) is kept. An id that belongs to someone else, or to a goal of
+ * another level or week, is refused before anything is written.
  */
 async function writePlanGoals(
   db: FlareMoDb,
@@ -707,6 +710,7 @@ async function writePlanGoals(
     userId: string;
     planWeek: string;
     goals: PlannerCommitBody["goals"];
+    knownIds: ReadonlySet<string>;
     nowIso: string;
   },
 ): Promise<void> {
@@ -781,7 +785,7 @@ async function writePlanGoals(
     });
   });
   for (const row of current) {
-    if (keep.has(row.id)) continue;
+    if (keep.has(row.id) || !input.knownIds.has(row.id)) continue;
     statements.push(
       db
         .update(plannerGoal)
@@ -888,6 +892,8 @@ export async function plannerCommitPlan(
       (goalOrder.get(left.goal_id) ?? 0) - (goalOrder.get(right.goal_id) ?? 0),
   );
   const stamp = () => plannerNow(input.now).toISOString();
+  // The goals this save may touch: the plan's and the ones the page knew about.
+  const knownIds = new Set([...(body.known_goal_ids ?? []), ...goalOrder.keys()]);
 
   // 1 and 2.
   await settleFlags(db, { userId, settled: body.settled, nowIso: stamp() });
@@ -895,6 +901,7 @@ export async function plannerCommitPlan(
     userId,
     planWeek,
     goals: body.goals,
+    knownIds,
     nowIso: stamp(),
   });
 
@@ -973,7 +980,8 @@ export async function plannerCommitPlan(
     planned.push(taskId);
   }
 
-  // 5. Every weekly goal of the plan week, removed ones included.
+  // 5. Every weekly goal of the plan week the page knew about, removed ones
+  // included. A goal it never saw keeps its tasks.
   const weekGoalIds = (
     await db
       .select({ id: plannerGoal.id })
@@ -986,7 +994,9 @@ export async function plannerCommitPlan(
         ),
       )
       .all()
-  ).map((row) => row.id);
+  )
+    .map((row) => row.id)
+    .filter((id) => knownIds.has(id));
   if (weekGoalIds.length > 0) {
     const linked = await db
       .select({ taskId: plannerTaskPlan.taskId })
