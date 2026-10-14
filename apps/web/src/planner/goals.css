@@ -671,7 +671,7 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 .planner-chip {
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid color-mix(in oklab, var(--planner-p, var(--border)) 35%, var(--border));
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 2px 7px;
   font-size: 11px;
@@ -711,7 +711,7 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
   opacity: 0.8;
 }
 .planner-split[data-current] .planner-chip {
-  border-color: color-mix(in oklab, var(--planner-p, var(--brand-500)) 55%, var(--border));
+  border-color: color-mix(in oklab, var(--foreground) 22%, transparent);
   color: var(--foreground);
 }
 .planner-u-add {
