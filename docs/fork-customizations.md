@@ -144,6 +144,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `.github/workflows/ci.yml` | CI runs nightly (skipped when the last 24 hours touched only docs), on pull requests (not docs-only ones) and by hand, not on every push, to stay within the free Actions minutes. |
 | `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily. |
 | `.github/workflows/deploy-cloudflare.yml` | Deleted on 2026-10-04: the fork deploys with `scripts/fork/prod-deploy.mjs` (see `docs/fork-dev-environment.md`). |
+| `pnpm-lock.yaml` | Regenerated in the v0.22.1 merge: upstream added the `cf` devDependency without updating the lockfile. Goes back to upstream once upstream ships a matching lockfile. |
 | `.dev.vars.example`, `wrangler.jsonc.example`, `scripts/write-wrangler-config.mjs`, `scripts/write-wrangler-config.test.mjs` | Email provider settings for the deleted deploy workflow. Nothing runs them now. |
 
 **Docs.** These still describe the deleted deploy-on-push workflow or the old email setup, and are due to go back to upstream's text.
