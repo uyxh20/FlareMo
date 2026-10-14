@@ -49,9 +49,6 @@ export type HealthTrainingVariant = (typeof healthTrainingVariants)[number];
 export const healthBreathVariants = ["wim_hof", "meditation"] as const;
 export type HealthBreathVariant = (typeof healthBreathVariants)[number];
 
-export const healthEntrySources = ["memo", "manual", "import"] as const;
-export type HealthEntrySource = (typeof healthEntrySources)[number];
-
 export const healthTargetPeriods = ["week", "year"] as const;
 export type HealthTargetPeriod = (typeof healthTargetPeriods)[number];
 
@@ -86,16 +83,6 @@ export const healthDefaultTargets: ReadonlyArray<{
   { kind: "breath", period: "week", amount: 7 },
   { kind: "night_out", period: "year", amount: 12 },
 ];
-
-/** The kind and period pairs a target can be set for. */
-export function healthIsTargetPair(
-  kind: HealthKind,
-  period: HealthTargetPeriod,
-): boolean {
-  return healthDefaultTargets.some(
-    (target) => target.kind === kind && target.period === period,
-  );
-}
 
 // --- Night units -----------------------------------------------------------
 
@@ -301,12 +288,6 @@ export const healthEntryDtoSchema = z.object({
   bender: z.boolean(),
   needs_check: z.boolean(),
   feel: z.string().nullable(),
-  source: z.enum(healthEntrySources),
-  memo_id: z.string().nullable(),
-  /** The owner changed it by hand; a re-read of the diary leaves it alone. */
-  edited: z.boolean(),
-  created_at: z.string(),
-  updated_at: z.string(),
 });
 export type HealthEntryDto = z.infer<typeof healthEntryDtoSchema>;
 
@@ -323,27 +304,6 @@ export const healthTargetsResponseSchema = z.object({
   targets: z.array(healthTargetDtoSchema),
 });
 export type HealthTargetsResponse = z.infer<typeof healthTargetsResponseSchema>;
-
-export const healthSetTargetsSchema = z.object({
-  targets: z
-    .array(
-      z.object({
-        kind: healthKindSchema,
-        period: z.enum(healthTargetPeriods),
-        amount: z.number().min(0).max(9999),
-      }),
-    )
-    .min(1)
-    .max(9)
-    .refine(
-      (targets) =>
-        targets.every((target) =>
-          healthIsTargetPair(target.kind, target.period),
-        ),
-      "Targets exist for training and breath per week and night_out per year.",
-    ),
-});
-export type HealthSetTargetsInput = z.infer<typeof healthSetTargetsSchema>;
 
 export const healthWeekQuerySchema = z.object({
   /** First of the seven days; the last seven days ending today when absent. */
@@ -406,9 +366,6 @@ export const healthYearDaySchema = z.object({
   breath: z.number().int(),
   /** Units of the night that started this day; null when it needs a check. */
   night_out: z.number().nullable(),
-  /** Whether a night this day is a night out at all (units may be 0). */
-  has_night: z.boolean(),
-  needs_check: z.boolean(),
   /** Entries of the owner's own trackers this day, by kind. */
   trackers: z.record(z.string(), z.number().int()),
 });

@@ -11,7 +11,6 @@ import {
   type PlannerReviewResponse,
   type PlannerReviewStateResponse,
   type PlannerReviewStatusResponse,
-  type PlannerWeekResponse,
   plannerAiCheckSchema,
   plannerAiCloseSchema,
   plannerAiCoachSchema,
@@ -25,7 +24,6 @@ import {
   plannerReviewStatusQuerySchema,
   plannerSaveReviewStateSchema,
   plannerUpdateGoalSchema,
-  plannerUpdateWeekSchema,
 } from "@flaremo/contracts";
 import {
   PLANNER_DIARY_CHARS,
@@ -57,7 +55,6 @@ import {
   plannerSaveReviewState,
   plannerStartReviewOver,
   plannerUpdateGoal,
-  plannerUpsertWeek,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
@@ -209,36 +206,6 @@ plannerGoalsApi.delete("/goals/:id", async (c) => {
     return jsonError(c, error);
   }
 });
-
-plannerGoalsApi.patch(
-  "/weeks/:weekStart",
-  zValidator("json", plannerUpdateWeekSchema),
-  async (c) => {
-    try {
-      const context = await getRequestContext(c);
-      const throttled = await rateLimitGuard(c, "planner", context.user.id);
-      if (throttled) return throttled;
-      const body = c.req.valid("json");
-      const response: PlannerWeekResponse = {
-        week: await plannerUpsertWeek(context.db, {
-          userId: context.user.id,
-          weekStart: c.req.param("weekStart"),
-          patch: {
-            auth: body.auth,
-            ach: body.ach,
-            note: body.note,
-            question: body.question,
-            verdict: body.verdict,
-            memoId: body.memo_id,
-          },
-        }),
-      };
-      return c.json(response);
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  },
-);
 
 // --- The weekly review ----------------------------------------------------------
 

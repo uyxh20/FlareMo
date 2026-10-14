@@ -2906,22 +2906,12 @@ e2e("dev environment against a fake Cloudflare", () => {
     );
   });
 
-  test("config writes the file, remembers a real id, and never remembers a placeholder", (t) => {
+  test("provision refuses the production D1 id before anything runs", (t) => {
     const h = harness(t);
-    h.devEnv.config({ d1Id: "00000000-0000-0000-0000-000000000000" });
-    assert.deepEqual(h.devEnv.readState(), {});
-    assert.ok(existsSync(h.devEnv.paths.devConfig));
-    h.devEnv.config({ d1Id: DEV_D1_ID });
-    assert.equal(h.devEnv.readState().d1Id, DEV_D1_ID);
-    assert.equal(
-      parseConfigText(readFileSync(h.devEnv.paths.devConfig, "utf8"))
-        .d1_databases[0].database_id,
-      DEV_D1_ID,
-    );
-    assert.equal(h.fake.calls.length, 0, "config is local only");
     assert.throws(
-      () => h.devEnv.config({ d1Id: PROD.d1Id }),
+      () => h.devEnv.provision({ d1Id: PROD.d1Id }),
       /production D1 id/,
     );
+    assert.equal(h.fake.calls.length, 0);
   });
 });

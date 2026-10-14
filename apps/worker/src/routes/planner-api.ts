@@ -5,20 +5,15 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerDeleteCommentResponse,
   type PlannerHistoryRangeResponse,
-  type PlannerRollupResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
-  type PlannerTreeNodeResponse,
-  type PlannerTreeResponse,
   plannerBoardQuerySchema,
   plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
-  plannerRollupQuerySchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
-  plannerUpdateTreeNodeSchema,
 } from "@flaremo/contracts";
 import { parseResourceName, updateTask } from "@flaremo/domain";
 import {
@@ -32,11 +27,9 @@ import {
   plannerReadBoard,
   plannerReadCockpitWeek,
   plannerReadHistoryRange,
-  plannerReadRollup,
   plannerReadTaskDetail,
   plannerReadTaskHistory,
   plannerReadTaskPlan,
-  plannerReadTree,
   plannerSetBoardRank,
   plannerSetEffort,
   plannerSetPlan,
@@ -45,7 +38,6 @@ import {
   plannerSyncHistory,
   plannerUndropTask,
   plannerUpdateComment,
-  plannerUpsertProjectNode,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
@@ -445,69 +437,6 @@ plannerApi.get(
       const response: PlannerHistoryRangeResponse =
         await plannerReadHistoryRange(db, { userId: user.id, from, to });
       return c.json(response);
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  },
-);
-
-// --- Goal tree --------------------------------------------------------------
-
-plannerApi.get("/tree", async (c) => {
-  try {
-    const { db, user } = await getRequestContext(c);
-    const response: PlannerTreeResponse = {
-      nodes: await plannerReadTree(db, { userId: user.id }),
-    };
-    return c.json(response);
-  } catch (error) {
-    return jsonError(c, error);
-  }
-});
-
-// PATCH, not PUT: the Worker's CORS allowMethods has no PUT. An omitted field is
-// unchanged and `null` clears it, which is why the body is passed through as is.
-plannerApi.patch(
-  "/tree/:projectId",
-  zValidator("json", plannerUpdateTreeNodeSchema),
-  async (c) => {
-    try {
-      const context = await getRequestContext(c);
-      const throttled = await rateLimitGuard(c, "planner", context.user.id);
-      if (throttled) return throttled;
-      const body = c.req.valid("json");
-      const response: PlannerTreeNodeResponse = {
-        node: await plannerUpsertProjectNode(context.db, {
-          userId: context.user.id,
-          projectId: c.req.param("projectId"),
-          parentProjectId: body.parent_project_id,
-          level: body.level,
-          periodStart: body.period_start,
-          periodEnd: body.period_end,
-          sortOrder: body.sort_order,
-        }),
-      };
-      return c.json(response);
-    } catch (error) {
-      return jsonError(c, error);
-    }
-  },
-);
-
-plannerApi.get(
-  "/tree/:projectId/rollup",
-  zValidator("query", plannerRollupQuerySchema),
-  async (c) => {
-    try {
-      const { db, user } = await getRequestContext(c);
-      const { from, to } = c.req.valid("query");
-      const rollup: PlannerRollupResponse = await plannerReadRollup(db, {
-        userId: user.id,
-        projectId: c.req.param("projectId"),
-        from,
-        to,
-      });
-      return c.json(rollup);
     } catch (error) {
       return jsonError(c, error);
     }

@@ -1,13 +1,12 @@
 import {
   type HealthEntryDto,
   type HealthPatchEntryInput,
-  type HealthSetTargetsInput,
   healthBreathVariants,
   healthNightUnitsFor,
   healthTrainingVariants,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { healthEntry, healthTarget } from "@flaremo/db/src/schema/fork-health";
+import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import { and, eq, isNull } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../errors";
 import {
@@ -139,28 +138,4 @@ export async function healthDismissEntry(
     ) as unknown as BatchItems,
   );
   return healthToDto(after);
-}
-
-/** Saves the owner's targets; a target left out keeps its value or default. */
-export async function healthSetTargets(
-  db: FlareMoDb,
-  input: { userId: string } & HealthSetTargetsInput & { now?: Date },
-): Promise<void> {
-  const at = (input.now ?? new Date()).toISOString();
-  const statements = input.targets.map((target) =>
-    db
-      .insert(healthTarget)
-      .values({
-        userId: input.userId,
-        kind: target.kind,
-        period: target.period,
-        amount: target.amount,
-        updatedAt: at,
-      })
-      .onConflictDoUpdate({
-        target: [healthTarget.userId, healthTarget.kind, healthTarget.period],
-        set: { amount: target.amount, updatedAt: at },
-      }),
-  );
-  await db.batch(statements as unknown as BatchItems);
 }

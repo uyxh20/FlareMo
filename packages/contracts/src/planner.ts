@@ -23,7 +23,6 @@ import { z } from "zod";
 import { plannerCockpitWeekSchema } from "./planner-goals";
 import {
   createTaskSchema,
-  projectStatusSchema,
   taskActorTypeSchema,
   taskDtoSchema,
   taskPrioritySchema,
@@ -43,12 +42,6 @@ export * from "./planner-review-memo";
 export const plannerHorizons = ["day", "week", "month"] as const;
 
 export type PlannerHorizon = (typeof plannerHorizons)[number];
-
-/**
- * A level is a short lowercase slug (area, year, quarter, goal, milestone, ...)
- * rather than an enum, so adding one needs no schema change.
- */
-export const plannerLevelPattern = /^[a-z][a-z0-9-]{0,23}$/;
 
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MS_PER_DAY = 86_400_000;
@@ -176,11 +169,6 @@ export function plannerTodayWithinBounds(
   return Math.abs(client.getTime() - serverDay) <= MS_PER_DAY;
 }
 
-/** True for a valid goal-tree level slug: `^[a-z][a-z0-9-]{0,23}$`. */
-export function plannerIsValidLevel(value: unknown): value is string {
-  return typeof value === "string" && plannerLevelPattern.test(value);
-}
-
 /**
  * The horizon a To Do task carries (v1.2, docs/planning-cockpit-implementation-plan.md,
  * section 13.x). The cockpit has no periods any more, but a To Do task still needs
@@ -242,9 +230,6 @@ export function plannerQuarterLabel(input: {
 //   PATCH  /comments/:id                           PlannerCommentResponse
 //   DELETE /comments/:id                           PlannerDeleteCommentResponse
 //   GET    /history?from&to                        PlannerHistoryRangeResponse
-//   GET    /tree                                   PlannerTreeResponse
-//   PATCH  /tree/:projectId                        PlannerTreeNodeResponse
-//   GET    /tree/:projectId/rollup?from&to         PlannerRollupResponse
 //
 // `today` is the client's local date. The server accepts it only within one day
 // of its own UTC date (`plannerTodayWithinBounds`) and answers 400 otherwise;
@@ -439,32 +424,6 @@ export const plannerHistoryRangeQuerySchema = z
   .object({ from: plannerDaySchema, to: plannerDaySchema })
   .refine(({ from, to }) => from <= to, "`from` must not be after `to`.");
 
-export const plannerRollupQuerySchema = plannerHistoryRangeQuerySchema;
-
-/**
- * An omitted field is unchanged and `null` clears it (a null parent makes the
- * project a root). `sort_order` has no null: it is always a whole number.
- */
-export const plannerUpdateTreeNodeSchema = z
-  .strictObject({
-    parent_project_id: z.string().trim().min(1).max(256).nullable().optional(),
-    level: z
-      .string()
-      .regex(
-        plannerLevelPattern,
-        "Expected a lowercase slug of up to 24 characters, such as area, quarter or goal.",
-      )
-      .nullable()
-      .optional(),
-    period_start: plannerDaySchema.nullable().optional(),
-    period_end: plannerDaySchema.nullable().optional(),
-    sort_order: z.number().int().optional(),
-  })
-  .refine(
-    (value) => Object.values(value).some((field) => field !== undefined),
-    "At least one field must be updated.",
-  );
-
 // --- Response schemas -------------------------------------------------------
 //
 // These describe exactly what the Worker sends. Dates and timestamps are plain
@@ -611,14 +570,11 @@ export const plannerCommentDtoSchema = z.object({
   updated_at: z.string(),
 });
 
-/** The goal a task belongs to, and the path of goals above it. */
+/** The goal a task belongs to. */
 export const plannerTaskProjectSchema = z.object({
   // Upstream's project id.
   id: z.string(),
   name: z.string(),
-  // The goals above it in the tree, root first, ending with its own parent;
-  // empty for a root or a project with no node row.
-  ancestors: z.array(z.object({ id: z.string(), name: z.string() })),
 });
 
 /**
@@ -656,66 +612,6 @@ export const plannerHistoryRangeResponseSchema = z.object({
   truncated: z.boolean(),
 });
 
-/** A project merged with its goal-tree node. */
-export const plannerTreeNodeDtoSchema = z.object({
-  // Upstream's project id.
-  id: z.string(),
-  name: z.string(),
-  status: projectStatusSchema,
-  // Null for a root, and also for a child whose parent is in the recycle bin.
-  parent_project_id: z.string().nullable(),
-  // A slug such as `area`, `year`, `quarter`, `goal` or `milestone`.
-  level: z.string().nullable(),
-  period_start: z.string().nullable(),
-  period_end: z.string().nullable(),
-  sort_order: z.number().int(),
-});
-
-export const plannerTreeResponseSchema = z.object({
-  // A flat list ordered by sort_order, then creation; build the tree from
-  // `parent_project_id`.
-  nodes: z.array(plannerTreeNodeDtoSchema),
-});
-
-export const plannerTreeNodeResponseSchema = z.object({
-  node: plannerTreeNodeDtoSchema,
-});
-
-const plannerRollupCountsShape = {
-  // Live tasks that are not done (todo, in progress or an unknown status).
-  open_tasks: z.number().int().nonnegative(),
-  done_tasks: z.number().int().nonnegative(),
-  // Tasks whose plan period starts inside the range.
-  planned_in_range: z.number().int().nonnegative(),
-  // Tasks completed inside the range.
-  done_in_range: z.number().int().nonnegative(),
-  // `carried_over` events inside the range.
-  carried_in_range: z.number().int().nonnegative(),
-};
-
-export const plannerRollupCountsSchema = z.object(plannerRollupCountsShape);
-
-export const plannerRollupNodeSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  parent_project_id: z.string().nullable(),
-  level: z.string().nullable(),
-  // 0 for the project the roll-up was asked for.
-  depth: z.number().int().nonnegative(),
-  ...plannerRollupCountsShape,
-});
-
-/** Not wrapped in a key: the body is the roll-up itself. */
-export const plannerRollupResponseSchema = z.object({
-  project_id: z.string(),
-  from: z.string(),
-  to: z.string(),
-  // The project and everything under it, parents before children.
-  nodes: z.array(plannerRollupNodeSchema),
-  // The counts summed over `nodes`.
-  total: plannerRollupCountsSchema,
-});
-
 // --- Types ------------------------------------------------------------------
 
 export type PlannerColumn = z.infer<typeof plannerColumnSchema>;
@@ -736,10 +632,6 @@ export type PlannerUpdateCommentInput = z.input<
 >;
 export type PlannerHistoryRangeQuery = z.output<
   typeof plannerHistoryRangeQuerySchema
->;
-export type PlannerRollupQuery = z.output<typeof plannerRollupQuerySchema>;
-export type PlannerUpdateTreeNodeInput = z.input<
-  typeof plannerUpdateTreeNodeSchema
 >;
 
 // Responses.
@@ -776,11 +668,3 @@ export type PlannerDeleteCommentResponse = z.infer<
 export type PlannerHistoryRangeResponse = z.infer<
   typeof plannerHistoryRangeResponseSchema
 >;
-export type PlannerTreeNodeDto = z.infer<typeof plannerTreeNodeDtoSchema>;
-export type PlannerTreeResponse = z.infer<typeof plannerTreeResponseSchema>;
-export type PlannerTreeNodeResponse = z.infer<
-  typeof plannerTreeNodeResponseSchema
->;
-export type PlannerRollupCounts = z.infer<typeof plannerRollupCountsSchema>;
-export type PlannerRollupNode = z.infer<typeof plannerRollupNodeSchema>;
-export type PlannerRollupResponse = z.infer<typeof plannerRollupResponseSchema>;

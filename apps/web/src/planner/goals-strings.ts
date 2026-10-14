@@ -2,7 +2,6 @@ import type {
   PlannerGoalResult,
   PlannerGoalStatus,
   PlannerPillar,
-  PlannerVerdictKind,
 } from "@flaremo/contracts";
 import { useMemo } from "react";
 import { type Locale, useI18n } from "@/i18n";
@@ -25,8 +24,6 @@ import {
 export type PlannerMonthDay = { month: number; day: number };
 
 export type PlannerGoalsStrings = {
-  intlLocale: string;
-
   /** The four objectives: the full name, and a short one for narrow places. */
   pillar: Record<PlannerPillar, string>;
   pillarShort: Record<PlannerPillar, string>;
@@ -46,7 +43,6 @@ export type PlannerGoalsStrings = {
   weekCode: (number: number) => string;
   result: Record<PlannerGoalResult, string>;
   status: Record<PlannerGoalStatus, string>;
-  verdict: Record<PlannerVerdictKind, string>;
 
   cockpit: {
     /** The row of goal cards. */
@@ -74,7 +70,6 @@ export type PlannerGoalsStrings = {
     floor: (value: string) => string;
     weeks: string;
     months: string;
-    yearGoals: string;
     quarterGoals: string;
     monthGoals: string;
     weeklyGoals: string;
@@ -90,15 +85,12 @@ export type PlannerGoalsStrings = {
     noGoalsSet: string;
     noGoal: string;
     summary: string;
-    loadFailed: string;
   };
 
   /** The Year map, the Goals page's year: objectives as columns, the year running down. */
   map: {
     follow: string;
     allPillars: string;
-    /** "2026 · following Work". */
-    following: (pillar: string) => string;
     openWeeks: (month: string) => string;
     closeWeeks: (month: string) => string;
     weeksOf: (month: string) => string;
@@ -119,7 +111,6 @@ export type PlannerGoalsStrings = {
     addTaskFailed: string;
     openCockpit: string;
     editGoal: string;
-    close: string;
   };
 
   editor: {
@@ -328,7 +319,6 @@ const EN_MONTHS_LONG = [
 ] as const;
 
 const en: PlannerGoalsStrings = {
-  intlLocale: "en-US",
   pillar: {
     of: "Objective Function",
     work: "Work",
@@ -358,7 +348,6 @@ const en: PlannerGoalsStrings = {
     contested: "Contested",
     closed: "Closed",
   },
-  verdict: { continue: "Continue", pivot: "Pivot", pause: "Pause" },
 
   cockpit: {
     goals: "Weekly goals",
@@ -382,7 +371,6 @@ const en: PlannerGoalsStrings = {
     floor: (value) => `floor ${value}`,
     weeks: "Weeks",
     months: "Months",
-    yearGoals: "Year goals",
     quarterGoals: "Quarter goals",
     monthGoals: "Month goals",
     weeklyGoals: "Weekly goals",
@@ -397,13 +385,11 @@ const en: PlannerGoalsStrings = {
     noGoalsSet: "No goals set",
     noGoal: "No goal",
     summary: "Summary",
-    loadFailed: "Couldn't load the goals.",
   },
 
   map: {
     follow: "Follow a pillar",
     allPillars: "All pillars",
-    following: (pillar) => `following ${pillar}`,
     openWeeks: (month) => `Open the weeks of ${month}`,
     closeWeeks: (month) => `Close the weeks of ${month}`,
     weeksOf: (month) => `Weeks of ${month}`,
@@ -420,7 +406,6 @@ const en: PlannerGoalsStrings = {
     addTaskFailed: "Couldn't add the task.",
     openCockpit: "Open in cockpit",
     editGoal: "Edit goal",
-    close: "Close",
   },
 
   editor: {
@@ -594,7 +579,6 @@ const en: PlannerGoalsStrings = {
 };
 
 const zhCN: PlannerGoalsStrings = {
-  intlLocale: "zh-CN",
   pillar: {
     of: "目标函数",
     work: "工作",
@@ -645,7 +629,6 @@ const zhCN: PlannerGoalsStrings = {
     contested: "有争议",
     closed: "已结束",
   },
-  verdict: { continue: "继续", pivot: "转向", pause: "暂停" },
 
   cockpit: {
     goals: "本周目标",
@@ -669,7 +652,6 @@ const zhCN: PlannerGoalsStrings = {
     floor: (value) => `底线 ${value}`,
     weeks: "各周",
     months: "各月",
-    yearGoals: "年度目标",
     quarterGoals: "季度目标",
     monthGoals: "月度目标",
     weeklyGoals: "本周目标",
@@ -684,13 +666,11 @@ const zhCN: PlannerGoalsStrings = {
     noGoalsSet: "没有设目标",
     noGoal: "没有目标",
     summary: "总结",
-    loadFailed: "目标加载失败。",
   },
 
   map: {
     follow: "跟随一个方向",
     allPillars: "全部方向",
-    following: (pillar) => `跟随${pillar}`,
     openWeeks: (month) => `展开${month}的各周`,
     closeWeeks: (month) => `收起${month}的各周`,
     weeksOf: (month) => `${month}的各周`,
@@ -707,7 +687,6 @@ const zhCN: PlannerGoalsStrings = {
     addTaskFailed: "任务添加失败。",
     openCockpit: "在驾驶舱打开",
     editGoal: "编辑目标",
-    close: "关闭",
   },
 
   editor: {

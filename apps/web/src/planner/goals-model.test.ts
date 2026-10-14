@@ -9,7 +9,6 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   plannerAverageText,
-  plannerCardGoal,
   plannerCellKind,
   plannerCellLines,
   plannerGoalBadge,
@@ -615,13 +614,5 @@ describe("goals on the board", () => {
       done: 0,
       total: 0,
     });
-  });
-
-  it("finds the goal a card belongs to among the week's goals", () => {
-    const work = goal();
-    const goals = new Map([[work.id, work]]);
-    expect(plannerCardGoal({ goal_id: work.id }, goals)).toBe(work);
-    expect(plannerCardGoal({ goal_id: "goal-last-week" }, goals)).toBeNull();
-    expect(plannerCardGoal({ goal_id: null }, goals)).toBeNull();
   });
 });

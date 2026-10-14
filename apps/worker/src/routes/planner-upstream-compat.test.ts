@@ -5,13 +5,10 @@ import { ensureSingleUser, getFlaremoUserById } from "@flaremo/domain";
 import {
   plannerDropTask,
   plannerReadBoard,
-  plannerReadRollup,
   plannerReadTaskHistory,
-  plannerReadTree,
   plannerRollover,
   plannerSetPlan,
   plannerSyncHistory,
-  plannerUpsertProjectNode,
 } from "@flaremo/domain/src/planner";
 import type { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -168,6 +165,21 @@ describe("planner and upstream flows", () => {
   const count = async (table: string) =>
     (await rows<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`))[0]?.n ??
     -1;
+
+  /** A leftover row of the retired goal tree; the planner no longer writes them. */
+  const insertNode = (
+    projectId: string,
+    parentProjectId: string | null = null,
+  ) =>
+    run(
+      `INSERT INTO planner_project_node (project_id, user_id, parent_project_id, level, sort_order, created_at, updated_at)
+       VALUES (?, ?, ?, 'goal', 0, ?, ?)`,
+      projectId,
+      owner.id,
+      parentProjectId,
+      at(0).toISOString(),
+      at(0).toISOString(),
+    );
 
   /** Everything upstream owns that these flows touch, in a stable order. */
   const upstreamTables = async () => ({
@@ -366,12 +378,7 @@ describe("planner and upstream flows", () => {
         today: "2026-10-07",
         now: at(0),
       });
-      await plannerUpsertProjectNode(db, {
-        userId: owner.id,
-        projectId,
-        level: "goal",
-        now: at(0),
-      });
+      await insertNode(projectId);
 
       // Delete: the project and its live tasks go to the bin together.
       expect(
@@ -722,12 +729,8 @@ describe("planner and upstream flows", () => {
         today: "2026-10-05",
         now: at(0),
       });
-      await plannerUpsertProjectNode(db, {
-        userId: owner.id,
-        projectId,
-        parentProjectId: parentId,
-        now: at(0),
-      });
+      await insertNode(parentId);
+      await insertNode(projectId, parentId);
       const before = await upstreamTables();
 
       await sync(1);
@@ -738,13 +741,6 @@ describe("planner and upstream flows", () => {
         now: new Date("2026-10-06T09:00:00.000Z"),
       });
       await plannerReadBoard(db, { userId: owner.id, today: "2026-10-06" });
-      await plannerReadTree(db, { userId: owner.id });
-      await plannerReadRollup(db, {
-        userId: owner.id,
-        projectId: parentId,
-        from: "2026-10-01",
-        to: "2026-10-31",
-      });
 
       expect(await upstreamTables()).toEqual(before);
       // The rollover itself did move the plan, in the planner's own table.

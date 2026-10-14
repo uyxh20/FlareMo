@@ -18,8 +18,8 @@
 
 ## 禁止事项
 
-- 不要新增第四类生产部署器。`ci.yml` 是唯一的 check workflow（format / lint / typecheck / 单元测试）；`flaremo-update.yml` 只在用户部署仓库中准备上游升级 PR。自托管 fork 的 Worker 发布使用已有的 `.github/workflows/deploy-cloudflare.yml`（push 到 `main` 与 `workflow_dispatch`）。不要把 `RESEND_API_KEY` 写入 GitHub Actions secrets。
-- 全量门禁 `pnpm verify` 仅在维护者明确要求时运行；常规部署直接执行本地部署脚本（`deploy-kosx.mjs` 默认不跑 verify，需要时用 `--verify`）。
+- 不要新增第四类生产部署器。`ci.yml` 是唯一的 check workflow（format / lint / typecheck / 单元测试）；`flaremo-update.yml` 只在用户部署仓库中准备上游升级 PR。本 fork 已删除 `.github/workflows/deploy-cloudflare.yml`，push 到 `main` 不会部署；Worker 只通过 `scripts/fork/prod-deploy.mjs` 手动发布。不要把 `RESEND_API_KEY` 写入 GitHub Actions secrets。
+- 全量门禁 `pnpm verify` 仅在维护者明确要求时运行；常规部署直接执行本地部署脚本（`scripts/fork/prod-deploy.mjs` 不跑 verify）。
 - 不要把 `Temp/`、`node_modules/`、`dist/`、`.wrangler/` 提交。
 - 不要新增绕开 Better Auth 的登录、共享密码或第二套 Bearer token；机器访问使用已撤销能力的 `memos_pat_` PAT。
 - 不要把 D1 主数据迁移到 KV、R2 或 Vectorize。

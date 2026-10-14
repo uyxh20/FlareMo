@@ -173,7 +173,6 @@ export function plannerTestActions() {
     undrop: vi.fn(),
     setTitle: vi.fn(),
     setPriority: vi.fn(),
-    setProject: vi.fn(),
     setGoal: vi.fn(),
     setEffort: vi.fn(),
     setStartDate: vi.fn(),

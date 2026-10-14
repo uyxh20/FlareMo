@@ -238,40 +238,6 @@ export async function plannerTestInsertTasks(
   }
 }
 
-/**
- * Inserts a goal-tree node exactly as given, skipping every guard, so a test
- * can build a state the domain functions would refuse (a cycle, a deep chain).
- */
-export async function plannerTestInsertNode(
-  database: PlannerTestDatabase,
-  node: {
-    projectId: string;
-    userId: string;
-    parentProjectId?: string | null;
-    level?: string | null;
-    periodStart?: string | null;
-    periodEnd?: string | null;
-    sortOrder?: number;
-    at?: string;
-  },
-): Promise<void> {
-  const at = node.at ?? "2026-10-01T00:00:00.000Z";
-  await plannerTestRun(
-    database,
-    `INSERT INTO planner_project_node (project_id, user_id, parent_project_id, level, period_start, period_end, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    node.projectId,
-    node.userId,
-    node.parentProjectId ?? null,
-    node.level ?? null,
-    node.periodStart ?? null,
-    node.periodEnd ?? null,
-    node.sortOrder ?? 0,
-    at,
-    at,
-  );
-}
-
 export type PlannerTestNode = {
   project_id: string;
   user_id: string;

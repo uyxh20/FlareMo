@@ -91,13 +91,12 @@ export type PlannerStrings = {
   empty: { title: string; body: string; action: string };
 
   /**
-   * Where a task is planned. `chip` is the short title-case form on a card
-   * ("This week"); `phrase` reads inside a sentence ("Planned for this week").
-   * Days and months read the same either way.
+   * Where a task is planned, as it reads inside a sentence ("Planned for this
+   * week"). `weekTitle` is the exact-period tooltip for a week ("Week of Oct 5, 2026").
    */
   plan: {
-    chip: PlannerPlanWords;
     phrase: PlannerPlanWords;
+    weekTitle: (date: string) => string;
     /** "Wed 8": `weekday` is a short weekday name, `day` the day of month. */
     dayChip: (weekday: string, day: number) => string;
   };
@@ -167,7 +166,6 @@ export type PlannerStrings = {
   panel: {
     /** The dialog's name for a screen reader. */
     label: string;
-    loading: string;
     /** The task is gone (deleted, or a stale link). */
     notFound: string;
     titleLabel: string;
@@ -207,7 +205,6 @@ export type PlannerStrings = {
       /** The new-comment box's name. */
       label: string;
       send: string;
-      sending: string;
       hint: string;
       edit: string;
       remove: string;
@@ -228,7 +225,6 @@ export type PlannerStrings = {
     title: string;
     description: string;
     empty: string;
-    loadFailed: string;
     you: string;
     agent: string;
     agentNamed: (name: string) => string;
@@ -237,7 +233,6 @@ export type PlannerStrings = {
     created: string;
     planned: (target: string) => string;
     replanned: (target: string) => string;
-    unplanned: string;
     carriedOver: (target: string) => string;
     movedTo: (column: string) => string;
     completed: string;
@@ -336,15 +331,6 @@ const en: PlannerStrings = {
   },
 
   plan: {
-    chip: {
-      today: "Today",
-      tomorrow: "Tomorrow",
-      yesterday: "Yesterday",
-      thisWeek: "This week",
-      nextWeek: "Next week",
-      lastWeek: "Last week",
-      weekOf: (date) => `Week of ${date}`,
-    },
     phrase: {
       today: "today",
       tomorrow: "tomorrow",
@@ -354,6 +340,7 @@ const en: PlannerStrings = {
       lastWeek: "last week",
       weekOf: (date) => `the week of ${date}`,
     },
+    weekTitle: (date) => `Week of ${date}`,
     dayChip: (weekday, day) => `${weekday} ${day}`,
   },
 
@@ -423,7 +410,6 @@ const en: PlannerStrings = {
 
   panel: {
     label: "Task details",
-    loading: "Loading the task",
     notFound:
       "This task isn't available any more. It may have been deleted. Close this panel to go back to the board.",
     titleLabel: "Task title",
@@ -459,7 +445,6 @@ const en: PlannerStrings = {
       placeholder: "Add a comment…",
       label: "Write a comment",
       send: "Send",
-      sending: "Sending…",
       hint: "Enter to send, Shift+Enter for a new line",
       edit: "Edit comment",
       remove: "Delete comment",
@@ -480,7 +465,6 @@ const en: PlannerStrings = {
     title: "History",
     description: "Everything that happened to this task.",
     empty: "No history yet.",
-    loadFailed: "Couldn't load the history.",
     you: "You",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
@@ -488,7 +472,6 @@ const en: PlannerStrings = {
     created: "Created",
     planned: (target) => `Planned for ${target}`,
     replanned: (target) => `Re-planned to ${target}`,
-    unplanned: "Unplanned",
     carriedOver: (target) => `Carried over to ${target}`,
     movedTo: (column) => `Moved to ${column}`,
     completed: "Completed",
@@ -583,15 +566,6 @@ const zhCN: PlannerStrings = {
   },
 
   plan: {
-    chip: {
-      today: "今天",
-      tomorrow: "明天",
-      yesterday: "昨天",
-      thisWeek: "本周",
-      nextWeek: "下周",
-      lastWeek: "上周",
-      weekOf: (date) => `${date}起的一周`,
-    },
     phrase: {
       today: "今天",
       tomorrow: "明天",
@@ -601,6 +575,7 @@ const zhCN: PlannerStrings = {
       lastWeek: "上周",
       weekOf: (date) => `${date}起的一周`,
     },
+    weekTitle: (date) => `${date}起的一周`,
     dayChip: (weekday, day) => `${weekday} ${day}日`,
   },
 
@@ -668,7 +643,6 @@ const zhCN: PlannerStrings = {
 
   panel: {
     label: "任务详情",
-    loading: "正在加载任务",
     notFound: "这项任务已不存在，可能已被删除。关闭此面板即可回到看板。",
     titleLabel: "任务标题",
     titlePlaceholder: "无标题",
@@ -703,7 +677,6 @@ const zhCN: PlannerStrings = {
       placeholder: "添加评论…",
       label: "写评论",
       send: "发送",
-      sending: "正在发送…",
       hint: "回车发送，Shift+回车换行",
       edit: "编辑评论",
       remove: "删除评论",
@@ -724,7 +697,6 @@ const zhCN: PlannerStrings = {
     title: "历史记录",
     description: "这项任务发生过的一切。",
     empty: "还没有历史记录。",
-    loadFailed: "历史记录加载失败。",
     you: "你",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
@@ -732,7 +704,6 @@ const zhCN: PlannerStrings = {
     created: "创建",
     planned: (target) => `安排到${target}`,
     replanned: (target) => `改期到${target}`,
-    unplanned: "取消计划",
     carriedOver: (target) => `顺延到${target}`,
     movedTo: (column) => `移到${column}`,
     completed: "完成",

@@ -161,7 +161,7 @@ export function plannerDescribeHistory(
     // the week it was planned in.
     const day = plannerLocalDayOf(event.occurred_at);
     const wording = (point: PlannerPlanPoint) =>
-      plannerPlanLabel(point, day, strings, "phrase")?.label ?? null;
+      plannerPlanLabel(point, day, strings)?.label ?? null;
     let label: string;
     let detail: string | null = null;
 
@@ -238,7 +238,7 @@ export function plannerDescribeHistory(
         }
         // The label is worded against the day of the event ("this week"); the
         // exact period under it keeps an old line from being misread.
-        const exact = plannerPlanLabel(to, day, strings, "phrase")?.title;
+        const exact = plannerPlanLabel(to, day, strings)?.title;
         const was = wording(from);
         const parts = [
           exact ?? null,

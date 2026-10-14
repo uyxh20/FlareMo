@@ -134,17 +134,15 @@ Data gets into the app by more than one path: typing an entry, editing it, impor
 
 ## Tests per module
 
-What protects each part today, what this branch added, and what is worth adding next. The audit behind the "next" column is in the project files (`repo-review/commit-review.md`, section 5).
-
-| Module | Already covered | Added here | Worth adding next |
-|---|---|---|---|
-| Every module | `pnpm persistence:check` (backup manifest, schema files only, not in `pnpm test`) | The registry and its contract: every table classified for every consumer, backup and memory checked against the code, migrations on a tested track | A member-removal check that finds every table with a `user_id` and asserts the removal empties it (team feature, hidden today) |
-| diary | Upstream's memo, tag, attachment and import suites | Probes for entries, earlier weeks and attachments | Export, import, export round trip |
-| search | `embedding-outbox.test.ts`, `semantic-search.test.ts` | Every way in reaches both indexes (`search-reach.test.ts`); import gap pinned as `it.fails` | Same for imported memories |
-| memory | `memory*.test.ts` | Memory reads exactly the tables marked for it | Dreaming skips AI-written summaries and trashed entries |
-| cockpit | `planner-api`, `history-sync`, `board`, `plans`, migrations suites | Archive never deleted or rewritten; nightly-sync and API mount hook-ins | Seeded property test that the archive never shrinks over random task operations |
-| goals and review | `review.test.ts`, `review-prompts.test.ts`, the diary fit | Probes for goals, weeks, flags, reviews, task notes and comments; snapshot of exactly what the model sees (`__snapshots__/`) | Month, quarter and year boundaries for the look forward check; 200-row limits keep the newest rows |
-| ops and deploy | `dev-env.test.mjs`, `prod-deploy.test.mjs` (pure helpers, not run by `pnpm test`) | Applied 9NNN migrations are frozen by hash (G12) | Fakes for the deploy and rollback flow; run `scripts/fork/*.test.mjs` from `pnpm test` |
+| Module | Covered by |
+|---|---|
+| Every module | `pnpm persistence:check` (backup manifest, schema files only, not in `pnpm test`); the registry contract in `data-sources.test.ts` (every table classified for every consumer, backup and memory checked against the code, migrations on a tested track) |
+| diary | Upstream's memo, tag, attachment and import suites; probes for entries, earlier weeks and attachments |
+| search | `embedding-outbox.test.ts`, `semantic-search.test.ts`, and `search-reach.test.ts` (every way in reaches both indexes; the import gap is pinned as `it.fails`) |
+| memory | `memory*.test.ts`; memory reads exactly the tables marked for it |
+| cockpit | The `planner-api`, `history-sync`, `board`, `plans` and migrations suites; the archive is never deleted or rewritten; the nightly-sync and API mount hook-ins |
+| goals and review | `review.test.ts`, `review-prompts.test.ts` (including the month, quarter and year boundaries of the look forward check), probes for goals, weeks, flags, reviews, task notes and comments, and a snapshot of exactly what the model sees (`__snapshots__/`) |
+| ops and deploy | `dev-env.test.mjs`, `prod-deploy.test.mjs` (pure helpers, not run by `pnpm test`); applied 9NNN migrations are frozen by hash (G12) |
 
 ## Checks
 
@@ -152,7 +150,7 @@ What protects each part today, what this branch added, and what is worth adding 
 pnpm exec vitest run packages/domain/src/fork
 ```
 
-Five files, about 30 seconds, no network and no model calls:
+Five files, no network and no model calls:
 
 - `data-sources.test.ts`: every table is listed; backup, search and memory agree with the code; migrations are on a track the tests apply; this page is current.
 - `data-reach.test.ts`: each content source reaches exactly the consumers marked `yes`, and one user's data never reaches another user's review or export.

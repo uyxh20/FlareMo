@@ -16,13 +16,13 @@ FlareMo 部署到 Cloudflare Workers。Worker 同时承载前端静态资源和 
 
 ## GitHub Action 部署（自托管 fork）
 
-自己的 fork 或部署仓库可以使用 `.github/workflows/deploy-cloudflare.yml`：在 push 到 `main` 或 Actions 里手动 `Run workflow` 时，创建缺失的 D1 / R2 / Queue / Vectorize，用 `cloudflare/wrangler-action` 发布 Worker，并把仓库 Secrets 里的 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 同步到 Cloudflare。上游 `realchendahuang/FlareMo` 不会跑这个 job。邮件密钥（`RESEND_API_KEY`）只放在 Worker secret store，不要放进 GitHub Actions secrets。
+若部署仓库保留了 `.github/workflows/deploy-cloudflare.yml`（本 fork 已删除，push 到 `main` 不会部署），可在 Actions 里手动 `Run workflow`：创建缺失的 D1 / R2 / Queue / Vectorize，用 `cloudflare/wrangler-action` 发布 Worker，并把仓库 Secrets 里的 `BETTER_AUTH_SECRET`、`FLAREMO_BOOTSTRAP_SECRET` 同步到 Cloudflare。上游 `realchendahuang/FlareMo` 不会跑这个 job。邮件密钥（`RESEND_API_KEY`）只放在 Worker secret store，不要放进 GitHub Actions secrets。
 
 完整步骤见 [用 GitHub Action 部署](./github-action-deploy.md)。
 
 ## 手动部署
 
-仓库不跟踪 `wrangler.jsonc`（手动部署者的配置以本机文件形式存在）；上游仓库不通过 push 自动部署，自托管 fork 或部署仓库可以按上一节通过受控 GitHub Action 在 push 到 `main` 或 `workflow_dispatch` 时发布。先创建资源、复制配置模板并填入自己的值，再执行部署命令。
+仓库不跟踪 `wrangler.jsonc`（手动部署者的配置以本机文件形式存在）；上游仓库不通过 push 自动部署；本 fork 也不会，只通过 `scripts/fork/prod-deploy.mjs` 手动发布。先创建资源、复制配置模板并填入自己的值，再执行部署命令。
 
 安装依赖：
 

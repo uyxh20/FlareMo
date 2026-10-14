@@ -83,7 +83,6 @@ const DETAIL: PlannerTaskDetailResponse = {
   project: {
     id: "projects/site",
     name: "Website relaunch",
-    ancestors: [{ id: "projects/work", name: "Work" }],
   },
   comments: [],
 };

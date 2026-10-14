@@ -1,12 +1,14 @@
 # Deploy FlareMo with GitHub Actions
 
-This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on push to `main` and on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
+> **Note for this fork (Schizo Diary):** `.github/workflows/deploy-cloudflare.yml` was deleted from this fork, so pushing or merging to `main` deploys nothing. This fork ships only by running `scripts/fork/prod-deploy.mjs` by hand; see [fork-dev-environment.md](../fork-dev-environment.md). The guide below applies only to a deployment repository that still has that workflow.
+
+This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
 
 Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY` in the workflow file, issues, PRs, chat, or `workflow_dispatch` inputs: GitHub stores those form values in the run record. Keep auth secrets in repository **Settings → Secrets**. Keep mail credentials in the Cloudflare Worker secret store (`wrangler secret put`).
 
 ## Prerequisites
 
-- The deployment repository includes `.github/workflows/deploy-cloudflare.yml`.
+- The deployment repository includes `.github/workflows/deploy-cloudflare.yml` (this fork deleted it).
 - The Cloudflare account has Workers enabled and an account-level `*.workers.dev` subdomain.
 - Two distinct random secrets of at least 32 characters, stored in a password manager first:
 
@@ -70,7 +72,7 @@ For a custom domain, bind it to the Worker in Cloudflare, set repository **Varia
 
 ## 4. Run Deploy to Cloudflare
 
-A push to `main` runs a production publish (`dry_run` off, `provision` on). You can also open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
+Open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
 
 1. On the first attempt, enable `dry_run`: build, Wrangler dry-run, and a **read-only check** of the D1 / R2 / Queue / Vectorize resources plus API token permissions. Nothing is created; remote D1 migration, publish, and secret sync are skipped. Missing resources or insufficient token permissions are reported right here.
 2. Leave `provision` enabled: create missing D1, R2, Queue, and Vectorize resources. Existing names are skipped.
@@ -113,13 +115,13 @@ After Resend is configured, smoke-test (do not paste secrets or mail bodies into
 
 | Situation | What to do |
 | --- | --- |
-| You changed application code | Push to `main`; the workflow publishes. Existing resource names are skipped. `Run workflow` still works. |
-| Upstream published a stable release | Follow the [update guide](./update.md) to run `Prepare FlareMo update`, review and merge the PR. This workflow publishes after the merge lands on `main`. |
+| You changed application code | Push to `main`, then publish with `Run workflow`. Existing resource names are skipped. |
+| Upstream published a stable release | Follow the [update guide](./update.md) to run `Prepare FlareMo update`, review and merge the PR. After the merge lands on `main`, publish with `Run workflow`. |
 | Rotate auth secrets | Change the GitHub Secrets and run a production deploy (overwrites the Worker secrets). |
 | Switch to a custom domain | Bind the domain in Cloudflare, set Variable `FLAREMO_PUBLIC_URL`, deploy again. |
 | Enable forgot-password email | Set Variables `FLAREMO_EMAIL_PROVIDER=resend` and `FLAREMO_EMAIL_FROM`, then `wrangler secret put RESEND_API_KEY` on the Worker, then deploy. |
 
-`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is this workflow (push to `main` or `Run workflow`), local `pnpm deploy`, or Workers Builds.
+`Prepare FlareMo update` only opens an upgrade PR and does not hold Cloudflare credentials. Publishing is this workflow (`Run workflow`), local `pnpm deploy`, or Workers Builds.
 
 ## 7. Not required on first install
 

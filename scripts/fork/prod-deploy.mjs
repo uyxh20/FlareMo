@@ -4,7 +4,6 @@
 // command, with the whole prod upgrade procedure built in. See
 // docs/fork-dev-environment.md ("Shipping to live").
 //
-//   node scripts/fork/prod-deploy.mjs config                  rebuild the gitignored root wrangler.jsonc
 //   node scripts/fork/prod-deploy.mjs status                  read-only: live version, counts, pending migrations
 //   node scripts/fork/prod-deploy.mjs deploy --dry-run        everything up to (not including) any write
 //   node scripts/fork/prod-deploy.mjs deploy --confirm flaremo   the real thing
@@ -484,10 +483,7 @@ async function main() {
   });
   const command = positionals[0];
   const ctx = context();
-  if (command === "config") {
-    await writeConfig(ctx);
-    say("Wrote wrangler.jsonc (gitignored) for production.");
-  } else if (command === "status") {
+  if (command === "status") {
     await status(ctx);
   } else if (command === "deploy") {
     if (!values["dry-run"] && values.confirm !== PROD.workerName) {
@@ -503,7 +499,7 @@ async function main() {
     await rollback(ctx);
   } else {
     throw new Error(
-      "Usage: prod-deploy.mjs <config|status|deploy|rollback> [--dry-run] [--confirm flaremo]",
+      "Usage: prod-deploy.mjs <status|deploy|rollback> [--dry-run] [--confirm flaremo]",
     );
   }
 }

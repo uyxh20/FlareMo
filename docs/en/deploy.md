@@ -16,13 +16,13 @@ Manual deployment remains the fully supported path; the button flow is best for 
 
 ## GitHub Action deploy (self-hosted fork)
 
-A fork or deployment repository can use `.github/workflows/deploy-cloudflare.yml`: on push to `main` or a manual `Run workflow`, it provisions missing D1 / R2 / Queue / Vectorize resources, publishes the Worker with `cloudflare/wrangler-action`, and syncs `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` from repository Secrets. Upstream `realchendahuang/FlareMo` never runs this job. Mail credentials (`RESEND_API_KEY`) stay in the Worker secret store; do not add them as GitHub Actions secrets.
+A deployment repository that keeps `.github/workflows/deploy-cloudflare.yml` (this fork deleted it, so pushing to `main` deploys nothing) can run it by hand with `Run workflow`; it provisions missing D1 / R2 / Queue / Vectorize resources, publishes the Worker with `cloudflare/wrangler-action`, and syncs `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` from repository Secrets. Upstream `realchendahuang/FlareMo` never runs this job. Mail credentials (`RESEND_API_KEY`) stay in the Worker secret store; do not add them as GitHub Actions secrets.
 
 Full steps: [Deploy with GitHub Actions](./github-action-deploy.md).
 
 ## Manual Deployment
 
-The repository does not track `wrangler.jsonc` (manual deployers keep their config as a local file); the upstream repository does not deploy on push, while a self-hosted fork or deployment repository may publish on push to `main` or via `workflow_dispatch` through the controlled GitHub Actions workflow described above. Create the resources, copy the config template, fill in your own values, then run the deploy commands.
+The repository does not track `wrangler.jsonc` (manual deployers keep their config as a local file); the upstream repository does not deploy on push, and neither does this fork, which ships only through `scripts/fork/prod-deploy.mjs`. Create the resources, copy the config template, fill in your own values, then run the deploy commands.
 
 ```bash
 pnpm install

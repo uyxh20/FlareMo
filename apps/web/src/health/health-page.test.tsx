@@ -103,8 +103,6 @@ const YEAR: HealthYearResponse = {
       training: 1,
       breath: 1,
       night_out: null,
-      has_night: false,
-      needs_check: false,
       trackers: { "t:fast00000001": 1 },
     },
   ],

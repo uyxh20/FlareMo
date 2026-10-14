@@ -141,7 +141,7 @@ FlareMo 回答了一个更简单的问题：**仅凭一个免费的 Cloudflare �
 
 ### 方式二：GitHub Action（自托管 fork）
 
-自己的 fork 在 push 到 `main` 或手动运行 **Deploy to Cloudflare** 时发布 Worker（`cloudflare/wrangler-action`）：创建 Cloudflare 资源、发布 Worker、同步认证密钥。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [docs/github-action-deploy.md](./docs/github-action-deploy.md)。
+带有 **Deploy to Cloudflare** workflow 的部署仓库可在 Actions 中手动运行它来发布 Worker（`cloudflare/wrangler-action`）：创建 Cloudflare 资源、发布 Worker、同步认证密钥。本 fork 已删除该 workflow，push 到 `main` 不会部署，只通过 `scripts/fork/prod-deploy.mjs` 发布。邮件密钥只放 Worker secret（`wrangler secret put RESEND_API_KEY`）。步骤见 [docs/github-action-deploy.md](./docs/github-action-deploy.md)。
 
 ### 方式三：让 AI Agent 替你部署（推荐）
 

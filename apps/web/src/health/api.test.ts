@@ -17,7 +17,7 @@ afterEach(() => {
 describe("loading labels", () => {
   it("sends the cards of one page as ONE request", async () => {
     request.mockResolvedValue({
-      memos: { m1: [healthTestEntry({ memo_id: "m1" })], m2: [] },
+      memos: { m1: [healthTestEntry()], m2: [] },
     });
     const a = healthLoadMemoEntries("m1");
     const b = healthLoadMemoEntries("m2");

@@ -220,8 +220,6 @@ export async function healthReadYear(
         training: 0,
         breath: 0,
         night_out: null,
-        has_night: false,
-        needs_check: false,
         trackers: {},
       };
       byDay.set(key, entry);
@@ -235,12 +233,8 @@ export async function healthReadYear(
     else if (row.kind === "breath") entry.breath += 1;
     else if (row.kind !== "night_out") {
       entry.trackers[row.kind] = (entry.trackers[row.kind] ?? 0) + 1;
-    } else {
-      entry.has_night = true;
-      if (row.needsCheck) entry.needs_check = true;
-      if (row.units !== null) {
-        entry.night_out = (entry.night_out ?? 0) + row.units;
-      }
+    } else if (row.units !== null) {
+      entry.night_out = (entry.night_out ?? 0) + row.units;
     }
   }
   const nights = rows.filter((row) => row.kind === "night_out");

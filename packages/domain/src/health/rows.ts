@@ -27,11 +27,6 @@ export function healthToDto(row: HealthEntryRow): HealthEntryDto {
     bender: row.bender,
     needs_check: row.needsCheck,
     feel: row.feel,
-    source: row.source,
-    memo_id: row.memoId,
-    edited: row.edited,
-    created_at: row.createdAt,
-    updated_at: row.updatedAt,
   };
 }
 

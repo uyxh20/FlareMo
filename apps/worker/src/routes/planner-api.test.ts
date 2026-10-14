@@ -6,12 +6,10 @@ import {
   type PlannerCommentResponse,
   type PlannerCreateTaskResponse,
   type PlannerHistoryRangeResponse,
-  type PlannerRollupResponse,
+  type PlannerRolloverResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
-  type PlannerTreeNodeResponse,
-  type PlannerTreeResponse,
   plannerBoardResponseSchema,
   plannerColumnSchema,
   plannerCommentBodyMax,
@@ -21,12 +19,10 @@ import {
   plannerDeleteCommentResponseSchema,
   plannerHistoryRangeResponseSchema,
   plannerPeriodStart,
-  plannerRollupResponseSchema,
+  plannerRolloverResponseSchema,
   plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
   plannerTaskPlanResponseSchema,
-  plannerTreeNodeResponseSchema,
-  plannerTreeResponseSchema,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { createDb } from "@flaremo/db";
@@ -399,11 +395,7 @@ describe("planner API", () => {
   // --- the endpoints, for the credential tables --------------------------------
 
   /** Every route with a body that is valid, so a failure comes from auth alone. */
-  const endpoints = (
-    taskId = "tasks/none",
-    projectId = "projects/none",
-    commentId = "none",
-  ) => {
+  const endpoints = (taskId = "tasks/none", commentId = "none") => {
     const range = `from=${TODAY}&to=${TODAY}`;
     return [
       { method: "GET", path: `/board?today=${TODAY}` },
@@ -433,20 +425,11 @@ describe("planner API", () => {
       },
       { method: "DELETE", path: `/comments/${commentId}` },
       { method: "GET", path: `/history?${range}` },
-      { method: "GET", path: "/tree" },
-      {
-        method: "PATCH",
-        path: `/tree/${bare(projectId)}`,
-        body: { level: "area" },
-      },
-      { method: "GET", path: `/tree/${bare(projectId)}/rollup?${range}` },
     ] as const;
   };
 
-  const mutations = (taskId?: string, projectId?: string, commentId?: string) =>
-    endpoints(taskId, projectId, commentId).filter(
-      (entry) => entry.method !== "GET",
-    );
+  const mutations = (taskId?: string, commentId?: string) =>
+    endpoints(taskId, commentId).filter((entry) => entry.method !== "GET");
 
   // ===========================================================================
   // Authentication and the Origin rules
@@ -498,10 +481,9 @@ describe("planner API", () => {
 
     it("refuses a cookie-session state change without FlareMo's Origin, and applies it with one", async () => {
       const task = await createTask("Origin check");
-      const projectId = await createProject("Origin project");
       const comment = await createComment(task.id, "Origin comment");
 
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const label = `${entry.method} ${entry.path}`;
         for (const origin of [
           undefined,
@@ -533,7 +515,7 @@ describe("planner API", () => {
       ).toEqual([{ body: "Origin comment", deleted_at: null }]);
 
       // The same requests with the right Origin go through.
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -563,7 +545,6 @@ describe("planner API", () => {
       for (const entry of endpoints(task.id).filter(
         (e) => e.method === "GET",
       )) {
-        if (entry.path.includes("/tree/")) continue; // needs a real project
         const response = await request("GET", `${API}${entry.path}`, {
           headers: { cookie: ctx.cookie },
         });
@@ -792,9 +773,7 @@ describe("planner API", () => {
   describe("validation", () => {
     it("answers 400 and writes nothing for a bad horizon, day, level, column and key", async () => {
       const task = await createTask("Untouched");
-      const projectId = await createProject("Untouched project");
       const taskPath = `${API}/tasks/${bare(task.id)}`;
-      const treePath = `${API}/tree/${bare(projectId)}`;
       const eventsBefore = await count("planner_task_event");
 
       const bad: Array<[string, string, unknown]> = [
@@ -853,14 +832,6 @@ describe("planner API", () => {
         ["PATCH", taskPath, { today: TODAY, title: "   " }],
         ["PATCH", taskPath, { today: TODAY, due_at: "tomorrow" }],
         ["POST", `${API}/tasks`, { title: "   ", today: TODAY }],
-        // the goal tree
-        ["PATCH", treePath, { level: "Quarter" }],
-        ["PATCH", treePath, { level: "1st" }],
-        ["PATCH", treePath, { level: "a".repeat(25) }],
-        ["PATCH", treePath, {}],
-        ["PATCH", treePath, { period_start: "2026-02-30" }],
-        ["PATCH", treePath, { sort_order: 1.5 }],
-        ["PATCH", treePath, { name: "Renamed" }],
         ["POST", `${API}/tasks`, { title: "Extra", today: TODAY, extra: 1 }],
       ];
       for (const [method, path, requestBody] of bad) {
@@ -897,7 +868,6 @@ describe("planner API", () => {
       );
       expect(notJson.status).toBe(400);
 
-      const projectId = await createProject("Ranged project");
       const day = TODAY;
       for (const query of [
         // the board
@@ -912,8 +882,6 @@ describe("planner API", () => {
         `${API}/history?from=${day}`,
         `${API}/history?from=${shiftDay(day, 1)}&to=${day}`,
         `${API}/history?from=2026-02-30&to=${day}`,
-        `${API}/tree/${bare(projectId)}/rollup?from=${shiftDay(day, 1)}&to=${day}`,
-        `${API}/tree/${bare(projectId)}/rollup?from=${day}`,
       ]) {
         expect((await send("GET", query)).status, query).toBe(400);
       }
@@ -1903,8 +1871,6 @@ describe("planner API", () => {
   });
 
   // ===========================================================================
-  // The goal tree
-  // ===========================================================================
 
   describe("goal tree", () => {
     const patchNode = (projectId: string, change: Record<string, unknown>) =>
@@ -2271,13 +2237,9 @@ describe("planner API", () => {
         project_id: goal,
         plan: { horizon: "day", day: TODAY },
       });
-      // The route is gone (410), but carries already in the archive still count.
-      await plannerRollover(db, {
-        userId: owner.id,
-        actor: { type: "user" },
-        today: shiftDay(TODAY, 1),
-        now: new Date(),
-      });
+      await body(
+        send("POST", `${API}/rollover`, { today: shiftDay(TODAY, 1) }),
+      );
 
       const rollup = await body<PlannerRollupResponse>(
         send(
@@ -2312,6 +2274,7 @@ describe("planner API", () => {
   });
 
   // ===========================================================================
+=======
   // The task panel: detail, effort, create in a column, comments
   // ===========================================================================
 
@@ -2324,15 +2287,8 @@ describe("planner API", () => {
     ) as PlannerTaskDetailResponse;
 
   describe("GET /tasks/:id", () => {
-    it("returns the whole task with its plan, effort, goal path and comments", async () => {
-      const health = await createProject("Health");
+    it("returns the whole task with its plan, effort, goal and comments", async () => {
       const marathon = await createProject("Run a marathon");
-      await body(
-        send("PATCH", `${API}/tree/${bare(marathon)}`, {
-          parent_project_id: health,
-          level: "goal",
-        }),
-      );
       const task = await createTask("Train for it", {
         notes: "Long run on Sunday",
         priority: "high",
@@ -2366,7 +2322,6 @@ describe("planner API", () => {
       expect(detail.project).toEqual({
         id: marathon,
         name: "Run a marathon",
-        ancestors: [{ id: health, name: "Health" }],
       });
       expect(detail.comments.map((c) => [c.id, c.body, c.task_id])).toEqual([
         [first.id, "First", task.id],
@@ -2385,16 +2340,6 @@ describe("planner API", () => {
       ]);
       expect(detail).toMatchObject({ plan: null, project: null, comments: [] });
       expect(detail.task.notes).toBeNull();
-    });
-
-    it("gives a project that has no node an empty path", async () => {
-      const home = await createProject("Home");
-      const task = await createTask("Chore", { project_id: home });
-      expect((await detailOk(task.id)).project).toEqual({
-        id: home,
-        name: "Home",
-        ancestors: [],
-      });
     });
 
     it("reads a backlog task that holds only an effort: a plan with no horizon", async () => {
@@ -3307,7 +3252,6 @@ describe("planner API", () => {
   describe("rate limiting", () => {
     it("throttles every mutation in the planner bucket, per user, before it writes anything", async () => {
       const task = await createTask("Throttled");
-      const projectId = await createProject("Throttled project");
       const keys: string[] = [];
       const limitedEnv = {
         ...ctx.env,
@@ -3320,7 +3264,7 @@ describe("planner API", () => {
       } as Env;
 
       const comment = await createComment(task.id, "Throttled comment");
-      for (const entry of mutations(task.id, projectId, comment.id)) {
+      for (const entry of mutations(task.id, comment.id)) {
         const response = await request(entry.method, `${API}${entry.path}`, {
           body: entry.body,
           headers: asOwnerCookie(),
@@ -3347,7 +3291,7 @@ describe("planner API", () => {
 
       // Reads are not throttled.
       keys.length = 0;
-      for (const entry of endpoints(task.id, projectId, comment.id).filter(
+      for (const entry of endpoints(task.id, comment.id).filter(
         (e) => e.method === "GET",
       )) {
         const response = await request("GET", `${API}${entry.path}`, {
@@ -3424,17 +3368,14 @@ describe("planner API", () => {
           error: { message: "Not found" },
         });
       }
-      // There is no PUT: the tree uses PATCH, as the CORS allow-list needs.
-      const put = await send("PUT", `${API}/tree/projects%2Fnone`, {
-        level: "area",
-      });
+      // There is no PUT: task edits use PATCH, as the CORS allow-list needs.
+      const put = await send("PUT", `${API}/tasks/x`, { title: "x" });
       expect(put.status).toBe(404);
     });
 
     it("is covered by the API's CORS rules, PATCH and DELETE included", async () => {
       for (const [method, path] of [
         ["PATCH", `${API}/tasks/x`],
-        ["PATCH", `${API}/tree/x`],
         ["PATCH", `${API}/comments/x`],
         ["DELETE", `${API}/comments/x`],
         ["POST", `${API}/tasks/x/comments`],
@@ -3458,7 +3399,7 @@ describe("planner API", () => {
         );
       }
       // An untrusted origin gets no allow header.
-      const refused = await request("OPTIONS", `${API}/tree/x`, {
+      const refused = await request("OPTIONS", `${API}/tasks/x`, {
         headers: {
           origin: "https://untrusted.example",
           "access-control-request-method": "PATCH",

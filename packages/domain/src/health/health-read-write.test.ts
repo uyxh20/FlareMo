@@ -12,11 +12,7 @@ import {
   healthReadWeek,
   healthReadYear,
 } from "./read";
-import {
-  healthDismissEntry,
-  healthPatchEntry,
-  healthSetTargets,
-} from "./write";
+import { healthDismissEntry, healthPatchEntry } from "./write";
 
 // Reading and fixing health rows against a real D1 (fork-owned add-on,
 // docs/fork-health-tracker.md). "Now" is fixed to Tue 13 Oct 2026, noon local.
@@ -54,6 +50,27 @@ describe("health read and write", () => {
       ),
     );
   });
+
+  // No route sets targets any more; a row the owner might still hold is
+  // written straight into the table.
+  async function setTarget(
+    kind: "training" | "breath" | "night_out",
+    period: "week" | "year",
+    amount: number,
+  ) {
+    await plannerTestRun(
+      rt.database,
+      `INSERT INTO health_target (user_id, kind, period, amount, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, kind, period)
+         DO UPDATE SET amount = excluded.amount, updated_at = excluded.updated_at`,
+      rt.user.id,
+      kind,
+      period,
+      amount,
+      NOW.toISOString(),
+    );
+  }
 
   async function seed(...entries: Seed[]) {
     for (const entry of entries) {
@@ -153,10 +170,7 @@ describe("health read and write", () => {
 
     it("takes a start day, and the owner's own targets", async () => {
       await seed({ id: "t1", kind: "training", day: "2026-10-05" });
-      await healthSetTargets(rt.db, {
-        userId: rt.user.id,
-        targets: [{ kind: "training", period: "week", amount: 4 }],
-      });
+      await setTarget("training", "week", 4);
       const week = await healthReadWeek(rt.db, {
         userId: rt.user.id,
         start: "2026-10-05",
@@ -195,18 +209,13 @@ describe("health read and write", () => {
         training: 2,
         breath: 1,
         night_out: null,
-        has_night: false,
-        needs_check: false,
         trackers: {},
       });
       expect(year.days.find((day) => day.day === "2026-10-10")).toMatchObject({
         night_out: null,
-        has_night: true,
-        needs_check: true,
       });
       expect(year.days.find((day) => day.day === "2026-10-11")).toMatchObject({
         night_out: 0,
-        has_night: true,
       });
       expect(year.night_out).toEqual({
         used: 1.5,
@@ -287,20 +296,14 @@ describe("health read and write", () => {
   });
 
   describe("targets", () => {
-    it("starts at the defaults and keeps what the owner sets", async () => {
+    it("starts at the defaults and reads what the owner saved", async () => {
       expect(await healthReadTargets(rt.db, rt.user.id)).toEqual([
         { kind: "training", period: "week", amount: 3, is_default: true },
         { kind: "breath", period: "week", amount: 7, is_default: true },
         { kind: "night_out", period: "year", amount: 12, is_default: true },
       ]);
-      await healthSetTargets(rt.db, {
-        userId: rt.user.id,
-        targets: [{ kind: "night_out", period: "year", amount: 10 }],
-      });
-      await healthSetTargets(rt.db, {
-        userId: rt.user.id,
-        targets: [{ kind: "night_out", period: "year", amount: 8 }],
-      });
+      await setTarget("night_out", "year", 10);
+      await setTarget("night_out", "year", 8);
       const targets = await healthReadTargets(rt.db, rt.user.id);
       expect(targets.find((t) => t.kind === "night_out")).toEqual({
         kind: "night_out",
@@ -344,7 +347,6 @@ describe("health read and write", () => {
         units,
         bender,
         needs_check: false,
-        edited: true,
       });
     });
 
@@ -371,7 +373,6 @@ describe("health read and write", () => {
     it("changes a variant, minutes and day", async () => {
       expect(await patch("gym", { variant: "legs" })).toMatchObject({
         variant: "legs",
-        edited: true,
       });
       expect(
         await patch("wh", { variant: "meditation", minutes: 20 }),

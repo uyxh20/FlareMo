@@ -568,19 +568,15 @@ function WeekView({
 function Theme({
   eyebrow,
   goal,
-  empty,
   editLabel,
   strings,
   onEdit,
-  onAdd,
 }: {
   eyebrow: string;
   goal: PlannerGoalDto | null;
-  empty?: string;
   editLabel: string;
   strings: PlannerGoalsStrings;
   onEdit: Edit;
-  onAdd?: () => void;
 }) {
   return (
     <section className="max-w-[62ch]">
@@ -589,16 +585,14 @@ function Theme({
           {eyebrow}
         </span>
         {goal && <PlannerGoalStatusBadge goal={goal} strings={strings} />}
-        {goal ? (
+        {goal && (
           <EditButton
             label={editLabel}
             onClick={() => onEdit({ kind: "edit", goal })}
           />
-        ) : (
-          onAdd && <AddButton label={strings.editor.add} onClick={onAdd} />
         )}
       </div>
-      {goal ? (
+      {goal && (
         <div className="mt-1 flex flex-col gap-2.5">
           {goal.title && (
             <p className="text-[17px] leading-[1.45] font-medium">
@@ -609,10 +603,6 @@ function Theme({
             <PlannerGoalBody goal={{ title: "", lines: goal.lines }} />
           )}
         </div>
-      ) : (
-        empty && (
-          <p className="mt-1 text-[15px] text-muted-foreground">{empty}</p>
-        )
       )}
     </section>
   );

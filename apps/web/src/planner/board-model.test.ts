@@ -23,7 +23,6 @@ import {
   plannerPredictMove,
   plannerPredictPlan,
   plannerPredictPriority,
-  plannerPredictProject,
   plannerPredictTitle,
   plannerPredictUndrop,
   plannerRemoveCard,
@@ -708,24 +707,6 @@ describe("the panel's predictions", () => {
     expect(
       plannerPredictPriority(card({ priority: "low" }), "none", NOW),
     ).toMatchObject({ priority: "none" });
-  });
-
-  it("moves a task to a goal, and takes it out of one", () => {
-    const before = card();
-    const moved = plannerPredictProject(
-      before,
-      { id: "projects/p1", name: "Run a marathon" },
-      NOW,
-    );
-    expect(moved).toMatchObject({
-      project_id: "projects/p1",
-      project_name: "Run a marathon",
-      updated_at: NOW.toISOString(),
-    });
-    expect(plannerPredictProject(moved, null, NOW)).toMatchObject({
-      project_id: null,
-      project_name: null,
-    });
   });
 });
 

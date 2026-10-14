@@ -68,7 +68,7 @@ describe("date wording", () => {
 });
 
 describe("plannerPlanLabel", () => {
-  const chip = (horizon: "day" | "week" | "month", start: string) =>
+  const label = (horizon: "day" | "week" | "month", start: string) =>
     plannerPlanLabel({ horizon, period_start: start }, TODAY, en)?.label;
 
   it("has nothing to say about no plan", () => {
@@ -80,59 +80,46 @@ describe("plannerPlanLabel", () => {
     ).toBeNull();
   });
 
-  it("calls a day plan Today, Tomorrow or Yesterday by name", () => {
-    expect(chip("day", "2026-10-07")).toBe("Today");
-    expect(chip("day", "2026-10-08")).toBe("Tomorrow");
-    expect(chip("day", "2026-10-06")).toBe("Yesterday");
+  it("calls a day plan today, tomorrow or yesterday by name", () => {
+    expect(label("day", "2026-10-07")).toBe("today");
+    expect(label("day", "2026-10-08")).toBe("tomorrow");
+    expect(label("day", "2026-10-06")).toBe("yesterday");
   });
 
   it("calls the next few days by weekday and date, and never a past day by weekday", () => {
-    expect(chip("day", "2026-10-09")).toBe("Fri 9");
-    expect(chip("day", "2026-10-13")).toBe("Tue 13");
+    expect(label("day", "2026-10-09")).toBe("Fri 9");
+    expect(label("day", "2026-10-13")).toBe("Tue 13");
     // A week ahead is a plain date, not a weekday that could mean today's.
-    expect(chip("day", "2026-10-14")).toBe("Oct 14");
+    expect(label("day", "2026-10-14")).toBe("Oct 14");
     // A past day (a plan that missed its rollover) reads as a date.
-    expect(chip("day", "2026-10-02")).toBe("Oct 2");
-    expect(chip("day", "2027-01-05")).toBe("Jan 5, 2027");
+    expect(label("day", "2026-10-02")).toBe("Oct 2");
+    expect(label("day", "2027-01-05")).toBe("Jan 5, 2027");
   });
 
-  it("calls a week plan This week, Next week or Last week, else Week of <Monday>", () => {
-    expect(chip("week", "2026-10-05")).toBe("This week");
-    expect(chip("week", "2026-10-12")).toBe("Next week");
-    expect(chip("week", "2026-09-28")).toBe("Last week");
-    expect(chip("week", "2026-10-26")).toBe("Week of Oct 26");
+  it("calls a week plan this, next or last week, else the week of <Monday>", () => {
+    expect(label("week", "2026-10-05")).toBe("this week");
+    expect(label("week", "2026-10-12")).toBe("next week");
+    expect(label("week", "2026-09-28")).toBe("last week");
+    expect(label("week", "2026-10-26")).toBe("the week of Oct 26");
   });
 
   it("names a month plan by its month, with the year when it is not this one", () => {
-    expect(chip("month", "2026-10-01")).toBe("Oct");
-    expect(chip("month", "2026-11-01")).toBe("Nov");
-    expect(chip("month", "2027-01-01")).toBe("Jan 2027");
+    expect(label("month", "2026-10-01")).toBe("Oct");
+    expect(label("month", "2026-11-01")).toBe("Nov");
+    expect(label("month", "2027-01-01")).toBe("Jan 2027");
   });
 
   it("keeps the week boundary on Monday across a month and a year", () => {
     // Thursday 31 December 2026: its week started Monday 28 December.
     const newYearsEve = "2026-12-31";
-    const label = (start: string) =>
+    const weekLabel = (start: string) =>
       plannerPlanLabel(
         { horizon: "week", period_start: start },
         newYearsEve,
         en,
       )?.label;
-    expect(label("2026-12-28")).toBe("This week");
-    expect(label("2027-01-04")).toBe("Next week");
-  });
-
-  it("words the same plans inside a sentence in the phrase style", () => {
-    const phrase = (horizon: "day" | "week" | "month", start: string) =>
-      plannerPlanLabel({ horizon, period_start: start }, TODAY, en, "phrase")
-        ?.label;
-    expect(phrase("day", "2026-10-07")).toBe("today");
-    expect(phrase("day", "2026-10-08")).toBe("tomorrow");
-    expect(phrase("week", "2026-10-05")).toBe("this week");
-    expect(phrase("week", "2026-10-26")).toBe("the week of Oct 26");
-    // Days and months read the same either way.
-    expect(phrase("day", "2026-10-09")).toBe("Fri 9");
-    expect(phrase("month", "2026-11-01")).toBe("Nov");
+    expect(weekLabel("2026-12-28")).toBe("this week");
+    expect(weekLabel("2027-01-04")).toBe("next week");
   });
 
   it("gives the exact period as the tooltip", () => {
@@ -144,14 +131,14 @@ describe("plannerPlanLabel", () => {
   });
 
   it("speaks Chinese for zh-CN", () => {
-    const label = (horizon: "day" | "week" | "month", start: string) =>
+    const zhLabel = (horizon: "day" | "week" | "month", start: string) =>
       plannerPlanLabel({ horizon, period_start: start }, TODAY, zh)?.label;
-    expect(label("day", "2026-10-07")).toBe("今天");
-    expect(label("day", "2026-10-08")).toBe("明天");
-    expect(label("day", "2026-10-09")).toBe("周五 9日");
-    expect(label("week", "2026-10-05")).toBe("本周");
-    expect(label("week", "2026-10-12")).toBe("下周");
-    expect(label("month", "2026-11-01")).toBe("11月");
+    expect(zhLabel("day", "2026-10-07")).toBe("今天");
+    expect(zhLabel("day", "2026-10-08")).toBe("明天");
+    expect(zhLabel("day", "2026-10-09")).toBe("周五 9日");
+    expect(zhLabel("week", "2026-10-05")).toBe("本周");
+    expect(zhLabel("week", "2026-10-12")).toBe("下周");
+    expect(zhLabel("month", "2026-11-01")).toBe("11月");
   });
 });
 

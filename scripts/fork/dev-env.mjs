@@ -5,7 +5,6 @@
 // on the same Cloudflare account, so new commits are tested on a copy of real
 // data before they go live. See docs/fork-dev-environment.md.
 //
-//   node scripts/fork/dev-env.mjs config      write the dev wrangler config
 //   node scripts/fork/dev-env.mjs provision   create dev resources and secrets
 //   node scripts/fork/dev-env.mjs clone       copy live data into dev, then
 //                                             rehearse the pending migrations
@@ -604,25 +603,6 @@ export class DevEnv {
     }
   }
 
-  // -- config ---------------------------------------------------------------
-
-  config(options = {}) {
-    const settings = this.resolveSettings(options, { allowPlaceholder: true });
-    const written = this.writeConfig(settings);
-    // An explicit real id is remembered; a placeholder never is.
-    if (options.d1Id && !isPlaceholderDatabaseId(settings.databaseId)) {
-      this.writeState({
-        d1Id: settings.databaseId,
-        updatedAt: this.now().toISOString(),
-      });
-    }
-    this.log(`Wrote ${written.path}`);
-    for (const [label, value] of describeConfig(written.config)) {
-      this.log(`  ${label.padEnd(11)} ${value}`);
-    }
-    return written;
-  }
-
   // -- provision ------------------------------------------------------------
 
   provision(options = {}) {
@@ -637,8 +617,9 @@ export class DevEnv {
     this.step("Vectorize indexes", () =>
       this.ensureVectorize(resources, outcome),
     );
+    // Tests only: the CLI has no flag for it.
     if (options.skipSecrets) {
-      this.log("\n==> Worker secrets\n    skipped (--skip-secrets)");
+      this.log("\n==> Worker secrets\n    skipped");
     } else {
       outcome.secretsSet = this.step("Worker secrets", () =>
         this.ensureSecrets(),
@@ -1471,7 +1452,6 @@ function generateSecret() {
 export const USAGE = `Usage: node scripts/fork/dev-env.mjs <command> [options]
 
 Commands
-  config      Write the dev wrangler config (.wrangler/fork-dev/wrangler.dev.jsonc).
   provision   Create the dev D1, R2, queues and Vectorize indexes if missing, and
               set the Worker secrets that are missing. Idempotent.
   clone       Copy production data into the dev D1 and rehearse the migrations the
@@ -1487,7 +1467,6 @@ Options
   --ratelimit-namespace-id <n> Rate-limit namespace (default ${DEV.ratelimitNamespaceId}).
   --dry-run                    deploy: stop at wrangler's dry run. clone: read-only plan.
   --skip-build                 deploy: reuse apps/web/dist.
-  --skip-secrets               provision: do not touch Worker secrets.
   --reset --confirm ${DEV.d1Name}   clone: delete and recreate the dev D1 first.
   --include-side-effect-tables clone: also copy webhook, push and integration tables.
   --keep-dump                  clone: keep the exported data file (credential hashes).
@@ -1511,7 +1490,6 @@ export function parseCli(argv) {
       "ratelimit-namespace-id": { type: "string" },
       "dry-run": { type: "boolean" },
       "skip-build": { type: "boolean" },
-      "skip-secrets": { type: "boolean" },
       reset: { type: "boolean" },
       confirm: { type: "string" },
       "include-side-effect-tables": { type: "boolean" },
@@ -1533,7 +1511,6 @@ export function parseCli(argv) {
       ratelimitNamespaceId: values["ratelimit-namespace-id"],
       dryRun: values["dry-run"],
       skipBuild: values["skip-build"],
-      skipSecrets: values["skip-secrets"],
       reset: values.reset,
       confirm: values.confirm,
       includeSideEffectTables: values["include-side-effect-tables"],
@@ -1543,7 +1520,7 @@ export function parseCli(argv) {
   };
 }
 
-const COMMANDS = ["config", "provision", "clone", "deploy", "status"];
+const COMMANDS = ["provision", "clone", "deploy", "status"];
 
 export function main(argv = process.argv.slice(2), deps = {}) {
   let cli;

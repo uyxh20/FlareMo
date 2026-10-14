@@ -42,7 +42,6 @@ function samples(strings: typeof en): Record<string, string> {
     scores: strings.goals.scores("4.0", "3.5"),
     goalCount: strings.goals.goalCount(3),
     edit: strings.editor.edit("Work"),
-    following: strings.map.following("Work"),
     openWeeks: strings.map.openWeeks("October"),
     closeWeeks: strings.map.closeWeeks("October"),
     weeksOf: strings.map.weeksOf("October"),
@@ -73,8 +72,7 @@ function samples(strings: typeof en): Record<string, string> {
 
 describe("plannerGoalsStringsFor", () => {
   it("speaks Chinese for zh-CN and English for every other app language", () => {
-    expect(zh.intlLocale).toBe("zh-CN");
-    expect(en.intlLocale).toBe("en-US");
+    expect(zh.goals.title).toBe("目标");
     for (const locale of ["en-US", "ja", "fr", "es", "ko", "ru", "ar", "zh"]) {
       expect(plannerGoalsStringsFor(locale), locale).toBe(en);
     }
@@ -118,7 +116,7 @@ describe("plannerGoalsStringsFor", () => {
     }
   });
 
-  it("names every objective, result, status and verdict, and twelve months twice", () => {
+  it("names every objective, result and status, and twelve months twice", () => {
     for (const strings of [en, zh]) {
       expect(Object.keys(strings.pillar).sort()).toEqual(
         [...plannerPillars].sort(),
@@ -187,7 +185,6 @@ describe("plannerGoalsStringsFor", () => {
       scores: "Auth 4.0 · Ach 3.5",
       goalCount: "3 goals",
       edit: "Edit Work",
-      following: "following Work",
       openWeeks: "Open the weeks of October",
       closeWeeks: "Close the weeks of October",
       weeksOf: "Weeks of October",
