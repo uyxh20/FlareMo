@@ -27,6 +27,9 @@ import {
 // a weekly goal to its month and quarter. Plain functions over the server's
 // answers, so the layout can be tested without rendering.
 
+/** A quarter or month goal holds five points at most: the map's progress bar. */
+export const PLANNER_MAP_POINTS = 5;
+
 /** A period's goals, split by objective; `loose` holds the ones with none. */
 export type PlannerMapGoals = {
   byPillar: Record<PlannerPillar, PlannerGoalDto[]>;

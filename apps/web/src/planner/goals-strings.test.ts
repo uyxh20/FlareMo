@@ -34,6 +34,7 @@ function samples(strings: typeof en): Record<string, string> {
     rangeAcross: strings.range({ month: 8, day: 28 }, { month: 9, day: 4 }),
     week: strings.week(41),
     weekCode: strings.weekCode(41),
+    day: strings.day({ month: 3, day: 6 }),
     weekLine: strings.cockpit.weekLine("Week 42", "12 – 18 Oct"),
     year: strings.goals.year(2026),
     quarter: strings.goals.quarter(4),
@@ -48,6 +49,8 @@ function samples(strings: typeof en): Record<string, string> {
     openWeek: strings.map.openWeek("Week 41"),
     tasksFor: strings.map.tasksFor("Ship the beta"),
     tasksDone: strings.map.tasksDone(2, 3),
+    showThread: strings.map.showThread("Ship the beta"),
+    pointsDone: strings.map.pointsDone(2, 3),
     stepOf: strings.review.stepOf(2, 4),
     promptOf: strings.review.promptOf(3, 7),
     lower: strings.review.lower("Authenticity"),
@@ -146,6 +149,12 @@ describe("plannerGoalsStringsFor", () => {
     expect(en.review.title).toBe("Weekly review");
   });
 
+  it("always writes a week chip's Monday with its month", () => {
+    expect(en.day({ month: 3, day: 6 })).toBe("6 Apr");
+    expect(en.day({ month: 2, day: 30 })).toBe("30 Mar");
+    expect(zh.day({ month: 3, day: 6 })).toBe("4月6日");
+  });
+
   it("writes a week's days within a month and across two", () => {
     expect(en.range({ month: 9, day: 5 }, { month: 9, day: 11 })).toBe(
       "5 – 11 Oct",
@@ -170,6 +179,7 @@ describe("plannerGoalsStringsFor", () => {
       rangeAcross: "28 Sep – 4 Oct",
       week: "Week 41",
       weekCode: "W41",
+      day: "6 Apr",
       weekLine: "Week 42 · 12 – 18 Oct",
       year: "2026",
       quarter: "Q4",
@@ -184,6 +194,8 @@ describe("plannerGoalsStringsFor", () => {
       openWeek: "Open Week 41",
       tasksFor: "Tasks for Ship the beta",
       tasksDone: "2 of 3 tasks done",
+      showThread: "Show the goals under Ship the beta",
+      pointsDone: "2 of 3 points done",
       stepOf: "Step 2 of 4",
       promptOf: "3 / 7",
       lower: "Lower Authenticity",

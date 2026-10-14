@@ -38,6 +38,8 @@ export type PlannerGoalsStrings = {
   monthsLong: readonly string[];
   /** "5 – 11 Oct", or "28 Sep – 4 Oct" across two months. */
   range: (from: PlannerMonthDay, to: PlannerMonthDay) => string;
+  /** "6 Apr": one day, always with its month (a week chip's Monday). */
+  day: (day: PlannerMonthDay) => string;
   /** "Week 41". */
   week: (number: number) => string;
   /** "W41", the short form. */
@@ -104,6 +106,10 @@ export type PlannerGoalsStrings = {
     openWeek: (week: string) => string;
     notPlanned: string;
     tasksFor: (goal: string) => string;
+    /** Clicking a quarter goal lights up its objective's column. */
+    showThread: (goal: string) => string;
+    /** "2 of 3 points done", read out with the progress bar. */
+    pointsDone: (done: number, total: number) => string;
     /** "2 of 3 tasks done". */
     tasksDone: (done: number, total: number) => string;
     noTasks: string;
@@ -125,6 +131,8 @@ export type PlannerGoalsStrings = {
     titlePlaceholder: string;
     lines: string;
     addLine: string;
+    /** Quarter and month goals stop at five points: the Year map's bar. */
+    linesFull: string;
     lineText: string;
     lineNote: string;
     struck: string;
@@ -340,6 +348,7 @@ const en: PlannerGoalsStrings = {
     from.month === to.month
       ? `${from.day} – ${to.day} ${EN_MONTHS[to.month]}`
       : `${from.day} ${EN_MONTHS[from.month]} – ${to.day} ${EN_MONTHS[to.month]}`,
+  day: (day) => `${day.day} ${EN_MONTHS[day.month]}`,
   week: (number) => `Week ${number}`,
   weekCode: (number) => `W${number}`,
   result: { met: "Met", partial: "Partly", missed: "Missed" },
@@ -401,6 +410,8 @@ const en: PlannerGoalsStrings = {
     openWeek: (week) => `Open ${week}`,
     notPlanned: "Not planned yet",
     tasksFor: (goal) => `Tasks for ${goal}`,
+    showThread: (goal) => `Show the goals under ${goal}`,
+    pointsDone: (done, total) => `${done} of ${total} points done`,
     tasksDone: (done, total) => `${done} of ${total} tasks done`,
     noTasks: "No tasks on the board for this goal.",
     addTask: "Add a task",
@@ -421,6 +432,7 @@ const en: PlannerGoalsStrings = {
     titlePlaceholder: "What this goal is",
     lines: "Points",
     addLine: "Add a point",
+    linesFull: "Five points at most",
     lineText: "Point",
     lineNote: "Short note",
     struck: "Struck through",
@@ -623,6 +635,7 @@ const zhCN: PlannerGoalsStrings = {
     from.month === to.month
       ? `${from.month + 1}月${from.day}日 – ${to.day}日`
       : `${from.month + 1}月${from.day}日 – ${to.month + 1}月${to.day}日`,
+  day: (day) => `${day.month + 1}月${day.day}日`,
   week: (number) => `第 ${number} 周`,
   weekCode: (number) => `W${number}`,
   result: { met: "达成", partial: "部分达成", missed: "未达成" },
@@ -684,6 +697,8 @@ const zhCN: PlannerGoalsStrings = {
     openWeek: (week) => `打开${week}`,
     notPlanned: "还没规划",
     tasksFor: (goal) => `${goal}的任务`,
+    showThread: (goal) => `显示${goal}下面的目标`,
+    pointsDone: (done, total) => `${total} 个要点完成 ${done} 个`,
     tasksDone: (done, total) => `${total} 个任务完成 ${done} 个`,
     noTasks: "看板上没有这个目标的任务。",
     addTask: "添加任务",
@@ -704,6 +719,7 @@ const zhCN: PlannerGoalsStrings = {
     titlePlaceholder: "这个目标是什么",
     lines: "要点",
     addLine: "添加要点",
+    linesFull: "最多五个要点",
     lineText: "要点",
     lineNote: "简短备注",
     struck: "划掉",

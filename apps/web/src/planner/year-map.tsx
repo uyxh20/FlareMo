@@ -5,7 +5,7 @@ import {
 } from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { PlusIcon } from "lucide-react";
+import { PencilIcon, PlusIcon } from "lucide-react";
 import {
   type CSSProperties,
   type FormEvent,
@@ -43,6 +43,7 @@ import { plannerTaskParamFromId } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 import {
+  PLANNER_MAP_POINTS,
   type PlannerMapGoals,
   type PlannerMapMark,
   type PlannerMapWeek,
@@ -62,7 +63,10 @@ import {
 // cards; months and weeks are plain cards under them. Each month folds out its
 // weeks; a weekly goal opens a pop-up with its tasks and the goals above it.
 // Picking an objective follows it: only its column is drawn, and the picker
-// switches between them. A phone opens the map following Work.
+// switches between them. A phone opens the map following Work. Quarter and
+// month goals show their points as a five-position progress bar; clicking a
+// quarter goal lights up its column and fades the others (fork change,
+// 2026-10-14).
 
 type Edit = (target: PlannerGoalEditorTarget) => void;
 
@@ -91,6 +95,9 @@ export function PlannerYearMap({
     plannerMapInitialWeeks(map),
   );
   const [popGoal, setPopGoal] = useState<PlannerGoalDto | null>(null);
+  // The objective whose quarter goal was clicked: its column stays lit.
+  const [thread, setThread] = useState<PlannerPillar | null>(null);
+  const lit = follow ? null : thread;
 
   const board = useQuery({
     queryKey: plannerQueryKeys.goalsBoard(today),
@@ -125,6 +132,7 @@ export function PlannerYearMap({
         "planner-yc",
         plannerPillarClass(pillar),
         follow === pillar && "is-on",
+        lit === pillar && "is-thread",
       )}
       key={pillar}
     >
@@ -139,55 +147,67 @@ export function PlannerYearMap({
     strong: boolean,
     current: boolean,
     add: (pillar: PlannerPillar | null) => PlannerGoalEditorTarget,
-  ) => (
-    <>
-      {label}
-      {plannerPillars.map((pillar) =>
-        cell(
-          pillar,
-          goals.byPillar[pillar].length ? (
-            <Split current={current} strong={strong}>
-              {goals.byPillar[pillar].map((goal) => (
-                <MapUnit
-                  goal={goal}
-                  key={goal.id}
-                  mark={plannerMapMark(goal)}
-                  strings={strings}
-                  onClick={() => onEdit({ kind: "edit", goal })}
-                />
-              ))}
-            </Split>
-          ) : (
-            <button
-              aria-label={`${strings.editor.add} · ${strings.pillar[pillar]}`}
-              className="planner-u planner-u-add"
-              title={`${strings.editor.add} · ${strings.pillar[pillar]}`}
-              type="button"
-              onClick={() => onEdit(add(pillar))}
-            >
-              <PlusIcon aria-hidden="true" className="size-3.5" />
-            </button>
+    level: "year" | "quarter" | "month" = "year",
+  ) => {
+    const unit = (goal: PlannerGoalDto) => {
+      const edit = () => onEdit({ kind: "edit", goal });
+      // A quarter goal lights up its column; its pencil opens the editor.
+      // Following one objective, the column is already lit: a click edits.
+      const threads = level === "quarter" && goal.pillar && !follow;
+      return (
+        <MapUnit
+          goal={goal}
+          key={goal.id}
+          mark={plannerMapMark(goal)}
+          pressed={threads ? lit === goal.pillar : undefined}
+          progress={level !== "year"}
+          strings={strings}
+          onClick={
+            threads
+              ? () =>
+                  setThread((current) =>
+                    current === goal.pillar ? null : goal.pillar,
+                  )
+              : edit
+          }
+          onEditGoal={threads ? edit : undefined}
+        />
+      );
+    };
+    return (
+      <>
+        {label}
+        {plannerPillars.map((pillar) =>
+          cell(
+            pillar,
+            goals.byPillar[pillar].length ? (
+              <Split current={current} strong={strong}>
+                {goals.byPillar[pillar].map(unit)}
+              </Split>
+            ) : (
+              <button
+                aria-label={`${strings.editor.add} · ${strings.pillar[pillar]}`}
+                className="planner-u planner-u-add"
+                title={`${strings.editor.add} · ${strings.pillar[pillar]}`}
+                type="button"
+                onClick={() => onEdit(add(pillar))}
+              >
+                <PlusIcon aria-hidden="true" className="size-3.5" />
+              </button>
+            ),
           ),
-        ),
-      )}
-      {!follow && goals.loose.length > 0 && (
-        <>
-          <span />
-          <Split current={current} span strong={strong}>
-            {goals.loose.map((goal) => (
-              <MapUnit
-                goal={goal}
-                key={goal.id}
-                mark={plannerMapMark(goal)}
-                strings={strings}
-                onClick={() => onEdit({ kind: "edit", goal })}
-              />
-            ))}
-          </Split>
-        </>
-      )}
-    </>
-  );
+        )}
+        {!follow && goals.loose.length > 0 && (
+          <>
+            <span />
+            <Split current={current} span strong={strong}>
+              {goals.loose.map(unit)}
+            </Split>
+          </>
+        )}
+      </>
+    );
+  };
 
   const themeRow = (
     label: ReactNode,
@@ -332,6 +352,7 @@ export function PlannerYearMap({
         <div
           className={cn("planner-ymap", follow && "is-following")}
           data-testid="planner-year-map"
+          data-thread={lit ?? undefined}
           style={style}
         >
           <span className="planner-yl is-star">{strings.goals.northStar}</span>
@@ -389,12 +410,19 @@ export function PlannerYearMap({
                 // the band just separates quarters (and shows an old one).
                 quarter.theme,
               )}
-              {periodRow(<span />, quarter.goals, true, false, (pillar) => ({
-                kind: "new",
-                level: "quarter",
-                periodStart: quarter.start,
-                pillar,
-              }))}
+              {periodRow(
+                <span />,
+                quarter.goals,
+                true,
+                false,
+                (pillar) => ({
+                  kind: "new",
+                  level: "quarter",
+                  periodStart: quarter.start,
+                  pillar,
+                }),
+                "quarter",
+              )}
               {quarter.months.map((month) => {
                 const mondays = month.weeks.map((week) => week.monday);
                 const allOpen =
@@ -432,6 +460,7 @@ export function PlannerYearMap({
                         periodStart: month.start,
                         pillar,
                       }),
+                      "month",
                     )}
                     <span />
                     <fieldset
@@ -496,10 +525,12 @@ export function PlannerYearMap({
   );
 }
 
-/** "12 Oct": a week's Monday. */
+/** "6 Apr": a week's Monday, always with its month. */
 function shortDay(monday: string, strings: PlannerGoalsStrings): string {
-  const range = plannerWeekRange(monday, strings);
-  return range.split("–")[0]?.trim() ?? range;
+  return strings.day({
+    month: Number(monday.slice(5, 7)) - 1,
+    day: Number(monday.slice(8, 10)),
+  });
 }
 
 function markText(
@@ -554,62 +585,140 @@ function Split({
   );
 }
 
-/** One part of a split row: a dot, the goal's heading, its mark, its points as chips. */
+/**
+ * One part of a split row: a dot and the goal's heading, then its points: as
+ * chips (year and week goals) or as a five-position progress bar with the
+ * points under it (quarter and month goals). The goal's result or task count
+ * is read out but not drawn. A quarter goal that lights up its column gets a
+ * pencil to open the editor.
+ */
 function MapUnit({
   goal,
   mark,
   label,
   strings,
+  progress = false,
+  pressed,
   onClick,
+  onEditGoal,
 }: {
   goal: PlannerGoalDto;
   mark: PlannerMapMark | null;
   label?: string;
   strings: PlannerGoalsStrings;
+  progress?: boolean;
+  pressed?: boolean;
   onClick: () => void;
+  onEditGoal?: () => void;
 }) {
   const text = plannerGoalText(goal);
   const { head, points } = plannerGoalParts(goal);
   const shown = mark ? markText(mark, strings) : null;
-  const hint = [text, shown?.label, goal.note].filter(Boolean).join("\n");
-  return (
-    <button
-      aria-label={[label ?? strings.editor.edit(text), shown?.label]
-        .filter(Boolean)
-        .join(", ")}
-      className={cn("planner-u", plannerPillarClass(goal.pillar))}
-      data-testid="planner-goal"
-      title={hint}
-      type="button"
-      onClick={onClick}
-    >
+  const slots = points.slice(0, PLANNER_MAP_POINTS);
+  const done = slots.filter((point) => point.struck).length;
+  const count =
+    progress && slots.length > 0
+      ? strings.map.pointsDone(done, slots.length)
+      : null;
+  const hint = [text, shown?.label, count, goal.note]
+    .filter(Boolean)
+    .join("\n");
+  const name = onEditGoal
+    ? strings.map.showThread(head)
+    : (label ?? strings.editor.edit(text));
+  const body = (
+    <>
       <span className="planner-u-h">
         <i aria-hidden="true" className="planner-dot" />
         <span className="planner-u-t">{head}</span>
-        {shown && (
-          <span
-            aria-hidden="true"
-            className="planner-u-m"
-            data-kind={mark?.kind}
-          >
-            {shown.text}
-          </span>
-        )}
       </span>
-      {points.length > 0 && (
-        <span aria-hidden="true" className="planner-chips">
-          {points.map((point) => (
-            <span
-              className="planner-chip"
-              data-struck={point.struck || undefined}
-              key={point.text}
-            >
-              {point.text}
-            </span>
-          ))}
-        </span>
+      {progress ? (
+        <>
+          <span aria-hidden="true" className="planner-bar">
+            {Array.from({ length: PLANNER_MAP_POINTS }, (_, at) => (
+              <i
+                data-done={slots[at]?.struck || undefined}
+                // biome-ignore lint/suspicious/noArrayIndexKey: fixed positions
+                key={at}
+              />
+            ))}
+          </span>
+          <span className="planner-pts">
+            {Array.from({ length: PLANNER_MAP_POINTS }, (_, at) => (
+              <span
+                data-done={slots[at]?.struck || undefined}
+                // biome-ignore lint/suspicious/noArrayIndexKey: fixed positions
+                key={at}
+              >
+                {slots[at]?.text ?? ""}
+              </span>
+            ))}
+          </span>
+        </>
+      ) : (
+        points.length > 0 && (
+          <span aria-hidden="true" className="planner-chips">
+            {points.map((point) => (
+              <span
+                className="planner-chip"
+                data-struck={point.struck || undefined}
+                key={point.text}
+              >
+                {point.text}
+              </span>
+            ))}
+          </span>
+        )
       )}
-    </button>
+    </>
+  );
+  const aria = [name, shown?.label, count].filter(Boolean).join(", ");
+  if (!onEditGoal) {
+    return (
+      <button
+        aria-label={aria}
+        className={cn(
+          "planner-u",
+          progress && "is-progress",
+          plannerPillarClass(goal.pillar),
+        )}
+        data-testid="planner-goal"
+        title={hint}
+        type="button"
+        onClick={onClick}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "planner-u is-progress is-thread-goal",
+        plannerPillarClass(goal.pillar),
+      )}
+    >
+      <button
+        aria-label={aria}
+        aria-pressed={pressed}
+        className="planner-u-main"
+        data-testid="planner-goal"
+        title={hint}
+        type="button"
+        onClick={onClick}
+      >
+        {body}
+      </button>
+      <button
+        aria-label={strings.editor.edit(text)}
+        className="planner-u-edit"
+        title={strings.editor.edit(text)}
+        type="button"
+        onClick={onEditGoal}
+      >
+        <PencilIcon aria-hidden="true" className="size-3.5" />
+      </button>
+    </div>
   );
 }
 

@@ -34,6 +34,7 @@ import { usePlannerGoalsStrings } from "./goals-strings";
 import { PlannerChoice } from "./goals-ui";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { PLANNER_MAP_POINTS } from "./year-map-model";
 
 // Writing a goal on the Goals page (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): its objective, a title, points under it
@@ -119,6 +120,11 @@ function GoalForm({
       struck: line.struck ?? false,
     })),
   );
+  // Quarter and month goals hold five points at most: the Year map draws
+  // them as a five-position progress bar.
+  const linesFull =
+    (level === "quarter" || level === "month") &&
+    lines.length >= PLANNER_MAP_POINTS;
   const [status, setStatus] = useState<PlannerGoalStatus>(
     goal?.status ?? "active",
   );
@@ -327,21 +333,27 @@ function GoalForm({
             </div>
           </div>
         ))}
-        <Button
-          className="self-start"
-          size="sm"
-          type="button"
-          variant="outline"
-          onClick={() =>
-            setLines((current) => [
-              ...current,
-              { text: "", note: "", struck: false },
-            ])
-          }
-        >
-          <PlusIcon data-icon="inline-start" />
-          {strings.editor.addLine}
-        </Button>
+        {linesFull ? (
+          <span className="text-xs text-muted-foreground">
+            {strings.editor.linesFull}
+          </span>
+        ) : (
+          <Button
+            className="self-start"
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setLines((current) => [
+                ...current,
+                { text: "", note: "", struck: false },
+              ])
+            }
+          >
+            <PlusIcon data-icon="inline-start" />
+            {strings.editor.addLine}
+          </Button>
+        )}
       </fieldset>
 
       {!northStar && (

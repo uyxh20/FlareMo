@@ -568,7 +568,7 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
   opacity: 0.6;
 }
 
-/* A goal: dot, up to two lines, a mark. Year and quarter goals are coloured. */
+/* A goal: dot, up to two lines. Its result or task count is read out, not drawn. */
 .planner-u {
   display: flex;
   width: 100%;
@@ -598,24 +598,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-}
-.planner-u-m {
-  flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--muted-foreground);
-}
-.planner-u-m[data-kind="met"] {
-  color: var(--success);
-}
-.planner-u-m[data-kind="missed"] {
-  color: var(--destructive);
-}
-.planner-u-m[data-kind="partial"],
-.planner-u-m[data-kind="contested"] {
-  color: var(--warning);
 }
 /*
  * A split row: one period's goals in one objective, one equal part per goal,
@@ -683,6 +665,135 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 .planner-chip[data-struck] {
   text-decoration: line-through;
 }
+/*
+ * Quarter and month goals: a five-position progress bar, one position per
+ * point (five at most), solid when the point is struck. The points sit under
+ * it when their column is lit or followed (fork change, 2026-10-14).
+ */
+.planner-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.planner-bar > i {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.planner-bar > i[data-done] {
+  background: var(--foreground);
+}
+.planner-split[data-strong] .planner-bar > i {
+  height: 5px;
+}
+.planner-pts {
+  display: none;
+}
+.planner-pts > span {
+  min-width: 0;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+.planner-pts > span[data-done] {
+  color: var(--foreground);
+}
+.planner-ymap[data-thread] .planner-yc.is-thread .planner-pts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.planner-ymap[data-thread] .planner-pts > span:empty {
+  display: none;
+}
+.planner-ymap.is-following .planner-pts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.planner-ymap.is-following .planner-bar,
+.planner-ymap.is-following .planner-pts {
+  gap: 12px;
+}
+.planner-u.is-progress .planner-u-h {
+  align-items: flex-start;
+}
+.planner-u.is-progress .planner-u-h .planner-dot {
+  flex: none;
+  margin-top: 0.42em;
+}
+.planner-split[data-strong] > .planner-u.is-progress .planner-u-t {
+  font-size: 15.5px;
+  -webkit-line-clamp: 3;
+}
+/* A lit column: the other objectives fade. */
+.planner-ymap .planner-yc,
+.planner-ymap .planner-split.is-span {
+  transition: opacity 0.15s;
+}
+.planner-ymap[data-thread] .planner-yc:not(.is-thread),
+.planner-ymap[data-thread] .planner-split.is-span {
+  opacity: 0.32;
+}
+/* A quarter goal that lights its column: the card, and a pencil to edit it. */
+.planner-split > .planner-u.is-progress.is-thread-goal {
+  position: relative;
+  padding: 0;
+}
+.planner-u-main {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: inherit;
+  padding: 10px 34px 11px 12px;
+  text-align: left;
+}
+.planner-u-main:hover {
+  background: color-mix(in oklab, var(--foreground) 4%, transparent);
+}
+.planner-u-edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  opacity: 0;
+}
+.planner-u-edit:hover {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+.planner-u.is-thread-goal:hover .planner-u-edit,
+.planner-u-edit:focus-visible,
+.planner-yc.is-thread .planner-u-edit {
+  opacity: 1;
+}
+@media (max-width: 640px) {
+  .planner-ymap.is-following .planner-bar,
+  .planner-ymap.is-following .planner-pts {
+    gap: 6px;
+  }
+  .planner-pts > span {
+    font-size: 11px;
+  }
+}
+@media (hover: none) {
+  .planner-u-edit {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .planner-ymap .planner-yc,
+  .planner-ymap .planner-split.is-span {
+    transition: none;
+  }
+}
 /* Year and quarter goals: bigger type, plain card. */
 .planner-split[data-strong] > .planner-u {
   padding: 9px 11px;
@@ -701,10 +812,6 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 }
 .planner-split[data-current] .planner-u-t {
   font-weight: 650;
-}
-.planner-split[data-current] .planner-u-m {
-  color: var(--foreground);
-  opacity: 0.8;
 }
 .planner-split[data-current] .planner-chip {
   border-color: color-mix(in oklab, var(--foreground) 22%, transparent);
