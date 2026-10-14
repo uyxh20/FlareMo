@@ -269,7 +269,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-14 · describes main at commit 0f18c55, live version 27 (sprint 1); dev also has upstream v0.22.1</p>
+      <p class="meta">Last updated 2026-10-14 · describes main after the deploy-safety merge, live version 27 (sprint 1); dev also has upstream v0.22.1</p>
     </header>
 
     <!-- ============================================================ -->
@@ -1038,22 +1038,23 @@
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 200" role="img" aria-label="A live deploy checks the code is main, saves a rollback point and bookmark, counts rows, migrates and deploys, then recounts and loads the site. If rows dropped or the site errors, it rolls the Worker back automatically.">
+          <svg viewBox="0 0 900 200" role="img" aria-label="A live deploy checks the code is main and fully committed, saves a rollback point and bookmark, builds, counts rows, migrates, recounts and deploys, then recounts and loads the site including a page that reads the database. If rows dropped or the site errors, it rolls the Worker back automatically.">
             <text x="20" y="20" class="t-s t-m">ONE LIVE DEPLOY · scripts/fork/prod-deploy.mjs</text>
             <rect x="20" y="36" width="140" height="60" rx="8" class="n" />
             <text x="90" y="62" text-anchor="middle" class="t-b">Code = main?</text>
-            <text x="90" y="80" text-anchor="middle" class="t-s">else refuse</text>
+            <text x="90" y="80" text-anchor="middle" class="t-s">all committed?</text>
             <rect x="190" y="36" width="160" height="60" rx="8" class="n" />
             <text x="270" y="62" text-anchor="middle" class="t-b">Save rollback</text>
             <text x="270" y="80" text-anchor="middle" class="t-s">version + DB bookmark</text>
             <rect x="380" y="36" width="140" height="60" rx="8" class="n n-d1" />
-            <text x="450" y="62" text-anchor="middle" class="t-b">Count rows</text>
-            <text x="450" y="80" text-anchor="middle" class="t-s">every table</text>
+            <text x="450" y="62" text-anchor="middle" class="t-b">Build, count</text>
+            <text x="450" y="80" text-anchor="middle" class="t-s">then rows per table</text>
             <rect x="550" y="36" width="150" height="60" rx="8" class="n n-acc" />
-            <text x="625" y="70" text-anchor="middle" class="t-b">Migrate, deploy</text>
+            <text x="625" y="62" text-anchor="middle" class="t-b">Migrate, deploy</text>
+            <text x="625" y="80" text-anchor="middle" class="t-s">recount in between</text>
             <rect x="730" y="36" width="150" height="60" rx="8" class="n n-d1" />
             <text x="805" y="62" text-anchor="middle" class="t-b">Recount</text>
-            <text x="805" y="80" text-anchor="middle" class="t-s">+ load the site</text>
+            <text x="805" y="80" text-anchor="middle" class="t-s">+ site, a DB page</text>
             <line x1="160" y1="66" x2="186" y2="66" class="a" marker-end="url(#ah)" />
             <line x1="350" y1="66" x2="376" y2="66" class="a" marker-end="url(#ah)" />
             <line x1="520" y1="66" x2="546" y2="66" class="a" marker-end="url(#ah)" />
@@ -1073,7 +1074,7 @@
             <text x="20" y="178" class="t-s">Data is never auto-reverted; the bookmark is the way back.</text>
           </svg>
         </div>
-        <figcaption>The dev clone copies live table by table, replays new migrations as a rehearsal, and fails on any row-count mismatch. Details: <code>docs/fork-dev-environment.md</code>.<br /><b>Dev on 2026-10-14:</b> runs branch <code>dev/sprint-1</code>: sprint 1 (live since version 27) plus the upstream v0.22.1 update, which is not on main yet. Sprint 1 shipped with no migrations; live row counts were 3,843 before and after.</figcaption>
+        <figcaption>The dev clone copies live table by table, replays new migrations as a rehearsal, and fails on any row-count mismatch. Details: <code>docs/fork-dev-environment.md</code>.<br /><b>On main since 2026-10-14 (deploy safety; nothing to deploy, the script runs from main):</b> the script refuses an uncommitted migration file, builds the app and the Worker before any write, counts rows just before migrating and again before deploying, and its site check includes <code>/feed.xml</code>, which reads the database. If its automatic rollback fails it says live is on the new version and prints the fix; a manual <code>rollback</code> skips versions that already failed (or takes <code>--version</code>). It refuses if live has a binding the config lacks. The leftover root <code>wrangler.jsonc</code> is cleaned up. Every other route into live (raw wrangler, <code>pnpm deploy</code>, the <code>cf</code> tool, the Cloudflare API and write tools, and the script's real deploy and rollback) asks first in <code>.claude/settings.json</code>. Dev has search indexing off, so it no longer spends the free daily AI allowance live shares. CI runs the fork script tests.<br /><b>Dev on 2026-10-14:</b> runs branch <code>dev/sprint-1</code>: sprint 1 (live since version 27) plus the upstream v0.22.1 update, which is not on main yet. Sprint 1 shipped with no migrations; live row counts were 3,843 before and after.</figcaption>
       </figure>
     </section>
   </main>
