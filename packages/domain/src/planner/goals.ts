@@ -364,20 +364,33 @@ export function plannerReadWeekGoals(
   });
 }
 
-/** Goals by id, removed ones included (a flag can name a goal that is gone). */
+/** Ids per query: D1 binds at most 100 values, and the user id is one. */
+const GOAL_ID_CHUNK = 50;
+
+/**
+ * Goals by id, removed ones included (a flag can name a goal that is gone).
+ * Read in chunks, since open flags pile up with no limit.
+ */
 export async function plannerReadGoalsById(
   db: FlareMoDb,
   input: { userId: string; ids: readonly string[] },
 ): Promise<PlannerGoalDto[]> {
   const ids = [...new Set(input.ids)].filter(Boolean);
-  if (ids.length === 0) return [];
-  const rows = await db
-    .select()
-    .from(plannerGoal)
-    .where(
-      and(eq(plannerGoal.userId, input.userId), inArray(plannerGoal.id, ids)),
-    )
-    .all();
+  const rows: PlannerGoalRow[] = [];
+  for (let start = 0; start < ids.length; start += GOAL_ID_CHUNK) {
+    rows.push(
+      ...(await db
+        .select()
+        .from(plannerGoal)
+        .where(
+          and(
+            eq(plannerGoal.userId, input.userId),
+            inArray(plannerGoal.id, ids.slice(start, start + GOAL_ID_CHUNK)),
+          ),
+        )
+        .all()),
+    );
+  }
   return rows.map(plannerGoalToDto).sort(plannerCompareGoals);
 }
 

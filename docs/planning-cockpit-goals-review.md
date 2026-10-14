@@ -70,7 +70,7 @@ Look back ends in the summary memo. It streams into a sheet with Stop, then Edit
 
 Save week then does all of this:
 
-- writes the week's goals;
+- writes the week's goals, removing only the ones the plan started from and left out (a goal added on the Goals page while the review was open is kept, with its tasks);
 - links the tasks to them;
 - moves the planned tasks to the top of To Do, and sends the cards the owner chose back to Backlog;
 - creates the new tasks;

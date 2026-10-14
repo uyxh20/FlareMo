@@ -893,7 +893,10 @@ export async function plannerCommitPlan(
   );
   const stamp = () => plannerNow(input.now).toISOString();
   // The goals this save may touch: the plan's and the ones the page knew about.
-  const knownIds = new Set([...(body.known_goal_ids ?? []), ...goalOrder.keys()]);
+  const knownIds = new Set([
+    ...(body.known_goal_ids ?? []),
+    ...goalOrder.keys(),
+  ]);
 
   // 1 and 2.
   await settleFlags(db, { userId, settled: body.settled, nowIso: stamp() });

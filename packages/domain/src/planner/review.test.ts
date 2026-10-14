@@ -276,6 +276,26 @@ describe("the weekly review", () => {
       });
     });
 
+    it("still opens with more flagged goals than one query can name", async () => {
+      // D1 binds at most 100 values per query; 150 open flags name 150 goals.
+      const ids: string[] = [];
+      for (let index = 0; index < 150; index += 1) {
+        const goal = await weekGoal(W40, "work", `Goal ${index}`);
+        ids.push(goal.id);
+        await insertFlag({
+          id: `flag-${index}`,
+          weekStart: W40,
+          goalId: goal.id,
+          createdAt: `2026-09-27T10:${String(Math.floor(index / 60)).padStart(2, "0")}:${String(index % 60).padStart(2, "0")}.000Z`,
+        });
+      }
+      const review = await read(SUNDAY);
+      expect(review.flags).toHaveLength(150);
+      expect(review.flag_goals.map((goal) => goal.id).sort()).toEqual(
+        ids.sort(),
+      );
+    });
+
     it("reads last week's question from its summary when the record has none", async () => {
       await createMemo(rt.db, rt.user, {
         content: W40_SUMMARY,
@@ -1001,7 +1021,9 @@ describe("the weekly review", () => {
       await commit(
         body({
           known_goal_ids: [G1, G2],
-          goals: [{ id: G1, pillar: "work", title: "Get the terms in writing" }],
+          goals: [
+            { id: G1, pillar: "work", title: "Get the terms in writing" },
+          ],
           tasks: [{ ref: "t1", goal_id: G1, task_id: "tasks/c-backlog" }],
         }),
       );
@@ -1021,7 +1043,9 @@ describe("the weekly review", () => {
       // A save that names no known goals removes nothing outside the plan.
       await commit(
         body({
-          goals: [{ id: G1, pillar: "work", title: "Get the terms in writing" }],
+          goals: [
+            { id: G1, pillar: "work", title: "Get the terms in writing" },
+          ],
           tasks: [],
         }),
       );
