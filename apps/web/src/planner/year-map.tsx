@@ -192,7 +192,7 @@ export function PlannerYearMap({
   const themeRow = (
     label: ReactNode,
     theme: PlannerGoalDto | null,
-    add: () => void,
+    add?: () => void,
   ) => (
     <>
       {label}
@@ -207,15 +207,17 @@ export function PlannerYearMap({
             {plannerGoalText(theme)}
           </button>
         ) : (
-          <button
-            aria-label={strings.editor.add}
-            className="planner-theme planner-theme-add"
-            title={strings.editor.add}
-            type="button"
-            onClick={add}
-          >
-            <PlusIcon aria-hidden="true" className="size-3.5" />
-          </button>
+          add && (
+            <button
+              aria-label={strings.editor.add}
+              className="planner-theme planner-theme-add"
+              title={strings.editor.add}
+              type="button"
+              onClick={add}
+            >
+              <PlusIcon aria-hidden="true" className="size-3.5" />
+            </button>
+          )
         )}
       </div>
     </>
@@ -383,14 +385,9 @@ export function PlannerYearMap({
                 <span className="planner-yl is-period planner-qlab">
                   {strings.goals.quarter(quarter.quarter)}
                 </span>,
+                // Quarters only have pillar goals: no "+" for a theme line,
+                // the band just separates quarters (and shows an old one).
                 quarter.theme,
-                () =>
-                  onEdit({
-                    kind: "new",
-                    level: "quarter",
-                    periodStart: quarter.start,
-                    pillar: null,
-                  }),
               )}
               {periodRow(<span />, quarter.goals, true, false, (pillar) => ({
                 kind: "new",

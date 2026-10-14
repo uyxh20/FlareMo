@@ -298,14 +298,6 @@ function QuarterView({
         eyebrow={`${name} · ${span}`}
         goal={theme}
         strings={strings}
-        onAdd={() =>
-          onEdit({
-            kind: "new",
-            level: "quarter",
-            periodStart: start,
-            pillar: null,
-          })
-        }
         onEdit={onEdit}
       />
       <StatTiles stats={stats} strings={strings} />

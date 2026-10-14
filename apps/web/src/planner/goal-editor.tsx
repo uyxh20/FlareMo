@@ -240,7 +240,10 @@ function GoalForm({
                   </>
                 ),
               })),
-              { value: NO_PILLAR, label: strings.noPillar },
+              // Quarter goals belong to a pillar; an old one without keeps its option.
+              ...(level === "quarter" && goal?.pillar !== null
+                ? []
+                : [{ value: NO_PILLAR, label: strings.noPillar }]),
             ]}
             value={pillar ?? NO_PILLAR}
             onChange={(value) =>
