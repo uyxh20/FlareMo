@@ -61,14 +61,14 @@
   background: var(--planner-p, var(--muted-foreground));
 }
 
-/* A goal card on the cockpit, a slot in Look forward. */
+/*
+ * A goal card on the cockpit: a plain card, the objective's colour only in its
+ * dot; no tint, no coloured border, no progress bar (fork change, 2026-10-14).
+ * The focused card keeps a coloured outline.
+ */
 .planner-goal-card {
-  border: 1px solid color-mix(in oklab, var(--planner-p) 30%, var(--border));
-  background: color-mix(
-    in oklab,
-    var(--planner-p) var(--planner-tint),
-    var(--card)
-  );
+  border: 1px solid var(--border);
+  background: var(--card);
 }
 .planner-goal-card[aria-pressed="true"] {
   outline: 2px solid var(--planner-p);
@@ -76,20 +76,7 @@
 }
 .planner-goal-card[data-empty] {
   border-style: dashed;
-  border-color: var(--border);
   background: transparent;
-}
-.planner-goal-bar {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--planner-p) 22%, transparent);
-}
-.planner-goal-bar > i {
-  display: block;
-  height: 100%;
-  border-radius: 4px;
-  background: var(--planner-p);
 }
 
 /* A goal being written in Look forward: a lighter tint than a card. */
@@ -494,9 +481,28 @@ a.planner-cell:hover {
 .planner-yl.planner-qlab {
   margin-top: 6px;
   border-top: 1px solid var(--border);
-  padding-top: 18px;
+  padding-top: 12px;
   font-size: 15px;
   letter-spacing: 0.02em;
+}
+/* A quarter's cards sit beside its label, just under the divider. */
+.planner-yc.is-quarter {
+  margin-top: 6px;
+}
+/*
+ * Every box in a row is as tall as the tallest one; the heading stays on top
+ * and the progress bar (with its points) sits at the bottom, so bars line up
+ * across columns (fork change, 2026-10-14).
+ */
+.planner-yc > .planner-split,
+.planner-yc > .planner-u-add {
+  flex: 1 1 auto;
+}
+.planner-u.is-progress .planner-u-h {
+  margin-bottom: auto;
+}
+.planner-u-main {
+  flex: 1 1 auto;
 }
 .planner-yl.is-now {
   color: var(--brand-600);
@@ -711,6 +717,15 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
 .planner-ymap.is-following .planner-pts {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+/* Following one objective: points cut at two lines, so quarter and month
+   boxes come out the same height (the full text is in the hover hint). */
+.planner-ymap.is-following .planner-pts > span {
+  display: -webkit-box;
+  min-height: calc(2 * 1.35em);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .planner-ymap.is-following .planner-bar,
 .planner-ymap.is-following .planner-pts {

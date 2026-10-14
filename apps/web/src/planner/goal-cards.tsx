@@ -19,8 +19,8 @@ import {
 import "./goals.css";
 
 // The week's goal cards above the cockpit board (fork-owned add-on,
-// docs/planning-cockpit-goals-review.md): one card per weekly goal, coloured by
-// its objective, with how many of its tasks are done; a dashed card for an
+// docs/planning-cockpit-goals-review.md): one plain card per weekly goal, its
+// objective's colour in the dot, with how many of its tasks are done; a dashed card for an
 // objective with no goal this week. Clicking a card focuses its goal: the other
 // cards and every task that does not serve it fade back until it is clicked
 // again or Escape is pressed (the page owns that state).
@@ -181,13 +181,6 @@ export function PlannerGoalCards({
               </span>
               <span className="line-clamp-4 text-[13.5px] leading-snug font-medium text-foreground sm:line-clamp-none sm:text-[15px]">
                 {plannerGoalText(goal)}
-              </span>
-              <span aria-hidden="true" className="planner-goal-bar mt-auto">
-                <i
-                  style={{
-                    width: `${progress.total ? Math.round((100 * progress.done) / progress.total) : 0}%`,
-                  }}
-                />
               </span>
             </button>
           );
