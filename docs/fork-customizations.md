@@ -141,7 +141,6 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `playwright.config.ts` | `cockpit`, `fork-ui` and `goals-review` added to the `memo-ui` project's `testMatch` alternation. |
 | `scripts/persistence-manifest.mjs` | The planner and health tables in `RESTORE_TABLES`. |
 | `scripts/e2e-server.mjs` | `FLAREMO_REVIEW_AI:off` in the test bindings, so the weekly review e2e runs on the page's own drafts instead of waiting on Workers AI. |
-| `package.json`, `pnpm-lock.yaml` | `@anthropic-ai/sdk` and `@types/node` in the root dev dependencies, for `scripts/fork/review-ab/`; the app does not use them. |
 | `.github/workflows/ci.yml` | CI runs nightly (skipped when the last 24 hours touched only docs), on pull requests (not docs-only ones) and by hand, not on every push, to stay within the free Actions minutes. |
 | `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily. |
 | `.github/workflows/deploy-cloudflare.yml` | Deleted on 2026-10-04: the fork deploys with `scripts/fork/prod-deploy.mjs` (see `docs/fork-dev-environment.md`). |
