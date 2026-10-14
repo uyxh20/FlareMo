@@ -1103,6 +1103,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-14</time><span>Claude sessions now ask before any raw live write (wrangler deploy, rollback, remote migrations or d1 execute, Time Travel restore); <code>scripts/fork/prod-deploy.mjs</code> stays the unprompted way to ship. Repo setting only, no deploy.</span></li>
         <li><time>2026-10-14</time><span>Shipped to live (version 23): quarters hold pillar goals only. The four generic quarter theme lines were soft-deleted on live (bookmark taken first; 190 goals, 186 visible after) and the app no longer offers a "+" for them. No migration; row counts unchanged (3,899).</span></li>
         <li><time>2026-10-14</time><span>Shipped to live (version 22): Year map colours only the current month and week, grey chip borders, one dot size. No migration; row counts unchanged (3,899).</span></li>
         <li><time>2026-10-14</time><span>Goals Year map: only the current month and week are coloured, year and quarter rows go plain, point chips get a grey border, one dot size (branch fix/goals-highlight-current-only; deployed to dev, not live). No migration.</span></li>
