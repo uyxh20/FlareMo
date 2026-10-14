@@ -66,7 +66,9 @@ import {
 // switches between them. A phone opens the map following Work. Quarter and
 // month goals show their points as a five-position progress bar; clicking a
 // quarter goal lights up its column and fades the others (fork change,
-// 2026-10-14).
+// 2026-10-14). Quarter cards are month-sized, sit beside their quarter's label
+// with no empty band above, and every box in a row is the same height
+// (fork change, 2026-10-14).
 
 type Edit = (target: PlannerGoalEditorTarget) => void;
 
@@ -126,10 +128,15 @@ export function PlannerYearMap({
     ? { gridTemplateColumns: "44px minmax(0, 1fr)" }
     : undefined;
 
-  const cell = (pillar: PlannerPillar, children: ReactNode) => (
+  const cell = (
+    pillar: PlannerPillar,
+    children: ReactNode,
+    quarter = false,
+  ) => (
     <div
       className={cn(
         "planner-yc",
+        quarter && "is-quarter",
         plannerPillarClass(pillar),
         follow === pillar && "is-on",
         lit === pillar && "is-thread",
@@ -195,6 +202,7 @@ export function PlannerYearMap({
                 <PlusIcon aria-hidden="true" className="size-3.5" />
               </button>
             ),
+            level === "quarter",
           ),
         )}
         {!follow && goals.loose.length > 0 && (
@@ -400,113 +408,116 @@ export function PlannerYearMap({
               pillar,
             }),
           )}
-          {map.quarters.map((quarter) => (
-            <Fragment key={quarter.quarter}>
-              {themeRow(
-                <span className="planner-yl is-period planner-qlab">
-                  {strings.goals.quarter(quarter.quarter)}
-                </span>,
-                // Quarters only have pillar goals: no "+" for a theme line,
-                // the band just separates quarters (and shows an old one).
-                quarter.theme,
-              )}
-              {periodRow(
-                <span />,
-                quarter.goals,
-                true,
-                false,
-                (pillar) => ({
-                  kind: "new",
-                  level: "quarter",
-                  periodStart: quarter.start,
-                  pillar,
-                }),
-                "quarter",
-              )}
-              {quarter.months.map((month) => {
-                const mondays = month.weeks.map((week) => week.monday);
-                const allOpen =
-                  mondays.length > 0 && mondays.every((day) => open.has(day));
-                const name = strings.monthsLong[month.month] ?? "";
-                return (
-                  <Fragment key={month.month}>
-                    {periodRow(
-                      <button
-                        aria-expanded={allOpen}
-                        aria-label={
-                          allOpen
-                            ? strings.map.closeWeeks(name)
-                            : strings.map.openWeeks(name)
-                        }
-                        className={cn(
-                          "planner-yl planner-ml",
-                          month.current && "is-now",
-                        )}
-                        type="button"
-                        onClick={() =>
-                          setOpen((current) =>
-                            plannerToggleMonthWeeks(current, mondays),
-                          )
-                        }
+          {map.quarters.map((quarter) => {
+            const qlabel = (
+              <span className="planner-yl is-period planner-qlab">
+                {strings.goals.quarter(quarter.quarter)}
+              </span>
+            );
+            return (
+              <Fragment key={quarter.quarter}>
+                {/* Quarters only have pillar goals: no "+" for a theme line. An
+                  old theme still shows in its band; otherwise the quarter's
+                  label sits beside its cards, like a month's. */}
+                {quarter.theme && themeRow(qlabel, quarter.theme)}
+                {periodRow(
+                  quarter.theme ? <span /> : qlabel,
+                  quarter.goals,
+                  false,
+                  false,
+                  (pillar) => ({
+                    kind: "new",
+                    level: "quarter",
+                    periodStart: quarter.start,
+                    pillar,
+                  }),
+                  "quarter",
+                )}
+                {quarter.months.map((month) => {
+                  const mondays = month.weeks.map((week) => week.monday);
+                  const allOpen =
+                    mondays.length > 0 && mondays.every((day) => open.has(day));
+                  const name = strings.monthsLong[month.month] ?? "";
+                  return (
+                    <Fragment key={month.month}>
+                      {periodRow(
+                        <button
+                          aria-expanded={allOpen}
+                          aria-label={
+                            allOpen
+                              ? strings.map.closeWeeks(name)
+                              : strings.map.openWeeks(name)
+                          }
+                          className={cn(
+                            "planner-yl planner-ml",
+                            month.current && "is-now",
+                          )}
+                          type="button"
+                          onClick={() =>
+                            setOpen((current) =>
+                              plannerToggleMonthWeeks(current, mondays),
+                            )
+                          }
+                        >
+                          {strings.months[month.month]}
+                        </button>,
+                        month.goals,
+                        false,
+                        month.current,
+                        (pillar) => ({
+                          kind: "new",
+                          level: "month",
+                          periodStart: month.start,
+                          pillar,
+                        }),
+                        "month",
+                      )}
+                      <span />
+                      <fieldset
+                        aria-label={strings.map.weeksOf(name)}
+                        className="planner-span planner-wstrip"
                       >
-                        {strings.months[month.month]}
-                      </button>,
-                      month.goals,
-                      false,
-                      month.current,
-                      (pillar) => ({
-                        kind: "new",
-                        level: "month",
-                        periodStart: month.start,
-                        pillar,
-                      }),
-                      "month",
-                    )}
-                    <span />
-                    <fieldset
-                      aria-label={strings.map.weeksOf(name)}
-                      className="planner-span planner-wstrip"
-                    >
-                      {month.weeks.map((week) => {
-                        const lines = plannerCellLines(
-                          week.monday,
-                          currentWeek,
-                          week.record,
-                          plannerMapIsEmpty(week.goals)
-                            ? 0
-                            : plannerPillars.reduce(
-                                (sum, pillar) =>
-                                  sum + week.goals.byPillar[pillar].length,
-                                week.goals.loose.length,
-                              ),
-                          strings,
-                        );
-                        return (
-                          <button
-                            aria-label={lines.join(", ")}
-                            aria-pressed={open.has(week.monday)}
-                            className="planner-wchip"
-                            data-kind={week.kind}
-                            data-testid="planner-week-cell"
-                            key={week.monday}
-                            title={lines.join("\n")}
-                            type="button"
-                            onClick={() => toggleWeek(week.monday)}
-                          >
-                            <b>{strings.weekCode(week.number)}</b>
-                            <span>{shortDay(week.monday, strings)}</span>
-                          </button>
-                        );
-                      })}
-                    </fieldset>
-                    {month.weeks
-                      .filter((week) => open.has(week.monday))
-                      .map(weekRows)}
-                  </Fragment>
-                );
-              })}
-            </Fragment>
-          ))}
+                        {month.weeks.map((week) => {
+                          const lines = plannerCellLines(
+                            week.monday,
+                            currentWeek,
+                            week.record,
+                            plannerMapIsEmpty(week.goals)
+                              ? 0
+                              : plannerPillars.reduce(
+                                  (sum, pillar) =>
+                                    sum + week.goals.byPillar[pillar].length,
+                                  week.goals.loose.length,
+                                ),
+                            strings,
+                          );
+                          return (
+                            <button
+                              aria-label={lines.join(", ")}
+                              aria-pressed={open.has(week.monday)}
+                              className="planner-wchip"
+                              data-kind={week.kind}
+                              data-testid="planner-week-cell"
+                              key={week.monday}
+                              title={lines.join("\n")}
+                              type="button"
+                              onClick={() => toggleWeek(week.monday)}
+                            >
+                              <b>{strings.weekCode(week.number)}</b>
+                              <span>{shortDay(week.monday, strings)}</span>
+                            </button>
+                          );
+                        })}
+                      </fieldset>
+                      {month.weeks
+                        .filter((week) => open.has(week.monday))
+                        .map(weekRows)}
+                    </Fragment>
+                  );
+                })}
+              </Fragment>
+            );
+          })}
         </div>
       </div>
       <TaskPop
