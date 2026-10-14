@@ -5,22 +5,22 @@ copy of the live data, so a new commit (an upstream upgrade, the planner
 add-on) is tested on real rows before it goes live. Fork-only tooling:
 `scripts/fork/dev-env.mjs`.
 
-| | Live | Dev |
-| --- | --- | --- |
-| Worker | `flaremo` | `flaremo-dev` |
-| D1 | `flaremo` | `flaremo-dev` |
-| R2 | `flaremo-attachments` | `flaremo-dev-attachments` |
-| Queues | `flaremo-member-removal`, `flaremo-data-export` | `flaremo-dev-member-removal`, `flaremo-dev-data-export` |
-| Vectorize (1024 dims, cosine) | `flaremo-memos`, `flaremo-memories` | `flaremo-dev-memos`, `flaremo-dev-memories` |
-| Rate-limit namespace | `1001` | `2001` |
-| URL | `https://flaremo.ulysse-ha-19.workers.dev` | `https://flaremo-dev.ulysse-ha-19.workers.dev` |
+|                               | Live                                            | Dev                                                     |
+| ----------------------------- | ----------------------------------------------- | ------------------------------------------------------- |
+| Worker                        | `flaremo`                                       | `flaremo-dev`                                           |
+| D1                            | `flaremo`                                       | `flaremo-dev`                                           |
+| R2                            | `flaremo-attachments`                           | `flaremo-dev-attachments`                               |
+| Queues                        | `flaremo-member-removal`, `flaremo-data-export` | `flaremo-dev-member-removal`, `flaremo-dev-data-export` |
+| Vectorize (1024 dims, cosine) | `flaremo-memos`, `flaremo-memories`             | `flaremo-dev-memos`, `flaremo-dev-memories`             |
+| Rate-limit namespace          | `1001`                                          | `2001`                                                  |
+| URL                           | `https://flaremo.ulysse-ha-19.workers.dev`      | `https://flaremo-dev.ulysse-ha-19.workers.dev`          |
 
 ## Safety
 
 - Production is never written. Every wrangler call goes through
   `assertSafeWranglerCall` (`scripts/fork/dev-env-guard.mjs`). Reads of
   production are allowed (`SELECT`, `PRAGMA table_info`, `d1 list`, `r2 object
-  get`, `secret list`, `deploy --dry-run`). Everything else must name only
+get`, `secret list`, `deploy --dry-run`). Everything else must name only
   `flaremo-dev*` resources, with a dev-only `--config`; unknown commands, flags
   and config keys are refused.
 - The dev config is generated from `wrangler.jsonc.example` into
@@ -121,3 +121,11 @@ are never reverted automatically; the bookmark is printed for that. Only counts
 are read from live D1, and var values are masked in wrangler output.
 
 Tests: `node --test scripts/fork/prod-deploy.test.mjs`.
+
+This script is the way to ship. The repo's `.claude/settings.json` makes a
+Claude session ask first before any raw live write (`wrangler deploy`,
+`wrangler versions deploy`, `wrangler rollback`, remote `d1 migrations apply`
+or `d1 execute`, `d1 time-travel restore`), because those skip every safeguard
+above. The script itself is not prompted: it carries its own `--confirm
+flaremo`. `packages/domain/src/fork/guards.test.ts` fails if a later edit
+allows a raw live write again.

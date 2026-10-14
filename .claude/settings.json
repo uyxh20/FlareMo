@@ -1,8 +1,12 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(npx wrangler d1 migrations apply DB --remote --config wrangler.jsonc)",
-      "Bash(npx wrangler deploy --config wrangler.jsonc --keep-vars)"
+    "ask": [
+      "Bash(*wrangler deploy*)",
+      "Bash(*wrangler versions deploy*)",
+      "Bash(*wrangler rollback*)",
+      "Bash(*wrangler d1 migrations apply*--remote*)",
+      "Bash(*wrangler d1 execute*--remote*)",
+      "Bash(*wrangler d1 time-travel restore*)"
     ]
   }
 }
