@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, useSearch } from "@tanstack/react-router";
 import { Loader2Icon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getBootstrapStatus, getRegistrationStatus } from "@/api";
 import { getAuthProviders } from "@/api/integrations";
 import { authClient } from "@/auth-client";
@@ -11,6 +11,20 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/lib/error";
+
+// How long the login page waits for the client session to confirm a
+// successful sign-in before falling back to a full document navigation. The
+// sign-in response has already stored the session cookie, so a reload reads
+// it directly; without this fallback a stalled confirmation left the user on
+// the form with no feedback (2026-10-10 support report: three successful
+// sign-ins, browser never left the login page).
+const POST_SIGN_IN_CONFIRMATION_TIMEOUT_MS = 5_000;
+// Marker for the recovery reload above: if the tab comes back to the login
+// page still without a session, the browser did not keep the cookie, and
+// reloading again would only loop. The timestamp keeps a stale marker from a
+// much later visit from raising a false alarm.
+const POST_SIGN_IN_RECOVERY_KEY = "flaremo.post-signin-recovery";
+const POST_SIGN_IN_RECOVERY_TTL_MS = 120_000;
 
 export function LoginPage() {
   const { t } = useI18n();
@@ -39,6 +53,43 @@ export function LoginPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [socialPending, setSocialPending] = useState<string | null>(null);
+  const [postSignIn, setPostSignIn] = useState(false);
+
+  // After a successful sign-in the server has already set the session
+  // cookie; the render branch below navigates as soon as the client session
+  // lands. That confirmation is a second round trip — when it stalls,
+  // nothing else moves the user off the form, so this watchdog guarantees an
+  // exit: with the cookie in place a full navigation reads it directly.
+  useEffect(() => {
+    if (!postSignIn) return;
+    const target = redirect && !redirect.startsWith("/login") ? redirect : "/";
+    const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem(POST_SIGN_IN_RECOVERY_KEY, String(Date.now()));
+      } catch {
+        // Storage unavailable; the reload below is still the right recovery.
+      }
+      window.location.replace(target);
+    }, POST_SIGN_IN_CONFIRMATION_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [postSignIn, redirect]);
+
+  // Returning from the recovery reload still without a session means the
+  // browser refused the session cookie (blocked by privacy settings); a
+  // further reload cannot help, so surface it instead of looping silently.
+  useEffect(() => {
+    if (session.isPending) return;
+    let marker: string | null = null;
+    try {
+      marker = sessionStorage.getItem(POST_SIGN_IN_RECOVERY_KEY);
+      if (marker) sessionStorage.removeItem(POST_SIGN_IN_RECOVERY_KEY);
+    } catch {
+      return;
+    }
+    if (!marker || session.data?.user) return;
+    if (Date.now() - Number(marker) > POST_SIGN_IN_RECOVERY_TTL_MS) return;
+    setFormError(t("auth.sessionNotStored"));
+  }, [session.data, session.isPending, t]);
 
   const socialProviders = [
     ...(providersQuery.data?.google ? ["google"] : []),
@@ -129,12 +180,21 @@ export function LoginPage() {
         }
       }
       setPassword("");
+      // Keep the form disabled: the session render branch (or the watchdog
+      // above) owns navigation from here.
+      setPostSignIn(true);
     } catch (error) {
       setFormError(errorMessage(error, t("auth.loginFailed")));
-    } finally {
       setIsSubmitting(false);
     }
   };
+
+  let submitLabel = t("auth.signIn");
+  if (isSubmitting) {
+    submitLabel = postSignIn
+      ? t("auth.confirmingSession")
+      : t("auth.signingIn");
+  }
 
   return (
     <AuthPageFrame title={t("auth.loginTitle")}>
@@ -203,7 +263,7 @@ export function LoginPage() {
           type="submit"
           variant="brand"
         >
-          {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
+          {submitLabel}
         </Button>
         {socialProviders.length > 0 && (
           <div className="flex flex-col gap-2 border-t pt-3">

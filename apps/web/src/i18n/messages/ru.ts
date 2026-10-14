@@ -491,6 +491,9 @@ const messages = {
   "auth.password": "Пароль",
   "auth.signIn": "Войти",
   "auth.signingIn": "Вход…",
+  "auth.confirmingSession": "Вы вошли, открываем ваше рабочее пространство…",
+  "auth.sessionNotStored":
+    "Вход выполнен, но браузер не сохранил сессию. Проверьте, не заблокированы ли файлы cookie этого сайта, и повторите попытку.",
   "auth.loginFailed":
     "Не удалось войти. Проверьте имя пользователя и пароль, затем повторите попытку.",
   "auth.statusUnavailable":

@@ -486,6 +486,9 @@ const messages = {
   "auth.password": "비밀번호",
   "auth.signIn": "로그인",
   "auth.signingIn": "로그인 중…",
+  "auth.confirmingSession": "로그인되었습니다. 작업 공간을 여는 중…",
+  "auth.sessionNotStored":
+    "로그인은 완료되었지만 브라우저가 로그인 상태를 저장하지 못했습니다. 이 사이트의 쿠키가 차단되어 있지 않은지 확인한 뒤 다시 시도해 주세요.",
   "auth.loginFailed":
     "로그인에 실패했습니다. 사용자 이름과 비밀번호를 확인하고 다시 시도해 주세요.",
   "auth.statusUnavailable":

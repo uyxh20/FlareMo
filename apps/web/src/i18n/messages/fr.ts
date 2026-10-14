@@ -499,6 +499,9 @@ const messages = {
   "auth.password": "Mot de passe",
   "auth.signIn": "Se connecter",
   "auth.signingIn": "Connexion…",
+  "auth.confirmingSession": "Connexion réussie, ouverture de votre espace…",
+  "auth.sessionNotStored":
+    "La connexion a réussi, mais le navigateur n'a pas conservé la session. Vérifiez que les cookies de ce site ne sont pas bloqués, puis réessayez.",
   "auth.loginFailed":
     "Échec de la connexion. Vérifiez votre nom d'utilisateur et votre mot de passe, puis réessayez.",
   "auth.statusUnavailable":
