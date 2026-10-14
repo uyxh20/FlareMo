@@ -107,7 +107,11 @@ node scripts/fork/prod-deploy.mjs deploy --confirm flaremo  # the real thing
 node scripts/fork/prod-deploy.mjs rollback --confirm flaremo
 ```
 
-`deploy` refuses unless HEAD equals `origin/main` and the tree is clean. Steps:
+`deploy` refuses unless HEAD equals `origin/main`, the tree is clean, and
+`migrations/` holds exactly the `.sql` files committed on `origin/main` (wrangler
+applies every file in that folder, tracked or not). It checks the folder again
+right before applying migrations. When it ends it deletes the generated root
+`wrangler.jsonc`, which points at live. Steps:
 rebuild the gitignored root `wrangler.jsonc` from `wrangler.jsonc.example` plus
 the live Worker's vars (checked to name only production resources) -> note the
 live version as the rollback target -> save a D1 Time Travel bookmark ->
@@ -121,9 +125,14 @@ are read from live D1, and var values are masked in wrangler output.
 Tests: `node --test scripts/fork/prod-deploy.test.mjs`.
 
 This script is the way to ship. The repo's `.claude/settings.json` makes a
-Claude session ask first before any raw live write (`wrangler deploy`,
-`wrangler versions deploy`, `wrangler rollback`, remote `d1 migrations apply`
-or `d1 execute`, `d1 time-travel restore`), because those skip every safeguard
-above. The script itself is not prompted: it carries its own `--confirm
+Claude session ask first before any raw live write, because those skip every
+safeguard above: any `wrangler … deploy` (also `wrangler.js` and other bin
+names), `versions upload`, `rollback`, `delete`, `secret`, remote `d1
+migrations apply`, `d1 execute` or `d1 export`, `d1 time-travel restore`,
+remote `r2 object` commands, `pnpm migrate:remote`, `pnpm deploy`, the worker
+package's `deploy`, the `cf` CLI, `curl` with `-X DELETE/PUT/PATCH` to
+`api.cloudflare.com`, and the Cloudflare connector's query, create, update and
+delete tools. A plain `POST` to the Cloudflare API is not matched (D1 reads use
+it too), so the deploy script stays the only sanctioned way to change live. The script itself is not prompted: it carries its own `--confirm
 flaremo`. `packages/domain/src/fork/guards.test.ts` fails if a later edit
 allows a raw live write again.

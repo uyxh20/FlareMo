@@ -8,6 +8,7 @@ import {
   compareCounts,
   pendingMigrations,
   redact,
+  strayMigrations,
 } from "./prod-deploy.mjs";
 
 const example = readFileSync(
@@ -37,6 +38,17 @@ describe("prod-deploy", () => {
       pendingMigrations(["b.sql", "a.sql", "c.sql"], ["a.sql"]),
       ["b.sql", "c.sql"],
     );
+  });
+
+  test("flags migration files that origin/main does not have", () => {
+    assert.deepEqual(
+      strayMigrations(
+        ["0001_a.sql", "9011_stray.sql", "0034_new.sql"],
+        ["0001_a.sql"],
+      ),
+      ["0034_new.sql", "9011_stray.sql"],
+    );
+    assert.deepEqual(strayMigrations(["0001_a.sql"], ["0001_a.sql"]), []);
   });
 
   test("row count drops are fatal except for ephemeral tables", () => {

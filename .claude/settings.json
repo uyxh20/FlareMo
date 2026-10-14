@@ -1,12 +1,41 @@
 {
   "permissions": {
     "ask": [
-      "Bash(*wrangler deploy*)",
-      "Bash(*wrangler versions deploy*)",
-      "Bash(*wrangler rollback*)",
-      "Bash(*wrangler d1 migrations apply*--remote*)",
-      "Bash(*wrangler d1 execute*--remote*)",
-      "Bash(*wrangler d1 time-travel restore*)"
+      "Bash(*wrangler* deploy*)",
+      "Bash(*wrangler* versions upload*)",
+      "Bash(*wrangler* rollback*)",
+      "Bash(*wrangler* delete*)",
+      "Bash(*wrangler* secret *)",
+      "Bash(*wrangler* d1 migrations apply*--remote*)",
+      "Bash(*wrangler* d1 execute*--remote*)",
+      "Bash(*wrangler* d1 export*--remote*)",
+      "Bash(*wrangler* d1 time-travel restore*)",
+      "Bash(*wrangler* r2 object*--remote*)",
+      "Bash(*migrate:remote*)",
+      "Bash(*pnpm deploy*)",
+      "Bash(*pnpm run deploy*)",
+      "Bash(*worker* deploy*)",
+      "Bash(cf *)",
+      "Bash(*pnpm cf *)",
+      "Bash(*pnpm exec cf *)",
+      "Bash(*npx cf *)",
+      "Bash(*node_modules/.bin/cf *)",
+      "Bash(*api.cloudflare.com*-X DELETE*)",
+      "Bash(*-X DELETE*api.cloudflare.com*)",
+      "Bash(*api.cloudflare.com*-X PUT*)",
+      "Bash(*-X PUT*api.cloudflare.com*)",
+      "Bash(*api.cloudflare.com*-X PATCH*)",
+      "Bash(*-X PATCH*api.cloudflare.com*)",
+      "mcp__Cloudflare_Developer_Platform__d1_database_query",
+      "mcp__Cloudflare_Developer_Platform__d1_database_create",
+      "mcp__Cloudflare_Developer_Platform__d1_database_delete",
+      "mcp__Cloudflare_Developer_Platform__r2_bucket_create",
+      "mcp__Cloudflare_Developer_Platform__r2_bucket_delete",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_create",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_delete",
+      "mcp__Cloudflare_Developer_Platform__kv_namespace_update",
+      "mcp__Cloudflare_Developer_Platform__hyperdrive_config_edit",
+      "mcp__Cloudflare_Developer_Platform__hyperdrive_config_delete"
     ]
   }
 }

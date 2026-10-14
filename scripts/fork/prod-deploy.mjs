@@ -17,7 +17,13 @@
 // never diary, memory or task text. Secrets and var values are never printed.
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -81,6 +87,16 @@ export function assertProdConfig(config) {
 }
 
 /** Local migration files that live has not applied yet, in order. */
+/**
+ * Migration files on disk that are not committed on origin/main. wrangler
+ * applies every .sql file in migrations/, tracked or not, so any stray file
+ * here would go to live with no review. Returns the offending names.
+ */
+export function strayMigrations(localFiles, trackedFiles) {
+  const tracked = new Set(trackedFiles);
+  return localFiles.filter((name) => !tracked.has(name)).sort();
+}
+
 export function pendingMigrations(localFiles, appliedNames) {
   const applied = new Set(appliedNames);
   return localFiles.filter((name) => !applied.has(name)).sort();
@@ -223,6 +239,25 @@ function localMigrations() {
   );
 }
 
+/** .sql names committed under migrations/ on origin/main. */
+function trackedMigrations() {
+  return git("ls-tree", "--name-only", "origin/main", "migrations/")
+    .split("\n")
+    .map((path) => path.replace(/^migrations\//, ""))
+    .filter((name) => name.endsWith(".sql"));
+}
+
+/** Refuse when migrations/ holds anything origin/main does not. */
+function assertMigrationsMatchMain() {
+  const stray = strayMigrations(localMigrations(), trackedMigrations());
+  const changed = git("status", "--porcelain", "--", "migrations");
+  if (stray.length > 0 || changed !== "") {
+    throw new Error(
+      `migrations/ differs from origin/main (${[...stray, changed].filter(Boolean).join("; ")}). wrangler would apply it to live; remove or commit it first.`,
+    );
+  }
+}
+
 function wranglerBin() {
   const require = createRequire(import.meta.url);
   const pkgPath = require.resolve("wrangler/package.json");
@@ -323,7 +358,23 @@ async function status(ctx) {
   );
 }
 
-async function deploy(ctx, { dryRun }) {
+/**
+ * The generated root wrangler.jsonc points at production. Left behind, any
+ * later `pnpm migrate:remote` or raw `wrangler deploy` would hit live without
+ * this script's safeguards, so a deploy run always removes it when it ends.
+ */
+async function deploy(ctx, options) {
+  try {
+    await shipToLive(ctx, options);
+  } finally {
+    if (existsSync(CONFIG_PATH)) {
+      rmSync(CONFIG_PATH);
+      say("Removed the generated wrangler.jsonc (it points at live).");
+    }
+  }
+}
+
+async function shipToLive(ctx, { dryRun }) {
   const branch = git("rev-parse", "--abbrev-ref", "HEAD");
   const head = git("rev-parse", "--short", "HEAD");
   if (git("status", "--porcelain", "--untracked-files=no") !== "") {
@@ -337,6 +388,7 @@ async function deploy(ctx, { dryRun }) {
       "HEAD is not the same commit as origin/main; refusing to ship it.",
     );
   }
+  assertMigrationsMatchMain();
   say(
     `Shipping ${head} (${branch}) ${dryRun ? "[dry run: nothing will change]" : ""}`,
   );
@@ -392,6 +444,8 @@ async function deploy(ctx, { dryRun }) {
   }
 
   assertProdConfig(config);
+  // The build takes minutes; check again right before anything is applied.
+  assertMigrationsMatchMain();
   try {
     if (pending.length > 0) {
       wrangler(
