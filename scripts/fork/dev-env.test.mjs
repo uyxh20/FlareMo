@@ -1617,8 +1617,11 @@ describe("command line", () => {
     assert.equal(main(["bogus"]), 2);
     assert.equal(main(["clone", "--nope"]), 2);
     assert.match(err.join("\n"), /Unknown command "bogus"/);
-    // No state, no id: clone fails before any wrangler call.
-    const exec = () => assert.fail("wrangler must not run");
+    // No state, no id, no dev D1: clone only lists databases, then stops.
+    const exec = (argv) => {
+      assert.deepEqual(argv.slice(0, 2), ["d1", "list"]);
+      return { status: 0, stdout: "[]", stderr: "" };
+    };
     assert.equal(
       main(["clone"], {
         env: {},
@@ -2434,7 +2437,25 @@ e2e("dev environment against a fake Cloudflare", () => {
     const h = harness(t);
     seedProduction(h.fake);
     assert.throws(() => h.devEnv.clone({}), /run provision first/);
-    assert.equal(h.fake.calls.length, 0);
+    assert.deepEqual(
+      h.fake.calls.map((call) => call.argv.slice(0, 2).join(" ")),
+      ["d1 list"],
+      "only the read-only lookup ran",
+    );
+  });
+
+  test("clone and deploy find the dev D1 by name when the saved id is gone", (t) => {
+    const h = harness(t);
+    seedProduction(h.fake);
+    h.devEnv.provision({ skipSecrets: true });
+    const id = h.fake.databases.get(DEV.d1Name).id;
+    rmSync(h.devEnv.paths.state, { force: true });
+    h.devEnv.clone({ dryRun: true });
+    assert.equal(h.devEnv.readState().d1Id, id);
+    rmSync(h.devEnv.paths.state, { force: true });
+    h.devEnv.deploy({ skipBuild: true });
+    assert.equal(h.devEnv.readState().d1Id, id);
+    assert.equal(h.fake.workers.get("flaremo-dev").deployed, true);
   });
 
   test("clone stops when production is ahead of this checkout", (t) => {
@@ -2903,6 +2924,31 @@ e2e("dev environment against a fake Cloudflare", () => {
     assert.throws(
       () => unprovisioned.devEnv.deploy({ skipBuild: true, d1Id: DEV_D1_ID }),
       /does not exist: run provision first/,
+    );
+  });
+
+  test("the dev config turns embedding off unless asked for", (t) => {
+    const h = harness(t);
+    h.devEnv.writeConfig(h.devEnv.resolveSettings({ d1Id: DEV_D1_ID }));
+    const vars = () =>
+      parseConfigText(readFileSync(h.devEnv.paths.devConfig, "utf8")).vars;
+    assert.equal(vars().FLAREMO_EMBEDDING_PROVIDER, "none");
+    const opted = harness(t, {
+      env: { FLAREMO_DEV_EMBEDDING_PROVIDER: "workers-ai" },
+    });
+    opted.devEnv.writeConfig(opted.devEnv.resolveSettings({ d1Id: DEV_D1_ID }));
+    assert.equal(
+      parseConfigText(readFileSync(opted.devEnv.paths.devConfig, "utf8")).vars
+        .FLAREMO_EMBEDDING_PROVIDER,
+      "workers-ai",
+    );
+    const wrong = harness(t, { env: { FLAREMO_DEV_EMBEDDING_PROVIDER: "x" } });
+    assert.throws(
+      () =>
+        wrong.devEnv.writeConfig(
+          wrong.devEnv.resolveSettings({ d1Id: DEV_D1_ID }),
+        ),
+      /Unknown embedding provider/,
     );
   });
 

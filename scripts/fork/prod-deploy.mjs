@@ -7,19 +7,32 @@
 //   node scripts/fork/prod-deploy.mjs status                  read-only: live version, counts, pending migrations
 //   node scripts/fork/prod-deploy.mjs deploy --dry-run        everything up to (not including) any write
 //   node scripts/fork/prod-deploy.mjs deploy --confirm flaremo   the real thing
-//   node scripts/fork/prod-deploy.mjs rollback --confirm flaremo put the previous Worker version back
+//   node scripts/fork/prod-deploy.mjs rollback --confirm flaremo put the previous healthy deployment back
+//                                     [--version <id>]          or a chosen version
 //
-// Deploy steps: regenerate config from wrangler.jsonc.example + the live
+// Deploy steps: check the checkout (clean, equal to origin/main, no stray
+// migration files) -> regenerate config from wrangler.jsonc.example + the live
 // Worker's vars -> note the current version (rollback target) -> Time Travel
-// bookmark -> baseline row counts -> build -> apply pending migrations ->
-// deploy (--keep-vars) -> re-check counts and the site -> roll the Worker back
-// automatically if anything is off. Only COUNT(*) is ever read from live D1,
-// never diary, memory or task text. Secrets and var values are never printed.
+// bookmark -> build the web app and the Worker bundle -> baseline row counts ->
+// apply pending migrations -> re-count -> deploy (--keep-vars) -> re-check
+// counts and the site (including one route that reads D1) -> roll the Worker
+// back automatically if anything is off. Only COUNT(*) is ever read from live
+// D1, never diary, memory or task text. Secrets and var values are never
+// printed. The root wrangler.jsonc it writes is put back the way it was at the
+// end, so it never stays behind pointing at live.
 
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { parseConfigText } from "./dev-env-config.mjs";
@@ -30,9 +43,27 @@ const CONFIG_PATH = join(ROOT, "wrangler.jsonc");
 const API = "https://api.cloudflare.com/client/v4";
 
 // Tables whose row count may legitimately drop between two reads (expiry
-// sweeps, queues, caches). A drop is reported but does not trigger rollback.
-const EPHEMERAL_TABLE =
-  /session|verification|token|rate|queue|job|outbox|cache|lock|nonce/i;
+// sweeps, queues, derived counters). A drop is reported but does not trigger
+// a rollback. Every other table, including any new one, is guarded.
+const EPHEMERAL_TABLES = new Set([
+  "auth_sessions",
+  "auth_verifications",
+  "data_tasks",
+  "embedding_tasks",
+  "member_removal_jobs",
+  "memo_hourly_counts",
+  "memos_sse_events",
+  "memos_webhook_deliveries",
+  "memos_webhook_events",
+  "push_subscriptions",
+  "usage_counters",
+]);
+
+// Paths checked after a deploy. /feed.xml runs the Worker and reads D1, so a
+// Worker that fails on every query cannot pass.
+const SMOKE_PATHS = ["/", "/openapi.json", "/feed.xml"];
+
+const ROLLED_BACK_FROM = /prod-deploy: rolled back from (\S+)/;
 
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested)
@@ -86,6 +117,15 @@ export function pendingMigrations(localFiles, appliedNames) {
   return localFiles.filter((name) => !applied.has(name)).sort();
 }
 
+/**
+ * Migration files on disk that are not committed. wrangler applies every .sql
+ * in migrations/, tracked or not, so one of these would reach live unreviewed.
+ */
+export function strayMigrations(localFiles, trackedFiles) {
+  const tracked = new Set(trackedFiles.map((file) => basename(file)));
+  return localFiles.filter((name) => !tracked.has(name)).sort();
+}
+
 /** Compare row counts. `fatal` means roll back; `notes` are just reported. */
 export function compareCounts(before, after) {
   const fatal = [];
@@ -96,7 +136,7 @@ export function compareCounts(before, after) {
       fatal.push(`${table}: table disappeared (was ${was})`);
     } else if (now < was) {
       const line = `${table}: ${was} -> ${now}`;
-      (EPHEMERAL_TABLE.test(table) ? notes : fatal).push(line);
+      (EPHEMERAL_TABLES.has(table) ? notes : fatal).push(line);
     }
   }
   for (const table of Object.keys(after)) {
@@ -117,6 +157,77 @@ export function redact(text, secretValues) {
   return out;
 }
 
+const VAR_BINDING_TYPES = new Set(["plain_text", "secret_text", "json"]);
+
+/** Binding names a wrangler config declares, vars excluded. */
+function configBindingNames(config) {
+  const names = new Set();
+  for (const [key, value] of Object.entries(config)) {
+    if (key === "vars" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const entries = Array.isArray(value)
+      ? value
+      : key === "queues"
+        ? (value.producers ?? [])
+        : key === "durable_objects"
+          ? (value.bindings ?? [])
+          : [value];
+    for (const entry of entries) {
+      const name = entry?.binding ?? entry?.name;
+      if (typeof name === "string") names.add(name);
+    }
+  }
+  return names;
+}
+
+/**
+ * What a deploy of `config` would change in live's bindings. `unknown`: live
+ * bindings (not vars or secrets) the config lacks, which wrangler would remove.
+ * `restored`: vars the config sets that live does not have, which come back
+ * with the example's default.
+ */
+export function bindingDrift(liveBindings, config) {
+  const declared = configBindingNames(config);
+  const liveNames = new Set(liveBindings.map((binding) => binding.name));
+  const unknown = liveBindings
+    .filter((binding) => !VAR_BINDING_TYPES.has(binding.type))
+    .filter((binding) => binding.name && !declared.has(binding.name))
+    .map((binding) => `${binding.name} (${binding.type})`)
+    .sort();
+  const restored = Object.keys(config.vars ?? {})
+    .filter((name) => !liveNames.has(name))
+    .sort();
+  return { unknown, restored };
+}
+
+/**
+ * The version a manual rollback should restore: the newest earlier deployment
+ * at 100% that is not the live version and that prod-deploy did not already
+ * roll back from (a version that failed its checks).
+ */
+export function previousDeployment(deployments, currentId) {
+  const sorted = [...deployments].sort((a, b) =>
+    String(b.created_on).localeCompare(String(a.created_on)),
+  );
+  const failed = new Set();
+  for (const deployment of sorted) {
+    const message = deployment.annotations?.["workers/message"] ?? "";
+    const match = ROLLED_BACK_FROM.exec(message);
+    if (match) failed.add(match[1]);
+  }
+  for (const deployment of sorted) {
+    const only =
+      deployment.versions?.length === 1 &&
+      deployment.versions[0].percentage === 100
+        ? deployment.versions[0].version_id
+        : null;
+    if (!only || only === currentId || failed.has(only)) continue;
+    return { versionId: only, createdOn: deployment.created_on };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Cloudflare + wrangler plumbing
 // ---------------------------------------------------------------------------
@@ -133,94 +244,6 @@ function context() {
     process.env.CLOUDFLARE_API ||
     "proxy-injected";
   return { accountId, token };
-}
-
-async function cf(ctx, path, { method = "GET", body } = {}) {
-  const response = await fetch(`${API}/accounts/${ctx.accountId}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${ctx.token}`,
-      "content-type": "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok || json.success === false) {
-    const reason = (json.errors ?? []).map((e) => e.message).join("; ");
-    throw new Error(
-      `Cloudflare ${method} ${path} failed (${response.status}) ${reason}`,
-    );
-  }
-  return json.result;
-}
-
-const d1 = (ctx, sql) =>
-  cf(ctx, `/d1/database/${PROD.d1Id}/query`, {
-    method: "POST",
-    body: { sql },
-  }).then((results) => results[0]?.results ?? []);
-
-async function liveWorker(ctx) {
-  const settings = await cf(
-    ctx,
-    `/workers/scripts/${PROD.workerName}/settings`,
-  );
-  const vars = {};
-  for (const binding of settings.bindings ?? []) {
-    if (binding.type === "plain_text") vars[binding.name] = binding.text;
-  }
-  return { vars };
-}
-
-async function currentVersion(ctx) {
-  const { deployments } = await cf(
-    ctx,
-    `/workers/scripts/${PROD.workerName}/deployments`,
-  );
-  const top = deployments?.[0];
-  const id = top?.versions?.[0]?.version_id;
-  if (!id || top.versions.length !== 1 || top.versions[0].percentage !== 100) {
-    throw new Error(
-      "Live Worker is not on a single 100% version; refusing to continue.",
-    );
-  }
-  const { items } = await cf(
-    ctx,
-    `/workers/scripts/${PROD.workerName}/versions`,
-  );
-  const number = items?.find((item) => item.id === id)?.number;
-  return { id, number };
-}
-
-async function rowCounts(ctx) {
-  const tables = await d1(
-    ctx,
-    "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
-  );
-  const virtual = tables
-    .filter((t) => /VIRTUAL TABLE/i.test(t.sql ?? ""))
-    .map((t) => t.name);
-  const counts = {};
-  for (const { name } of tables) {
-    if (virtual.some((v) => name === v || name.startsWith(`${v}_`))) continue;
-    const [row] = await d1(
-      ctx,
-      `SELECT COUNT(*) AS n FROM "${name.replaceAll('"', '""')}"`,
-    );
-    counts[name] = row.n;
-  }
-  return counts;
-}
-
-async function appliedMigrations(ctx) {
-  const rows = await d1(ctx, "SELECT name FROM d1_migrations ORDER BY id");
-  return rows.map((row) => row.name);
-}
-
-function localMigrations() {
-  return readdirSync(join(ROOT, "migrations")).filter((f) =>
-    f.endsWith(".sql"),
-  );
 }
 
 function wranglerBin() {
@@ -251,150 +274,296 @@ function run(command, args, { cwd = ROOT, secretValues = [] } = {}) {
   return output;
 }
 
-const wrangler = (args, options) =>
-  run(process.execPath, [wranglerBin(), ...args], options);
+/** The real side effects. Tests pass their own object with the same shape. */
+export function realIo() {
+  const ctx = context();
+  return {
+    async cf(path, { method = "GET", body } = {}) {
+      const response = await fetch(`${API}/accounts/${ctx.accountId}${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${ctx.token}`,
+          "content-type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || json.success === false) {
+        const reason = (json.errors ?? []).map((e) => e.message).join("; ");
+        throw new Error(
+          `Cloudflare ${method} ${path} failed (${response.status}) ${reason}`,
+        );
+      }
+      return json.result;
+    },
+    run: (command, args, options) => run(command, args, options),
+    wrangler: (args, options) =>
+      run(process.execPath, [wranglerBin(), ...args], options),
+    fetch: (url, init) => fetch(url, init),
+    sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+    say: (line = "") => console.log(line),
+    localMigrations: () =>
+      readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql")),
+    readExample: () =>
+      readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8"),
+    readRootConfig: () =>
+      existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : null,
+    writeRootConfig: (text) =>
+      writeFileSync(CONFIG_PATH, text, { mode: 0o600 }),
+    removeRootConfig: () => rmSync(CONFIG_PATH, { force: true }),
+    makeTempDir: () => mkdtempSync(join(tmpdir(), "prod-deploy-bundle-")),
+    removeDir: (dir) => rmSync(dir, { recursive: true, force: true }),
+  };
+}
 
-async function writeConfig(ctx) {
-  const { vars } = await liveWorker(ctx);
-  const example = readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8");
-  const config = buildProdConfig(example, vars);
+const d1 = (io, sql) =>
+  io
+    .cf(`/d1/database/${PROD.d1Id}/query`, { method: "POST", body: { sql } })
+    .then((results) => results[0]?.results ?? []);
+
+async function currentVersion(io) {
+  const { deployments } = await io.cf(
+    `/workers/scripts/${PROD.workerName}/deployments`,
+  );
+  const top = deployments?.[0];
+  const id = top?.versions?.[0]?.version_id;
+  if (!id || top.versions.length !== 1 || top.versions[0].percentage !== 100) {
+    throw new Error(
+      "Live Worker is not on a single 100% version; refusing to continue.",
+    );
+  }
+  const { items } = await io.cf(`/workers/scripts/${PROD.workerName}/versions`);
+  const number = items?.find((item) => item.id === id)?.number;
+  return { id, number };
+}
+
+async function rowCounts(io) {
+  const tables = await d1(
+    io,
+    "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+  );
+  const virtual = tables
+    .filter((t) => /VIRTUAL TABLE/i.test(t.sql ?? ""))
+    .map((t) => t.name);
+  const counts = {};
+  for (const { name } of tables) {
+    if (virtual.some((v) => name === v || name.startsWith(`${v}_`))) continue;
+    const [row] = await d1(
+      io,
+      `SELECT COUNT(*) AS n FROM "${name.replaceAll('"', '""')}"`,
+    );
+    counts[name] = row.n;
+  }
+  return counts;
+}
+
+async function appliedMigrations(io) {
+  const rows = await d1(io, "SELECT name FROM d1_migrations ORDER BY id");
+  return rows.map((row) => row.name);
+}
+
+async function writeConfig(io) {
+  const settings = await io.cf(`/workers/scripts/${PROD.workerName}/settings`);
+  const bindings = settings.bindings ?? [];
+  const vars = {};
+  for (const binding of bindings) {
+    if (binding.type === "plain_text") vars[binding.name] = binding.text;
+  }
+  const config = buildProdConfig(io.readExample(), vars);
   assertProdConfig(config);
-  writeFileSync(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  return { config, secretValues: Object.values(vars) };
+  io.writeRootConfig(`${JSON.stringify(config, null, 2)}\n`);
+  return {
+    config,
+    secretValues: Object.values(vars),
+    drift: bindingDrift(bindings, config),
+  };
 }
 
-function git(...args) {
-  return run("git", args).trim();
+/** Run `fn` with the root wrangler.jsonc, then put the old one back. */
+async function withRootConfig(io, fn) {
+  const saved = io.readRootConfig();
+  try {
+    return await fn();
+  } finally {
+    // A file left by an older run of this script points at live: drop it.
+    if (saved === null || saved.includes(PROD.d1Id)) io.removeRootConfig();
+    else io.writeRootConfig(saved);
+  }
 }
 
-async function smokeCheck() {
-  const results = [];
-  for (const path of ["/", "/openapi.json"]) {
-    const response = await fetch(`${PROD.publicUrl}${path}`, {
-      redirect: "manual",
-    });
-    results.push({ path, status: response.status });
+const git = (io, ...args) => io.run("git", args).trim();
+
+async function smokeCheck(io, { attempts = 4, delayMs = 5000 } = {}) {
+  let results = [];
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    results = [];
+    for (const path of SMOKE_PATHS) {
+      try {
+        const response = await io.fetch(`${PROD.publicUrl}${path}`, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(10000),
+        });
+        results.push({ path, status: response.status });
+      } catch (error) {
+        results.push({ path, status: 0, error: error.message });
+      }
+    }
+    if (results.every((r) => r.status > 0 && r.status < 400)) return results;
+    if (attempt < attempts) await io.sleep(delayMs);
   }
   return results;
 }
 
-const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
-
-async function rollbackTo(ctx, versionId) {
-  await cf(ctx, `/workers/scripts/${PROD.workerName}/deployments`, {
-    method: "POST",
-    body: {
-      strategy: "percentage",
-      versions: [{ version_id: versionId, percentage: 100 }],
-    },
-  });
+async function rollbackTo(io, versionId, fromId) {
+  const path = `/workers/scripts/${PROD.workerName}/deployments`;
+  const body = {
+    strategy: "percentage",
+    versions: [{ version_id: versionId, percentage: 100 }],
+  };
+  const message = fromId
+    ? `prod-deploy: rolled back from ${fromId}`
+    : "prod-deploy: rollback";
+  try {
+    await io.cf(path, {
+      method: "POST",
+      body: { ...body, annotations: { "workers/message": message } },
+    });
+  } catch {
+    // The note only helps a later manual rollback skip a failed version;
+    // never let it stand in the way of the rollback itself.
+    await io.cf(path, { method: "POST", body });
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
-function say(line = "") {
-  console.log(line);
-}
-
 function total(counts) {
   return Object.values(counts).reduce((sum, n) => sum + n, 0);
 }
 
-async function status(ctx) {
-  const version = await currentVersion(ctx);
-  const counts = await rowCounts(ctx);
+export async function status(io) {
+  const version = await currentVersion(io);
+  const counts = await rowCounts(io);
   const pending = pendingMigrations(
-    localMigrations(),
-    await appliedMigrations(ctx),
+    io.localMigrations(),
+    await appliedMigrations(io),
   );
-  say(`Live Worker version: #${version.number ?? "?"} (${version.id})`);
-  say(
-    `Local checkout: ${git("rev-parse", "--short", "HEAD")} ${git("log", "-1", "--format=%s")}`,
+  io.say(`Live Worker version: #${version.number ?? "?"} (${version.id})`);
+  io.say(
+    `Local checkout: ${git(io, "rev-parse", "--short", "HEAD")} ${git(io, "log", "-1", "--format=%s")}`,
   );
-  say(
+  io.say(
     `Live tables: ${Object.keys(counts).length}, rows in total: ${total(counts)}`,
   );
-  say(
+  io.say(
     `Pending migrations: ${pending.length === 0 ? "none" : pending.join(", ")}`,
   );
 }
 
-async function deploy(ctx, { dryRun }) {
-  const branch = git("rev-parse", "--abbrev-ref", "HEAD");
-  const head = git("rev-parse", "--short", "HEAD");
-  if (git("status", "--porcelain", "--untracked-files=no") !== "") {
+/** Refuse a checkout that is not exactly origin/main, committed. */
+function checkCheckout(io) {
+  if (git(io, "status", "--porcelain", "--untracked-files=no") !== "") {
     throw new Error(
       "Working tree has uncommitted changes; commit or stash first.",
     );
   }
-  git("fetch", "origin", "main");
-  if (git("rev-parse", "HEAD") !== git("rev-parse", "origin/main")) {
+  git(io, "fetch", "origin", "main");
+  if (git(io, "rev-parse", "HEAD") !== git(io, "rev-parse", "origin/main")) {
     throw new Error(
       "HEAD is not the same commit as origin/main; refusing to ship it.",
     );
   }
-  say(
-    `Shipping ${head} (${branch}) ${dryRun ? "[dry run: nothing will change]" : ""}`,
-  );
+  const tracked = git(io, "ls-tree", "--name-only", "HEAD", "migrations/")
+    .split("\n")
+    .filter(Boolean);
+  const stray = strayMigrations(io.localMigrations(), tracked);
+  if (stray.length > 0) {
+    throw new Error(
+      `migrations/ holds files that are not committed on main: ${stray.join(", ")}. They would be applied to live; move or delete them first.`,
+    );
+  }
+}
 
-  const { config, secretValues } = await writeConfig(ctx);
-  say(
-    "1/8 Config rebuilt from the example + live settings (matches production).",
-  );
+/** Returns true when live ended on the new version with every check passed. */
+export async function deploy(io, { dryRun }) {
+  checkCheckout(io);
+  const head = git(io, "rev-parse", "--short", "HEAD");
+  io.say(`Shipping ${head} ${dryRun ? "[dry run: nothing will change]" : ""}`);
+  return withRootConfig(io, () => deploySteps(io, { dryRun }));
+}
 
-  const rollbackTarget = await currentVersion(ctx);
+async function deploySteps(io, { dryRun }) {
+  const say = io.say;
+  const { config, secretValues, drift } = await writeConfig(io);
+  if (drift.unknown.length > 0) {
+    throw new Error(
+      `Live has bindings that wrangler.jsonc.example lacks, and a deploy would remove them: ${drift.unknown.join(", ")}. Add them to the example first.`,
+    );
+  }
   say(
-    `2/8 Rollback target: version #${rollbackTarget.number ?? "?"} (${rollbackTarget.id})`,
+    "1/9 Config rebuilt from the example + live settings (matches production).",
+  );
+  if (drift.restored.length > 0) {
+    say(
+      `    note: vars live does not set will take the example's default: ${drift.restored.join(", ")}`,
+    );
+  }
+
+  const rollbackTarget = await currentVersion(io);
+  say(
+    `2/9 Rollback target: version #${rollbackTarget.number ?? "?"} (${rollbackTarget.id})`,
   );
 
   const bookmark = (
-    await cf(ctx, `/d1/database/${PROD.d1Id}/time_travel/bookmark`)
+    await io.cf(`/d1/database/${PROD.d1Id}/time_travel/bookmark`)
   ).bookmark;
-  say(`3/8 Time Travel bookmark saved: ${bookmark}`);
+  say(`3/9 Time Travel bookmark saved: ${bookmark}`);
 
-  const before = await rowCounts(ctx);
-  say(
-    `4/8 Baseline: ${Object.keys(before).length} tables, ${total(before)} rows.`,
-  );
-
-  const pending = pendingMigrations(
-    localMigrations(),
-    await appliedMigrations(ctx),
-  );
-  say(
-    `    Pending migrations: ${pending.length === 0 ? "none" : pending.join(", ")}`,
-  );
-
-  run("pnpm", ["--filter", "@flaremo/web", "build"]);
-  say("5/8 Web app built.");
-
-  if (dryRun) {
-    wrangler(
+  // Build everything before any write, so a build error can never leave live
+  // half-upgraded (new tables, old code).
+  io.run("pnpm", ["--filter", "@flaremo/web", "build"]);
+  const bundleDir = io.makeTempDir();
+  try {
+    io.wrangler(
       [
         "deploy",
         "--dry-run",
+        "--outdir",
+        bundleDir,
         "--config",
         "../../wrangler.jsonc",
         "--keep-vars",
       ],
-      {
-        cwd: join(ROOT, "apps/worker"),
-        secretValues,
-      },
+      { cwd: join(ROOT, "apps/worker"), secretValues },
     );
-    say("    Worker bundle builds cleanly (wrangler dry run).");
+  } finally {
+    io.removeDir(bundleDir);
+  }
+  say("4/9 Web app and Worker bundle built.");
+
+  const pending = pendingMigrations(
+    io.localMigrations(),
+    await appliedMigrations(io),
+  );
+  // Taken as late as possible, so normal diary use during the build cannot
+  // make the comparison cry wolf.
+  const before = await rowCounts(io);
+  say(
+    `5/9 Baseline: ${Object.keys(before).length} tables, ${total(before)} rows. Pending migrations: ${pending.length === 0 ? "none" : pending.join(", ")}`,
+  );
+
+  if (dryRun) {
     say("Dry run finished. Nothing on live was changed.");
-    return;
+    return true;
   }
 
   assertProdConfig(config);
+  let migrated = false;
   try {
     if (pending.length > 0) {
-      wrangler(
+      io.wrangler(
         [
           "d1",
           "migrations",
@@ -404,72 +573,131 @@ async function deploy(ctx, { dryRun }) {
           "--config",
           CONFIG_PATH,
         ],
-        {
-          secretValues,
-        },
+        { secretValues },
       );
-      say(`6/8 Applied ${pending.length} migration(s).`);
+      migrated = true;
+      const afterMigrations = await rowCounts(io);
+      const { fatal } = compareCounts(before, afterMigrations);
+      if (fatal.length > 0) {
+        throw new Error(
+          `rows dropped during the migrations, so the Worker was not deployed: ${fatal.join("; ")}`,
+        );
+      }
+      say(`6/9 Applied ${pending.length} migration(s); row counts held.`);
     } else {
-      say("6/8 No migrations to apply.");
+      say("6/9 No migrations to apply.");
     }
 
-    wrangler(["deploy", "--config", "../../wrangler.jsonc", "--keep-vars"], {
+    io.wrangler(["deploy", "--config", "../../wrangler.jsonc", "--keep-vars"], {
       cwd: join(ROOT, "apps/worker"),
       secretValues,
     });
-    const after = await currentVersion(ctx);
+    const after = await currentVersion(io);
     if (after.id === rollbackTarget.id) {
       throw new Error("Deploy finished but the live version did not change.");
     }
-    say(`7/8 Deployed: version #${after.number ?? "?"} (${after.id}).`);
+    say(`7/9 Deployed: version #${after.number ?? "?"} (${after.id}).`);
 
-    await sleep(5000);
-    const afterCounts = await rowCounts(ctx);
+    await io.sleep(5000);
+    const afterCounts = await rowCounts(io);
     const { fatal, notes } = compareCounts(before, afterCounts);
-    const smoke = await smokeCheck();
-    const badSmoke = smoke.filter((s) => s.status >= 400);
-    if (fatal.length > 0 || badSmoke.length > 0) {
+    if (fatal.length > 0) {
       throw new Error(
-        [
-          ...fatal.map((line) => `row count dropped: ${line}`),
-          ...badSmoke.map((s) => `${s.path} answered ${s.status}`),
-        ].join("; "),
+        fatal.map((line) => `row count dropped: ${line}`).join("; "),
       );
     }
     say(
-      `8/8 Checks passed: ${Object.keys(afterCounts).length} tables, ${total(afterCounts)} rows (was ${total(before)}); site answers.`,
+      `8/9 Row counts held: ${Object.keys(afterCounts).length} tables, ${total(afterCounts)} rows (was ${total(before)}).`,
     );
     for (const note of notes) say(`    note: ${note}`);
+
+    const smoke = await smokeCheck(io);
+    const bad = smoke.filter((s) => s.status === 0 || s.status >= 400);
+    if (bad.length > 0) {
+      throw new Error(
+        bad
+          .map(
+            (s) =>
+              `${s.path} ${s.status ? `answered ${s.status}` : `failed: ${s.error}`}`,
+          )
+          .join("; "),
+      );
+    }
+    say(`9/9 Site answers, including ${SMOKE_PATHS.at(-1)}, which reads D1.`);
     say("");
     say(
       `Done. Live is on version #${after.number ?? "?"}. Previous version #${rollbackTarget.number ?? "?"} can be restored with: node scripts/fork/prod-deploy.mjs rollback --confirm flaremo`,
     );
+    return true;
   } catch (error) {
     say(`PROBLEM: ${error.message}`);
-    say(
-      `Rolling the Worker back to version #${rollbackTarget.number ?? "?"} ...`,
-    );
-    await rollbackTo(ctx, rollbackTarget.id);
-    say("Worker rolled back. No data was restored automatically.");
-    say(
-      `If a migration ran and the data needs undoing, use the Time Travel bookmark ${bookmark} (wrangler d1 time-travel restore flaremo --bookmark=...), after checking with Anon.`,
-    );
-    process.exitCode = 1;
+    await recover(io, { rollbackTarget, bookmark, migrated, pending });
+    return false;
   }
 }
 
-async function rollback(ctx) {
-  const { items } = await cf(
-    ctx,
-    `/workers/scripts/${PROD.workerName}/versions`,
-  );
-  const current = await currentVersion(ctx);
-  const index = items.findIndex((item) => item.id === current.id);
-  const previous = items[index + 1];
-  if (!previous) throw new Error("No earlier version to roll back to.");
-  await rollbackTo(ctx, previous.id);
+/** Put the Worker back after a failed deploy and say exactly where live is. */
+async function recover(io, { rollbackTarget, bookmark, migrated, pending }) {
+  const say = io.say;
+  const target = `#${rollbackTarget.number ?? "?"} (${rollbackTarget.id})`;
+  let live = null;
+  try {
+    live = await currentVersion(io);
+  } catch {
+    // Unknown: roll back anyway.
+  }
+  if (live?.id === rollbackTarget.id) {
+    say(`The Worker was not changed: live is still on version ${target}.`);
+  } else {
+    say(`Rolling the Worker back to version ${target} ...`);
+    try {
+      await rollbackTo(io, rollbackTarget.id, live?.id);
+      say("Worker rolled back.");
+    } catch (error) {
+      say(`ROLLBACK FAILED: ${error.message}`);
+      say(
+        `Live is on the NEW, unchecked version${live ? ` #${live.number ?? "?"} (${live.id})` : ""}. Roll it back by hand now: node scripts/fork/prod-deploy.mjs rollback --confirm flaremo --version ${rollbackTarget.id}, or the Worker's Deployments page in the Cloudflare dashboard.`,
+      );
+    }
+  }
+  if (migrated) {
+    say(
+      `The database schema is NOT rolled back: ${pending.length} migration(s) stay applied (${pending.join(", ")}). Migrations only add, so the old Worker keeps working on the new tables.`,
+    );
+  }
   say(
-    `Live Worker is back on version #${previous.number} (${previous.id}). Data was not touched.`,
+    `No data was restored automatically. If data needs undoing, Time Travel bookmark ${bookmark} restores the whole database to before this deploy (wrangler d1 time-travel restore flaremo --bookmark=...), only after checking with Anon.`,
+  );
+}
+
+export async function rollback(io, { version } = {}) {
+  const current = await currentVersion(io);
+  const { items } = await io.cf(`/workers/scripts/${PROD.workerName}/versions`);
+  let targetId = version;
+  if (!targetId) {
+    const { deployments } = await io.cf(
+      `/workers/scripts/${PROD.workerName}/deployments`,
+    );
+    targetId = previousDeployment(deployments ?? [], current.id)?.versionId;
+    if (!targetId) {
+      throw new Error(
+        "No earlier healthy deployment found; pass --version <id> to choose one.",
+      );
+    }
+  }
+  if (targetId === current.id) {
+    throw new Error(`Version ${targetId} is already live.`);
+  }
+  const target = items?.find((item) => item.id === targetId);
+  if (version && !target) {
+    throw new Error(`Version ${version} is not one of the Worker's versions.`);
+  }
+  io.say(
+    `Rolling back from #${current.number ?? "?"} (${current.id}) to #${target?.number ?? "?"} (${targetId}).`,
+  );
+  await rollbackTo(io, targetId, current.id);
+  io.say(
+    `Live Worker is back on version #${target?.number ?? "?"} (${targetId}). Data was not touched.`,
   );
 }
 
@@ -479,27 +707,30 @@ async function main() {
     options: {
       "dry-run": { type: "boolean", default: false },
       confirm: { type: "string" },
+      version: { type: "string" },
     },
   });
   const command = positionals[0];
-  const ctx = context();
+  const io = realIo();
   if (command === "status") {
-    await status(ctx);
+    await status(io);
   } else if (command === "deploy") {
     if (!values["dry-run"] && values.confirm !== PROD.workerName) {
       throw new Error(
         "Live deploys need --confirm flaremo (or use --dry-run).",
       );
     }
-    await deploy(ctx, { dryRun: values["dry-run"] });
+    if (!(await deploy(io, { dryRun: values["dry-run"] }))) {
+      process.exitCode = 1;
+    }
   } else if (command === "rollback") {
     if (values.confirm !== PROD.workerName) {
       throw new Error("Rollback needs --confirm flaremo.");
     }
-    await rollback(ctx);
+    await rollback(io, { version: values.version });
   } else {
     throw new Error(
-      "Usage: prod-deploy.mjs <status|deploy|rollback> [--dry-run] [--confirm flaremo]",
+      "Usage: prod-deploy.mjs <status|deploy|rollback> [--dry-run] [--confirm flaremo] [--version <id>]",
     );
   }
 }

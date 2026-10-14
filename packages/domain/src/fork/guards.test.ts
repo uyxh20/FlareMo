@@ -150,8 +150,9 @@ describe("Claude sessions ask before writing to live", () => {
   // The repo's .claude/settings.json once allowed raw `wrangler deploy` and
   // remote migrations with no prompt, which skipped every safeguard of
   // scripts/fork/prod-deploy.mjs (clean tree, Time Travel bookmark, row counts,
-  // automatic rollback). Raw live writes must prompt; the deploy script is the
-  // way to ship and carries its own `--confirm flaremo`.
+  // automatic rollback). Every route that can write to live must prompt,
+  // including the deploy script's own real deploy and rollback; only its
+  // dry run and status stay unprompted.
   const settings = JSON.parse(
     readFileSync(repo(".claude/settings.json"), "utf8"),
   ) as { permissions?: { allow?: string[]; ask?: string[] } };
@@ -162,10 +163,47 @@ describe("Claude sessions ask before writing to live", () => {
     "npx wrangler d1 execute flaremo --remote --command 'DELETE FROM memos'",
     "npx wrangler rollback --config wrangler.jsonc",
     "npx wrangler versions deploy --config wrangler.jsonc",
+    "npx wrangler versions upload --config wrangler.jsonc",
     "npx wrangler d1 time-travel restore flaremo --bookmark x",
+    "node node_modules/wrangler/bin/wrangler.js deploy",
+    "npx wrangler2 deploy",
+    "npx cf-wrangler deploy",
+    "npx wrangler secret put BETTER_AUTH_SECRET",
+    "npx wrangler secret delete BETTER_AUTH_SECRET",
+    "npx wrangler delete flaremo",
+    "npx wrangler d1 delete flaremo",
+    "npx wrangler r2 object put flaremo-attachments/x --file y --remote",
+    "npx wrangler r2 object delete flaremo-attachments/x --remote",
+    "npx wrangler r2 bucket delete flaremo-attachments",
+    "npx wrangler queues delete flaremo-data-export",
+    "npx wrangler vectorize delete flaremo-memos",
+    "npx wrangler vectorize insert flaremo-memos --file x",
+    "pnpm migrate:remote",
+    "pnpm run deploy",
+    "pnpm deploy",
+    "pnpm --filter @flaremo/worker deploy",
+    "npm run deploy",
+    "node scripts/fork/prod-deploy.mjs deploy --confirm flaremo",
+    "node scripts/fork/prod-deploy.mjs rollback --confirm flaremo",
+    "cf d1 execute flaremo --remote",
+    "npx cf workers deploy",
+    "pnpm cf d1 execute flaremo",
+    "pnpm exec cf d1 execute flaremo",
+    "node_modules/.bin/cf d1 execute flaremo",
+    "npx cloudflare d1 execute flaremo",
+    "curl -X POST https://api.cloudflare.com/client/v4/accounts/x/d1/database/y/query",
   ];
+  const MCP_LIVE_WRITES = [
+    "d1_database_query",
+    "d1_database_delete",
+    "r2_bucket_delete",
+    "kv_namespace_delete",
+    "kv_namespace_update",
+    "hyperdrive_config_delete",
+    "hyperdrive_config_edit",
+  ].map((tool) => `mcp__Cloudflare_Developer_Platform__${tool}`);
 
-  /** A Bash permission rule as Claude Code reads it: `*` matches any text. */
+  /** A permission rule as Claude Code reads it: `*` matches any text. */
   const matches = (rule: string, command: string) => {
     const inner = /^Bash\((.*)\)$/.exec(rule)?.[1];
     if (inner === undefined) return false;
@@ -175,35 +213,41 @@ describe("Claude sessions ask before writing to live", () => {
       .join(".*");
     return new RegExp(`^${pattern}$`).test(command);
   };
+  const asks = (command: string) =>
+    (settings.permissions?.ask ?? []).some((rule) => matches(rule, command));
 
   it("allows no live write without a prompt", () => {
+    const allow = settings.permissions?.allow ?? [];
     const allowed = LIVE_WRITES.filter((command) =>
-      (settings.permissions?.allow ?? []).some((rule) =>
-        matches(rule, command),
-      ),
+      allow.some((rule) => matches(rule, command)),
     );
     expect(allowed).toEqual([]);
+    expect(allow.filter((rule) => rule.startsWith("mcp__Cloudflare"))).toEqual(
+      [],
+    );
   });
 
   it("asks before every live write", () => {
-    const unasked = LIVE_WRITES.filter(
-      (command) =>
-        !(settings.permissions?.ask ?? []).some((rule) =>
-          matches(rule, command),
-        ),
-    );
-    expect(unasked).toEqual([]);
+    expect(LIVE_WRITES.filter((command) => !asks(command))).toEqual([]);
   });
 
-  it("leaves the deploy script and local work unprompted", () => {
+  it("asks before every Cloudflare MCP tool that can write", () => {
+    const ask = settings.permissions?.ask ?? [];
+    expect(MCP_LIVE_WRITES.filter((tool) => !ask.includes(tool))).toEqual([]);
+  });
+
+  it("leaves dry runs, status, dev work and local work unprompted", () => {
     const asked = [
-      "node scripts/fork/prod-deploy.mjs deploy --confirm flaremo",
+      "node scripts/fork/prod-deploy.mjs deploy --dry-run",
+      "node scripts/fork/prod-deploy.mjs status",
       "node scripts/fork/dev-env.mjs deploy",
+      "node scripts/fork/dev-env.mjs clone --dry-run",
       "npx wrangler d1 migrations apply DB --local",
       "pnpm exec vitest run packages/domain/src/fork",
-    ].filter((command) =>
-      (settings.permissions?.ask ?? []).some((rule) => matches(rule, command)),
-    );
+      "node --test scripts/fork/prod-deploy.test.mjs",
+      "pnpm build",
+      "git status",
+    ].filter(asks);
     expect(asked).toEqual([]);
   });
 });

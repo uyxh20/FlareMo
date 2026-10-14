@@ -141,8 +141,9 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `playwright.config.ts` | `cockpit`, `fork-ui` and `goals-review` added to the `memo-ui` project's `testMatch` alternation. |
 | `scripts/persistence-manifest.mjs` | The planner and health tables in `RESTORE_TABLES`. |
 | `scripts/e2e-server.mjs` | `FLAREMO_REVIEW_AI:off` in the test bindings, so the weekly review e2e runs on the page's own drafts instead of waiting on Workers AI. |
-| `.github/workflows/ci.yml` | CI runs nightly (skipped when the last 24 hours touched only docs), on pull requests (not docs-only ones) and by hand, not on every push, to stay within the free Actions minutes. |
-| `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily. |
+| `.github/workflows/ci.yml` | CI runs nightly (skipped when the last 24 hours touched only docs), on pull requests (not docs-only ones) and by hand, not on every push, to stay within the free Actions minutes. It also runs `node --test scripts/fork/*.test.mjs` and `pnpm persistence:check`. |
+| `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily, and its PR text says merging does not deploy. |
+| `AGENTS.md` | A "Fork: shipping to live" section at the top; the production-deploy lines and the workflow line point at `scripts/fork/prod-deploy.mjs`. |
 | `.github/workflows/deploy-cloudflare.yml` | Deleted on 2026-10-04: the fork deploys with `scripts/fork/prod-deploy.mjs` (see `docs/fork-dev-environment.md`). |
 | `.dev.vars.example`, `wrangler.jsonc.example`, `scripts/write-wrangler-config.mjs`, `scripts/write-wrangler-config.test.mjs` | Email provider settings for the deleted deploy workflow. Nothing runs them now. |
 
@@ -150,7 +151,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 
 | File | Change |
 | --- | --- |
-| `AGENTS.md`, `README.md`, `README.zh-CN.md` | One line each on the deploy workflow. |
+| `README.md`, `README.zh-CN.md` | One line each on the deploy workflow. |
 | `docs/deploy.md`, `docs/en/deploy.md`, `docs/github-action-deploy.md`, `docs/en/github-action-deploy.md` | Deploy-on-push and email setup sections. |
 | `docs/update.md`, `docs/en/update.md`, `docs/agent-deploy.md`, `docs/en/agent-deploy.md`, `docs/maintenance.md`, `docs/release.md` | One or two lines each on the deploy workflow. |
 | `docs/architecture-notes.md` | One line on email. |
@@ -178,6 +179,7 @@ All new, none in conflict with anything upstream ships.
 | `apps/web/src/fork/product-name-wiring.test.ts`                                      | Fails when an upstream sync drops the `i18n.tsx`, `branding.tsx` or media-session hook-ins.                                                                                                                                                    |
 | `scripts/fork/prod-deploy.mjs`, `prod-deploy.test.mjs`                               | One-command ship to live (`deploy`, `rollback`, `status`). See `docs/fork-dev-environment.md`, "Shipping to live". Touches no upstream file.                                                                                         |
 | `packages/domain/src/fork/` | The data-source registry and its tests: which data reaches the weekly review, search, memory, MCP, the export and the backup (see `docs/fork-data-sources.md`); `upstream-manifest.txt` and `upstream-hookins.test.ts`, which keep the hook-in table above complete; and `memo-backdate.ts`, the backdating rules `updateMemo` calls (the only file here the app imports). |
+| `.claude/settings.json`                                                              | "Ask" rules for every route that can write to live (raw wrangler, `pnpm deploy`, `cf`, the Cloudflare API and MCP write tools, the deploy script's real deploy and rollback). Guarded by `packages/domain/src/fork/guards.test.ts`.       |
 | `apps/web/src/health/`                                                               | The tracker's web side: week strip, memo labels, Health page, route, nav link, model, API client, strings, CSS and tests. `health-wiring.test.ts` fails when an upstream sync drops a hook-in.                                                 |
 | `packages/domain/src/health/`                                                        | The diary reader (`parse.ts`), sync, read and write services, the after-save hook target, and their tests.                                                                                                                                     |
 | `packages/contracts/src/fork-health.ts`                                              | Constants, date helpers and the HTTP schemas.                                                                                                                                                                                                  |
