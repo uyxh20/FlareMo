@@ -487,6 +487,9 @@ const messages = {
   "auth.password": "パスワード",
   "auth.signIn": "サインイン",
   "auth.signingIn": "サインイン中…",
+  "auth.confirmingSession": "サインインしました。ワークスペースを開いています…",
+  "auth.sessionNotStored":
+    "サインインは完了しましたが、ブラウザーがログイン状態を保存できませんでした。このサイトの Cookie がブロックされていないか確認して、もう一度お試しください。",
   "auth.loginFailed":
     "サインインに失敗しました。ユーザー名とパスワードを確認して再試行してください。",
   "auth.statusUnavailable":

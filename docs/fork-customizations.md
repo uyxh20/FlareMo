@@ -139,6 +139,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/worker/src/api/branding.test.ts`, `apps/worker/src/scheduled.test.ts` | Expectations for the default name, plus one case that clearing the custom name restores it. |
 | `tests/e2e/branding.spec.ts`, `tests/e2e/capture-flow.spec.ts`, `tests/e2e/capture-webkit.spec.ts` | Expectations for the new name: the login text and the "Save to …" button label. Not run. |
 | `playwright.config.ts` | `cockpit`, `fork-ui` and `goals-review` added to the `memo-ui` project's `testMatch` alternation. |
+| `pnpm-lock.yaml` | Regenerated in the v0.22.1 merge, because upstream added the `cf` devDependency without updating the lockfile. Goes back to upstream once upstream ships a matching lockfile. |
 | `scripts/persistence-manifest.mjs` | The planner and health tables in `RESTORE_TABLES`. |
 | `scripts/e2e-server.mjs` | `FLAREMO_REVIEW_AI:off` in the test bindings, so the weekly review e2e runs on the page's own drafts instead of waiting on Workers AI. |
 | `.github/workflows/ci.yml` | CI runs nightly (skipped when the last 24 hours touched only docs), on pull requests (not docs-only ones) and by hand, not on every push, to stay within the free Actions minutes. |
@@ -217,6 +218,7 @@ Fork code nothing called, removed after a review. Git history keeps all of it; n
 
 - **Refresh the change list.** After merging an upstream release, regenerate the manifest from it and fix the hook-in table until the test passes: `FORK_UPSTREAM_MANIFEST_WRITE=upstream/main pnpm exec vitest run packages/domain/src/fork/upstream-hookins.test.ts` (needs the upstream remote fetched).
 - **The planner's alarm.** `planner-wiring.test.ts` fails if a merge drops the planner routes, the sidebar link, the SPA paths, the service-worker entries, the contracts re-export or the Playwright pattern.
+- **Last sync: upstream v0.22.1 (`0248d53`), 2026-10-14.** It brought a login-page watchdog and a 401 re-check in `authenticated-route.tsx` (neither file has a fork hook-in), version bumps, and a `cf` devDependency (Cloudflare's new CLI) with a `pnpm cf` script. Upstream did not update `pnpm-lock.yaml` for `cf`, so the fork's lockfile was regenerated in the merge. The fork's deploy scripts still use wrangler.
 - **The wiring tests are the alarm.** After a merge run `pnpm exec vitest run apps/web/src/fork --config vitest.config.ts`. `sidebar-nav-wiring.test.ts` fails if `flaremo-explorer.tsx` no longer routes its nav through `ForkSidebarNav`, or if a hidden route's `to="…"` link was renamed or removed (the filter would then match nothing, and the entry would quietly come back). `tag-picker-wiring.test.ts` does the same for the composer hook-ins.
 - **New upstream sidebar links** show up on their own: only the five routes in the list are filtered. If upstream renames one of them, update `forkHiddenSidebarRoutes` to match.
 - **`ComposerTagSuggestions` restyled upstream:** keep their markup and re-apply the fork's attributes (`role`, `aria-selected`, `ref`, `style`, the position class, the mousedown guard). The behaviour lives in `use-tag-picker-list.ts` and does not need to change.
