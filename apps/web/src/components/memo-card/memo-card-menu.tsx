@@ -1,6 +1,5 @@
 import {
   ArchiveIcon,
-  CalendarClockIcon,
   Edit3Icon,
   Globe2Icon,
   ImageIcon,
@@ -29,7 +28,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ForkMemoDateDialog } from "@/fork/memo-date-dialog"; // fork: edit created time
+import {
+  ForkMemoDateDialog,
+  ForkMemoDateMenuItem,
+} from "@/fork/memo-date-dialog"; // fork: edit created time
 import { useI18n } from "@/i18n";
 
 // The share-image dialog pulls in html-to-image and the plugin card registry;
@@ -135,10 +137,9 @@ export function MemoCardMenu({
                       <Edit3Icon />
                       {t("common.edit")}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setForkDateOpen(true)}>
-                      <CalendarClockIcon />
-                      Edit date and time
-                    </DropdownMenuItem>
+                    <ForkMemoDateMenuItem
+                      onSelect={() => setForkDateOpen(true)}
+                    />
                     <DropdownMenuItem onClick={() => onPin(id, !memo.pinned)}>
                       <PinIcon />
                       {memo.pinned ? t("memo.unpin") : t("memo.pin")}

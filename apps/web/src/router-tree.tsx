@@ -21,11 +21,7 @@ import { healthRoute } from "@/health/route"; // fork: health tracker
 import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { queryKeys } from "@/lib/query-keys";
-import { plannerCockpitSearch } from "@/planner/cockpit-search";
-import {
-  plannerGoalsSearch,
-  plannerReviewSearch,
-} from "@/planner/goals-search";
+import { plannerRoutes } from "@/planner/routes"; // fork: planning cockpit
 import { AuthenticatedRoute } from "@/routes/authenticated-route";
 import { indexRoute } from "@/routes/index-route";
 import { rootRoute } from "@/routes/root-route";
@@ -113,21 +109,6 @@ const MemoryPage = lazy(() =>
 const TeamProjectsPage = lazy(() =>
   import("@/pages/team-projects-page").then((module) => ({
     default: module.TeamProjectsPage,
-  })),
-);
-const CockpitPage = lazy(() =>
-  import("@/planner/cockpit-page").then((module) => ({
-    default: module.PlannerCockpitPage,
-  })),
-);
-const GoalsPage = lazy(() =>
-  import("@/planner/goals-page").then((module) => ({
-    default: module.PlannerGoalsPage,
-  })),
-);
-const WeeklyReviewPage = lazy(() =>
-  import("@/planner/review-page").then((module) => ({
-    default: module.PlannerReviewPage,
   })),
 );
 const ProjectsPage = lazy(() =>
@@ -511,59 +492,6 @@ const teamProjectsRoute = createRoute({
   component: TeamProjectsRoutePage,
 });
 
-function CockpitRoutePage() {
-  return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <CockpitPage />
-      </Suspense>
-    </AuthenticatedRoute>
-  );
-}
-
-const cockpitRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/cockpit",
-  // `?task=<id>` opens that task's panel (see planner/cockpit-search.ts).
-  validateSearch: plannerCockpitSearch,
-  component: CockpitRoutePage,
-});
-
-function GoalsRoutePage() {
-  return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <GoalsPage />
-      </Suspense>
-    </AuthenticatedRoute>
-  );
-}
-
-const goalsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/goals",
-  // The year, quarter, month or week shown (see planner/goals-search.ts).
-  validateSearch: plannerGoalsSearch,
-  component: GoalsRoutePage,
-});
-
-function WeeklyReviewRoutePage() {
-  return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <WeeklyReviewPage />
-      </Suspense>
-    </AuthenticatedRoute>
-  );
-}
-
-const weeklyReviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/weekly-review",
-  validateSearch: plannerReviewSearch,
-  component: WeeklyReviewRoutePage,
-});
-
 function CaptureRoutePage() {
   return (
     <AuthenticatedRoute>
@@ -645,9 +573,7 @@ const router = createRouter({
     memoryRoute,
     projectsRoute,
     teamProjectsRoute,
-    cockpitRoute,
-    goalsRoute,
-    weeklyReviewRoute,
+    ...plannerRoutes, // fork: planning cockpit
     healthRoute, // fork: health tracker
     captureRoute,
     articlesRoute,

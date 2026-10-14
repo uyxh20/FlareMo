@@ -3,7 +3,8 @@ import type { FlareMoDb, MemoRow } from "@flaremo/db";
 import { memoRevisions, memos, memoTags } from "@flaremo/db";
 import { and, eq } from "drizzle-orm";
 import { insertEmbeddingTask } from "./embedding-outbox";
-import { ConflictError, ForbiddenError, ValidationError } from "./errors";
+import { ConflictError, ForbiddenError } from "./errors";
+import { forkApplyBackdate } from "./fork/memo-backdate"; // fork: backdating
 import { forkHealthSyncMemo } from "./health/after-memo-write"; // fork: health tracker
 import { createResourceId } from "./ids";
 import {
@@ -193,8 +194,6 @@ export async function updateMemo(
     assertMemoContentSize(input.content);
   }
   const now = new Date().toISOString();
-  // fork: backdating (docs/fork-customizations.md). Only a real change counts.
-  const nextCreatedAt = forkResolveCreatedAt(input.created_at, existing, now);
   const status = input.status;
   const metadataChanged =
     input.content !== undefined || input.payload !== undefined;
@@ -203,6 +202,13 @@ export async function updateMemo(
     input.payload !== undefined
       ? normalizeMemoPayload(input.payload)
       : normalizeMemoPayload(existing.payload);
+  // fork: backdating (docs/fork-customizations.md); throws on a future time.
+  const backdate = forkApplyBackdate(
+    existing,
+    input.created_at,
+    nextPayload,
+    now,
+  );
   const persistedClientId =
     existing.clientId ?? normalizeMemoClientId(existing.payload.client_id);
   const requestedClientId =
@@ -257,16 +263,10 @@ export async function updateMemo(
     input.visibility !== undefined && input.visibility !== existing.visibility
       ? resolveMemoTeamId(user, input.visibility)
       : existing.teamId;
-  if (nextCreatedAt !== existing.createdAt) {
-    // Keep the very first time, whatever the number of later edits.
-    nextPayload[FORK_ORIGINAL_CREATED_AT_KEY] =
-      existing.payload[FORK_ORIGINAL_CREATED_AT_KEY] ?? existing.createdAt;
-  }
-  const payloadChanged =
-    metadataChanged || nextCreatedAt !== existing.createdAt;
+  const payloadChanged = metadataChanged || backdate.changed; // fork
   const nextMemo = {
     ...existing,
-    createdAt: nextCreatedAt,
+    createdAt: backdate.createdAt, // fork
     content: nextContent,
     teamId: nextTeamId,
     visibility: nextVisibility,
@@ -313,9 +313,7 @@ export async function updateMemo(
     ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
     ...(nextClientId !== existing.clientId ? { clientId: nextClientId } : {}),
     ...(payloadChanged ? { payload: nextPayload } : {}),
-    ...(nextCreatedAt !== existing.createdAt
-      ? { createdAt: nextCreatedAt }
-      : {}),
+    ...(backdate.changed ? { createdAt: backdate.createdAt } : {}), // fork
     updatedAt: now,
     ...(status === "trashed" || status === "deleted" ? { deletedAt: now } : {}),
     ...(status === "normal" || status === "archived"
@@ -462,34 +460,6 @@ export async function updateMemo(
   await forkHealthSyncMemo(db, id); // fork: health tracker, never throws
 
   return getMemoById(db, user, id, { includeDeleted: true });
-}
-
-const FORK_ORIGINAL_CREATED_AT_KEY = "original_created_at";
-const FORK_BACKDATE_FUTURE_SLACK_MS = 5 * 60 * 1000;
-
-/**
- * fork: the created time a PATCH asks for, as the canonical ISO string the
- * column stores, or the existing value when nothing changes. Rejects a future
- * time (past the slack for clock skew) and an unreadable one.
- */
-function forkResolveCreatedAt(
-  requested: string | undefined,
-  existing: MemoRow,
-  now: string,
-): string {
-  if (requested === undefined) return existing.createdAt;
-  const at = new Date(requested);
-  if (Number.isNaN(at.getTime())) {
-    throw new ValidationError("created_at is not a valid time");
-  }
-  if (at.getTime() > Date.parse(now) + FORK_BACKDATE_FUTURE_SLACK_MS) {
-    throw new ValidationError("created_at cannot be in the future");
-  }
-  const iso = at.toISOString();
-  // Same instant as before (the column may carry another ISO spelling).
-  return Date.parse(existing.createdAt) === at.getTime()
-    ? existing.createdAt
-    : iso;
 }
 
 type MemoMentionNotificationInput = {

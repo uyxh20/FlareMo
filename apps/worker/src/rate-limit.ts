@@ -82,7 +82,6 @@ const RATE_LIMITED_AUTH_PATHS = [
   "/sign-in/",
   "/sign-up/",
   "/forget-password",
-  "/request-password-reset",
   "/reset-password",
 ];
 
