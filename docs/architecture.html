@@ -274,7 +274,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-14 · describes main at commit 5f53a7a, live version 24</p>
+      <p class="meta">Last updated 2026-10-14 · describes main at commit 5f53a7a, live version 24; upstream v0.22.1 on dev (branch chore/upstream-v0.22.1)</p>
     </header>
 
     <!-- ============================================================ -->
@@ -1104,6 +1104,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-14</time><span>On dev, not live yet: upstream FlareMo v0.22.1 merged (sign-in page no longer hangs silently, version bumps, Cloudflare's new <code>cf</code> tool added but unused by fork scripts). No migration. Fork docs refreshed after the four-part code review: AGENTS.md gains a fork rules section, <code>docs/fork-customizations.md</code> gains a "Where things live" map and a complete list of upstream files the fork changes.</span></li>
         <li><time>2026-10-14</time><span>Shipped to live (version 24): Year map quarter and month progress bars (five positions, five points at most), clicking a quarter goal lights up its column, no result marks on cards, week chips always show the month. Dev deploy first; no migration; row counts unchanged (3,899).</span></li>
         <li><time>2026-10-14</time><span>Claude sessions now ask before any raw live write (wrangler deploy, rollback, remote migrations or d1 execute, Time Travel restore); <code>scripts/fork/prod-deploy.mjs</code> stays the unprompted way to ship. Repo setting only, no deploy.</span></li>
         <li><time>2026-10-14</time><span>Shipped to live (version 23): quarters hold pillar goals only. The four generic quarter theme lines were soft-deleted on live (bookmark taken first; 190 goals, 186 visible after) and the app no longer offers a "+" for them. No migration; row counts unchanged (3,899).</span></li>
