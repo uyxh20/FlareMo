@@ -1086,6 +1086,7 @@
     <section id="next">
       <h2>In progress</h2>
       <ul class="list">
+        <li><b>Rewrite keeps a goal's details</b> <span class="chip">fork</span>. Live since 2026-10-14 (version 21). Rewriting a goal in Check goals changes only its title: its lines and note stay, and the old title is kept as a struck line. Code: <code>packages/domain/src/planner/review.ts</code>. See <a href="#review">Weekly review</a>.</li>
         <li><b>Goals Year map</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 19). Replaces the year heatmap with the whole cascade on one page, pillars as columns; follow one pillar; split rows for goals and their points; weekly goal pop-up with tasks. No migration. Code: <code>apps/web/src/planner/year-map.tsx</code>. See <a href="#goals">Goals</a>.</li>
         <li><b>Edit a memo's date and time</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 18). A ⋯ menu item on each entry backdates it; the first time is kept. See <a href="#memos">Diary entries</a>.</li>
         <li><b>Health tracker</b> <span class="chip">fork</span>. Live since 2026-10-13 (version 17). See <a href="#health">Health tracker</a>.</li>
@@ -1100,6 +1101,7 @@
       <h2>Changelog</h2>
       <p>One line per change. Every branch that merges or ships updates the sections it touches and adds a line here.</p>
       <ul class="log">
+        <li><time>2026-10-14</time><span>Shipped to live (version 21): Rewrite in Check goals keeps the goal's lines and note and keeps the old title as a struck line (it used to wipe them). No migration.</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 20): weekly review reads health and memories, local-midnight weeks, plan-week goal check, editable summary. No migration; row counts unchanged.</span></li>
         <li><time>2026-10-13</time><span>Weekly review: reads health and memories, week cut at local midnight, look forward checks the plan week's goals, summary editable before saving (branch feat/review-health-memories-edit; dev first).</span></li>
         <li><time>2026-10-13</time><span>Shipped to live (version 19): Goals Year map, with pillar follow and split rows. No migration; row counts unchanged.</span></li>
