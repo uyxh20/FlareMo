@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
+import { HealthGoalProgressLines } from "@/health/goal-progress";
 import { cn, stripResourceName } from "@/lib/utils";
 import { PlannerPillarLabel, plannerPillarClass } from "./goal-cards";
 import { PlannerGoalEditor, type PlannerGoalEditorTarget } from "./goal-editor";
@@ -770,6 +771,7 @@ function GoalCards({
               </span>
             </div>
             <PlannerGoalBody goal={slot.goal} />
+            <HealthGoalProgressLines goalId={slot.goal.id} />
           </article>
         ) : (
           <div
@@ -820,8 +822,9 @@ function MonthGoalRow({
         pillar={goal.pillar}
         strings={strings}
       />
-      <span className="min-w-0 text-sm leading-snug">
-        {plannerGoalText(goal)}
+      <span className="flex min-w-0 flex-col gap-1 text-sm leading-snug">
+        <span>{plannerGoalText(goal)}</span>
+        <HealthGoalProgressLines goalId={goal.id} />
       </span>
       <span className="flex items-center gap-1">
         <PlannerGoalStatusBadge goal={goal} strings={strings} />

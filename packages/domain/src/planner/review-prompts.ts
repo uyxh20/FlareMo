@@ -211,13 +211,53 @@ export function plannerHealthLines(context: PlannerReviewContext): string[] {
         ? ` ${plural(summary.night_out.needs_check, "night")} still ${summary.night_out.needs_check === 1 ? "needs" : "need"} a check.`
         : ""
     }`,
+    ...(health.trackers ?? []).map(trackerLine),
   ];
-  if (!entries.length) {
+  const logged =
+    entries.length +
+    (health.trackers ?? []).reduce(
+      (sum, tracker) => sum + tracker.entries.length,
+      0,
+    );
+  if (!logged) {
     lines.push(
       "Nothing was logged in the tracker this week. That means nothing was recorded, not that nothing happened.",
     );
   }
   return lines;
+}
+
+function trackerLength(
+  measure: "days" | "minutes" | "hours",
+  minutes: number,
+): string {
+  return measure === "hours"
+    ? `${Math.round((minutes / 60) * 10) / 10} h`
+    : `${minutes} min`;
+}
+
+/**
+ * One of the owner's own trackers (read by words they set in the app): the
+ * week, then how far it has got in the period of the goal it is linked to.
+ */
+function trackerLine(
+  tracker: NonNullable<PlannerReviewContext["health"]>["trackers"][number],
+): string {
+  const timed = tracker.measure !== "days" && tracker.minutes > 0;
+  const days = tracker.entries.map(
+    (entry) =>
+      `${dayName(entry.day)}${entry.minutes && tracker.measure !== "days" ? ` ${trackerLength(tracker.measure, entry.minutes)}` : ""}${entry.feel ? ` (${quote(entry.feel)})` : ""}`,
+  );
+  const goal = tracker.goal;
+  const average =
+    goal && tracker.measure !== "days" && goal.timed_days > 0
+      ? `, avg ${trackerLength(tracker.measure, Math.round(goal.minutes / goal.timed_days))}`
+      : "";
+  return `- ${tracker.label} (the owner's own tracker): ${plural(tracker.days, "day")} this week${timed ? `, ${trackerLength(tracker.measure, tracker.minutes)} in total` : ""}${days.length ? `. ${days.join("; ")}` : ""}${
+    goal
+      ? `. Linked to the ${goal.level} goal; ${goal.from} to ${goal.to} so far: ${plural(goal.days, "day")}${average}.`
+      : ""
+  }`;
 }
 
 /** Memories the app made or changed during the week. */

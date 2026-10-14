@@ -1,5 +1,6 @@
 import {
   type HealthEntryResponse,
+  type HealthGoalProgressResponse,
   type HealthMemosResponse,
   type HealthRescanResponse,
   type HealthTargetsResponse,
@@ -9,6 +10,7 @@ import {
   type HealthWeekResponse,
   type HealthYearResponse,
   healthEntryResponseSchema,
+  healthGoalProgressResponseSchema,
   healthMemosResponseSchema,
   healthRescanResponseSchema,
   healthTargetsResponseSchema,
@@ -221,6 +223,7 @@ describe("health API", () => {
         path: "/targets",
         body: { targets: [{ kind: "training", period: "week", amount: 4 }] },
       },
+      { method: "GET", path: "/goals" },
       { method: "GET", path: "/trackers" },
       { method: "POST", path: "/trackers", body: FASTING },
       {
@@ -567,6 +570,13 @@ describe("health API", () => {
         "Nights out",
         "Fasting",
       ]);
+      // Not linked to a goal, so no goal card shows it.
+      expect(
+        onTheWire(
+          healthGoalProgressResponseSchema,
+          await body<HealthGoalProgressResponse>(send("GET", `${API}/goals`)),
+        ),
+      ).toEqual({ progress: [] });
 
       const archived = await body<HealthTrackerSaveResponse>(
         send("DELETE", `${API}/trackers/${fasting?.id}`),

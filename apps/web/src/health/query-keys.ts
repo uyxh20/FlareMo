@@ -14,4 +14,6 @@ export const healthQueryKeys = {
   week: (start: string) => ["health", "week", start] as const,
   year: (year: number) => ["health", "year", year] as const,
   trackers: ["health", "trackers"] as const,
+  /** Tracker counts over each linked goal's period, for the goal cards. */
+  goalProgress: ["health", "goal-progress"] as const,
 } as const;
