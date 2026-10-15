@@ -1,6 +1,5 @@
 import type {
   PlannerBoardCard,
-  PlannerBoardResponse,
   PlannerColumn,
   PlannerPlanInput,
   PlannerTaskDetailResponse,
@@ -33,35 +32,29 @@ import {
   plannerPredictStartDate,
   plannerPredictTitle,
   plannerPredictUndrop,
-  plannerRemoveCard,
-  plannerUpdateCard,
 } from "./board-model";
 import { plannerPlanLabel } from "./dates";
 import {
   plannerCardFromDetail,
-  plannerDetailWithAnswer,
   plannerDetailWithCard,
   plannerDetailWithEffort,
 } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { type PlannerTaskChangeView, plannerTaskStore } from "./task-store";
 
 // Every change a person can make from the cockpit (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, sections 5 and 13), as optimistic
-// edits:
+// edits through the task store (task-store.ts):
 //
-//   1. Patch the card into the cached board, and into the open task panel's
-//      cached detail, at once, where the server will put it.
+//   1. Show the card on the cached board, and in the open task panel's cached
+//      detail, at once, where the server will put it.
 //   2. Send the request.
-//   3. Success: put the server's answer in their place, and say so in a toast
-//      when the change needs saying (a card may have moved out of sight).
-//      Failure (a 429 included): put this one card, and its detail, back as they
-//      were and say why.
+//   3. Success: keep the fields this edit owns as the server answered them, and
+//      say so in a toast when the change needs saying (a card may have moved out
+//      of sight). Failure (a 429 included): take this one edit away and say why.
+//      Every other edit, saved or still in flight, stays as it is.
 //   4. When the last change in flight settles, refresh from the server.
-//
-// A rollback restores the one card, not the whole board, so it cannot undo a
-// second edit that was made while the first was still in flight, and the refresh
-// waits for every change to settle so it cannot snap a still-pending card back.
 //
 // A change that moves a card (a quick add, a move, a re-plan, an undrop) also asks
 // the page to point the card out, scrolled into view with a ring, because the
@@ -122,6 +115,15 @@ export function plannerInvalidateAll(queryClient: QueryClient) {
 }
 
 /**
+ * The task store of a query cache (task-store.ts), refreshing the cockpit once the
+ * last change that asked for it has settled. The panel's notes and comments use
+ * it too, so every change to a task stacks on the same copy.
+ */
+export function plannerStoreFor(queryClient: QueryClient) {
+  return plannerTaskStore(queryClient, () => plannerInvalidateAll(queryClient));
+}
+
+/**
  * The one toast every cockpit edit uses, so a run of edits replaces the toast
  * instead of piling up. The panel's own saves (notes, comments) share it.
  */
@@ -140,37 +142,19 @@ export function usePlannerActions(input: {
   stringsRef.current = strings;
   const revealRef = useRef(input.reveal);
   revealRef.current = input.reveal;
-  const pending = useRef(0);
   // Numbers the cards that wait for the server, so two quick adds never share an id.
   const serial = useRef(0);
 
   return useMemo(() => {
     const text = () => stringsRef.current;
+    const store = plannerStoreFor(queryClient);
 
-    /** Applies `change` to every cached board. */
-    const patchBoards = (
-      change: (board: PlannerBoardResponse) => PlannerBoardResponse,
-    ) => {
-      queryClient.setQueriesData<PlannerBoardResponse>(
-        { queryKey: plannerQueryKeys.boards },
-        (board) => (board ? change(board) : board),
-      );
-    };
-
-    /** Applies `change` to one task's cached panel detail, when it has one. */
-    const patchDetail = (
-      taskId: string,
-      change: (detail: PlannerTaskDetailResponse) => PlannerTaskDetailResponse,
-    ) => {
-      queryClient.setQueryData<PlannerTaskDetailResponse>(
-        plannerQueryKeys.detail(taskId),
-        (detail) => (detail ? change(detail) : detail),
-      );
-    };
-
-    const settle = () => {
-      pending.current = Math.max(0, pending.current - 1);
-      if (pending.current === 0) plannerInvalidateAll(queryClient);
+    /** Waits for any fetch of the cockpit's data to stop, so it cannot land over an edit. */
+    const cancelFetches = async (taskId: string) => {
+      await queryClient.cancelQueries({ queryKey: plannerQueryKeys.boards });
+      await queryClient.cancelQueries({
+        queryKey: plannerQueryKeys.detail(taskId),
+      });
     };
 
     /** One optimistic edit of one card, and of the task's open panel. */
@@ -178,9 +162,19 @@ export function usePlannerActions(input: {
       card: PlannerBoardCard,
       options: {
         predict: (card: PlannerBoardCard) => PlannerBoardCard;
+        /**
+         * The card fields this edit changes. On success they are taken from the
+         * server's answer; every other field stays as the other edits left it.
+         */
+        fields: readonly (keyof PlannerBoardCard)[];
         /** A change only the panel's detail shows (an effort), after the card's. */
         predictDetail?: (
           detail: PlannerTaskDetailResponse,
+        ) => PlannerTaskDetailResponse;
+        /** The same change as the server answered it. */
+        answerDetail?: (
+          detail: PlannerTaskDetailResponse,
+          response: PlannerTaskPlanResponse,
         ) => PlannerTaskDetailResponse;
         request: () => Promise<PlannerTaskPlanResponse>;
         /** Left out, the edit is silent when it works. */
@@ -193,56 +187,45 @@ export function usePlannerActions(input: {
       },
     ) => {
       // Counted before the first await, so a change that settles meanwhile
-      // cannot see zero in flight and refresh over this one.
-      pending.current += 1;
-      const detailKey = plannerQueryKeys.detail(card.id);
-      const detailBefore =
-        queryClient.getQueryData<PlannerTaskDetailResponse>(detailKey);
-      let boardsBefore: [
-        readonly unknown[],
-        PlannerBoardResponse | undefined,
-      ][] = [];
+      // cannot see nothing in flight and refresh over this one.
+      const change = store.begin(card.id);
       try {
-        await queryClient.cancelQueries({ queryKey: plannerQueryKeys.boards });
-        await queryClient.cancelQueries({ queryKey: detailKey });
-        // A positioned move can re-rank its neighbours too, so a rollback
-        // restores whole columns from here instead of only putting the card back.
-        boardsBefore = queryClient.getQueriesData<PlannerBoardResponse>({
-          queryKey: plannerQueryKeys.boards,
-        });
-        const position = options.position;
-        patchBoards((board) => {
-          const current = plannerFindCard(board, card.id);
-          if (!current) return board;
-          const predicted = options.predict(current);
-          return position
-            ? plannerPlaceCardAt(board, predicted, position)
-            : plannerPlaceCard(board, predicted);
-        });
-        patchDetail(card.id, (detail) => {
-          const predicted = options.predict(plannerCardFromDetail(detail));
-          const shown = plannerDetailWithCard(detail, predicted);
-          return options.predictDetail ? options.predictDetail(shown) : shown;
-        });
+        await cancelFetches(card.id);
+        change.show(
+          cardChangeView(
+            card.id,
+            options.predict,
+            options.position,
+            (detail) =>
+              options.predictDetail ? options.predictDetail(detail) : detail,
+          ),
+        );
         if (options.reveal !== false) revealRef.current?.(card.id);
         const response = await options.request();
-        patchBoards((board) =>
-          plannerUpdateCard(board, card.id, (current) => {
-            const answered = plannerCardFromTask(
-              response.task,
-              response.plan,
-              card.project_name,
-            );
-            // The neighbours still hold the keys the prediction gave them, which
-            // the server's key for this card does not fit; keep the predicted one
-            // until the refresh brings every key from the server.
-            return options.position
-              ? { ...answered, board_rank: current.board_rank }
-              : answered;
-          }),
+        const answered = plannerCardFromTask(
+          response.task,
+          response.plan,
+          card.project_name,
         );
-        patchDetail(card.id, (detail) =>
-          plannerDetailWithAnswer(detail, response),
+        // A card dropped at a place keeps the key the prediction gave it: its
+        // neighbours still hold predicted keys, which the server's key for this
+        // card does not fit, until the refresh brings every key from the server.
+        const owned = options.position
+          ? options.fields.filter((field) => field !== "board_rank")
+          : options.fields;
+        change.saved(
+          cardChangeView(
+            card.id,
+            (current) => ({
+              ...options.predict(current),
+              ...pickFields(answered, owned),
+            }),
+            options.position,
+            (detail) =>
+              options.answerDetail
+                ? options.answerDetail(detail, response)
+                : detail,
+          ),
         );
         if (options.success !== undefined) {
           toast.success(
@@ -253,43 +236,11 @@ export function usePlannerActions(input: {
           );
         }
       } catch (error) {
-        if (options.position) {
-          // Put the columns the move touched back exactly as they were.
-          const columns = new Set<string>([
-            plannerCardColumn(card),
-            plannerCardColumn(options.predict(card)),
-          ]);
-          for (const [key, before] of boardsBefore) {
-            if (!before) continue;
-            queryClient.setQueryData<PlannerBoardResponse>(key, (board) =>
-              board
-                ? {
-                    ...board,
-                    columns: {
-                      ...board.columns,
-                      ...Object.fromEntries(
-                        [...columns]
-                          .filter((name) => name in before.columns)
-                          .map((name) => [
-                            name,
-                            before.columns[name as keyof typeof before.columns],
-                          ]),
-                      ),
-                    },
-                  }
-                : board,
-            );
-          }
-        } else {
-          patchBoards((board) => plannerPlaceCard(board, card));
-        }
-        if (detailBefore) queryClient.setQueryData(detailKey, detailBefore);
+        change.failed();
         toast.error(
           plannerErrorMessage(error, options.failure, text().toast.rateLimited),
           { id: TOAST_ID },
         );
-      } finally {
-        settle();
       }
     };
 
@@ -299,6 +250,7 @@ export function usePlannerActions(input: {
         void edit(card, {
           predict: (current) =>
             plannerPredictMove(current, to, { today, now: new Date() }),
+          fields: MOVE_FIELDS,
           request: () =>
             plannerUpdateTaskRequest(card.id, {
               today,
@@ -324,6 +276,7 @@ export function usePlannerActions(input: {
         void edit(card, {
           // Same column, so only the card's place changes.
           predict: (current) => current,
+          fields: [],
           request: () =>
             plannerUpdateTaskRequest(card.id, {
               today,
@@ -343,6 +296,7 @@ export function usePlannerActions(input: {
       plan: (card, plan) => {
         void edit(card, {
           predict: (current) => plannerPredictPlan(current, plan, new Date()),
+          fields: ["horizon", "period_start", "updated_at"],
           request: () => plannerUpdateTaskRequest(card.id, { today, plan }),
           success: () => {
             const label = plan
@@ -366,6 +320,7 @@ export function usePlannerActions(input: {
       setDue: (card, due) => {
         void edit(card, {
           predict: (current) => plannerPredictDue(current, due, new Date()),
+          fields: ["due_at", "updated_at"],
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, due_at: due }),
           success: () =>
@@ -378,6 +333,7 @@ export function usePlannerActions(input: {
       drop: (card) => {
         void edit(card, {
           predict: (current) => plannerPredictDrop(current, new Date()),
+          fields: ["dropped_at", "due_at", "updated_at"],
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, dropped: true }),
           success: () => text().toast.dropped,
@@ -389,6 +345,7 @@ export function usePlannerActions(input: {
       undrop: (card) => {
         void edit(card, {
           predict: (current) => plannerPredictUndrop(current, new Date()),
+          fields: ["dropped_at", "updated_at"],
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, dropped: false }),
           success: () => text().toast.undropped,
@@ -399,6 +356,7 @@ export function usePlannerActions(input: {
       setTitle: (card, title) => {
         void edit(card, {
           predict: (current) => plannerPredictTitle(current, title, new Date()),
+          fields: ["title", "updated_at"],
           request: () => plannerUpdateTaskRequest(card.id, { today, title }),
           failure: text().toast.titleFailed,
           reveal: false,
@@ -409,6 +367,7 @@ export function usePlannerActions(input: {
         void edit(card, {
           predict: (current) =>
             plannerPredictPriority(current, priority, new Date()),
+          fields: ["priority", "updated_at"],
           request: () => plannerUpdateTaskRequest(card.id, { today, priority }),
           failure: text().toast.priorityFailed,
           reveal: false,
@@ -418,6 +377,7 @@ export function usePlannerActions(input: {
       setGoal: (card, goalId) => {
         void edit(card, {
           predict: (current) => plannerPredictGoal(current, goalId, new Date()),
+          fields: ["goal_id", "updated_at"],
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, goal_id: goalId }),
           failure: text().toast.goalFailed,
@@ -429,8 +389,15 @@ export function usePlannerActions(input: {
         void edit(card, {
           // A card carries no effort: only the panel's detail shows it.
           predict: (current) => current,
+          fields: [],
           predictDetail: (detail) =>
             plannerDetailWithEffort(detail, effort, new Date()),
+          answerDetail: (detail, response) =>
+            plannerDetailWithEffort(
+              detail,
+              response.plan?.effort ?? null,
+              response.plan?.updated_at,
+            ),
           request: () => plannerUpdateTaskRequest(card.id, { today, effort }),
           failure: text().toast.effortFailed,
           reveal: false,
@@ -441,6 +408,7 @@ export function usePlannerActions(input: {
         void edit(card, {
           predict: (current) =>
             plannerPredictStartDate(current, startDate, new Date()),
+          fields: ["start_date", "updated_at"],
           request: () =>
             plannerUpdateTaskRequest(card.id, { today, start_date: startDate }),
           failure: text().toast.startFailed,
@@ -451,27 +419,29 @@ export function usePlannerActions(input: {
       createIn: async ({ title, column, plan }) => {
         serial.current += 1;
         const pendingId = plannerPendingCardId(serial.current);
-        pending.current += 1;
+        const change = store.begin(pendingId);
         try {
           await queryClient.cancelQueries({
             queryKey: plannerQueryKeys.boards,
           });
           // On the board before the server has heard of it, in the column it was
           // made for and pointed out, so the person sees where it went at once.
-          patchBoards((board) => {
-            const waiting = plannerPendingCard({
-              id: pendingId,
-              title,
-              column,
-              plan,
-              now: new Date(),
-            });
-            // A column with a manual order puts the new card on top of it, as the
-            // server does; any other column keeps its natural order.
-            const first = board.columns[column][0];
-            return first?.board_rank
-              ? plannerPlaceCardAt(board, waiting, { beforeId: first.id })
-              : plannerPlaceCard(board, waiting);
+          const waiting = plannerPendingCard({
+            id: pendingId,
+            title,
+            column,
+            plan,
+            now: new Date(),
+          });
+          change.show({
+            board: (board) => {
+              // A column with a manual order puts the new card on top of it, as
+              // the server does; any other column keeps its natural order.
+              const first = board.columns[column][0];
+              return first?.board_rank
+                ? plannerPlaceCardAt(board, waiting, { beforeId: first.id })
+                : plannerPlaceCard(board, waiting);
+            },
           });
           revealRef.current?.(pendingId);
 
@@ -483,9 +453,7 @@ export function usePlannerActions(input: {
           });
           const created = plannerCardFromTask(response.task, response.plan);
           // The pending card gives way to the real one, which takes its place.
-          patchBoards((board) =>
-            plannerPlaceCard(plannerRemoveCard(board, pendingId), created),
-          );
+          change.saved({ board: (board) => plannerPlaceCard(board, created) });
           revealRef.current?.(created.id);
           if (response.plan_error) {
             // The task exists, in its column, without the plan it was given.
@@ -505,7 +473,7 @@ export function usePlannerActions(input: {
           }
           return true;
         } catch (error) {
-          patchBoards((board) => plannerRemoveCard(board, pendingId));
+          change.failed();
           toast.error(
             plannerErrorMessage(
               error,
@@ -515,11 +483,54 @@ export function usePlannerActions(input: {
             { id: TOAST_ID },
           );
           return false;
-        } finally {
-          settle();
         }
       },
     };
     return actions;
   }, [queryClient, today]);
+}
+
+/** The fields a column move changes, taken from the server's answer. */
+const MOVE_FIELDS: readonly (keyof PlannerBoardCard)[] = [
+  "status",
+  "completed_at",
+  "horizon",
+  "period_start",
+  "board_rank",
+  "updated_at",
+];
+
+/** Just the named fields of a card. */
+function pickFields(
+  card: PlannerBoardCard,
+  fields: readonly (keyof PlannerBoardCard)[],
+): Partial<PlannerBoardCard> {
+  return Object.fromEntries(fields.map((field) => [field, card[field]]));
+}
+
+/**
+ * How a change to one card shows: on every cached board, the card rewritten by
+ * `predict` and put where its fields say (or at `position`); on its panel's
+ * detail, the same card, then `detail` for what only the panel shows.
+ */
+function cardChangeView(
+  taskId: string,
+  predict: (card: PlannerBoardCard) => PlannerBoardCard,
+  position: PlannerMovePosition | undefined,
+  detail: (detail: PlannerTaskDetailResponse) => PlannerTaskDetailResponse,
+): PlannerTaskChangeView {
+  return {
+    board: (board) => {
+      const current = plannerFindCard(board, taskId);
+      if (!current) return board;
+      const next = predict(current);
+      return position
+        ? plannerPlaceCardAt(board, next, position)
+        : plannerPlaceCard(board, next);
+    },
+    detail: (shown) =>
+      detail(
+        plannerDetailWithCard(shown, predict(plannerCardFromDetail(shown))),
+      ),
+  };
 }

@@ -90,13 +90,17 @@ export function plannerDetailWithCard(
   return { ...detail, task, plan, project };
 }
 
-/** The detail with a new effort estimate (or none) on its plan row, made if it had none. */
+/**
+ * The detail with a new effort estimate (or none) on its plan row, made if it had
+ * none. `at` is when the row changed: now for a prediction, the server's time for
+ * an answer.
+ */
 export function plannerDetailWithEffort(
   detail: Detail,
   effort: number | null,
-  now: Date,
+  when: Date | string = new Date(),
 ): Detail {
-  const at = now.toISOString();
+  const at = typeof when === "string" ? when : when.toISOString();
   const plan: PlannerPlanDto = detail.plan
     ? { ...detail.plan, effort, updated_at: at }
     : {
@@ -113,14 +117,6 @@ export function plannerDetailWithEffort(
         updated_at: at,
       };
   return { ...detail, plan };
-}
-
-/** The detail with the task and plan the server answered a change with. */
-export function plannerDetailWithAnswer(
-  detail: Detail,
-  answer: { task: TaskDto; plan: PlannerPlanDto | null },
-): Detail {
-  return { ...detail, task: answer.task, plan: answer.plan };
 }
 
 // --- Comments ----------------------------------------------------------------

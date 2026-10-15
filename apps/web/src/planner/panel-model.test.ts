@@ -13,7 +13,6 @@ import {
 import {
   plannerCardFromDetail,
   plannerDetailReplacingComment,
-  plannerDetailWithAnswer,
   plannerDetailWithCard,
   plannerDetailWithComment,
   plannerDetailWithEffort,
@@ -286,19 +285,6 @@ describe("plannerDetailWithEffort", () => {
     expect(
       plannerDetailWithEffort(detail({ plan: PLAN }), null, NOW).plan?.effort,
     ).toBeNull();
-  });
-});
-
-describe("plannerDetailWithAnswer", () => {
-  it("takes the task and plan the server answered with, and keeps the rest", () => {
-    const before = detail({ comments: [comment("c1")] });
-    const answered = plannerDetailWithAnswer(before, {
-      task: { ...TASK, title: "Server's title" },
-      plan: PLAN,
-    });
-    expect(answered.task.title).toBe("Server's title");
-    expect(answered.plan).toEqual(PLAN);
-    expect(answered.comments).toEqual(before.comments);
   });
 });
 
