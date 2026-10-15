@@ -1,4 +1,4 @@
-# upstream realchendahuang/FlareMo 326258d8187a6515398637fc3b45c19087b48ee2
+# upstream realchendahuang/FlareMo 0248d5354e824329e725191770eadaabeb8c7d90
 395d746c274f .dev.vars.example
 1416bfa38269 .github/ISSUE_TEMPLATE/bug_report.yml
 ca9678ec55f4 .github/ISSUE_TEMPLATE/feature_request.yml
@@ -9,7 +9,7 @@ e45d68635c79 .github/workflows/ci.yml
 e09ee15962d8 .github/workflows/flaremo-update.yml
 17c8ffec32d4 .gitignore
 2a78706e77da AGENTS.md
-634cb29c43e7 CHANGELOG.md
+91cda10ab657 CHANGELOG.md
 689b3e03ab5c CODEOWNERS
 08f504b2f13d CODE_OF_CONDUCT.md
 312ca2f3b898 CONTRIBUTING.md
@@ -29,7 +29,7 @@ eea0734203c6 README.zh-CN.md
 68fc8737a6df apps/site/AGENTS.md
 665ff150a934 apps/site/components.json
 c92da8cda56a apps/site/index.html
-05c6fff79e64 apps/site/package.json
+38f6a587a51e apps/site/package.json
 907f6a374d7a apps/site/playwright.config.ts
 70ee9971d086 apps/site/public/brand/flaremo-app-icon-180.png
 b988cd35aa77 apps/site/public/brand/flaremo-app-icon-192.png
@@ -122,14 +122,14 @@ c36d52afa7ca apps/site/tsconfig.json
 7051ac1cc505 apps/site/tsconfig.node.json
 2b60e37f445b apps/site/vite.config.ts
 1251d58d6f6b apps/site/wrangler.jsonc
-d9205da92677 apps/telegram-bot/package.json
+689e45edc054 apps/telegram-bot/package.json
 03be47076479 apps/telegram-bot/src/index.test.ts
 903d3c8e51db apps/telegram-bot/src/index.ts
 0f40a7811600 apps/telegram-bot/tsconfig.json
 ef9909bc3e13 apps/telegram-bot/wrangler.jsonc
 5c23ec49120d apps/web/components.json
 3313097a7259 apps/web/index.html
-a0cd46729da1 apps/web/package.json
+043867ab544d apps/web/package.json
 33b27d0a9b28 apps/web/public/brand/amber/flaremo-mark-dark-320.png
 aa12240555e6 apps/web/public/brand/amber/flaremo-mark-light-300.png
 33b27d0a9b28 apps/web/public/brand/crimson/flaremo-mark-dark-320.png
@@ -316,15 +316,15 @@ d6f4ab7b533c apps/web/src/hooks/use-pwa.ts
 1ef80dcfca90 apps/web/src/hooks/use-workspace-shortcuts.ts
 40dd4e8f34e3 apps/web/src/i18n.tsx
 fec5acc12747 apps/web/src/i18n/key.ts
-c2d98a78bfc7 apps/web/src/i18n/messages/ar.ts
-6d687b67493a apps/web/src/i18n/messages/en-US.ts
-114ce144500c apps/web/src/i18n/messages/es.ts
-c498a9273b73 apps/web/src/i18n/messages/fr.ts
-3613a8b22b34 apps/web/src/i18n/messages/ja.ts
-9d341da9649f apps/web/src/i18n/messages/ko.ts
+4fca7f7377c7 apps/web/src/i18n/messages/ar.ts
+ae9208e9cb6d apps/web/src/i18n/messages/en-US.ts
+f091224e0e78 apps/web/src/i18n/messages/es.ts
+fe3e7ea0e23e apps/web/src/i18n/messages/fr.ts
+14f586a02b8e apps/web/src/i18n/messages/ja.ts
+010ba441e6ee apps/web/src/i18n/messages/ko.ts
 5d49b059de9d apps/web/src/i18n/messages/parity.test.ts
-fdfb1fa249aa apps/web/src/i18n/messages/ru.ts
-089301fde2cd apps/web/src/i18n/messages/zh-CN.ts
+843275a24ccd apps/web/src/i18n/messages/ru.ts
+1200cb8ff4ee apps/web/src/i18n/messages/zh-CN.ts
 d71fc3f4e12f apps/web/src/index.css
 ffc73688c539 apps/web/src/lib/activity.test.ts
 2b2dc69e2076 apps/web/src/lib/activity.ts
@@ -454,7 +454,7 @@ bdfb95cf29a1 apps/web/src/pages/capture/use-capture-session.ts
 44d1a3cc6631 apps/web/src/pages/capture/use-capture-submit.ts
 d5ac01e19dc1 apps/web/src/pages/daily-review-page.tsx
 00769ec548ad apps/web/src/pages/forgot-password-page.tsx
-76c3a1afd04a apps/web/src/pages/login-page.tsx
+8e02d6658567 apps/web/src/pages/login-page.tsx
 a324d1844837 apps/web/src/pages/memo-detail-page.tsx
 0f363e05040e apps/web/src/pages/memo-detail/content-tab.tsx
 0d00c0511ec7 apps/web/src/pages/memo-detail/history-tab.tsx
@@ -494,7 +494,7 @@ abe5bef5c8c4 apps/web/src/pages/verify-token-page.tsx
 7d7a8f0cdeba apps/web/src/pwa.test.ts
 2d6c616f85a7 apps/web/src/pwa.ts
 956d6414d309 apps/web/src/router-tree.tsx
-4e959622733e apps/web/src/routes/authenticated-route.tsx
+035c9b0dd853 apps/web/src/routes/authenticated-route.tsx
 a41d00c1ea5a apps/web/src/routes/index-route.tsx
 3962d4cccaf3 apps/web/src/routes/root-route.tsx
 4043aa7b3544 apps/web/src/routes/route-loading.tsx
@@ -505,7 +505,7 @@ c36d52afa7ca apps/web/tsconfig.json
 d3c52ea64c6c apps/web/tsconfig.node.json
 82942c41287a apps/web/tsconfig.team-projects.json
 e2688c5bf90f apps/web/vite.config.ts
-920d6c24b2e3 apps/worker/package.json
+7975ddfccaf3 apps/worker/package.json
 bfbaae3b8b41 apps/worker/src/api/app-memos.test.ts
 de18e0d03f33 apps/worker/src/api/branding.test.ts
 80b6efbfc21e apps/worker/src/api/capture.test.ts
@@ -895,8 +895,8 @@ dfe3c7baf24a migrations/meta/0029_snapshot.json
 e0eebab9b266 migrations/meta/0032_snapshot.json
 c0bc1420403e migrations/meta/0033_snapshot.json
 c7a85cda12e8 migrations/meta/_journal.json
-80df0a1b17da package.json
-9886b6df6d7e packages/contracts/package.json
+dd4af2339656 package.json
+dd7e73dcab9a packages/contracts/package.json
 fed3b92f5c3d packages/contracts/src/articles.ts
 c83ef65bfe5a packages/contracts/src/calendar.ts
 f3cba977ff48 packages/contracts/src/capture.test.ts
@@ -915,11 +915,11 @@ fdabee99828c packages/contracts/src/openapi-current/connect-paths.ts
 78ad20bf762b packages/contracts/src/openapi-current/document.ts
 cc8d856035f5 packages/contracts/src/openapi-current/rest-paths.ts
 5a73dc3a793c packages/contracts/src/openapi-current/shared.ts
-3aab1e62bd19 packages/contracts/src/openapi.ts
+d827e9570d4f packages/contracts/src/openapi.ts
 2e7c76d0c70e packages/contracts/src/projects.ts
 517220c65a62 packages/contracts/src/search-query.ts
 2b1059779c57 packages/contracts/tsconfig.json
-bd9e9f82c661 packages/db/package.json
+d820c3ecbbda packages/db/package.json
 1fc9bb46193c packages/db/src/index.ts
 68e3afdf8d1a packages/db/src/schema.ts
 2b4d15fb9558 packages/db/src/schema/auth.ts
@@ -934,7 +934,7 @@ e7b14ceea488 packages/db/src/schema/rows.ts
 cac4fe0686b9 packages/db/src/schema/usage.ts
 9e4c9ad77b9e packages/db/src/test-migrations.ts
 d2d5a3c3f000 packages/db/tsconfig.json
-4059918d1c6a packages/domain/package.json
+ba16860e3be2 packages/domain/package.json
 608e42a51949 packages/domain/src/articles.test.ts
 2edcf3c30b4b packages/domain/src/articles.ts
 2536d2a0cd52 packages/domain/src/attachments-lifecycle.ts
@@ -1044,7 +1044,7 @@ d4415e76f474 packages/domain/src/usage.ts
 ebc19444e3a0 packages/domain/src/users.ts
 ca5053e0df74 packages/domain/src/voice-service.ts
 10cc775c21c1 packages/domain/tsconfig.json
-fa08d2ef8126 packages/memos/package.json
+82b13c9c2ec9 packages/memos/package.json
 8b87ecc1a823 packages/memos/src/adapter.test.ts
 b74328a27dad packages/memos/src/adapter.ts
 1a1093daf8e2 packages/memos/src/current-adapter.test.ts
@@ -1147,7 +1147,7 @@ defc99aeb314 tests/e2e/attachment-inline.spec.ts
 1084699a5c82 tests/e2e/audio-transcript-reading.spec.ts
 3717d355df4c tests/e2e/auth-fixture.ts
 7b06ef6ce7cd tests/e2e/auth-flow.spec.ts
-c498cdff90d3 tests/e2e/auth-redirect.spec.ts
+08aafea33f02 tests/e2e/auth-redirect.spec.ts
 0fa5f1e5d1dd tests/e2e/auth-ui-flow.spec.ts
 c8979af52430 tests/e2e/branding.spec.ts
 b0649a64d047 tests/e2e/capture-flow.spec.ts

@@ -6,6 +6,30 @@ One rule runs through every change: **logic goes in fork-owned files under `apps
 
 The planning cockpit is a separate fork add-on with its own document: [planning-cockpit-implementation-plan.md](planning-cockpit-implementation-plan.md). So is the health tracker: [fork-health-tracker.md](fork-health-tracker.md).
 
+## Where things live
+
+Every fork-owned folder or file group, so nothing is a surprise. Generate the raw list with `comm -23 <(git ls-files | sort) <(git ls-tree -r --name-only upstream/main | sort)`.
+
+| Where                                                                                                          | What it is                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/src/planner/`                                                                                        | The planning cockpit, Goals and weekly review screens: board, task panel, year map, goals editor, review page, their hooks, strings and tests.    |
+| `apps/web/src/fork/`                                                                                           | Small fork changes to upstream screens: hidden sidebar entries, the `#` tag picker, the product name, the backdate dialog.                        |
+| `apps/web/src/health/`                                                                                         | The health tracker screens: week strip, memo labels, Health page.                                                                                 |
+| `packages/domain/src/planner/`                                                                                 | Planner logic: plans, board, task history archive, goals, weekly review context and prompts, nightly sync.                                        |
+| `packages/domain/src/health/`                                                                                  | Reads health values out of diary entries and keeps the tracker rows in step.                                                                      |
+| `packages/domain/src/fork/`                                                                                    | The registry of which data reaches which feature, the guard tests (frozen migrations, hook-in table, agent ask rules) and the backdating rules.                               |
+| `packages/domain/src/memo-backdate.test.ts` | Tests for editing a memo's created date (the rules are in `packages/domain/src/fork/memo-backdate.ts`, called from a hook-in in `memos-write.ts`). |
+| `packages/contracts/src/planner*.ts`, `fork-brand.ts`, `fork-health.ts`                                        | Shared types and request schemas for the planner, the product name and the health tracker.                                                        |
+| `packages/db/src/schema/planner.ts`, `fork-health.ts`, `packages/db/src/planner-migrations.ts` and their tests | Drizzle mirror of the fork tables (kept out of the schema barrel) and checks that it matches the SQL.                                             |
+| `migrations/9xxx_*.sql`                                                                                        | Hand-written, additive fork migrations (planner, goals and review, health). Not in the Drizzle journal; applied hashes are frozen.                |
+| `apps/worker/src/fork/`                                                                                        | Product-name helpers for the Worker (page titles, mail copy) and the password reset checks.                                                                                     |
+| `apps/worker/src/routes/planner-*.ts`, `health-api.ts` and their tests                                         | The fork API routes: planner, goals, review, review model calls, health tracker, and a test that upstream flows still work.                       |
+| `scripts/fork/dev-env*.mjs`, `fake-wrangler.mjs`                                                               | The separate dev deployment: clone live data, deploy, safety guard for every wrangler call.                                                       |
+| `scripts/fork/prod-deploy.mjs`                                                                                 | The one way to ship to live (status, dry run, deploy, rollback).                                                                                  |
+| `tests/e2e/cockpit.spec.ts`, `goals-review.spec.ts`, `fork-ui.spec.ts`                                         | Opt-in browser tests for the fork screens. Written, not run by default.                                                                           |
+| `docs/fork-*.md`, `docs/planning-cockpit-*.md`                                                                 | The fork's own docs (this file, data sources, dev environment, health tracker, planner plan, goals and review). |
+| `.claude/settings.json`, `.cursorrules`                                                                        | Agent settings: ask before raw live writes; editor rules.                             |
+
 ## What is customized, and why
 
 ### 1. Five sidebar entries are hidden
@@ -147,6 +171,8 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily, and its PR text says merging does not deploy. |
 | `AGENTS.md` | A "Fork: shipping to live" section at the top; the production-deploy lines and the workflow line point at `scripts/fork/prod-deploy.mjs`. |
 | `.github/workflows/deploy-cloudflare.yml` | Deleted on 2026-10-04: the fork deploys with `scripts/fork/prod-deploy.mjs` (see `docs/fork-dev-environment.md`). |
+| `packages/domain/package.json` | `@types/node` as a devDependency: the fork's guard tests in `packages/domain/src/fork/` use `node:` modules. Before the v0.22.1 merge they found the types only through pnpm's hidden hoisting, which the new `cf` package changed. |
+| `pnpm-lock.yaml` | Regenerated in the v0.22.1 merge: upstream added the `cf` devDependency without updating the lockfile. Goes back to upstream once upstream ships a matching lockfile. |
 | `.dev.vars.example`, `wrangler.jsonc.example`, `scripts/write-wrangler-config.mjs`, `scripts/write-wrangler-config.test.mjs` | Email provider settings for the deleted deploy workflow. Nothing runs them now. |
 
 **Docs.** These still describe the deleted deploy-on-push workflow or the old email setup, and are due to go back to upstream's text.
@@ -233,6 +259,7 @@ The cockpit's rules used to be written twice, once for the server and once for t
 
 - **Refresh the change list.** After merging an upstream release, regenerate the manifest from it and fix the hook-in table until the test passes: `FORK_UPSTREAM_MANIFEST_WRITE=upstream/main pnpm exec vitest run packages/domain/src/fork/upstream-hookins.test.ts` (needs the upstream remote fetched).
 - **The planner's alarm.** `planner-wiring.test.ts` fails if a merge drops the planner routes, the sidebar link, the SPA paths, the service-worker entries, the contracts re-export or the Playwright pattern.
+- **Last sync: upstream v0.22.1 (`0248d53`), 2026-10-14.** It brought a login-page watchdog and a 401 re-check in `authenticated-route.tsx` (neither file has a fork hook-in), version bumps, and a `cf` devDependency (Cloudflare's new CLI) with a `pnpm cf` script. Upstream did not update `pnpm-lock.yaml` for `cf`, so the fork's lockfile was regenerated in the merge. The fork's deploy scripts still use wrangler.
 - **The wiring tests are the alarm.** After a merge run `pnpm exec vitest run apps/web/src/fork --config vitest.config.ts`. `sidebar-nav-wiring.test.ts` fails if `flaremo-explorer.tsx` no longer routes its nav through `ForkSidebarNav`, or if a hidden route's `to="…"` link was renamed or removed (the filter would then match nothing, and the entry would quietly come back). `tag-picker-wiring.test.ts` does the same for the composer hook-ins.
 - **New upstream sidebar links** show up on their own: only the five routes in the list are filtered. If upstream renames one of them, update `forkHiddenSidebarRoutes` to match.
 - **`ComposerTagSuggestions` restyled upstream:** keep their markup and re-apply the fork's attributes (`role`, `aria-selected`, `ref`, `style`, the position class, the mousedown guard). The behaviour lives in `use-tag-picker-list.ts` and does not need to change.

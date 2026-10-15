@@ -149,3 +149,14 @@ issue -> branch -> PR 流程只用于：对外贡献者、维护者明确要求�
 - `docs/design-system.md`：Ember 设计系统（色彩、字体、动效、组件和文案约定）。
 - `docs/semantic-search.md`：语义搜索、Vectorize 和 Workers AI 的边界。
 - `ROADMAP.md`：稳定方向和公开任务池。
+
+## Fork (Schizo Diary): other rules
+
+This repository is a personal fork of FlareMo ("Schizo Diary"). The sections above are upstream's and are written for upstream; where they disagree with this section or with "Fork: shipping to live" at the top, the fork sections win.
+
+- **Dev environment**: a separate `flaremo-dev` deployment with a copy of live data, driven by `node scripts/fork/dev-env.mjs`. Test a change there before shipping. See `docs/fork-dev-environment.md`.
+- **Fork migrations** are the hand-written `migrations/9xxx_*.sql` files. They are additive and not in the Drizzle journal, and applied ones are frozen by hash. Never apply an untracked migration file.
+- **Keep upstream diffs small.** Fork logic goes in fork-owned files; an upstream file gets only the smallest hook-in. Every upstream file the fork changed is listed in `docs/fork-customizations.md`, "Upstream files with a hook-in". Update that table in the same change when you touch another upstream file.
+- **README files**: do not edit `README.md` for the fork. Every README change must be mirrored into seven translations (rule above), and it is upstream's file. Deploy guidance for the fork lives here and in the fork docs.
+- **Fork docs**: start with `docs/fork-customizations.md` (what is customized, hook-ins, and the "Where things live" directory map). Then, as needed: `docs/fork-dev-environment.md` (dev and prod deploy), `docs/fork-data-sources.md` (which data reaches which feature), `docs/fork-health-tracker.md`, `docs/planning-cockpit-implementation-plan.md` and `docs/planning-cockpit-goals-review.md`.
+- No diary text, secrets or tokens in docs, tests or commit messages.

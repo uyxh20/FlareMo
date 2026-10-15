@@ -179,6 +179,6 @@ pnpm exec playwright test --project=memo-ui tests/e2e/goals-review.spec.ts
 
 ## Deploy and rollback
 
-- **Order:** local, then `flaremo-dev` (`node scripts/fork/dev-env.mjs deploy`, which applies 9005), then the owner tries it, then live on the owner's word.
+- **Order:** local, then `flaremo-dev` (`node scripts/fork/dev-env.mjs deploy`, which applies 9005), then the owner tries it, then live on the owner's word with `node scripts/fork/prod-deploy.mjs deploy --confirm flaremo` (there is no auto-deploy).
 - **Rollback:** revert the feature's commits. 9005 is additive, so the previous release runs on the new schema unchanged. If the tables must go, drop them in this order: `planner_goal_flag`, `planner_review`, `planner_week`, `planner_goal`. `planner_task_plan.goal_id` can stay.
 - **Upstream sync:** keep both sides in the hook-in files above, then run the checks.
