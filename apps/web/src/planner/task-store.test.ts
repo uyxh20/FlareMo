@@ -4,7 +4,7 @@ import type {
   PlannerTaskDetailResponse,
 } from "@flaremo/contracts";
 import { QueryClient } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import { plannerFindCard, plannerPlaceCard } from "./board-model";
 import { plannerQueryKeys } from "./query-keys";
 import {
@@ -63,14 +63,14 @@ const boardKey = plannerQueryKeys.board(TODAY, false);
 const detailKey = plannerQueryKeys.detail(TASK_ID);
 
 let queryClient: QueryClient;
-let refresh: ReturnType<typeof vi.fn>;
+let refresh: Mock<() => void>;
 let store: PlannerTaskStore;
 
 beforeEach(() => {
   queryClient = new QueryClient();
   queryClient.setQueryData(boardKey, BOARD);
   queryClient.setQueryData(detailKey, DETAIL);
-  refresh = vi.fn();
+  refresh = vi.fn<() => void>();
   store = createPlannerTaskStore(queryClient, refresh);
 });
 
