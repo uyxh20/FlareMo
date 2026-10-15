@@ -370,6 +370,160 @@ describe("health sync", () => {
     });
   });
 
+  describe("bookmark", () => {
+    /** Memos straight into the table, the hook never seeing them. */
+    async function insertMemos(
+      list: Array<{
+        id: string;
+        content: string;
+        at: string;
+        updated?: string;
+      }>,
+    ) {
+      for (let start = 0; start < list.length; start += 100) {
+        await rt.database.batch(
+          list
+            .slice(start, start + 100)
+            .map((memo) =>
+              rt.database
+                .prepare(
+                  "INSERT INTO memos (id, user_id, content, visibility, status, pinned, source, payload, created_at, updated_at) VALUES (?, ?, ?, 'private', 'normal', 0, 'web', '{}', ?, ?)",
+                )
+                .bind(
+                  memo.id,
+                  rt.user.id,
+                  memo.content,
+                  memo.at,
+                  memo.updated ?? memo.at,
+                ),
+            ),
+        );
+      }
+    }
+    const state = async () =>
+      (
+        await plannerTestRows<{
+          memo_count: number;
+          scan_cursor: string | null;
+          scan_claimed_at: string | null;
+          sweep_cursor: string | null;
+        }>(rt.database, "SELECT * FROM health_sync_state")
+      )[0];
+
+    it("never skips memos that share a time across a page break", async () => {
+      // 450 memos written in the same second: the second page starts inside
+      // that second, and every memo is still read.
+      await insertMemos(
+        Array.from({ length: 450 }, (_, index) => ({
+          id: `memos/same-${String(index).padStart(3, "0")}`,
+          content: "wim hof 10",
+          at: "2026-09-01T08:00:00.000Z",
+        })),
+      );
+      const result = await healthRescan(rt.db, rt.user.id);
+      expect(result).toMatchObject({ memos: 450, created: 450 });
+      expect(await rows()).toHaveLength(450);
+      expect(await state()).toMatchObject({
+        memo_count: 450,
+        scan_cursor: null,
+        scan_claimed_at: null,
+      });
+    });
+
+    it("carries on after a first read that was cut off", async () => {
+      await insertMemos(
+        Array.from({ length: 450 }, (_, index) => ({
+          id: `memos/cut-${String(index).padStart(3, "0")}`,
+          content:
+            index === 5 || index === 420 ? "crossfit done" : "a plain note",
+          at: new Date(Date.UTC(2026, 7, 1) + index * 60_000).toISOString(),
+        })),
+      );
+      // The second page's write fails, as if the run were stopped there.
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const batch = rt.db.batch.bind(rt.db);
+      let calls = 0;
+      const spy = vi.spyOn(rt.db, "batch").mockImplementation(((
+        statements: Parameters<typeof batch>[0],
+      ) => {
+        calls += 1;
+        if (calls === 2) return Promise.reject(new Error("cut off"));
+        return batch(statements);
+      }) as unknown as typeof rt.db.batch);
+      expect(await healthEnsureScanned(rt.db, rt.user.id)).toBe(false);
+      expect(error).toHaveBeenCalled();
+      spy.mockRestore();
+      const halfway = await state();
+      expect(halfway?.memo_count).toBe(400);
+      expect(halfway?.scan_cursor).toMatch(/^\[/);
+      expect(halfway?.scan_claimed_at).toBeNull();
+      expect(await rows()).toHaveLength(1);
+
+      // The next health request reads only the rest, and finishes.
+      expect(await healthEnsureScanned(rt.db, rt.user.id)).toBe(true);
+      expect(await rows()).toHaveLength(2);
+      expect(await events()).toHaveLength(2);
+      expect(await state()).toMatchObject({
+        memo_count: 450,
+        scan_cursor: null,
+      });
+      expect(await healthEnsureScanned(rt.db, rt.user.id)).toBe(false);
+    });
+
+    it("lets a run that died be taken over, but not a live one", async () => {
+      await insertMemos([
+        {
+          id: "memos/a",
+          content: "crossfit done",
+          at: "2026-08-01T08:00:00.000Z",
+        },
+      ]);
+      const now = new Date("2026-10-15T09:00:00.000Z");
+      await plannerTestRun(
+        rt.database,
+        "INSERT INTO health_sync_state (user_id, scanned_at, memo_count, scan_cursor, scan_claimed_at) VALUES (?, ?, 0, '', ?)",
+        rt.user.id,
+        now.toISOString(),
+        "2026-10-15T08:58:00.000Z",
+      );
+      // Claimed two minutes ago: someone is reading.
+      expect(await healthEnsureScanned(rt.db, rt.user.id, now)).toBe(false);
+      expect(await rows()).toHaveLength(0);
+      // Ten minutes later the claim is stale and this call finishes the read.
+      const later = new Date(now.getTime() + 10 * 60_000);
+      expect(await healthEnsureScanned(rt.db, rt.user.id, later)).toBe(true);
+      expect(await rows()).toHaveLength(1);
+    });
+
+    it("the nightly sweep finishes a cut-off read and carries on its own walk", async () => {
+      const now = new Date("2026-10-15T03:00:00.000Z");
+      await insertMemos([
+        // Changed a week ago, before the three days: only the bookmark finds it.
+        {
+          id: "memos/old",
+          content: "wim hof 10",
+          at: "2026-10-01T08:00:00.000Z",
+          updated: "2026-10-08T08:00:00.000Z",
+        },
+        {
+          id: "memos/new",
+          content: "crossfit done",
+          at: "2026-10-14T08:00:00.000Z",
+        },
+      ]);
+      await plannerTestRun(
+        rt.database,
+        "INSERT INTO health_sync_state (user_id, scanned_at, memo_count, scan_cursor, sweep_cursor) VALUES (?, ?, 0, NULL, ?)",
+        rt.user.id,
+        now.toISOString(),
+        JSON.stringify(["2026-10-07T00:00:00.000Z", "memos/z"]),
+      );
+      const result = await healthNightlySweep(rt.db, now);
+      expect(result).toMatchObject({ users: 1, created: 2 });
+      expect((await state())?.sweep_cursor).toBeNull();
+    });
+  });
+
   describe("nightly sweep", () => {
     it("re-reads memos changed in the last three days and drops rows of gone memos", async () => {
       const kept = await write("wim hof 10");

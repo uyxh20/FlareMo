@@ -108,11 +108,20 @@ export const healthTarget = sqliteTable(
 );
 
 // A user with a row here has had the diary read once; the first call to the
-// health API reads everything for a user without one.
+// health API reads everything for a user without one. The bookmark columns
+// (migrations/9012_planner_health_bookmark.sql) let a read that was cut off carry
+// on where it stopped: see packages/domain/src/health/sync.ts.
 export const healthSyncState = sqliteTable("health_sync_state", {
   userId: text("user_id").primaryKey(),
   scannedAt: text("scanned_at").notNull(),
   memoCount: integer("memo_count").notNull().default(0),
+  // JSON [created_at, id] of the last memo a full read finished; '' while one
+  // waits to start; NULL when none is in progress.
+  scanCursor: text("scan_cursor"),
+  // When the run doing the full read claimed it; stale after a few minutes.
+  scanClaimedAt: text("scan_claimed_at"),
+  // JSON [updated_at, id] of the last changed memo the nightly read finished.
+  sweepCursor: text("sweep_cursor"),
 });
 
 // A tracker the owner edits in the app (migrations/9011_planner_health_trackers.sql).

@@ -12,7 +12,8 @@ import {
   healthEntry,
   healthSyncState,
 } from "@flaremo/db/src/schema/fork-health";
-import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { healthErrorText } from "./after-memo-write";
 import {
   type HealthParseConfig,
   type HealthParsedEntry,
@@ -30,8 +31,11 @@ import {
   healthReadTrackerRows,
 } from "./trackers";
 
-// The health tracker's sync (fork-owned add-on, docs/fork-health-tracker.md):
-// turns what the parser reads in a memo into health_entry rows.
+// The health projection (fork-owned add-on, docs/fork-health-tracker.md): the
+// one module that turns what the parser reads in the diary into health_entry
+// rows. Two ways in: one memo (`healthSyncMemoById`, after a save) and many
+// (`projectPages`, behind the first read, Re-read, a tracker save and the nightly
+// sweep), which walks the diary on a (time, id) key and keeps a bookmark.
 //
 // The rules, per memo and kind (a memo yields at most one row per kind):
 //   - new signal            -> insert
@@ -261,8 +265,8 @@ async function readMemoRows(
 }
 
 function isUniqueConflict(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /UNIQUE constraint failed/i.test(message);
+  // Drizzle wraps D1's error: the reason is in `cause`, not the message.
+  return /UNIQUE constraint failed/i.test(healthErrorText(error));
 }
 
 /**
@@ -328,24 +332,67 @@ export async function healthSyncMemoById(
   return healthSyncMemo(db, memo);
 }
 
-// --- Many memos ----------------------------------------------------------------
+// --- Many memos: the projection --------------------------------------------------
+//
+// Every read of more than one memo goes through `projectPages`: the first read of
+// a diary, the Re-read button, a tracker save and the nightly read of changed
+// memos. It walks the diary in pages on a (time, id) key, so memos that share a
+// time are never skipped, and saves a bookmark in health_sync_state after every
+// page, so a run that is cut off carries on where it stopped instead of being
+// lost (migrations/9012_planner_health_bookmark.sql).
 
-type ScannedMemo = HealthMemoInput;
+type ScannedMemo = HealthMemoInput & { updatedAt: string };
+
+/** Where a walk of the diary has got: the last memo it finished. */
+type Bookmark = { at: string; id: string };
+
+type WalkOrder = "created" | "updated";
 
 const MEMO_CHUNK = 40;
 const ID_CHUNK = 50;
+const PAGE = 400;
+const GONE_PAGE = 500;
+/** A claim on a full read older than this is a run that died. */
+const CLAIM_STALE_MS = 5 * 60_000;
+/** Pages one nightly run reads per user and per walk; the bookmark keeps the rest. */
+const NIGHTLY_PAGES = 5;
+
+function encodeBookmark(mark: Bookmark): string {
+  return JSON.stringify([mark.at, mark.id]);
+}
+
+/** A saved bookmark, or null for '' (start from the beginning) and anything unreadable. */
+function decodeBookmark(value: string | null): Bookmark | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      Array.isArray(parsed) &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    ) {
+      return { at: parsed[0], id: parsed[1] };
+    }
+  } catch {
+    // An unreadable bookmark starts the walk over, which is always safe.
+  }
+  return null;
+}
 
 /** A memo's columns for a scan; long memos come back empty (they are skipped). */
 async function readScanMemos(
   db: FlareMoDb,
   where: ReturnType<typeof and>,
   limit: number,
+  order: WalkOrder = "created",
 ): Promise<ScannedMemo[]> {
+  const column = order === "created" ? memos.createdAt : memos.updatedAt;
   const rows = await db
     .select({
       id: memos.id,
       userId: memos.userId,
       createdAt: memos.createdAt,
+      updatedAt: memos.updatedAt,
       status: memos.status,
       deletedAt: memos.deletedAt,
       source: memos.source,
@@ -355,7 +402,7 @@ async function readScanMemos(
     })
     .from(memos)
     .where(where)
-    .orderBy(asc(memos.createdAt))
+    .orderBy(asc(column), asc(memos.id))
     .limit(limit)
     .all();
   return rows.map((row) => {
@@ -372,6 +419,7 @@ async function readScanMemos(
       id: row.id,
       userId: row.userId,
       createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
       status: row.status,
       deletedAt: row.deletedAt,
       source: row.source,
@@ -379,6 +427,34 @@ async function readScanMemos(
       content: row.content,
     };
   });
+}
+
+/** One page of a user's memos after a bookmark, on a (time, id) key. */
+function readPage(
+  db: FlareMoDb,
+  userId: string,
+  order: WalkOrder,
+  after: Bookmark | null,
+): Promise<ScannedMemo[]> {
+  const column = order === "created" ? memos.createdAt : memos.updatedAt;
+  return readScanMemos(
+    db,
+    and(
+      eq(memos.userId, userId),
+      after
+        ? sql`(${column} > ${after.at} OR (${column} = ${after.at} AND ${memos.id} > ${after.id}))`
+        : undefined,
+    ),
+    PAGE,
+    order,
+  );
+}
+
+function bookmarkOf(memo: ScannedMemo, order: WalkOrder): Bookmark {
+  return {
+    at: order === "created" ? memo.createdAt : memo.updatedAt,
+    id: memo.id,
+  };
 }
 
 export async function healthReadRowsForMemos(
@@ -450,6 +526,42 @@ async function syncMemos(
 }
 
 /**
+ * The one loop: reads a user's memos page by page after `from`, brings their
+ * rows in line, and hands the bookmark of each finished page to `save`. Stops
+ * at the end of the diary (`done`) or after `pages` pages.
+ */
+async function projectPages(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    order: WalkOrder;
+    from: Bookmark | null;
+    at: string;
+    config: HealthParseConfig;
+    pages?: number;
+    save: (mark: Bookmark, read: number) => Promise<void>;
+  },
+): Promise<HealthSyncCounts & { memos: number; done: boolean }> {
+  let counts: HealthSyncCounts = { created: 0, updated: 0, removed: 0 };
+  let read = 0;
+  let after = input.from;
+  for (let page = 0; input.pages === undefined || page < input.pages; page++) {
+    const list = await readPage(db, input.userId, input.order, after);
+    const last = list[list.length - 1];
+    if (!last) return { ...counts, memos: read, done: true };
+    counts = addCounts(
+      counts,
+      await syncMemos(db, input.userId, list, input.at, input.config),
+    );
+    read += list.length;
+    after = bookmarkOf(last, input.order);
+    await input.save(after, list.length);
+    if (list.length < PAGE) return { ...counts, memos: read, done: true };
+  }
+  return { ...counts, memos: read, done: false };
+}
+
+/**
  * Soft-deletes the live rows whose memo no longer exists (a hard delete or a
  * purge, which no hook sees). Returns how many rows it removed.
  */
@@ -459,27 +571,31 @@ export async function healthSweepGoneMemos(
   now: Date = new Date(),
 ): Promise<number> {
   const at = now.toISOString();
-  const orphans = await db
-    .select()
-    .from(healthEntry)
-    .where(
-      and(
-        eq(healthEntry.userId, userId),
-        eq(healthEntry.source, "memo"),
-        isNull(healthEntry.deletedAt),
-        sql`${healthEntry.memoId} IS NOT NULL`,
-        sql`NOT EXISTS (SELECT 1 FROM memos WHERE memos.id = ${healthEntry.memoId})`,
-      ),
-    )
-    .limit(500)
-    .all();
-  const writes: HealthWrite[] = orphans.map((row) => ({
-    action: "delete" as const,
-    before: row,
-    after: { ...row, deletedAt: at, updatedAt: at },
-  }));
-  await applyWrites(db, writes, at);
-  return writes.length;
+  let removed = 0;
+  for (;;) {
+    const orphans = await db
+      .select()
+      .from(healthEntry)
+      .where(
+        and(
+          eq(healthEntry.userId, userId),
+          eq(healthEntry.source, "memo"),
+          isNull(healthEntry.deletedAt),
+          sql`${healthEntry.memoId} IS NOT NULL`,
+          sql`NOT EXISTS (SELECT 1 FROM memos WHERE memos.id = ${healthEntry.memoId})`,
+        ),
+      )
+      .limit(GONE_PAGE)
+      .all();
+    const writes: HealthWrite[] = orphans.map((row) => ({
+      action: "delete" as const,
+      before: row,
+      after: { ...row, deletedAt: at, updatedAt: at },
+    }));
+    await applyWrites(db, writes, at);
+    removed += writes.length;
+    if (orphans.length < GONE_PAGE) return removed;
+  }
 }
 
 /** Every memo of a user, oldest first, in pages so a big diary stays bounded. */
@@ -487,26 +603,128 @@ export async function* healthScanPages(
   db: FlareMoDb,
   userId: string,
 ): AsyncGenerator<ScannedMemo[]> {
-  const PAGE = 400;
-  let after = "";
+  let after: Bookmark | null = null;
   for (;;) {
-    const page = await readScanMemos(
-      db,
-      and(eq(memos.userId, userId), sql`${memos.createdAt} > ${after}`),
-      PAGE,
-    );
-    if (page.length === 0) return;
-    yield page;
+    const page = await readPage(db, userId, "created", after);
     const last = page[page.length - 1];
-    if (page.length < PAGE || !last) return;
-    after = last.createdAt;
+    if (!last) return;
+    yield page;
+    if (page.length < PAGE) return;
+    after = bookmarkOf(last, "created");
+  }
+}
+
+// --- The bookmark in health_sync_state -------------------------------------------
+
+type SyncState = typeof healthSyncState.$inferSelect;
+
+async function readState(
+  db: FlareMoDb,
+  userId: string,
+): Promise<SyncState | undefined> {
+  return db
+    .select()
+    .from(healthSyncState)
+    .where(eq(healthSyncState.userId, userId))
+    .get();
+}
+
+/**
+ * Takes the full read of a user, unless a live run holds it. A user without a
+ * state row gets one, with a full read waiting. Returns where the read starts,
+ * or undefined when someone else has it or nothing is waiting.
+ */
+async function claimFullRead(
+  db: FlareMoDb,
+  userId: string,
+  now: Date,
+): Promise<{ from: Bookmark | null } | undefined> {
+  const at = now.toISOString();
+  const created = await db
+    .insert(healthSyncState)
+    .values({
+      userId,
+      scannedAt: at,
+      memoCount: 0,
+      scanCursor: "",
+      scanClaimedAt: at,
+    })
+    .onConflictDoNothing()
+    .returning({ userId: healthSyncState.userId });
+  if (created.length > 0) return { from: null };
+  const stale = new Date(now.getTime() - CLAIM_STALE_MS).toISOString();
+  const claimed = await db
+    .update(healthSyncState)
+    .set({ scanClaimedAt: at })
+    .where(
+      and(
+        eq(healthSyncState.userId, userId),
+        sql`${healthSyncState.scanCursor} IS NOT NULL`,
+        sql`(${healthSyncState.scanClaimedAt} IS NULL OR ${healthSyncState.scanClaimedAt} < ${stale})`,
+      ),
+    )
+    .returning({ cursor: healthSyncState.scanCursor });
+  const row = claimed[0];
+  return row ? { from: decodeBookmark(row.cursor) } : undefined;
+}
+
+/** Runs a claimed full read from `from`, saving the bookmark after each page. */
+async function runFullRead(
+  db: FlareMoDb,
+  userId: string,
+  from: Bookmark | null,
+  now: Date,
+  pages?: number,
+): Promise<HealthSyncCounts & { memos: number; done: boolean }> {
+  const at = now.toISOString();
+  try {
+    const result = await projectPages(db, {
+      userId,
+      order: "created",
+      from,
+      at,
+      config: await healthReadParseConfig(db, userId),
+      pages,
+      save: async (mark, read) => {
+        await db
+          .update(healthSyncState)
+          .set({
+            scanCursor: encodeBookmark(mark),
+            memoCount: sql`${healthSyncState.memoCount} + ${read}`,
+          })
+          .where(eq(healthSyncState.userId, userId));
+      },
+    });
+    if (!result.done) {
+      // The rest waits for the next run; the claim is given back for it.
+      await db
+        .update(healthSyncState)
+        .set({ scanClaimedAt: null })
+        .where(eq(healthSyncState.userId, userId));
+      return result;
+    }
+    const removed = await healthSweepGoneMemos(db, userId, now);
+    await db
+      .update(healthSyncState)
+      .set({ scannedAt: at, scanCursor: null, scanClaimedAt: null })
+      .where(eq(healthSyncState.userId, userId));
+    return { ...result, removed: result.removed + removed };
+  } catch (error) {
+    // The bookmark keeps what was done; the next caller takes over at once.
+    await db
+      .update(healthSyncState)
+      .set({ scanClaimedAt: null })
+      .where(eq(healthSyncState.userId, userId))
+      .catch(() => undefined);
+    throw error;
   }
 }
 
 /**
- * Re-reads the user's whole diary. Rows the owner dismissed or edited keep
- * their state; rows of memos that are gone are soft-deleted. Marks the user as
- * scanned.
+ * Re-reads the user's whole diary from the start: the Re-read button and a
+ * tracker save. Rows the owner dismissed or edited keep their state; rows of
+ * memos that are gone are soft-deleted. If the run is cut off, the bookmark
+ * lets the next health request finish it.
  */
 export async function healthRescan(
   db: FlareMoDb,
@@ -514,28 +732,35 @@ export async function healthRescan(
   now: Date = new Date(),
 ): Promise<HealthRescanResponse> {
   const at = now.toISOString();
-  let counts: HealthSyncCounts = { created: 0, updated: 0, removed: 0 };
-  let memoCount = 0;
-  const config = await healthReadParseConfig(db, userId);
-  for await (const page of healthScanPages(db, userId)) {
-    memoCount += page.length;
-    counts = addCounts(counts, await syncMemos(db, userId, page, at, config));
-  }
-  counts.removed += await healthSweepGoneMemos(db, userId, now);
+  // Starts over whatever another run was doing; two runs at once are safe, they
+  // only repeat work.
   await db
     .insert(healthSyncState)
-    .values({ userId, scannedAt: at, memoCount })
+    .values({
+      userId,
+      scannedAt: at,
+      memoCount: 0,
+      scanCursor: "",
+      scanClaimedAt: at,
+    })
     .onConflictDoUpdate({
       target: healthSyncState.userId,
-      set: { scannedAt: at, memoCount },
+      set: { memoCount: 0, scanCursor: "", scanClaimedAt: at },
     });
-  return { memos: memoCount, ...counts };
+  const result = await runFullRead(db, userId, null, now);
+  return {
+    memos: result.memos,
+    created: result.created,
+    updated: result.updated,
+    removed: result.removed,
+  };
 }
 
 /**
- * Reads the diary once for a user who has never been read: the first call to
- * the health API. Claims the marker first so two requests do not both scan; a
- * failed scan gives the claim back, so the next call tries again. Never throws.
+ * Makes sure the diary has been read: on the first call to the health API, a
+ * full read; after a read that was cut off, the rest of it. The claim keeps two
+ * requests from reading at once; a run that died leaves a claim that goes stale
+ * after a few minutes. Returns whether this call read anything. Never throws.
  */
 export async function healthEnsureScanned(
   db: FlareMoDb,
@@ -543,34 +768,18 @@ export async function healthEnsureScanned(
   now: Date = new Date(),
 ): Promise<boolean> {
   try {
-    const marker = await db
-      .select({ userId: healthSyncState.userId })
-      .from(healthSyncState)
-      .where(eq(healthSyncState.userId, userId))
-      .get();
-    if (marker) return false;
-    const claimed = await db
-      .insert(healthSyncState)
-      .values({ userId, scannedAt: now.toISOString(), memoCount: 0 })
-      .onConflictDoNothing()
-      .returning({ userId: healthSyncState.userId });
-    if (claimed.length === 0) return false;
-    try {
-      await healthRescan(db, userId, now);
-      return true;
-    } catch (error) {
-      await db
-        .delete(healthSyncState)
-        .where(eq(healthSyncState.userId, userId))
-        .catch(() => undefined);
-      throw error;
-    }
+    const state = await readState(db, userId);
+    if (state && state.scanCursor === null) return false;
+    const claim = await claimFullRead(db, userId, now);
+    if (!claim) return false;
+    await runFullRead(db, userId, claim.from, now);
+    return true;
   } catch (error) {
     console.error(
       JSON.stringify({
         level: "error",
         message: "Health first scan failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: healthErrorText(error),
       }),
     );
     return false;
@@ -581,9 +790,12 @@ export async function healthEnsureScanned(
 export const HEALTH_SWEEP_DAYS = 3;
 
 /**
- * The nightly safety net: re-reads memos updated in the last three days (an
- * import, a failed hook, an edit that never reached the hook) and soft-deletes
- * rows whose memo is gone. Never throws and never blocks the caller's work.
+ * The nightly safety net, per user: finishes a full read that was cut off (or
+ * starts one for a diary never read), re-reads every memo changed since the
+ * last three days (an import, a failed hook, an edit that never reached the
+ * hook), and soft-deletes rows whose memo is gone. Both walks are bounded per
+ * night and keep a bookmark, so more than one night's worth carries on the next
+ * night instead of being dropped. Never throws.
  */
 export async function healthNightlySweep(
   db: FlareMoDb,
@@ -596,6 +808,7 @@ export async function healthNightlySweep(
 }> {
   const empty = { users: 0, created: 0, updated: 0, removed: 0 };
   try {
+    const at = now.toISOString();
     const since = new Date(
       now.getTime() - HEALTH_SWEEP_DAYS * 86_400_000,
     ).toISOString();
@@ -604,18 +817,41 @@ export async function healthNightlySweep(
     );
     let total = { ...empty };
     for (const { user_id: userId } of users) {
-      const recent = await readScanMemos(
-        db,
-        and(eq(memos.userId, userId), gte(memos.updatedAt, since)),
-        1000,
+      let counts: HealthSyncCounts = { created: 0, updated: 0, removed: 0 };
+      const claim = await claimFullRead(db, userId, now);
+      if (claim) {
+        counts = addCounts(
+          counts,
+          await runFullRead(db, userId, claim.from, now, NIGHTLY_PAGES),
+        );
+      }
+      // A bookmark is left only by a night that ran out of pages: carry on
+      // from it. Otherwise read the last three days.
+      const saved = decodeBookmark(
+        (await readState(db, userId))?.sweepCursor ?? null,
       );
-      const counts = await syncMemos(
-        db,
+      const from: Bookmark = saved ?? { at: since, id: "" };
+      const changed = await projectPages(db, {
         userId,
-        recent,
-        now.toISOString(),
-        await healthReadParseConfig(db, userId),
-      );
+        order: "updated",
+        from,
+        at,
+        config: await healthReadParseConfig(db, userId),
+        pages: NIGHTLY_PAGES,
+        save: async (mark) => {
+          await db
+            .update(healthSyncState)
+            .set({ sweepCursor: encodeBookmark(mark) })
+            .where(eq(healthSyncState.userId, userId));
+        },
+      });
+      if (changed.done) {
+        await db
+          .update(healthSyncState)
+          .set({ sweepCursor: null })
+          .where(eq(healthSyncState.userId, userId));
+      }
+      counts = addCounts(counts, changed);
       const removed = await healthSweepGoneMemos(db, userId, now);
       total = {
         users: total.users + 1,
@@ -630,7 +866,7 @@ export async function healthNightlySweep(
       JSON.stringify({
         level: "error",
         message: "Health nightly sweep failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: healthErrorText(error),
       }),
     );
     return empty;

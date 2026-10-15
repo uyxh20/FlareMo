@@ -6,7 +6,6 @@ import {
   healthFormatUnits,
   healthLevel,
   healthMonthMarks,
-  healthShare,
   healthStripDays,
   healthWeekdayShort,
   healthYearWeeks,
@@ -211,12 +210,5 @@ describe("the year grid", () => {
     expect(healthLevel(2, 3)).toBe(3);
     expect(healthLevel(3, 3)).toBe(4);
     expect(healthLevel(5, 3)).toBe(4);
-  });
-
-  it("caps a share for a bar", () => {
-    expect(healthShare(1, 4)).toBe(0.25);
-    expect(healthShare(9, 4)).toBe(1);
-    expect(healthShare(0, 0)).toBe(0);
-    expect(healthShare(1, 0)).toBe(1);
   });
 });

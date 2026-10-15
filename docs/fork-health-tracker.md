@@ -1,6 +1,6 @@
 # Health tracker
 
-A fork add-on (not in upstream FlareMo). It reads the owner's diary notes and turns the ones that mention a workout, breath work or a night out into small structured rows, so the timeline can show a week strip and label chips and a Health page can count them against targets.
+A fork add-on (not in upstream FlareMo). It reads the owner's diary notes and turns the ones that mention a workout, breath work or a night out into small structured rows, so the timeline can show a week strip and label chips and a Health page can count them.
 
 The diary stays the source of truth. A note is never changed by the tracker. The rows can always be rebuilt from the notes with **Re-read diary**.
 
@@ -29,7 +29,7 @@ Your words are read with the same care as the built-in keywords: a plan ("tomorr
 
 **Test a sentence** (folded away until opened) says whether a sentence would count and why not. **Preview changes** (shown only once something changed) reads the whole diary with the new words and says how many entries would start or stop counting, without writing anything. **Apply** saves the tracker and re-reads the diary: labels you removed or fixed by hand stay as you left them. Removing a tracker archives it; its rows are soft-deleted by the re-read, never hard-deleted. Every save is kept in `health_tracker_event`.
 
-New trackers show as a tile in the last 7 days, a row in the year grid and the week strip, and as chips on notes (`Fasting · 16 h`). A tracker linked to a goal also shows on that goal's card on the Goals page, counted over the goal's period up to today (`Fasting · 9 days so far · avg 16 h`); the goal's own words hold the target. The weekly review reads every tracker too (see below).
+New trackers show as a tile in this week, a row in the year grid and the week strip, and as chips on notes (`Fasting · 16 h`). A tracker linked to a goal also shows on that goal's card on the Goals page, counted over the goal's period up to today (`Fasting · 9 days so far · avg 16 h`); the goal's own words hold the target. The weekly review reads every tracker too (see below).
 
 ### Which day a note belongs to
 
@@ -57,7 +57,7 @@ Created by `migrations/9010_planner_health.sql` and `9011_planner_health_tracker
 | `health_entry` | One row per memo and kind (a unique partial index enforces it). `deleted_at` and `dismissed` are soft; `edited` marks an owner's hand edit. |
 | `health_entry_event` | Append-only history, written in the same D1 batch as each row change. |
 | `health_target` | The owner's targets. Defaults when empty: training 3 a week, breath 7 a week, night out 12 units a year. Empty on live (counted 14 Oct 2026); the route that set it was removed, and the table is kept. |
-| `health_sync_state` | The marker that the first full read of the diary happened. |
+| `health_sync_state` | The marker that the first full read of the diary happened, plus the bookmarks (migration 9012): where an unfinished full read stopped, who is running it, and where an unfinished nightly read stopped. |
 | `health_tracker` | The owner's trackers (`migrations/9011_planner_health_trackers.sql`): kind `t:<id>` or a built-in kind, name, colour, what it counts, words and blocked words (JSON), linked goal (`planner_goal.id` by value), `archived_at`. |
 | `health_tracker_event` | Append-only history of every save of a tracker, written in the same batch. |
 
@@ -67,10 +67,14 @@ History is never hard-deleted. A memo that goes to the trash soft-deletes its ro
 
 ## Keeping it in step
 
+All of this is one module, the health projection (`packages/domain/src/health/sync.ts`). It has two ways in: one note (after a save) and many notes (`projectPages`, behind everything else). The many-notes walk pages through the diary on a (time, id) key, so notes written in the same second are never skipped, and saves a bookmark in `health_sync_state` after every page, so a read that is cut off (CPU or time limit, a deploy) carries on where it stopped.
+
 1. **On save.** `createMemo` and `updateMemo` call `forkHealthSyncMemo(db, id)` after the write. It catches every error: a missing table logs one warning per isolate, anything else is logged, and **a memo save never fails because of the tracker**.
-2. **Nightly.** `healthNightlySweep`, called from the scheduled task, re-reads the last 3 days and soft-deletes rows whose memo is gone.
-3. **First use.** The first request to the API reads the whole diary once (`healthEnsureScanned`, claimed with an insert-or-ignore marker so two requests cannot both do it).
-4. **By hand.** `POST /rescan`, or the **Re-read diary** button, reads every note again. It leaves dismissed and edited rows alone.
+2. **Nightly.** `healthNightlySweep`, called from the scheduled task, per user: finishes a full read that was cut off (or starts one for a diary never read), re-reads every note changed in the last 3 days, and soft-deletes rows whose note is gone. Each walk reads at most 5 pages (2,000 notes) a night; the rest carries on from its bookmark the next night instead of being dropped.
+3. **First use.** The first request to the API reads the whole diary (`healthEnsureScanned`). A claim with a timestamp stops two requests reading at once; a claim older than 5 minutes is a run that died, and the next request finishes its read from the bookmark.
+4. **By hand.** `POST /rescan`, or the **Re-read diary** button, reads every note again from the start. It leaves dismissed and edited rows alone.
+
+A race between two writers for the same note is retried once; D1's "UNIQUE constraint" reason sits in the error's `cause`, which the retry check reads (`healthErrorText`).
 
 ## API
 
@@ -78,7 +82,7 @@ Mounted at `/api/app/health-tracker` (not `/api/app/health`, which is upstream's
 
 | Method and path | Does |
 | --- | --- |
-| `GET /week?start=` | Seven days (the last seven when `start` is absent): entries and a summary against targets. |
+| `GET /week?start=` | Seven days (the last seven when `start` is absent; the app asks for this week's Monday): entries and a summary. The summary still carries the default targets, which only the weekly review reads (on hold). |
 | `GET /year?year=` | The year: per-day cells, night-out budget and pace, totals, nights that need a check. |
 | `GET /memos?ids=a,b,c` | The labels of up to 100 memos in one request (the timeline's batch). |
 | `PATCH /entries/:id` | Fix a row: `home_at`, `variant`, `minutes` or `day`. Marks it `edited`. |
@@ -97,9 +101,9 @@ Mounted at `/api/app/health-tracker` (not `/api/app/health`, which is upstream's
 
 All in `apps/web/src/health/`, English only (the strings are in `strings.ts`, not in the eight upstream catalogs, so a sync never conflicts on them).
 
-- **Week strip** above the timeline (only on the unfiltered "all" view): three rows (Training, Breath, Out) by seven days. A filled dot is something done, a half dot is half a unit, a dashed ring is a night still needing a home time, a hairline ring is a night home before midnight. The right-hand column is the count against the week's target (Out shows year units against the year budget). The strip is a link to the Health page.
+- **Week strip** above the timeline (only on the unfiltered "all" view): three rows (Training, Breath, Out) by seven days. A filled dot is something done, a half dot is half a unit, a dashed ring is a night still needing a home time, a hairline ring is a night home before midnight. The strip shows this week, Monday to Sunday, and the right-hand column is what happened this week: sessions, breath days, night-out units. There are no targets: the defaults (3, 7, 12) were never changed, so they were dropped from the screens (Q05, 15 Oct 2026). The strip and the page share one request (`useHealthThisWeek`). The strip is a link to the Health page.
 - **Chips** under a memo card, for example `Gym · Back`, `Wim Hof · 10 min`, `Night out · Fri · home 03:30 · 1`. The x removes the label. A night without a time shows **home when?** and four buttons: Before 00:00, 00-03, 03-06, Morning, which set the home time to 23:30, 01:30, 04:30 and 08:00. All cards on a page get their labels through one request.
-- **/health** (sidebar link "Health"): the last 7 days against the targets, the night-out budget with the year's pace, the list of nights that need a home time, the year as three rows of weekly cells, and the Re-read diary button.
+- **/health** (sidebar link "Health"): this week's counts ("Trained 2 times this week"), the year's night-out units with their pace, the list of nights that need a home time, the year as three rows of weekly cells, and the Re-read diary button.
 
 **The weekly review** reads the reviewed week's rows and totals (Monday to Sunday, local days) into every Look back prompt: what was done on which day, the targets, bender nights, nights still needing a check and the year's night-out units. Each of the owner's own trackers gets a line too: its days (and hours or minutes) that week, and, when it is linked to a goal, how far it has got in that goal's period. It reads them through `healthReadWeek`, so it counts exactly what the /health page counts. The change history (`health_entry_event`) is not read. See [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
 

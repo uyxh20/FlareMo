@@ -15,7 +15,6 @@ import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import { cn } from "@/lib/utils";
 import {
-  healthFetchWeek,
   healthFetchYear,
   healthPatchEntryRequest,
   healthRescanRequest,
@@ -26,12 +25,12 @@ import {
   healthFormatUnits,
   healthLevel,
   healthMonthMarks,
-  healthShare,
   healthWeekdayShort,
   healthYearWeeks,
 } from "./model";
 import { healthQueryKeys } from "./query-keys";
 import { healthStrings } from "./strings";
+import { useHealthThisWeek } from "./this-week";
 import {
   healthKindClass,
   healthOwnTrackers,
@@ -41,7 +40,8 @@ import { HealthTrackersPanel } from "./trackers-panel";
 import "./health.css";
 
 // The Health page at /health (fork-owned add-on, docs/fork-health-tracker.md):
-// the last seven days against the targets, the night-out budget with its pace,
+// what happened this week (counts, no targets), the nights out so far this year
+// with their pace,
 // the nights still waiting for a home time, and the year week by week. A button
 // reads the whole diary again. Same WorkspaceLayout and WorkspacePageHeader as
 // the cockpit.
@@ -68,36 +68,18 @@ function Section({
   );
 }
 
-function Bar({ share }: { share: number }) {
-  return (
-    <div
-      aria-hidden="true"
-      className="health-bar-track h-1.5 overflow-hidden rounded-full"
-    >
-      <div
-        className="health-bar-fill h-full rounded-full motion-safe:transition-[width] motion-safe:duration-500"
-        style={{ width: `${Math.round(share * 100)}%` }}
-      />
-    </div>
-  );
-}
-
 function Tile({
   kind,
   kindClass = `health-kind-${kind}`,
   title,
   big,
-  of,
   note,
-  share,
 }: {
   kind: HealthEntryKind;
   kindClass?: string;
   title: string;
   big: string;
-  of?: number;
   note: string;
-  share?: number;
 }) {
   return (
     <div
@@ -116,13 +98,7 @@ function Tile({
         >
           {big}
         </span>
-        {of !== undefined && (
-          <span className="text-sm text-muted-foreground tabular-nums">
-            / {of}
-          </span>
-        )}
       </div>
-      {share !== undefined && <Bar share={share} />}
       <span className="text-xs text-muted-foreground">{note}</span>
     </div>
   );
@@ -130,12 +106,7 @@ function Tile({
 
 function WeekSection() {
   const trackers = useHealthTrackers().data?.trackers;
-  const query = useQuery({
-    queryKey: healthQueryKeys.week("last7"),
-    queryFn: () => healthFetchWeek(),
-    staleTime: 30_000,
-    retry: false,
-  });
+  const query = useHealthThisWeek();
   if (query.isError) {
     return (
       <QueryErrorState
@@ -156,23 +127,13 @@ function WeekSection() {
         <Tile
           big={String(summary.training.sessions)}
           kind="training"
-          note={s.trainingNote(
-            summary.training.sessions,
-            summary.training.target,
-          )}
-          of={summary.training.target}
-          share={healthShare(
-            summary.training.sessions,
-            summary.training.target,
-          )}
+          note={s.trainingNote(summary.training.sessions)}
           title={s.trainingTile}
         />
         <Tile
           big={String(summary.breath.days)}
           kind="breath"
-          note={s.breathNote(summary.breath.days, summary.breath.target)}
-          of={summary.breath.target}
-          share={healthShare(summary.breath.days, summary.breath.target)}
+          note={s.breathNote(summary.breath.days, summary.breath.minutes)}
           title={s.breathTile}
         />
         <Tile
@@ -223,10 +184,7 @@ function NeedsCheck({
       void queryClient.invalidateQueries({
         queryKey: healthQueryKeys.year(year),
       });
-      void queryClient.invalidateQueries({ queryKey: ["health", "week"] });
-      void queryClient.invalidateQueries({
-        queryKey: healthQueryKeys.stripAll,
-      });
+      void queryClient.invalidateQueries({ queryKey: healthQueryKeys.weekAll });
       void queryClient.invalidateQueries({ queryKey: ["health", "memo"] });
     },
     onError: () => toast.error(healthStrings.chip.failed),
@@ -416,17 +374,15 @@ function YearSections({ year }: { year: number }) {
               {healthFormatUnits(out.used)}
             </span>
             <span className="text-sm text-muted-foreground">
-              {s.budgetOf(out.target)}
+              {s.unitsSoFar}
             </span>
           </div>
-          <Bar share={healthShare(out.used, out.target)} />
           <p className="text-xs text-muted-foreground">
             {s.nightsLine(out.nights, out.benders)}
             {out.days_elapsed > 0 && out.used > 0 && (
               <>
                 {". "}
-                {s.pace(healthFormatUnits(projected))}{" "}
-                {projected > out.target ? s.paceOver : s.paceUnder}
+                {s.pace(healthFormatUnits(projected))}
               </>
             )}
           </p>

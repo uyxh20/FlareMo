@@ -721,7 +721,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
     module: "health",
     kind: "bookkeeping",
     owner: "fork",
-    holds: "When the diary was first read for health entries",
+    holds:
+      "When the diary was first read for health entries, and the bookmarks that let a cut-off read carry on",
     uses: plumbing("health tracker bookkeeping"),
   },
   {

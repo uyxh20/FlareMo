@@ -113,14 +113,28 @@ describe("the week strip", () => {
     expect(state("night_out", "2026-10-10")).toBe("check");
   });
 
-  it("counts the week against its targets and the year against its budget", async () => {
+  it("counts this week, with no targets", async () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
-    const text = container.textContent ?? "";
-    expect(text).toContain("1/3");
-    expect(text).toContain("1/7");
-    expect(text).toContain("3½/12 yr");
+    const counts = Array.from(container.querySelectorAll(".text-right")).map(
+      (cell) => cell.textContent,
+    );
+    expect(counts).toEqual(["1", "1", "1"]);
+    expect(container.textContent).not.toContain("/");
+  });
+
+  it("asks for this week, Monday to Sunday", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T09:00:00Z"));
+    try {
+      fetchWeek.mockResolvedValue(WEEK);
+      mount();
+      await settle();
+      expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("opens the Health page", async () => {

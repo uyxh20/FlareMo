@@ -230,12 +230,6 @@ export function healthMonthMarks(
   return marks;
 }
 
-/** Progress as a share of a target, capped for a bar. */
-export function healthShare(value: number, target: number): number {
-  if (target <= 0) return value > 0 ? 1 : 0;
-  return Math.max(0, Math.min(1, value / target));
-}
-
 /**
  * A linked tracker's line on a goal card: "Fasting · 9 days so far · avg 16 h".
  * The average is over the entries a length was read for, and only for a tracker that

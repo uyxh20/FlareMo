@@ -133,14 +133,7 @@
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--k) 55%, transparent);
 }
 
-/* --- Progress bars and the year grid ---------------------------------------- */
-
-.health-bar-track {
-  background: color-mix(in oklab, var(--muted-foreground) 16%, transparent);
-}
-.health-bar-fill {
-  background: var(--k);
-}
+/* --- The year grid ----------------------------------------------------------- */
 
 .health-cell {
   border-radius: 2px;
