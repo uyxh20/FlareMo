@@ -169,6 +169,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `.github/workflows/flaremo-update.yml` | The upstream release check runs weekly instead of daily, and its PR text says merging does not deploy. |
 | `AGENTS.md` | A "Fork: shipping to live" section at the top; the production-deploy lines and the workflow line point at `scripts/fork/prod-deploy.mjs`. |
 | `.github/workflows/deploy-cloudflare.yml` | Deleted on 2026-10-04: the fork deploys with `scripts/fork/prod-deploy.mjs` (see `docs/fork-dev-environment.md`). |
+| `packages/domain/package.json` | `@types/node` as a devDependency: the fork's guard tests in `packages/domain/src/fork/` use `node:` modules. Before the v0.22.1 merge they found the types only through pnpm's hidden hoisting, which the new `cf` package changed. |
 | `pnpm-lock.yaml` | Regenerated in the v0.22.1 merge: upstream added the `cf` devDependency without updating the lockfile. Goes back to upstream once upstream ships a matching lockfile. |
 | `.dev.vars.example`, `wrangler.jsonc.example`, `scripts/write-wrangler-config.mjs`, `scripts/write-wrangler-config.test.mjs` | Email provider settings for the deleted deploy workflow. Nothing runs them now. |
 
