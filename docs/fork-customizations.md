@@ -201,6 +201,15 @@ Fork code nothing called, removed after a review. Git history keeps all of it; n
 | `PUT /api/app/health-tracker/targets` | Gone. `health_target` was empty on live; `GET /targets` returns the defaults. |
 | `dev-env.mjs config`, `dev-env.mjs provision --skip-secrets`, `prod-deploy.mjs config` | Gone. `provision`, `clone` and `deploy` write the dev config; `prod-deploy.mjs deploy` writes the prod one. |
 
+## Cockpit rules with one home (15 Oct 2026, sprint 2)
+
+The cockpit's rules used to be written twice, once for the server and once for the web board. Each now has one home that both sides read. All fork-owned files; no upstream file, table or column changed.
+
+| Rule | Its one home | Who reads it |
+| --- | --- | --- |
+| Which column a card is in, how each column is ordered, what a move to another column does to the status and the plan, the status a new card starts with, the To Do marker | `packages/contracts/src/planner-board.ts`, pinned by one table test, `planner-board.test.ts` | The server's board read (`board.ts`), column move and create (`plans.ts`) through `columns.ts`; the web board's predictions (`board-model.ts`) |
+| The period maths (day, week, month, quarter) | `packages/contracts/src/planner-periods.ts`, moved out of `planner.ts` unchanged so `planner-board.ts` can read it without importing `planner.ts` back | Everything that imported it from `@flaremo/contracts`, unchanged |
+
 ## Undoing a change
 
 **Bring one sidebar entry back.** Delete its line in `forkHiddenSidebarRoutes`. Nothing else needs to change: its `<Link>` block is still in `flaremo-explorer.tsx`. Set `forkOnThisDayBannerHidden` to `false` to bring the banner back. To drop the whole change, revert the three-line hook-in (and the `use-workspace-queries.ts` line) and delete `sidebar-nav.tsx` and its two tests.

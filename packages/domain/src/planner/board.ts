@@ -1,7 +1,7 @@
 import {
   type PlannerHorizon,
-  plannerCompareRanked,
-  plannerNextPeriodStart,
+  plannerCompareCards,
+  plannerDoneAt,
   plannerParseBoardRank,
   plannerPeriodStart,
 } from "@flaremo/contracts";
@@ -85,54 +85,8 @@ export type PlannerBoard = {
   truncated: boolean;
 };
 
-const HORIZON_RANK: Record<string, number> = { day: 0, week: 1, month: 2 };
-
 const byId = (left: PlannerBoardCard, right: PlannerBoardCard) =>
   left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
-
-/** Descending on a string field, newest first; ties fall back to the id. */
-function newestFirst(field: (card: PlannerBoardCard) => string) {
-  return (left: PlannerBoardCard, right: PlannerBoardCard) => {
-    const a = field(left);
-    const b = field(right);
-    return a < b ? 1 : a > b ? -1 : byId(left, right);
-  };
-}
-
-/** Upstream's own order: `sort_order`, then creation time. */
-const byUpstreamOrder = (left: PlannerBoardCard, right: PlannerBoardCard) =>
-  left.sort_order - right.sort_order ||
-  (left.created_at < right.created_at
-    ? -1
-    : left.created_at > right.created_at
-      ? 1
-      : byId(left, right));
-
-/**
- * The day a plan's period ends (exclusive). A damaged value sorts by its start,
- * because sorting must never throw.
- */
-function periodEnd(card: PlannerBoardCard): string {
-  if (card.horizon === null || card.period_start === null) return "";
-  try {
-    return plannerNextPeriodStart(card.horizon, card.period_start);
-  } catch {
-    return card.period_start;
-  }
-}
-
-/**
- * Nearest deadline first: the plan whose period ends soonest, so today's day
- * plans sit above this week's, which sit above this month's. A day goes before a
- * week before a month when they end together, then upstream's order.
- */
-const byPlan = (left: PlannerBoardCard, right: PlannerBoardCard) =>
-  periodEnd(left).localeCompare(periodEnd(right)) ||
-  (HORIZON_RANK[left.horizon ?? ""] ?? 3) -
-    (HORIZON_RANK[right.horizon ?? ""] ?? 3) ||
-  byUpstreamOrder(left, right);
-
-const doneAt = (card: PlannerBoardCard) => card.completed_at ?? card.updated_at;
 
 /**
  * The board for one user: their live tasks left-joined to their plans and
@@ -263,18 +217,11 @@ export async function plannerReadBoard(
     groups[column].push(card);
   }
 
-  // Manually ranked cards first, in rank order; the rest follow in the column's
-  // own order (migration 9004).
-  const ranked = (
-    fallback: (l: PlannerBoardCard, r: PlannerBoardCard) => number,
-  ) =>
-    plannerCompareRanked<PlannerBoardCard>((card) => card.board_rank, fallback);
-  groups.backlog.sort(ranked(newestFirst((card) => card.created_at)));
-  groups.todo.sort(ranked(byPlan));
-  groups.doing.sort(ranked(byUpstreamOrder));
-  groups.done.sort(ranked(newestFirst(doneAt)));
-  groups.other.sort(newestFirst((card) => card.created_at));
-  groups.dropped.sort(newestFirst((card) => card.dropped_at ?? ""));
+  // Each column in its own order (planner-board.ts in the contracts, shared with
+  // the web board): manually ranked cards first, then the column's natural order.
+  for (const [column, cards] of Object.entries(groups)) {
+    cards.sort(plannerCompareCards(column as keyof typeof groups));
+  }
 
   // The cap. To Do, Doing and Other are never cut; Backlog and Done share the rest.
   let truncated = false;
@@ -293,7 +240,7 @@ export async function plannerReadBoard(
           card,
           recency: card.created_at,
         })),
-        ...groups.done.map((card) => ({ card, recency: doneAt(card) })),
+        ...groups.done.map((card) => ({ card, recency: plannerDoneAt(card) })),
       ]
         .sort((left, right) =>
           left.recency < right.recency
