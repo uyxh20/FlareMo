@@ -2115,6 +2115,33 @@ describe("planner API", () => {
         ),
       ).toEqual([]);
     });
+
+    it("creates a task already linked to a weekly goal in one POST, and none for a goal that cannot hold it", async () => {
+      const goal = await createWeekGoal("Ship the launch");
+      const created = onTheWire(
+        plannerCreateTaskResponseSchema,
+        await body<PlannerCreateTaskResponse>(
+          send("POST", `${API}/tasks`, {
+            title: "From the year map",
+            today: TODAY,
+            goal_id: goal.id,
+          }),
+          201,
+        ),
+      );
+      expect(created).not.toHaveProperty("goal_error");
+      expect(created.plan).toMatchObject({ horizon: null, goal_id: goal.id });
+
+      await body(
+        send("POST", `${API}/tasks`, {
+          title: "Orphan",
+          today: TODAY,
+          goal_id: "00000000-0000-4000-8000-000000000000",
+        }),
+        404,
+      );
+      expect(await count("tasks")).toBe(1);
+    });
   });
 
   describe("PATCH /tasks/:id with effort", () => {

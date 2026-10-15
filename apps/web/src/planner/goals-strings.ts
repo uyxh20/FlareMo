@@ -108,6 +108,8 @@ export type PlannerGoalsStrings = {
     addTask: string;
     newTask: string;
     taskAdded: string;
+    /** The task exists, but its link to the goal could not be saved. */
+    taskAddedNoGoal: string;
     addTaskFailed: string;
     openCockpit: string;
     editGoal: string;
@@ -403,6 +405,8 @@ const en: PlannerGoalsStrings = {
     addTask: "Add a task",
     newTask: "New task for this goal",
     taskAdded: "Task added to the backlog",
+    taskAddedNoGoal:
+      "Task added to the backlog, but not linked to this goal. Link it from the task.",
     addTaskFailed: "Couldn't add the task.",
     openCockpit: "Open in cockpit",
     editGoal: "Edit goal",
@@ -684,6 +688,7 @@ const zhCN: PlannerGoalsStrings = {
     addTask: "添加任务",
     newTask: "这个目标的新任务",
     taskAdded: "任务已加入待规划",
+    taskAddedNoGoal: "任务已加入待规划，但没有关联到这个目标。请在任务里关联。",
     addTaskFailed: "任务添加失败。",
     openCockpit: "在驾驶舱打开",
     editGoal: "编辑目标",

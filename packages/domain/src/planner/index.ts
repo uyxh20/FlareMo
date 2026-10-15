@@ -28,4 +28,5 @@ export type {
   PlannerEventType,
   PlannerHistoryStatus,
 } from "./shared";
+export * from "./task-change";
 export * from "./task-detail";

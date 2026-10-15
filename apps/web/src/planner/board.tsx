@@ -45,8 +45,8 @@ import { cn } from "@/lib/utils";
 import {
   type PlannerColumnKey,
   plannerCardColumn,
-  plannerColumns,
   plannerFindCard,
+  plannerIsColumn,
   plannerIsPendingCard,
   plannerResolveDrop,
 } from "./board-model";
@@ -75,9 +75,10 @@ import {
 // docs/planning-cockpit-implementation-plan.md, section 5): Backlog, To Do, Doing
 // and Done side by side, plus Other when a task has a status the cockpit does not
 // know. Dropping a card on a column asks the server to move it
-// (`PATCH {column}`); the server owns the move table. Modelled on upstream's
-// pages/projects/board.tsx, minus the in-column sorting that this board, ordered
-// by plan, does not have.
+// (`PATCH {column}`); the server owns the move table, and the board predicts the
+// result with the same table (planner-board.ts in the contracts). Dropping a card
+// between two others also sets its place in the column (its manual rank).
+// Modelled on upstream's pages/projects/board.tsx.
 //
 // Sensors: a mouse sensor (the card lifts after 6px) and a touch sensor (a
 // deliberate long press lifts it, 400 ms without moving more than 5px, so even a
@@ -678,11 +679,7 @@ export function PlannerBoard({
               label={strings.column[column]}
               reveal={reveal}
               today={today}
-              onAdd={
-                (plannerColumns as readonly string[]).includes(column)
-                  ? addTo(column as PlannerColumn)
-                  : undefined
-              }
+              onAdd={plannerIsColumn(column) ? addTo(column) : undefined}
               onOpen={onOpen}
               onRequest={onRequest}
             />

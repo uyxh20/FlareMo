@@ -9,9 +9,7 @@ import {
   plannerBoardCardCount,
   plannerCardColumn,
   plannerCardFromTask,
-  plannerColumns,
   plannerFindCard,
-  plannerHasPlan,
   plannerIsOverdue,
   plannerIsPendingCard,
   plannerPendingCard,
@@ -90,155 +88,9 @@ function board(
 const ids = (cards: readonly PlannerBoardCard[] | undefined) =>
   (cards ?? []).map((entry) => entry.id);
 
-describe("plannerCardColumn", () => {
-  it("puts a todo task in To Do with a plan and in Backlog without", () => {
-    expect(plannerCardColumn(planned())).toBe("todo");
-    expect(plannerCardColumn(card())).toBe("backlog");
-  });
-
-  it("treats a horizon with no start (or a start with no horizon) as no plan", () => {
-    expect(plannerHasPlan(card({ horizon: "day", period_start: null }))).toBe(
-      false,
-    );
-    expect(
-      plannerCardColumn(card({ horizon: "day", period_start: null })),
-    ).toBe("backlog");
-    expect(plannerHasPlan(card({ horizon: null, period_start: WEEK }))).toBe(
-      false,
-    );
-  });
-
-  it("maps the other statuses onto Doing, Done and Other, whatever the plan", () => {
-    expect(plannerCardColumn(planned({ status: "in_progress" }))).toBe("doing");
-    expect(plannerCardColumn(card({ status: "in_progress" }))).toBe("doing");
-    expect(plannerCardColumn(planned({ status: "done" }))).toBe("done");
-    expect(plannerCardColumn(card({ status: "blocked" }))).toBe("other");
-  });
-
-  it("lets Dropped win over every status", () => {
-    for (const status of ["todo", "in_progress", "done", "blocked"]) {
-      expect(
-        plannerCardColumn(planned({ status, dropped_at: "2026-10-06T08:00Z" })),
-      ).toBe("dropped");
-    }
-  });
-
-  it("lists the four move targets in board order", () => {
-    expect(plannerColumns).toEqual(["backlog", "todo", "doing", "done"]);
-  });
-});
-
-describe("plannerSortCards", () => {
-  it("orders Backlog newest first, ties by id", () => {
-    const sorted = plannerSortCards("backlog", [
-      card({ id: "tasks/b", created_at: "2026-10-02T00:00:00Z" }),
-      card({ id: "tasks/c", created_at: "2026-10-03T00:00:00Z" }),
-      card({ id: "tasks/a", created_at: "2026-10-02T00:00:00Z" }),
-    ]);
-    expect(ids(sorted)).toEqual(["tasks/c", "tasks/a", "tasks/b"]);
-  });
-
-  it("orders To Do by the plan that ends soonest: days, then weeks, then months", () => {
-    const sorted = plannerSortCards("todo", [
-      planned({
-        id: "tasks/month",
-        horizon: "month",
-        period_start: "2026-10-01",
-      }),
-      planned({ id: "tasks/next-week", period_start: "2026-10-12" }),
-      planned({ id: "tasks/week" }),
-      planned({
-        id: "tasks/tomorrow",
-        horizon: "day",
-        period_start: "2026-10-08",
-      }),
-      planned({ id: "tasks/today", horizon: "day", period_start: TODAY }),
-    ]);
-    expect(ids(sorted)).toEqual([
-      "tasks/today",
-      "tasks/tomorrow",
-      "tasks/week",
-      "tasks/next-week",
-      "tasks/month",
-    ]);
-  });
-
-  it("breaks a To Do tie by upstream order, then creation time", () => {
-    const sorted = plannerSortCards("todo", [
-      planned({
-        id: "tasks/late",
-        sort_order: 0,
-        created_at: "2026-10-03T00:00:00Z",
-      }),
-      planned({
-        id: "tasks/first",
-        sort_order: -1,
-        created_at: "2026-10-04T00:00:00Z",
-      }),
-      planned({
-        id: "tasks/early",
-        sort_order: 0,
-        created_at: "2026-10-02T00:00:00Z",
-      }),
-    ]);
-    expect(ids(sorted)).toEqual(["tasks/first", "tasks/early", "tasks/late"]);
-  });
-
-  it("puts a day plan before a week plan that ends the same day", () => {
-    // Sunday the 11th ends this week; a day plan for it ends the same moment.
-    const sorted = plannerSortCards("todo", [
-      planned({ id: "tasks/week" }),
-      planned({
-        id: "tasks/sunday",
-        horizon: "day",
-        period_start: "2026-10-11",
-      }),
-    ]);
-    expect(ids(sorted)).toEqual(["tasks/sunday", "tasks/week"]);
-  });
-
-  it("orders Doing by upstream order, Done by completion newest first, Dropped by drop time", () => {
-    expect(
-      ids(
-        plannerSortCards("doing", [
-          card({ id: "tasks/b", sort_order: 2 }),
-          card({ id: "tasks/a", sort_order: 1 }),
-        ]),
-      ),
-    ).toEqual(["tasks/a", "tasks/b"]);
-    expect(
-      ids(
-        plannerSortCards("done", [
-          card({ id: "tasks/old", completed_at: "2026-10-02T00:00:00Z" }),
-          card({ id: "tasks/new", completed_at: "2026-10-05T00:00:00Z" }),
-          card({
-            id: "tasks/none",
-            completed_at: null,
-            updated_at: "2026-10-04T00:00:00Z",
-          }),
-        ]),
-      ),
-    ).toEqual(["tasks/new", "tasks/none", "tasks/old"]);
-    expect(
-      ids(
-        plannerSortCards("dropped", [
-          card({ id: "tasks/x", dropped_at: "2026-10-01T00:00:00Z" }),
-          card({ id: "tasks/y", dropped_at: "2026-10-06T00:00:00Z" }),
-        ]),
-      ),
-    ).toEqual(["tasks/y", "tasks/x"]);
-  });
-
-  it("does not touch the array it is given", () => {
-    const input = [
-      card({ created_at: "2026-10-01T00:00:00Z" }),
-      card({ created_at: "2026-10-09T00:00:00Z" }),
-    ];
-    const before = ids(input);
-    plannerSortCards("backlog", input);
-    expect(ids(input)).toEqual(before);
-  });
-});
+// Which column a card is in and how each column is ordered are the server's own
+// rules, pinned once in packages/contracts/src/planner-board.test.ts; this file
+// covers what the web board does with them.
 
 describe("plannerPlaceCard", () => {
   it("moves a card into the column its fields put it in", () => {
@@ -804,49 +656,6 @@ describe("cards that wait for the server", () => {
 });
 
 describe("manual order", () => {
-  it("sorts ranked cards first in key order in every column, then the natural order", () => {
-    const cards = [
-      card({ id: "tasks/n1", created_at: "2026-10-03T00:00:00.000Z" }),
-      card({ id: "tasks/b", board_rank: "b" }),
-      card({ id: "tasks/n2", created_at: "2026-10-05T00:00:00.000Z" }),
-      card({ id: "tasks/a", board_rank: "a" }),
-    ];
-    // Backlog is newest first for the cards without a rank.
-    expect(ids(plannerSortCards("backlog", cards))).toEqual([
-      "tasks/a",
-      "tasks/b",
-      "tasks/n2",
-      "tasks/n1",
-    ]);
-    for (const column of ["todo", "doing", "done"] as const) {
-      expect(ids(plannerSortCards(column, cards)).slice(0, 2)).toEqual([
-        "tasks/a",
-        "tasks/b",
-      ]);
-    }
-  });
-
-  it("does not order the Other and Dropped buckets by rank", () => {
-    const cards = [
-      card({
-        id: "tasks/x",
-        board_rank: "z",
-        goal_id: null,
-        created_at: "2026-10-09T00:00:00.000Z",
-      }),
-      card({
-        id: "tasks/y",
-        board_rank: "a",
-        goal_id: null,
-        created_at: "2026-10-01T00:00:00.000Z",
-      }),
-    ];
-    expect(ids(plannerSortCards("other", cards))).toEqual([
-      "tasks/x",
-      "tasks/y",
-    ]);
-  });
-
   it("forgets the rank when a card changes column", () => {
     const next = plannerPredictMove(
       planned({ board_rank: "m" }),

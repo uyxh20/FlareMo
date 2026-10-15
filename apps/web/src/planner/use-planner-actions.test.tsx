@@ -810,3 +810,99 @@ describe("placing a card in a column", () => {
     expect(todoIds()).toEqual(["tasks/new", "tasks/a", "tasks/b", "tasks/c"]);
   });
 });
+
+describe("two edits in flight at once", () => {
+  it("keeps a saved move when a later edit of the same card fails", async () => {
+    const card = seed();
+    const move = pendingRequest<PlannerTaskPlanResponse>();
+    const priority = pendingRequest<PlannerTaskPlanResponse>();
+    update
+      .mockReturnValueOnce(move.promise)
+      .mockReturnValueOnce(priority.promise);
+
+    actions.move(card, "doing");
+    actions.setPriority(card, "high");
+    await flush();
+    expect(boardCard()).toMatchObject({
+      status: "in_progress",
+      priority: "high",
+    });
+
+    move.resolve({ task: { ...TASK, status: "in_progress" }, plan: PLAN });
+    await flush();
+    priority.reject(new ApiError("Too many requests.", 429));
+    await flush();
+
+    // Only the priority goes back: the card stays in Doing on both views.
+    expect(boardCard()).toMatchObject({
+      status: "in_progress",
+      priority: "none",
+    });
+    expect(detail()?.task).toMatchObject({
+      status: "in_progress",
+      priority: "none",
+    });
+  });
+
+  it("keeps an earlier edit still in flight when a later one fails first", async () => {
+    const card = seed();
+    const title = pendingRequest<PlannerTaskPlanResponse>();
+    update
+      .mockReturnValueOnce(title.promise)
+      .mockRejectedValueOnce(new ApiError("No", 400));
+
+    actions.setTitle(card, "Renamed");
+    actions.setPriority(card, "high");
+    await flush();
+    expect(boardCard()).toMatchObject({ title: "Renamed", priority: "none" });
+
+    title.resolve({ task: { ...TASK, title: "Renamed" }, plan: PLAN });
+    await flush();
+    expect(boardCard()).toMatchObject({ title: "Renamed", priority: "none" });
+    expect(detail()?.task.title).toBe("Renamed");
+  });
+
+  it("does not take another card's reorder back when a move in the same column fails", async () => {
+    const cardIn = (id: string, rank: string) => ({
+      ...plannerCardFromDetail({
+        ...DETAIL,
+        task: { ...TASK, id, title: id },
+        plan: { ...PLAN, task_id: id },
+      }),
+      board_rank: rank,
+      goal_id: null,
+    });
+    const a = cardIn("tasks/a", "d");
+    const b = cardIn("tasks/b", "h");
+    const c = cardIn("tasks/c", "m");
+    queryClient.setQueryData(boardKey, {
+      ...EMPTY_BOARD,
+      columns: { ...EMPTY_BOARD.columns, todo: [a, b, c] },
+    });
+    const first = pendingRequest<PlannerTaskPlanResponse>();
+    const second = pendingRequest<PlannerTaskPlanResponse>();
+    update
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    const todoIds = () =>
+      queryClient
+        .getQueryData<PlannerBoardResponse>(boardKey)
+        ?.columns.todo.map((entry) => entry.id);
+
+    actions.reorder(c, { beforeId: "tasks/a" });
+    actions.reorder(a, { afterId: "tasks/b" });
+    await flush();
+    expect(todoIds()).toEqual(["tasks/c", "tasks/b", "tasks/a"]);
+
+    first.resolve({
+      task: { ...TASK, id: "tasks/c" },
+      plan: { ...PLAN, task_id: "tasks/c", board_rank: "todo|5" },
+    });
+    await flush();
+    second.reject(new ApiError("No", 400));
+    await flush();
+
+    // Card c stays on top, where its saved reorder put it; only a goes back.
+    expect(todoIds()).toEqual(["tasks/c", "tasks/a", "tasks/b"]);
+  });
+});

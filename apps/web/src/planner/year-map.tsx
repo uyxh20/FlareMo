@@ -27,9 +27,7 @@ import {
   plannerCreateTaskRequest,
   plannerErrorMessage,
   plannerFetchBoard,
-  plannerUpdateTaskRequest,
 } from "./api";
-import { plannerCardFromTask } from "./board-model";
 import { plannerPillarClass } from "./goal-cards";
 import type { PlannerGoalEditorTarget } from "./goal-editor";
 import {
@@ -825,17 +823,23 @@ function TaskPopBody({
     if (!title || busy) return;
     setBusy(true);
     try {
-      const response = await plannerCreateTaskRequest({ title, today });
-      const created = plannerCardFromTask(response.task, response.plan);
-      await plannerUpdateTaskRequest(created.id, { today, goal_id: goal.id });
+      // One request: the task is created already linked to the goal, so a
+      // refused second request can no longer leave it in Backlog without one
+      // while the kept draft invites a second task.
+      const response = await plannerCreateTaskRequest({
+        title,
+        today,
+        goal_id: goal.id,
+      });
       setDraft("");
-      toast.success(strings.map.taskAdded);
+      if (response.goal_error) toast.warning(strings.map.taskAddedNoGoal);
+      else toast.success(strings.map.taskAdded);
     } catch (error) {
       toast.error(
         plannerErrorMessage(
           error,
           strings.map.addTaskFailed,
-          strings.map.addTaskFailed,
+          cockpit.toast.rateLimited,
         ),
       );
     } finally {

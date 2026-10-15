@@ -1,4 +1,3 @@
-import type { PlannerTaskDetailResponse } from "@flaremo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, Loader2Icon } from "lucide-react";
 import { type RefObject, useId, useLayoutEffect, useRef } from "react";
@@ -7,10 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { queryKeys } from "@/lib/query-keys";
 import { plannerErrorMessage, plannerUpdateTaskRequest } from "./api";
-import { plannerDetailWithAnswer } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
-import { plannerToastId } from "./use-planner-actions";
+import { plannerStoreFor, plannerToastId } from "./use-planner-actions";
 import { usePlannerAutosave } from "./use-planner-autosave";
 
 // The task's notes (fork-owned add-on,
@@ -59,6 +57,12 @@ export function PlannerTaskNotes({
   const autosave = usePlannerAutosave({
     saved: notes ?? "",
     save: async (value, { keepalive }) => {
+      // The box holds the text while it saves, so nothing shows early; the saved
+      // notes go into the task's one copy (task-store.ts) when the server has
+      // them, and only the notes: a notes save never rewrites another field.
+      const change = plannerStoreFor(queryClient).begin(taskId, {
+        refresh: false,
+      });
       try {
         const input = {
           today,
@@ -70,11 +74,16 @@ export function PlannerTaskNotes({
         const response = await (keepalive
           ? plannerUpdateTaskRequest(taskId, input, { keepalive: true })
           : plannerUpdateTaskRequest(taskId, input));
-        queryClient.setQueryData<PlannerTaskDetailResponse>(
-          plannerQueryKeys.detail(taskId),
-          (detail) =>
-            detail ? plannerDetailWithAnswer(detail, response) : detail,
-        );
+        change.saved({
+          detail: (detail) => ({
+            ...detail,
+            task: {
+              ...detail.task,
+              notes: response.task.notes,
+              updated_at: response.task.updated_at,
+            },
+          }),
+        });
         // Upstream's own task lists show notes too, and the archive has a new
         // "Edited" line. The board shows neither, so it is left alone.
         void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
@@ -82,6 +91,7 @@ export function PlannerTaskNotes({
           queryKey: plannerQueryKeys.history(taskId),
         });
       } catch (error) {
+        change.failed();
         toast.error(
           plannerErrorMessage(
             error,

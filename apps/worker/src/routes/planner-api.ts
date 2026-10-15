@@ -15,28 +15,19 @@ import {
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
 } from "@flaremo/contracts";
-import { parseResourceName, updateTask } from "@flaremo/domain";
+import { parseResourceName } from "@flaremo/domain";
 import {
   plannerAddComment,
-  plannerApplyColumnMove,
-  plannerCreateTask,
+  plannerAddTask,
+  plannerChangeTask,
   plannerDeleteComment,
-  plannerDropTask,
   plannerListComments,
-  plannerRankNewTaskOnTop,
   plannerReadBoard,
   plannerReadCockpitWeek,
   plannerReadHistoryRange,
   plannerReadTaskDetail,
   plannerReadTaskHistory,
-  plannerReadTaskPlan,
-  plannerSetBoardRank,
-  plannerSetEffort,
-  plannerSetPlan,
-  plannerSetStartDate,
-  plannerSetTaskGoal,
   plannerSyncHistory,
-  plannerUndropTask,
   plannerUpdateComment,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
@@ -135,6 +126,10 @@ plannerApi.post("/rollover", async (c) => {
 
 // --- Tasks ------------------------------------------------------------------
 
+// A new task, in a column and with a goal when asked (plannerAddTask). The task
+// exists once this answers 201. When only its plan or its goal link could not be
+// saved, `plan` is null or the goal is missing and `plan_error` or `goal_error`
+// tells the client to retry that part.
 plannerApi.post(
   "/tasks",
   zValidator("json", plannerCreateTaskSchema),
@@ -145,7 +140,7 @@ plannerApi.post(
       if (throttled) return throttled;
       const body = c.req.valid("json");
       plannerAssertToday(body.today, new Date());
-      const created = await plannerCreateTask(context.db, {
+      const created = await plannerAddTask(context.db, {
         user: context.user,
         actor: await plannerResolveActor(c, context.credential),
         title: body.title,
@@ -155,33 +150,14 @@ plannerApi.post(
         projectId: body.project_id,
         column: body.column,
         plan: body.plan,
+        goalId: body.goal_id,
         today: body.today,
       });
-      const { task, planError } = created;
-      let plan = created.plan;
-      // A column with a manual order puts the new card on top of it (migration
-      // 9004); an unranked column keeps its natural order and nothing is written.
-      if (
-        body.column !== undefined &&
-        (await plannerRankNewTaskOnTop(context.db, {
-          userId: context.user.id,
-          taskId: task.id,
-          column: body.column,
-        }))
-      ) {
-        plan = (
-          await plannerReadTaskPlan(context.db, {
-            user: context.user,
-            taskId: task.id,
-          })
-        ).plan;
-      }
-      // The task exists either way. When only its plan could not be saved,
-      // `plan` is null and `plan_error` tells the client to offer a retry.
       const response: PlannerCreateTaskResponse = {
-        task,
-        plan,
-        ...(planError ? { plan_error: planError } : {}),
+        task: created.task,
+        plan: created.plan,
+        ...(created.planError ? { plan_error: created.planError } : {}),
+        ...(created.goalError ? { goal_error: created.goalError } : {}),
       };
       return c.json(response, 201);
     } catch (error) {
@@ -207,17 +183,10 @@ plannerApi.get("/tasks/:id", async (c) => {
   }
 });
 
-// One request can change a task's status column, plan, effort, start date, drop state
-// and upstream fields together. The order is the contract (documented on
-// `plannerUpdateTaskSchema`): undrop first, so a dropped task can be planned or
-// moved in the same request; then the upstream fields, through upstream's own
-// `updateTask` and only the fields given; then the column move (and, with `before_id` or
-// `after_id`, its place in the column) or the plan (the schema rejects column
-// and plan together); then the effort estimate and the start date; and
-// drop last, so it also clears a due date set a step earlier. The steps are separate
-// writes, so a step that fails leaves the earlier ones applied. No step is given a
-// shared `now`: each reads the clock when it runs, so the events of one request come
-// out in the order they happened.
+// One request can change a task's column and place, plan, effort, start date,
+// goal, drop state and upstream fields together. plannerChangeTask owns the order
+// (documented on `plannerUpdateTaskSchema`) and checks everything it can refuse
+// before the first write.
 plannerApi.patch(
   "/tasks/:id",
   zValidator("json", plannerUpdateTaskSchema),
@@ -226,88 +195,32 @@ plannerApi.patch(
       const context = await getRequestContext(c);
       const throttled = await rateLimitGuard(c, "planner", context.user.id);
       if (throttled) return throttled;
-      const {
-        today,
-        column,
-        plan,
-        effort,
-        start_date,
-        goal_id,
-        before_id,
-        after_id,
-        dropped,
-        ...fields
-      } = c.req.valid("json");
-      plannerAssertToday(today, new Date());
-      const { db, user } = context;
-      const actor = await plannerResolveActor(c, context.credential);
-      const taskId = parseTaskId(c.req.param("id"));
-
-      // The last planner step that ran holds the final task and plan, unless an
-      // upstream edit came after it.
-      let result: PlannerTaskPlanResponse | undefined;
-      if (dropped === false) {
-        result = await plannerUndropTask(db, { user, actor, taskId });
-      }
-      if (Object.keys(fields).length > 0) {
-        await updateTask(db, user, actor, taskId, fields);
-        result = undefined;
-      }
-      if (column !== undefined) {
-        result = await plannerApplyColumnMove(db, {
-          user,
-          actor,
-          taskId,
-          to: column,
-          today,
-        });
-        // Dropped between two cards: the column's order, one row, no event. The
-        // schema guarantees `column` is set whenever an anchor is.
-        if (before_id !== undefined || after_id !== undefined) {
-          result = await plannerSetBoardRank(db, {
-            user,
-            taskId,
-            column,
-            beforeId: before_id,
-            afterId: after_id,
-            today,
-          });
-        }
-      } else if (plan !== undefined) {
-        result = await plannerSetPlan(db, {
-          user,
-          actor,
-          taskId,
-          plan,
-          today,
-        });
-      }
-      if (effort !== undefined) {
-        result = await plannerSetEffort(db, { user, actor, taskId, effort });
-      }
-      if (start_date !== undefined) {
-        result = await plannerSetStartDate(db, {
-          user,
-          actor,
-          taskId,
-          startDate: start_date,
-        });
-      }
-      if (goal_id !== undefined) {
-        await plannerSetTaskGoal(db, { user, actor, taskId, goalId: goal_id });
-        result = undefined;
-      }
-      if (dropped === true) {
-        result = await plannerDropTask(db, { user, actor, taskId });
-      }
-
-      // Upstream's updateTask returns only the task, so read the plan back when
-      // nothing planner-side ran after it. Then pick just the two keys: a column
-      // move's result also carries `from` and `to`, which are not on the wire.
-      const final = result ?? (await plannerReadTaskPlan(db, { user, taskId }));
+      const body = c.req.valid("json");
+      plannerAssertToday(body.today, new Date());
+      const result = await plannerChangeTask(context.db, {
+        user: context.user,
+        actor: await plannerResolveActor(c, context.credential),
+        taskId: parseTaskId(c.req.param("id")),
+        today: body.today,
+        change: {
+          dropped: body.dropped,
+          title: body.title,
+          notes: body.notes,
+          priority: body.priority,
+          dueAt: body.due_at,
+          projectId: body.project_id,
+          column: body.column,
+          beforeId: body.before_id,
+          afterId: body.after_id,
+          plan: body.plan,
+          effort: body.effort,
+          startDate: body.start_date,
+          goalId: body.goal_id,
+        },
+      });
       const response: PlannerTaskPlanResponse = {
-        task: final.task,
-        plan: final.plan,
+        task: result.task,
+        plan: result.plan,
       };
       return c.json(response);
     } catch (error) {

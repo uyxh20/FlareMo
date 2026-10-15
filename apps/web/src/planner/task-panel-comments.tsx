@@ -44,7 +44,7 @@ import {
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
 import { usePlannerAutoGrow } from "./task-panel-notes";
-import { plannerToastId } from "./use-planner-actions";
+import { plannerStoreFor, plannerToastId } from "./use-planner-actions";
 
 // The task's comments (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): oldest first, each
@@ -52,10 +52,10 @@ import { plannerToastId } from "./use-planner-actions";
 // edited in place and deleted after a confirmation. The box at the bottom sends on
 // Enter and adds a line on Shift+Enter.
 //
-// Changes are optimistic, in the panel's cached detail: a new comment shows at
-// once, dimmed, until the server's copy replaces it; an edit and a delete show at
-// once too. A failure puts things back and says why in a toast (and a new
-// comment's text returns to the box, so nothing typed is lost).
+// Changes are optimistic, in the task's one copy (task-store.ts): a new comment
+// shows at once, dimmed, until the server's copy replaces it; an edit and a
+// delete show at once too. A failure takes back only that change and says why in
+// a toast (and a new comment's text returns to the box, so nothing typed is lost).
 
 type Detail = PlannerTaskDetailResponse;
 
@@ -69,12 +69,14 @@ function usePlannerCommentActions(taskId: string) {
 
   return useMemo(() => {
     const detailKey = plannerQueryKeys.detail(taskId);
-    const patch = (change: (detail: Detail) => Detail) => {
-      queryClient.setQueryData<Detail>(detailKey, (detail) =>
-        detail ? change(detail) : detail,
-      );
-    };
+    const store = plannerStoreFor(queryClient);
     const current = () => queryClient.getQueryData<Detail>(detailKey);
+    /** A comment change, in the task's one copy (task-store.ts). */
+    const begin = async () => {
+      const change = store.begin(taskId, { refresh: false });
+      await queryClient.cancelQueries({ queryKey: detailKey });
+      return change;
+    };
     // Each change adds a line to the task's history; if it is open it refreshes.
     const refreshHistory = () =>
       void queryClient.invalidateQueries({
@@ -96,25 +98,26 @@ function usePlannerCommentActions(taskId: string) {
         serial.current += 1;
         const pendingId = plannerPendingCommentId(serial.current);
         const at = new Date().toISOString();
-        await queryClient.cancelQueries({ queryKey: detailKey });
-        patch((detail) =>
-          plannerDetailWithComment(detail, {
-            id: pendingId,
-            task_id: taskId,
-            body: body.trim(),
-            created_at: at,
-            updated_at: at,
-          }),
-        );
+        const change = await begin();
+        change.show({
+          detail: (detail) =>
+            plannerDetailWithComment(detail, {
+              id: pendingId,
+              task_id: taskId,
+              body: body.trim(),
+              created_at: at,
+              updated_at: at,
+            }),
+        });
         try {
           const { comment } = await plannerAddCommentRequest(taskId, body);
-          patch((detail) =>
-            plannerDetailReplacingComment(detail, pendingId, comment),
-          );
+          change.saved({
+            detail: (detail) => plannerDetailWithComment(detail, comment),
+          });
           refreshHistory();
           return true;
         } catch (error) {
-          patch((detail) => plannerDetailWithoutComment(detail, pendingId));
+          change.failed();
           fail(error, stringsRef.current.toast.commentAddFailed);
           return false;
         }
@@ -125,50 +128,48 @@ function usePlannerCommentActions(taskId: string) {
           (comment) => comment.id === commentId,
         );
         if (!before) return false;
-        await queryClient.cancelQueries({ queryKey: detailKey });
-        patch((detail) =>
-          plannerDetailReplacingComment(detail, commentId, {
-            ...before,
-            body: body.trim(),
-            updated_at: new Date().toISOString(),
-          }),
-        );
+        const change = await begin();
+        change.show({
+          detail: (detail) =>
+            plannerDetailReplacingComment(detail, commentId, {
+              ...before,
+              body: body.trim(),
+              updated_at: new Date().toISOString(),
+            }),
+        });
         try {
           const { comment } = await plannerUpdateCommentRequest(
             commentId,
             body,
           );
-          patch((detail) =>
-            plannerDetailReplacingComment(detail, commentId, comment),
-          );
+          change.saved({
+            detail: (detail) =>
+              plannerDetailReplacingComment(detail, commentId, comment),
+          });
           refreshHistory();
           return true;
         } catch (error) {
-          patch((detail) =>
-            plannerDetailReplacingComment(detail, commentId, before),
-          );
+          change.failed();
           fail(error, stringsRef.current.toast.commentEditFailed);
           return false;
         }
       },
 
       remove: async (commentId: string): Promise<void> => {
-        const comments = current()?.comments ?? [];
-        const index = comments.findIndex((comment) => comment.id === commentId);
-        const before = comments[index];
-        if (!before) return;
-        await queryClient.cancelQueries({ queryKey: detailKey });
-        patch((detail) => plannerDetailWithoutComment(detail, commentId));
+        if (!current()?.comments.some((comment) => comment.id === commentId)) {
+          return;
+        }
+        const change = await begin();
+        const without = (detail: Detail) =>
+          plannerDetailWithoutComment(detail, commentId);
+        change.show({ detail: without });
         try {
           await plannerDeleteCommentRequest(commentId);
+          change.saved({ detail: without });
           refreshHistory();
         } catch (error) {
-          // Back where it was, not at the end: the list is oldest first.
-          patch((detail) => {
-            const restored = [...detail.comments];
-            restored.splice(Math.min(index, restored.length), 0, before);
-            return { ...detail, comments: restored };
-          });
+          // It comes back where it was: only this change is taken away.
+          change.failed();
           fail(error, stringsRef.current.toast.commentDeleteFailed);
         }
       },

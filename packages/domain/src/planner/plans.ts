@@ -1,5 +1,8 @@
 import {
   type PlannerHorizon,
+  plannerCardColumn,
+  plannerColumnMove,
+  plannerColumnStatus,
   plannerEffortMax,
   plannerHorizons,
   plannerIsValidDayKey,
@@ -16,12 +19,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { ValidationError } from "../errors";
 import { createTask, getTask, updateTask } from "../tasks";
-import {
-  type PlannerColumn,
-  plannerColumnFor,
-  plannerHasPlan,
-  plannerIsColumn,
-} from "./columns";
+import { type PlannerColumn, plannerHasPlan, plannerIsColumn } from "./columns";
 import {
   type PlannerActor,
   plannerEventStatement,
@@ -259,14 +257,6 @@ export async function plannerReadTaskPlan(
 // Create
 // ---------------------------------------------------------------------------
 
-/** The upstream status a task created in each column starts with. */
-const CREATE_STATUS: Record<PlannerColumn, StatusTarget> = {
-  backlog: "todo",
-  todo: "todo",
-  doing: "in_progress",
-  done: "done",
-};
-
 /**
  * Creates a task through upstream's `createTask` and, when a plan is given,
  * writes the plan and its `planned` event in one batch.
@@ -338,7 +328,7 @@ export async function plannerCreateTask(
     priority: input.priority,
     due_at: input.dueAt,
     project_id: input.projectId,
-    status: column === undefined ? "todo" : CREATE_STATUS[column],
+    status: column === undefined ? "todo" : plannerColumnStatus[column],
   });
   if (!resolved) return { task, plan: null };
 
@@ -670,26 +660,10 @@ export async function plannerUndropTask(
 // Column moves
 // ---------------------------------------------------------------------------
 
-/** Plan before today's period: the one case where "Done to To Do" re-plans. */
-function isPast(plan: PlannerTaskPlanRow, today: string): boolean {
-  return (
-    plan.horizon !== null &&
-    plan.periodStart !== null &&
-    plan.periodStart < plannerPeriodStart(plan.horizon, today)
-  );
-}
-
 /**
- * Moves a card to a column, applying the plan's column-move table:
- *
- *   Backlog to To Do        plan = this week (default)
- *   To Do to Backlog        plan cleared
- *   Backlog or To Do to Doing   status in_progress, plan kept
- *   any to Done             status done, plan kept for history
- *   Doing to To Do          status todo; no plan (or NULL horizon): plan = this week
- *   Doing or Done to Backlog    status todo, plan cleared
- *   Done to To Do           status todo; plan missing, NULL horizon or past: this week
- *   Done to Doing           status in_progress
+ * Moves a card to a column by the column-move table, `plannerColumnMove` in the
+ * contracts (planner-board.ts). The web board predicts moves with the same
+ * table, so a dragged card shows exactly what is saved here.
  *
  * A move to the column the task is already in does nothing. A task with an
  * unknown status moves like any other. A dropped task cannot be moved.
@@ -721,39 +695,25 @@ export async function plannerApplyColumnMove(
   const existing = await loadPlan(db, input.user.id, taskId);
   assertNotDropped(existing);
 
-  const from = plannerColumnFor({
+  const fields = {
     status: task.status,
     horizon: existing?.horizon ?? null,
-    periodStart: existing?.periodStart ?? null,
-    droppedAt: null,
-  }) as PlannerColumn | "other";
-  if (from === to) {
+    period_start: existing?.periodStart ?? null,
+    dropped_at: null,
+  };
+  const from = plannerCardColumn(fields) as PlannerColumn | "other";
+  const move = plannerColumnMove(fields, to, today);
+  if (move === null) {
     return { ...(await resultFor(db, input.user, taskId)), from, to };
   }
-
-  const hasPlan = plannerHasPlan(existing);
-  let status: StatusTarget | null = null;
-  let plan: ResolvedPlan | null | undefined; // undefined: leave the plan alone
-
-  switch (to) {
-    case "todo":
-      status = "todo";
-      if (from === "backlog" || !hasPlan) plan = todoMarker(today);
-      else if (from === "done" && existing && isPast(existing, today)) {
-        plan = todoMarker(today);
-      }
-      break;
-    case "backlog":
-      status = "todo";
-      if (hasPlan) plan = null;
-      break;
-    case "doing":
-      status = "in_progress";
-      break;
-    case "done":
-      status = "done";
-      break;
-  }
+  const status: StatusTarget = move.status;
+  // undefined: leave the plan alone
+  const plan: ResolvedPlan | null | undefined =
+    move.plan === "todo-marker"
+      ? todoMarker(today)
+      : move.plan === "clear"
+        ? null
+        : undefined;
 
   if (plan !== undefined) {
     await writePlanChange(db, {
@@ -765,7 +725,7 @@ export async function plannerApplyColumnMove(
       now: plannerNow(input.now),
     });
   }
-  if (status !== null && status !== task.status) {
+  if (status !== task.status) {
     await updateTask(db, input.user, input.actor, taskId, { status });
   }
   return { ...(await resultFor(db, input.user, taskId)), from, to };

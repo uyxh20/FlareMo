@@ -601,6 +601,23 @@ export async function plannerUpsertWeek(
 }
 
 /**
+ * Checks that a goal can hold tasks: one of the caller's live goals (a 404
+ * otherwise) at the week level (a 400 otherwise). Save week and the goal cards
+ * read week goals alone, so a link to a year or quarter goal would never show or
+ * unlink (fork review finding C07).
+ */
+export async function plannerRequireWeeklyGoal(
+  db: FlareMoDb,
+  userId: string,
+  goalId: string,
+): Promise<void> {
+  const goal = await loadGoal(db, userId, goalId);
+  if (goal.level !== "week") {
+    throw new ValidationError("A task can only be linked to a weekly goal.");
+  }
+}
+
+/**
  * Links a task to a weekly goal (`goalId`) or unlinks it (null), with a
  * `goal_changed` event `{from, to}` in the same batch. A task with no plan row
  * gets one with a NULL horizon, which plans nothing. Returns whether anything
@@ -619,13 +636,7 @@ export async function plannerSetTaskGoal(
   const taskId = plannerNormalizeTaskId(input.taskId);
   const task = await plannerLoadLiveTask(db, input.user.id, taskId);
   if (input.goalId !== null) {
-    const goal = await loadGoal(db, input.user.id, input.goalId);
-    // Only weekly goals hold tasks: Save week and the goal cards read week
-    // goals alone, so a link to a year or quarter goal would never show or
-    // unlink (fork review finding C07).
-    if (goal.level !== "week") {
-      throw new ValidationError("A task can only be linked to a weekly goal.");
-    }
+    await plannerRequireWeeklyGoal(db, input.user.id, input.goalId);
   }
   const existing = await plannerLoadPlan(db, input.user.id, taskId);
   const from = existing?.goalId ?? null;
