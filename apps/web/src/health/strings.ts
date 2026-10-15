@@ -17,7 +17,7 @@ export const healthStrings = {
   },
 
   strip: {
-    label: "Health, last 7 days",
+    label: "Health, this week",
     open: "Open the health page",
     needsCheck: "Home time needed",
     beforeMidnight: "Home before midnight, not counted",
@@ -128,20 +128,24 @@ export const healthStrings = {
   ] as ReadonlyArray<{ label: string; homeAt: string }>,
 
   page: {
-    thisWeek: "Last 7 days",
+    thisWeek: "This week",
     weekRange: (from: string, to: string) => `${from} to ${to}`,
     trainingTile: "Training",
-    trainingNote: (sessions: number, target: number) =>
-      `${sessions} of ${target} sessions`,
+    trainingNote: (sessions: number) =>
+      sessions === 0
+        ? "No training yet this week"
+        : `Trained ${sessions} ${sessions === 1 ? "time" : "times"} this week`,
     breathTile: "Breath work",
-    breathNote: (days: number, target: number) => `${days} of ${target} days`,
+    breathNote: (days: number, minutes: number) =>
+      days === 0
+        ? "No breath work yet this week"
+        : `${days} ${days === 1 ? "day" : "days"} this week${minutes > 0 ? `, ${minutes} min` : ""}`,
     outTile: "Nights out",
-    outNote: (units: string) => `${units} in the last 7 days`,
-    budgetTitle: (year: number) => `Night-out budget ${year}`,
-    budgetOf: (target: number) => `of ${target} units used`,
+    outNote: (units: string) =>
+      `${units} ${units === "1" ? "unit" : "units"} this week`,
+    budgetTitle: (year: number) => `Nights out ${year}`,
+    unitsSoFar: "units so far this year",
     pace: (pace: string) => `At this rate the year ends at ${pace}.`,
-    paceOver: "That is over the budget.",
-    paceUnder: "That is within the budget.",
     nightsLine: (nights: number, benders: number) =>
       benders > 0
         ? `${nights} ${nights === 1 ? "night" : "nights"}, ${benders} ${benders === 1 ? "bender" : "benders"}`

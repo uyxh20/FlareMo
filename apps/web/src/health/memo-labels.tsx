@@ -37,8 +37,7 @@ function useLabelWrites(memo: LabelMemo) {
       next(entries ?? []),
     );
     // The strip and the page count the same rows.
-    void queryClient.invalidateQueries({ queryKey: healthQueryKeys.stripAll });
-    void queryClient.invalidateQueries({ queryKey: ["health", "week"] });
+    void queryClient.invalidateQueries({ queryKey: healthQueryKeys.weekAll });
     void queryClient.invalidateQueries({ queryKey: ["health", "year"] });
   };
   const fail = () => toast.error(healthStrings.chip.failed);

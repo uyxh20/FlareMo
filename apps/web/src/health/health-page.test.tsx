@@ -157,7 +157,7 @@ describe("the Health page", () => {
     expect(fetchYear).toHaveBeenCalledWith(2026);
   });
 
-  it("shows the week against its targets", async () => {
+  it("shows this week's counts, with no targets", async () => {
     const container = await show();
     const tiles = Array.from(
       container.querySelectorAll('[data-testid="health-tile"]'),
@@ -171,28 +171,23 @@ describe("the Health page", () => {
     expect(tiles[3]?.textContent).toContain("Fasting");
     expect(tiles[3]?.textContent).toContain("34 h in total");
     expect(tiles[3]?.className).toContain("health-kind-t-green");
-    expect(tiles[0]?.textContent).toContain("2 of 3 sessions");
-    expect(tiles[1]?.textContent).toContain("5 of 7 days");
-    expect(tiles[2]?.textContent).toContain("1½ in the last 7 days");
+    expect(tiles[0]?.textContent).toContain("Trained 2 times this week");
+    expect(tiles[1]?.textContent).toContain("5 days this week, 50 min");
+    expect(tiles[2]?.textContent).toContain("1½ units this week");
+    expect(tiles.map((t) => t.textContent).join(" ")).not.toMatch(/ of \d/);
+    // Monday to Sunday: the Monday of the week of Tuesday 13 October.
+    expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
   });
 
-  it("shows the budget, the nights, the pace and whether it holds", async () => {
+  it("shows the year's nights out and their pace, with no budget", async () => {
     const container = await show();
     const budget = container.querySelector('[data-testid="health-budget"]');
-    expect(budget?.textContent).toContain("6");
-    expect(budget?.textContent).toContain("of 12 units used");
+    expect(container.textContent).toContain("Nights out 2026");
+    expect(budget?.textContent).toContain("6units so far this year");
     expect(budget?.textContent).toContain("9 nights, 2 benders");
     expect(budget?.textContent).toContain("ends at 7.7");
-    expect(budget?.textContent).toContain("within the budget");
-  });
-
-  it("says when the pace is over the budget", async () => {
-    fetchYear.mockResolvedValue({
-      ...YEAR,
-      night_out: { ...YEAR.night_out, pace: 15.2 },
-    });
-    const container = await show();
-    expect(container.textContent).toContain("That is over the budget.");
+    expect(budget?.textContent).not.toContain("12");
+    expect(budget?.textContent).not.toContain("budget");
   });
 
   it("lists the nights that need a home time and answers them", async () => {

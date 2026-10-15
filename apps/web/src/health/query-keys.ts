@@ -9,9 +9,9 @@ export const healthQueryKeys = {
     ["health", "memo", memoId, stamp] as const,
   /** Every cached label of one memo, whatever its stamp. */
   memoPrefix: (memoId: string) => ["health", "memo", memoId] as const,
-  strip: (start: string) => ["health", "strip", start] as const,
-  stripAll: ["health", "strip"] as const,
+  /** One week from its Monday: the diary strip and the Health page share it. */
   week: (start: string) => ["health", "week", start] as const,
+  weekAll: ["health", "week"] as const,
   year: (year: number) => ["health", "year", year] as const,
   trackers: ["health", "trackers"] as const,
   /** Tracker counts over each linked goal's period, for the goal cards. */

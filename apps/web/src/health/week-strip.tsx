@@ -3,12 +3,11 @@ import type {
   HealthEntryKind,
   HealthKind,
 } from "@flaremo/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { healthFetchWeek } from "./api";
 import {
   type HealthDotState,
   healthDotState,
@@ -17,6 +16,7 @@ import {
 } from "./model";
 import { healthQueryKeys } from "./query-keys";
 import { healthStrings } from "./strings";
+import { useHealthThisWeek } from "./this-week";
 import {
   healthKindClass,
   healthOwnTrackers,
@@ -25,13 +25,12 @@ import {
 import "./health.css";
 
 // The week strip on top of the diary timeline (fork-owned add-on,
-// docs/fork-health-tracker.md): a compact grid of the last seven days, one row
-// per kind. A filled dot is something done, a half dot is half a unit, a dashed
+// docs/fork-health-tracker.md): a compact grid of this week, Monday to Sunday,
+// one row per kind, with how many times each happened this week. A filled dot is something done, a half dot is half a unit, a dashed
 // ring is a night that still needs a home time. Tapping it opens the Health page.
 //
-// It reads `GET /week` with no start day, so the server's own "today" (the
-// owner's time zone, the one the days were filed under) decides which seven days
-// show. After a note is saved the timeline refreshes its stats; the strip
+// It shares `useHealthThisWeek` with the Health page: one request, one cache
+// entry. After a note is saved the timeline refreshes its stats; the strip
 // listens for that and reads again.
 
 const ROWS: Array<{ kind: HealthKind; label: string }> = [
@@ -81,14 +80,7 @@ function Dot({
 export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
   const queryClient = useQueryClient();
   const trackers = useHealthTrackers().data?.trackers;
-  const query = useQuery({
-    queryKey: healthQueryKeys.strip("last7"),
-    queryFn: () => healthFetchWeek(),
-    enabled: visible,
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-    retry: false,
-  });
+  const query = useHealthThisWeek({ enabled: visible });
 
   // A saved note refreshes the timeline's stats; the strip follows. The first
   // load of the stats (dataUpdateCount 1) is not a change.
@@ -102,7 +94,7 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
         event.query.state.dataUpdateCount > 1
       ) {
         void queryClient.invalidateQueries({
-          queryKey: healthQueryKeys.stripAll,
+          queryKey: healthQueryKeys.weekAll,
         });
       }
     });
@@ -118,10 +110,11 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
   const { start, today, entries, summary } = query.data;
   const own = healthOwnTrackers(trackers);
   const days = healthStripDays(start, today);
+  // What happened this week, no targets (the owner never set any).
   const counts: Record<HealthKind, string> = {
-    training: `${summary.training.sessions}/${summary.training.target}`,
-    breath: `${summary.breath.days}/${summary.breath.target}`,
-    night_out: `${healthFormatUnits(summary.night_out.year_used)}/${summary.night_out.year_target} yr`,
+    training: String(summary.training.sessions),
+    breath: String(summary.breath.days),
+    night_out: healthFormatUnits(summary.night_out.units),
   };
 
   return (

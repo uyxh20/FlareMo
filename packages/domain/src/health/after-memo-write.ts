@@ -12,7 +12,7 @@ import type { FlareMoDb } from "@flaremo/db";
 let warnedMissingTables = false;
 
 /** The message of an error and of everything it wraps (Drizzle hides D1's reason in `cause`). */
-function messageChain(error: unknown): string {
+export function healthErrorText(error: unknown): string {
   const parts: string[] = [];
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current; depth++) {
@@ -35,7 +35,7 @@ export async function forkHealthSyncMemo(
     const { healthSyncMemoById } = await import("./sync");
     await healthSyncMemoById(db, memoId);
   } catch (error) {
-    const message = messageChain(error);
+    const message = healthErrorText(error);
     if (/no such table/i.test(message)) {
       if (!warnedMissingTables) {
         warnedMissingTables = true;
