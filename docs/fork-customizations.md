@@ -209,6 +209,7 @@ The cockpit's rules used to be written twice, once for the server and once for t
 | --- | --- | --- |
 | Which column a card is in, how each column is ordered, what a move to another column does to the status and the plan, the status a new card starts with, the To Do marker | `packages/contracts/src/planner-board.ts`, pinned by one table test, `planner-board.test.ts` | The server's board read (`board.ts`), column move and create (`plans.ts`) through `columns.ts`; the web board's predictions (`board-model.ts`) |
 | The period maths (day, week, month, quarter) | `packages/contracts/src/planner-periods.ts`, moved out of `planner.ts` unchanged so `planner-board.ts` can read it without importing `planner.ts` back | Everything that imported it from `@flaremo/contracts`, unchanged |
+| How a task edit or a new task is saved: the order of the steps (undrop, upstream fields, column move and place or plan, effort, start date, goal, drop) and every check made before the first write, so a refused request changes nothing | `packages/domain/src/planner/task-change.ts` (`plannerChangeTask`, `plannerAddTask`), tested in `task-change.test.ts` | `PATCH /api/app/planner/tasks/:id` and `POST /api/app/planner/tasks`, which only validate, throttle and pass the request on. `POST` now takes `goal_id`, so the Year map's "Add task" is one request; `goal_error` says when only the link failed. The weekly review's Save week still runs its own steps (on hold). |
 
 ## Undoing a change
 

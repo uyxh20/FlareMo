@@ -155,6 +155,10 @@ export const plannerCreateTaskSchema = z.strictObject({
   // Omitted or null: the task lands in the backlog (unless `column` says To Do,
   // Doing or Done, which then carry their own rules).
   plan: plannerPlanInputSchema.nullable().optional(),
+  // The weekly goal the new task serves (a goal's "Add task"), linked in the same
+  // request instead of a second one that could fail on its own. Checked before
+  // the task is created.
+  goal_id: z.uuid().nullable().optional(),
   today: plannerDaySchema,
 });
 
@@ -353,7 +357,9 @@ export const plannerTaskPlanResponseSchema = z.object({
  */
 export const plannerCreateTaskResponseSchema =
   plannerTaskPlanResponseSchema.extend({
+    // The task exists, but its plan (or its goal link) could not be saved.
     plan_error: z.string().optional(),
+    goal_error: z.string().optional(),
   });
 
 /**
