@@ -31,7 +31,7 @@ import {
   plannerTestRuntime,
 } from "./test-support";
 
-// The month, quarter and year reviews (period-review.ts, migration 9012):
+// The month, quarter and year reviews (period-review.ts, migration 9013):
 // what they read, how receipts are checked, and what saving writes.
 
 const OCTOBER = "2026-10-01";

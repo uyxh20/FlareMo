@@ -1,13 +1,13 @@
--- migrations/9012_planner_period_review.sql: fork-owned, hand-written. Never edit once applied (add 9013_planner_...).
+-- migrations/9013_planner_period_review.sql: fork-owned, hand-written. Never edit once applied (add 9014_planner_...).
 --
 -- The month, quarter and year reviews (docs/planning-cockpit-period-review.md): one
 -- record per reviewed period (the page's progress, the memo, the verdict, the forecast
 -- for the next period and how the last one's forecast turned out, the model's draft
 -- against the saved memo) and the receipts each review rests on: a claim, the words it
 -- rests on, and where those words were found. Hand-written and not listed in
--- migrations/meta/_journal.json, like 9000 to 9011: never run pnpm db:generate for
+-- migrations/meta/_journal.json, like 9000 to 9012: never run pnpm db:generate for
 -- these (G3, the fork exception to AGENTS.md). Wrangler orders migration files by
--- leading number, so this one is applied after 9011.
+-- leading number, so this one is applied after 9012.
 --
 -- Rules for this file, the same as for every 9NNN_planner_ file:
 --   G10  no foreign key to an upstream table (planner-internal keys are fine)
