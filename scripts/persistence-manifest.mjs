@@ -66,7 +66,7 @@ export const RESTORE_TABLES = [
   "planner_week",
   "planner_review",
   "planner_goal_flag",
-  // The month, quarter and year reviews (migrations/9012_planner_period_review.sql).
+  // The month, quarter and year reviews (migrations/9013_planner_period_review.sql).
   "planner_period_review",
   "planner_evidence",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo

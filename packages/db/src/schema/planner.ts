@@ -323,7 +323,7 @@ export const plannerGoalFlag = sqliteTable(
   ],
 );
 
-// One row per reviewed month, quarter or year (migration 9012,
+// One row per reviewed month, quarter or year (migration 9013,
 // docs/planning-cockpit-period-review.md): the page's progress, the memo, the
 // verdict, the forecast for the next period and the grade the next review gave
 // the last one, the model's draft against the saved memo.
@@ -360,7 +360,7 @@ export const plannerPeriodReview = sqliteTable(
   ],
 );
 
-// A receipt of a period review (migration 9012): a claim and the words it
+// A receipt of a period review (migration 9013): a claim and the words it
 // rests on, with where the server found them word for word, or unsourced.
 export const plannerEvidence = sqliteTable(
   "planner_evidence",

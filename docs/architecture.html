@@ -823,7 +823,7 @@
             <text x="714" y="68" class="t-s t-m">planner_period_review</text>
           </svg>
         </div>
-        <figcaption>Migration <code>9012_planner_period_review.sql</code>: two new tables, additive, no foreign keys. Progress autosaves to the period's row. Saving twice updates the one memo and rewrites the receipts. Routes under <code>/api/app/planner/period-review</code> (<code>apps/worker/src/routes/planner-period-review-api.ts</code>); the weekly review's one hook-in is the hand-off tile under its two parts, and the sidebar link carries a dot from Saturday to Monday while a closing period's review is not done.</figcaption>
+        <figcaption>Migration <code>9013_planner_period_review.sql</code>: two new tables, additive, no foreign keys. Progress autosaves to the period's row. Saving twice updates the one memo and rewrites the receipts. Routes under <code>/api/app/planner/period-review</code> (<code>apps/worker/src/routes/planner-period-review-api.ts</code>); the weekly review's one hook-in is the hand-off tile under its two parts, and the sidebar link carries a dot from Saturday to Monday while a closing period's review is not done.</figcaption>
       </figure>
     </section>
 
