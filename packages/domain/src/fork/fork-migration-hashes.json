@@ -6,5 +6,6 @@
   "9005_planner_goals_review.sql": "67b186336833b50a71d70f5dfe94e92fa255c680cc1c9c2b9372c2812680e7ba",
   "9010_planner_health.sql": "a655848b49e6d991c79e9d98a96ed0727ee31736e98223063058519e353d8b10",
   "9011_planner_health_trackers.sql": "a937228f09887ce7a981f448db97f3c5bc699357719ccf689dcc4dd3f0fb7723",
-  "9012_planner_health_bookmark.sql": "a195e68d04858a2a0824e49b7cbc3e42763fe8220f331135431f7f3cddc9dc34"
+  "9012_planner_health_bookmark.sql": "a195e68d04858a2a0824e49b7cbc3e42763fe8220f331135431f7f3cddc9dc34",
+  "9012_planner_period_review.sql": "b514a7545669899b3a99715cb8bc1d028bd835f4a3fd8a2c07740d90201e5a03"
 }

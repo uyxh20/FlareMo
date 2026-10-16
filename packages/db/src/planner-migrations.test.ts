@@ -13,8 +13,10 @@ import {
   plannerMigrationFiles,
 } from "./planner-migrations";
 import {
+  plannerEvidence,
   plannerGoal,
   plannerGoalFlag,
+  plannerPeriodReview,
   plannerProjectNode,
   plannerReview,
   plannerSyncState,
@@ -114,6 +116,15 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "state"],
     },
   ],
+  planner_period_review: [],
+  planner_evidence: [
+    {
+      name: "planner_evidence_user_period_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "level", "period_start"],
+    },
+  ],
 };
 
 const PLANNER_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -129,6 +140,8 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_week: plannerWeek,
   planner_review: plannerReview,
   planner_goal_flag: plannerGoalFlag,
+  planner_period_review: plannerPeriodReview,
+  planner_evidence: plannerEvidence,
 };
 
 let mf: Miniflare;
@@ -295,8 +308,10 @@ describe("planner migrations", () => {
         targets[table] = keys.map((key) => key.table);
       }
       expect(targets).toEqual({
+        planner_evidence: [],
         planner_goal: [],
         planner_goal_flag: [],
+        planner_period_review: [],
         planner_project_node: ["planner_project_node"],
         planner_review: [],
         planner_sync_state: [],

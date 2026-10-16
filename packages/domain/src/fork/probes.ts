@@ -266,6 +266,31 @@ export const PROBES: Record<string, Probe> = {
       );
     }
   },
+  planner_period_review: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_period_review (user_id, level, period_start, state, verdict, forecast, created_at, updated_at)
+       VALUES (?, 'month', '2026-09-01', ?, ?, ?, ?, ?)`,
+      p.user.id,
+      JSON.stringify({ answers: { fold: [`Fold ${p.marker}`] } }),
+      `Continue: ${p.marker}`,
+      `Next month ${p.marker} lands.`,
+      IN_WEEK,
+      IN_WEEK,
+    );
+  },
+  planner_evidence: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_evidence (id, user_id, level, period_start, pillar, claim, quote, source, verified, created_at)
+       VALUES (?, ?, 'month', '2026-09-01', 'work', ?, ?, 'memo', 1, ?)`,
+      nextId("evidence"),
+      p.user.id,
+      `Shipped ${p.marker}`,
+      `we shipped ${p.marker} on Tuesday`,
+      IN_WEEK,
+    );
+  },
   health_entry: async (p) => {
     await plannerTestRun(
       p.rt.database,

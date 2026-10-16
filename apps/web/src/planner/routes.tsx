@@ -4,9 +4,13 @@ import { AuthenticatedRoute } from "@/routes/authenticated-route";
 import { rootRoute } from "@/routes/root-route";
 import { RouteLoading } from "@/routes/route-loading";
 import { plannerCockpitSearch } from "./cockpit-search";
-import { plannerGoalsSearch, plannerReviewSearch } from "./goals-search";
+import {
+  plannerGoalsSearch,
+  plannerPeriodSearch,
+  plannerReviewSearch,
+} from "./goals-search";
 
-// The planner's three pages (fork-owned add-on,
+// The planner's four pages (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md), kept out of router-tree.tsx so
 // that upstream file only gains an import and one spread in the route list, like
 // the health tracker's route. Each page is a lazy chunk behind the sign-in guard.
@@ -25,6 +29,12 @@ const GoalsPage = lazy(() =>
 const WeeklyReviewPage = lazy(() =>
   import("./review-page").then((module) => ({
     default: module.PlannerReviewPage,
+  })),
+);
+
+const PeriodReviewPage = lazy(() =>
+  import("./period-page").then((module) => ({
+    default: module.PlannerPeriodPage,
   })),
 );
 
@@ -81,8 +91,27 @@ const weeklyReviewRoute = createRoute({
   component: WeeklyReviewRoutePage,
 });
 
+function PeriodReviewRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <PeriodReviewPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+// The month, quarter and year reviews (docs/planning-cockpit-period-review.md).
+const periodReviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/period-review",
+  validateSearch: plannerPeriodSearch,
+  component: PeriodReviewRoutePage,
+});
+
 export const plannerRoutes = [
   cockpitRoute,
   goalsRoute,
   weeklyReviewRoute,
+  periodReviewRoute,
 ] as const;

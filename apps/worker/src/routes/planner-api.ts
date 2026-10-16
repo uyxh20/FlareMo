@@ -36,6 +36,7 @@ import { getRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import { plannerGoalsApi } from "./planner-goals-api";
+import { plannerPeriodReviewApi } from "./planner-period-review-api";
 import {
   plannerAssertToday,
   plannerResolveActor,
@@ -361,3 +362,5 @@ plannerApi.get(
 // Registered last, on the same sub-app, so the lazy mount and the JSON 404 above
 // cover them too (planner-goals-api.ts).
 plannerApi.route("/", plannerGoalsApi);
+// The month, quarter and year reviews, the same way (planner-period-review-api.ts).
+plannerApi.route("/", plannerPeriodReviewApi);

@@ -75,6 +75,8 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `planner_week` | goals | content | yes | – | – | – | **gap** | **gap** | yes |
 | `planner_review` | goals | content | – | – | – | – | – | **gap** | yes |
 | `planner_goal_flag` | goals | content | yes | yes | – | – | – | **gap** | yes |
+| `planner_period_review` | goals | content | – | – | – | – | – | **gap** | yes |
+| `planner_evidence` | goals | content | – | – | – | – | – | **gap** | yes |
 | `health_entry` | health | content | yes | – | – | – | **gap** | **gap** | yes |
 | `health_entry_event` | health | history | – | – | – | – | – | **gap** | yes |
 | `health_target` | health | bookkeeping | – | – | – | – | – | – | yes |
@@ -111,6 +113,8 @@ Gaps (left out, and probably should not be):
 - `planner_week` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_goal_flag` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `planner_period_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `planner_evidence` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry` → mcp: agents cannot read health entries over MCP.
 - `health_entry` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
