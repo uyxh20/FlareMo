@@ -13,7 +13,7 @@ function read(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-const PAGES = ["cockpit", "goals", "weekly-review"] as const;
+const PAGES = ["cockpit", "goals", "weekly-review", "period-review"] as const;
 
 const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
   {
@@ -64,13 +64,13 @@ describe("the planner's hook-ins in upstream files", () => {
     });
   }
 
-  it("routes.tsx registers exactly the three planner pages", () => {
+  it("routes.tsx registers exactly the four planner pages", () => {
     const text = read("./routes.tsx");
     for (const page of PAGES) {
       expect(text).toContain(`path: "/${page}",`);
     }
     expect(text).toMatch(
-      /plannerRoutes = \[\s*cockpitRoute,\s*goalsRoute,\s*weeklyReviewRoute,?\s*\] as const/,
+      /plannerRoutes = \[\s*cockpitRoute,\s*goalsRoute,\s*weeklyReviewRoute,\s*periodReviewRoute,?\s*\] as const/,
     );
   });
 });

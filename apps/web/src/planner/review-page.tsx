@@ -60,6 +60,7 @@ import {
   type PlannerGoalsStrings,
   usePlannerGoalsStrings,
 } from "./goals-strings";
+import { PlannerPeriodHandoff } from "./period-handoff"; // fork: month, quarter and year reviews
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerLookBack } from "./review-back";
 import { type PlannerCheck, PlannerLookForward } from "./review-forward";
@@ -1101,6 +1102,8 @@ function ReviewSession({
         step={step}
         strings={strings}
       />
+      {/* fork: the hand-off to the month, quarter or year review closing with this week */}
+      <PlannerPeriodHandoff lookBackDone={lookBackDone} today={today} />
       <div className={cn(part === "forward" && "pt-1")}>
         {part === "back" ? (
           <PlannerLookBack

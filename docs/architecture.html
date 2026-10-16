@@ -254,6 +254,7 @@
       <li><a href="#search">Search and vectors</a></li>
       <li><a href="#memory">Memory and dreaming</a></li>
       <li><a href="#review">Weekly review</a></li>
+      <li><a href="#period">Month, quarter, year</a></li>
       <li><a href="#cockpit">Cockpit and history</a></li>
       <li><a href="#goals">Goals</a></li>
       <li><a href="#health">Health tracker</a></li>
@@ -721,6 +722,108 @@
           </svg>
         </div>
         <figcaption>The summary is written, then waits: you can edit its text before pressing Save, and what you save is what is kept. Work in progress autosaves to <code>planner_review</code>. Each step is logged, so finishing twice never creates a task twice. Code: <code>packages/domain/src/planner/review*.ts</code>, <code>apps/worker/src/routes/planner-review-ai.ts</code>.<br /><b>Live since 2026-10-14 (version 27, sprint 1):</b> Save week only removes next-week goals the review itself started from or saved, so a goal added on the Goals page mid-review keeps its place and tasks. Open clashes are looked up 50 at a time, so a pile of ignored clashes can no longer lock the page.</figcaption>
+      </figure>
+    </section>
+
+    <!-- ============================================================ -->
+    <section id="period">
+      <h2>Month, quarter and year reviews <span class="chip">fork</span></h2>
+      <p>The weekly review's superset. A period closes on the Sunday of its last week (a week belongs to the month of its Thursday). That Sunday stays one sitting: Look back, then the period review in the middle, then Look forward against the new goals. Five steps per level, the same shape as the weekly: raw rows on the right, your words and a reader on the left, a memo you edit, Save. The model reads, checks, counts and quotes; goals, verdicts and marks are yours. Design: <code>docs/planning-cockpit-period-review.md</code>. <b>On dev since 2026-10-17; not on live.</b></p>
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 900 250" role="img" aria-label="A review Sunday: Look back, then the month review on the last Sunday of a month, the quarter review on the last Sunday of March, June, September and December, the year review in the last week of December, then Look forward. Raw rows feed every level directly; only goals and forecasts pass between levels.">
+            <text x="20" y="20" class="t-s t-m">THE SUNDAY · one sitting, biggest level in the middle</text>
+            <rect x="20" y="36" width="150" height="48" rx="8" class="n" />
+            <text x="95" y="58" text-anchor="middle" class="t-b">Look back</text>
+            <text x="95" y="76" text-anchor="middle" class="t-s">every Sunday</text>
+            <line x1="170" y1="60" x2="206" y2="60" class="a" marker-end="url(#ah)" />
+            <rect x="210" y="36" width="150" height="48" rx="8" class="n n-acc fill-acc" />
+            <text x="285" y="58" text-anchor="middle" class="t-b">Month</text>
+            <text x="285" y="76" text-anchor="middle" class="t-s">last week of the month</text>
+            <line x1="360" y1="60" x2="396" y2="60" class="a" marker-end="url(#ah)" />
+            <rect x="400" y="36" width="150" height="48" rx="8" class="n n-acc fill-acc" />
+            <text x="475" y="58" text-anchor="middle" class="t-b">Quarter</text>
+            <text x="475" y="76" text-anchor="middle" class="t-s">Mar · Jun · Sep · Dec</text>
+            <line x1="550" y1="60" x2="586" y2="60" class="a" marker-end="url(#ah)" />
+            <rect x="590" y="36" width="130" height="48" rx="8" class="n n-acc fill-acc" />
+            <text x="655" y="58" text-anchor="middle" class="t-b">Year</text>
+            <text x="655" y="76" text-anchor="middle" class="t-s">last week of Dec</text>
+            <line x1="720" y1="60" x2="746" y2="60" class="a" marker-end="url(#ah)" />
+            <rect x="750" y="36" width="130" height="48" rx="8" class="n" />
+            <text x="815" y="58" text-anchor="middle" class="t-b">Look forward</text>
+            <text x="815" y="76" text-anchor="middle" class="t-s">new goals</text>
+
+            <text x="20" y="130" class="t-s t-m">RAW ROWS · evidence, read whole</text>
+            <rect x="20" y="142" width="420" height="34" rx="8" class="n n-d1" />
+            <text x="34" y="164">Diary entries · health rows · tasks done · week records · goals</text>
+            <text x="20" y="206" class="t-s t-m">CLAIMS · tested, never trusted</text>
+            <rect x="20" y="218" width="420" height="26" rx="8" class="n n-warn dash" />
+            <text x="34" y="236" class="t-s">weekly summaries · memories · the model's drafts</text>
+            <path d="M 440 159 C 480 159, 470 60, 500 60" class="a" />
+            <path d="M 440 231 C 500 231, 480 60, 500 60" class="a" />
+
+            <text x="470" y="130" class="t-s t-m">FIVE QUESTIONS PER LEVEL</text>
+            <text x="470" y="152" class="t-s">Month: summaries vs diary · key questions graded · points struck with a receipt · the fold · verdict + forecast</text>
+            <text x="470" y="172" class="t-s">Quarter: goal walk keep/rephrase/kill · themes, two readers · 13 weeks of scores · pre-mortem · close-out</text>
+            <text x="470" y="192" class="t-s">Year: 52-week walk, repeat/never · year goals graded · north star test · belief ledger · year sentence</text>
+            <text x="470" y="226" class="t-s">Only goals and forecasts pass between levels. Raw rows feed each level directly.</text>
+          </svg>
+        </div>
+        <figcaption>A week is never split between two months, so a month has four or five whole weeks, a quarter thirteen (fourteen in a 53-week December), a year the ISO year's. <code>plannerPeriodWeeks</code> and <code>plannerPeriodsClosingWith</code> in <code>packages/contracts/src/planner-period-review.ts</code>.</figcaption>
+      </figure>
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 900 230" role="img" aria-label="Five proof checks: receipts are quotes the server finds word for word in a raw row, else shown as unsourced; the model's checks and themes go through the same check; themes come from two independent readers with their agreement shown; each forecast is graded by the next review; the rewrite rate compares the model's draft with the saved memo.">
+            <text x="20" y="20" class="t-s t-m">WHAT SHOWS THE RESULT IS RIGHT · other than you and me</text>
+            <rect x="20" y="36" width="270" height="78" rx="8" class="n n-acc" />
+            <text x="34" y="58" class="t-b">Receipts</text>
+            <text x="34" y="78" class="t-s">a quote must exist word for word in a row</text>
+            <text x="34" y="96" class="t-s">found → verified + source · not found → unsourced</text>
+            <rect x="310" y="36" width="270" height="78" rx="8" class="n n-acc" />
+            <text x="324" y="58" class="t-b">Two readers</text>
+            <text x="324" y="78" class="t-s">themes from two model calls, weeks in opposite</text>
+            <text x="324" y="96" class="t-s">order, run one after the other · agreement %</text>
+            <rect x="600" y="36" width="280" height="78" rx="8" class="n n-acc" />
+            <text x="614" y="58" class="t-b">Forecast graded</text>
+            <text x="614" y="78" class="t-s">one sentence about the next period;</text>
+            <text x="614" y="96" class="t-s">the next review grades it held / partly / missed</text>
+            <rect x="20" y="130" width="270" height="78" rx="8" class="n n-acc" />
+            <text x="34" y="152" class="t-b">Rewrite rate</text>
+            <text x="34" y="172" class="t-s">the model's draft is kept beside your memo;</text>
+            <text x="34" y="190" class="t-s">share of saved lines that are yours, 0 to 1</text>
+            <rect x="310" y="130" width="270" height="78" rx="8" class="n n-acc" />
+            <text x="324" y="152" class="t-b">Counts over adjectives</text>
+            <text x="324" y="172" class="t-s">entries, rows, tasks done, goal results per week;</text>
+            <text x="324" y="190" class="t-s">mean, spread, weeks under the floors</text>
+            <rect x="600" y="130" width="280" height="78" rx="8" class="n n-warn dash" />
+            <text x="614" y="152" class="t-b t-warn">Never asked of the model</text>
+            <text x="614" y="172" class="t-s">goals · verdicts · marks · scores</text>
+            <text x="614" y="190" class="t-s">it reads, checks, counts and quotes</text>
+          </svg>
+        </div>
+        <figcaption>The check normalises case, punctuation and spacing, not the words or their order; a quote under twelve characters never verifies. <code>plannerVerifyQuote</code> in <code>packages/domain/src/planner/period-review-context.ts</code>. The diary budget is the whole period's: 60,000 characters on OpenRouter or Anthropic, 9,000 on Workers AI, shared evenly across the weeks; the rows are read whole for the check either way.</figcaption>
+      </figure>
+      <figure>
+        <div class="fig">
+          <svg viewBox="0 0 900 110" role="img" aria-label="Saving a period review writes its memo as a diary entry tagged vault-summary, the results and decisions on the period's goals, the receipts after the check, and the period's row with verdict, forecast, draft and rewrite rate, and grades the last period's forecast.">
+            <rect x="20" y="30" width="150" height="48" rx="24" class="n n-acc" />
+            <text x="95" y="59" text-anchor="middle" class="t-b">Save the review</text>
+            <line x1="170" y1="54" x2="206" y2="54" class="a" marker-end="url(#ah)" />
+            <rect x="210" y="30" width="160" height="48" rx="8" class="n n-d1" />
+            <text x="224" y="50" class="t-b">Memo</text>
+            <text x="224" y="68" class="t-s t-m">#vault-summary · one per period</text>
+            <rect x="380" y="30" width="150" height="48" rx="8" class="n n-d1" />
+            <text x="394" y="50" class="t-b">Goal results</text>
+            <text x="394" y="68" class="t-s t-m">planner_goal</text>
+            <rect x="540" y="30" width="150" height="48" rx="8" class="n n-d1" />
+            <text x="554" y="50" class="t-b">Receipts</text>
+            <text x="554" y="68" class="t-s t-m">planner_evidence</text>
+            <rect x="700" y="30" width="180" height="48" rx="8" class="n n-d1" />
+            <text x="714" y="50" class="t-b">Verdict, forecast, grade</text>
+            <text x="714" y="68" class="t-s t-m">planner_period_review</text>
+          </svg>
+        </div>
+        <figcaption>Migration <code>9012_planner_period_review.sql</code>: two new tables, additive, no foreign keys. Progress autosaves to the period's row. Saving twice updates the one memo and rewrites the receipts. Routes under <code>/api/app/planner/period-review</code> (<code>apps/worker/src/routes/planner-period-review-api.ts</code>); the weekly review's one hook-in is the hand-off tile under its two parts, and the sidebar link carries a dot from Saturday to Monday while a closing period's review is not done.</figcaption>
       </figure>
     </section>
 

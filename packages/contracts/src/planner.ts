@@ -36,6 +36,7 @@ import {
 // The health tracker add-on (docs/fork-health-tracker.md) rides the same way.
 export * from "./fork-health";
 export * from "./planner-goals";
+export * from "./planner-period-review";
 export * from "./planner-rank";
 export * from "./planner-review-memo";
 

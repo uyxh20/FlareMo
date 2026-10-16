@@ -664,6 +664,45 @@ export const forkDataSources: readonly ForkDataSource[] = [
     },
   },
 
+  {
+    id: "planner_period_review",
+    table: "planner_period_review",
+    module: "goals",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "Each reviewed month, quarter or year: progress, memo link, verdict, forecast and its grade, the rewrite rate",
+    uses: {
+      lookBack: no(
+        "the weekly review reads weeks; the period's memo is a diary memo and reaches the diary's consumers",
+      ),
+      lookForward: no("the goal check reads goals only"),
+      search: REVIEW_SKIPS,
+      memory: REVIEW_SKIPS,
+      mcp: no("not exposed to agents"),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "planner_evidence",
+    table: "planner_evidence",
+    module: "goals",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "A period review's receipts: each claim, the words it rests on, and where they were found",
+    uses: {
+      lookBack: no("the weekly review reads the week's own rows, not receipts"),
+      lookForward: no("the goal check reads goals only"),
+      search: REVIEW_SKIPS,
+      memory: REVIEW_SKIPS,
+      mcp: no("not exposed to agents"),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+
   // --- Health tracker ------------------------------------------------------
   {
     id: "health_entry",

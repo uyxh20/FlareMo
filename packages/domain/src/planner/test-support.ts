@@ -43,6 +43,8 @@ const RESET_TABLES = [
   "planner_week",
   "planner_review",
   "planner_goal_flag",
+  "planner_period_review",
+  "planner_evidence",
   "task_activity",
   "tasks",
   "projects",

@@ -30,4 +30,12 @@ export const plannerQueryKeys = {
   review: (today: string) => ["planner", "review", today] as const,
   /** Whether a review is due, for the sidebar's dot. */
   reviewStatus: (today: string) => ["planner", "review-status", today] as const,
+  /** A month, quarter or year review (docs/planning-cockpit-period-review.md). */
+  periodReview: (
+    today: string,
+    level: string | undefined,
+    period: string | undefined,
+  ) => ["planner", "period-review", today, level ?? "", period ?? ""] as const,
+  /** Whether a period review closes with this week, for the sidebar's dot and the hand-off. */
+  periodStatus: (today: string) => ["planner", "period-status", today] as const,
 } as const;
