@@ -13,6 +13,10 @@
 //   /weekly-review                   wherever the review stands
 //   /weekly-review?part=back         Look back
 //   /weekly-review?part=forward&step=2
+//
+//   /period-review                   the review due this Sunday, or the last month
+//   /period-review?level=quarter     a level: its latest closed period
+//   /period-review?level=month&period=2026-10-01&step=3
 
 export type PlannerGoalsSearch = {
   year?: number;
@@ -23,6 +27,12 @@ export type PlannerGoalsSearch = {
 
 export type PlannerReviewSearch = {
   part?: "back" | "forward";
+  step?: number;
+};
+
+export type PlannerPeriodSearch = {
+  level?: "month" | "quarter" | "year";
+  period?: string;
   step?: number;
 };
 
@@ -88,4 +98,32 @@ export function plannerReviewSearch(
     part,
     step: part === "forward" ? whole(search.step, 1, 4) : undefined,
   };
+}
+
+/** The period review's level, period (the first day of a period) and step (1 to 5). */
+export function plannerPeriodSearch(
+  search: Record<string, unknown>,
+): PlannerPeriodSearch {
+  const level =
+    search.level === "month" ||
+    search.level === "quarter" ||
+    search.level === "year"
+      ? search.level
+      : undefined;
+  let period: string | undefined;
+  if (
+    level &&
+    typeof search.period === "string" &&
+    /^\d{4}-\d{2}-01$/.test(search.period)
+  ) {
+    const month = Number(search.period.slice(5, 7));
+    const fits =
+      level === "month"
+        ? month >= 1 && month <= 12
+        : level === "quarter"
+          ? [1, 4, 7, 10].includes(month)
+          : month === 1;
+    if (fits) period = search.period;
+  }
+  return { level, period, step: whole(search.step, 1, 5) };
 }

@@ -1,6 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { CalendarCheck2Icon, GaugeIcon, TargetIcon } from "lucide-react";
+import {
+  CalendarCheck2Icon,
+  CalendarRangeIcon,
+  GaugeIcon,
+  TargetIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { HealthNavLink } from "@/health/nav-link"; // fork: health tracker
 import { useI18n } from "@/i18n";
@@ -8,9 +13,11 @@ import { plannerFetchReviewStatus } from "./goals-api";
 import {
   plannerGoalsNavLabelFor,
   plannerNavLabelFor,
+  plannerPeriodNavLabelFor,
   plannerReviewDueLabelFor,
   plannerReviewNavLabelFor,
 } from "./nav-label";
+import { plannerFetchPeriodStatus } from "./period-api";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
 
@@ -25,7 +32,10 @@ import { usePlannerToday } from "./use-planner-clock";
 // not pull in the pages' whole dictionaries.
 //
 // The weekly review's link carries a dot from Saturday to Monday until both parts
-// of the review are done (`GET /review/status`).
+// of the review are done (`GET /review/status`). The period review's link (the
+// month, quarter and year reviews, docs/planning-cockpit-period-review.md)
+// carries one on the same days when a period closes with the reviewed week and
+// its review is not done (`GET /period-review/status`).
 
 const LINK_CLASS =
   "flex h-9 items-center gap-3 rounded-lg px-2.5 text-muted-foreground motion-safe:transition-[background-color,color,transform] motion-safe:duration-150 hover:bg-muted hover:text-foreground motion-safe:hover:translate-x-0.5";
@@ -41,7 +51,7 @@ function PlannerLink({
   onNavigate,
   children,
 }: {
-  to: "/cockpit" | "/goals" | "/weekly-review";
+  to: "/cockpit" | "/goals" | "/weekly-review" | "/period-review";
   icon: ReactNode;
   label: string;
   onNavigate?: () => void;
@@ -74,9 +84,23 @@ function useReviewDue(): boolean {
   return status.data?.due ?? false;
 }
 
+/** Whether a month, quarter or year review closes with this week and is not done. */
+function usePeriodDue(): boolean {
+  const today = usePlannerToday();
+  const status = useQuery({
+    queryKey: plannerQueryKeys.periodStatus(today),
+    queryFn: () => plannerFetchPeriodStatus(today),
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  return status.data?.any_due ?? false;
+}
+
 export function PlannerNavLink({ onNavigate }: { onNavigate?: () => void }) {
   const { locale } = useI18n();
   const due = useReviewDue();
+  const periodDue = usePeriodDue();
   return (
     <>
       <PlannerLink
@@ -101,6 +125,21 @@ export function PlannerNavLink({ onNavigate }: { onNavigate?: () => void }) {
           <span
             className="size-2 shrink-0 rounded-full bg-brand-500 dark:bg-brand-400"
             data-testid="planner-review-due"
+          >
+            <span className="sr-only">{plannerReviewDueLabelFor(locale)}</span>
+          </span>
+        )}
+      </PlannerLink>
+      <PlannerLink
+        icon={<CalendarRangeIcon className="size-4 shrink-0" />}
+        label={plannerPeriodNavLabelFor(locale)}
+        to="/period-review"
+        onNavigate={onNavigate}
+      >
+        {periodDue && (
+          <span
+            className="size-2 shrink-0 rounded-full bg-brand-500 dark:bg-brand-400"
+            data-testid="planner-period-due"
           >
             <span className="sr-only">{plannerReviewDueLabelFor(locale)}</span>
           </span>

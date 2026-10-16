@@ -323,11 +323,77 @@ export const plannerGoalFlag = sqliteTable(
   ],
 );
 
+// One row per reviewed month, quarter or year (migration 9013,
+// docs/planning-cockpit-period-review.md): the page's progress, the memo, the
+// verdict, the forecast for the next period and the grade the next review gave
+// the last one, the model's draft against the saved memo.
+export const plannerPeriodReview = sqliteTable(
+  "planner_period_review",
+  {
+    userId: text("user_id").notNull(),
+    level: text("level", { enum: ["month", "quarter", "year"] }).notNull(),
+    // The first day of the period, YYYY-MM-DD.
+    periodStart: text("period_start").notNull(),
+    state: text("state", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    // Upstream memos.id by value, with no foreign key.
+    memoId: text("memo_id"),
+    verdict: text("verdict"),
+    forecast: text("forecast"),
+    forecastGrade: text("forecast_grade", {
+      enum: ["held", "partly", "missed"],
+    }),
+    draftMemo: text("draft_memo"),
+    rewriteRate: real("rewrite_rate"),
+    weekMarks: text("week_marks", { mode: "json" })
+      .$type<Record<string, "repeat" | "never">>()
+      .notNull()
+      .default({}),
+    doneAt: text("done_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.level, table.periodStart] }),
+  ],
+);
+
+// A receipt of a period review (migration 9013): a claim and the words it
+// rests on, with where the server found them word for word, or unsourced.
+export const plannerEvidence = sqliteTable(
+  "planner_evidence",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    level: text("level", { enum: ["month", "quarter", "year"] }).notNull(),
+    periodStart: text("period_start").notNull(),
+    pillar: text("pillar", { enum: ["of", "work", "ai", "health"] }),
+    claim: text("claim").notNull(),
+    quote: text("quote").notNull(),
+    source: text("source", { enum: ["memo", "health", "task_event", "week"] }),
+    sourceId: text("source_id"),
+    sourceDay: text("source_day"),
+    verified: integer("verified").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("planner_evidence_user_period_idx").on(
+      table.userId,
+      table.level,
+      table.periodStart,
+    ),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
 export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
 export type PlannerReviewRow = typeof plannerReview.$inferSelect;
 export type PlannerGoalFlagRow = typeof plannerGoalFlag.$inferSelect;
+export type PlannerPeriodReviewRow = typeof plannerPeriodReview.$inferSelect;
+export type PlannerEvidenceRow = typeof plannerEvidence.$inferSelect;
 export type PlannerTaskEventRow = typeof plannerTaskEvent.$inferSelect;
 export type PlannerTaskSeenRow = typeof plannerTaskSeen.$inferSelect;
 export type PlannerSyncStateRow = typeof plannerSyncState.$inferSelect;
