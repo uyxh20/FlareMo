@@ -219,6 +219,8 @@ export type PlannerGoalsStrings = {
       copyBlocked: string;
       close: string;
       writing: string;
+      /** While the memo agent reads the week, which takes a few minutes. */
+      writingAgent: string;
       diary: (range: string) => string;
       stoppedToast: string;
       templateToast: string;
@@ -510,6 +512,7 @@ const en: PlannerGoalsStrings = {
       copyBlocked: "Copy is blocked here",
       close: "Close",
       writing: "Writing",
+      writingAgent: "Reading your whole week · this takes a few minutes",
       diary: (range) => `Diary entries · ${range}`,
       stoppedToast: "Stopped",
       templateToast: "The model didn't finish · template used",
@@ -792,6 +795,7 @@ const zhCN: PlannerGoalsStrings = {
       copyBlocked: "这里无法复制",
       close: "关闭",
       writing: "写作中",
+      writingAgent: "正在读完这一周 · 需要几分钟",
       diary: (range) => `日记 · ${range}`,
       stoppedToast: "已停止",
       templateToast: "模型没有写完 · 已使用模板",

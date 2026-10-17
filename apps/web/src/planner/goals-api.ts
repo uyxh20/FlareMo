@@ -14,6 +14,7 @@ import type {
   PlannerGoalsYearResponse,
   PlannerLookBackInput,
   PlannerLookBackResponse,
+  PlannerMemoAgentResponse,
   PlannerOkResponse,
   PlannerReviewResponse,
   PlannerReviewStateResponse,
@@ -188,6 +189,8 @@ export type PlannerStreamResult = {
    */
   status: "done" | "limited" | "unavailable" | "failed" | "aborted";
   text: string;
+  /** The memo agent's session, when the agent writes the memo instead. */
+  agent?: string;
   /** The coach's verdict on moving to the next prompt; only with `done`. */
   advance?: boolean;
 };
@@ -272,6 +275,9 @@ export async function plannerReadAiStream(
     if ("error" in parsed) {
       return ended(parsed.error === "limited" ? "limited" : "failed", text);
     }
+    if ("agent" in parsed && typeof parsed.agent === "string") {
+      return { status: "done", text, agent: parsed.agent };
+    }
     return null;
   };
 
@@ -309,11 +315,71 @@ export function plannerStreamCoach(
   return plannerReadAiStream(reviewPath(week, "ai/coach"), input, options);
 }
 
-/** The summary memo, streamed. */
-export function plannerStreamMemo(
+/** How often the page asks the memo agent for its memo, and for how long. */
+const AGENT_POLL_MS = 5_000;
+const AGENT_WAIT_MS = 15 * 60_000;
+
+/**
+ * The summary memo, streamed; or, when the memo agent writes it, asked for
+ * every few seconds until the agent is done (a few minutes), then shown whole.
+ */
+export async function plannerStreamMemo(
   week: string,
   input: PlannerAiMemoInput,
-  options: { signal?: AbortSignal; onText?: (text: string) => void },
-) {
-  return plannerReadAiStream(reviewPath(week, "ai/memo"), input, options);
+  options: {
+    signal?: AbortSignal;
+    onText?: (text: string) => void;
+    /** The agent started: the memo comes whole, in a few minutes. */
+    onAgent?: () => void;
+  },
+): Promise<PlannerStreamResult> {
+  const result = await plannerReadAiStream(
+    reviewPath(week, "ai/memo"),
+    input,
+    options,
+  );
+  if (!result.agent) return result;
+  options.onAgent?.();
+  const path = `${reviewPath(week, `ai/memo/${encodeURIComponent(result.agent)}`)}?today=${encodeURIComponent(input.today)}`;
+  const deadline = Date.now() + AGENT_WAIT_MS;
+  const wait = () =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, AGENT_POLL_MS);
+      options.signal?.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  while (Date.now() < deadline) {
+    await wait();
+    if (options.signal?.aborted) return { status: "aborted", text: "" };
+    let state: PlannerMemoAgentResponse;
+    try {
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        signal: options.signal,
+      });
+      if (response.status === 401 && typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTHENTICATION_REQUIRED_EVENT));
+      }
+      if (response.status === 404 || response.status === 401) {
+        return { status: "failed", text: "" };
+      }
+      if (!response.ok) continue;
+      state = (await response.json()) as PlannerMemoAgentResponse;
+    } catch {
+      if (options.signal?.aborted) return { status: "aborted", text: "" };
+      continue;
+    }
+    if (state.status === "done") {
+      options.onText?.(state.memo);
+      return { status: "done", text: state.memo };
+    }
+    if (state.status === "failed") return { status: "failed", text: "" };
+  }
+  return { status: "failed", text: "" };
 }

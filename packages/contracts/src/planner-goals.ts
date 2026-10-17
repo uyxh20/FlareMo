@@ -800,7 +800,15 @@ export const plannerAiCheckResponseSchema = z.object({
 export type PlannerAiStreamLine =
   | { d: string }
   | { done: true; advance?: boolean }
-  | { error: "limited" | "failed" };
+  | { error: "limited" | "failed" }
+  /** The memo agent started this session: ask for the memo with it. */
+  | { agent: string };
+
+/** The memo agent's session, asked for every few seconds until it is done. */
+export type PlannerMemoAgentResponse =
+  | { status: "running" }
+  | { status: "done"; memo: string }
+  | { status: "failed" };
 
 // --- Types ------------------------------------------------------------------
 

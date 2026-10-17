@@ -674,6 +674,7 @@ function ReviewSession({
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [memoLive, setMemoLive] = useState<string | null>(null);
+  const [memoAgent, setMemoAgent] = useState(false);
   const [memoSaving, setMemoSaving] = useState(false);
   const [memoSaveFailed, setMemoSaveFailed] = useState(false);
 
@@ -772,9 +773,13 @@ function ReviewSession({
           onText: (text) => {
             if (alive.current) setMemoLive(text);
           },
+          onAgent: () => {
+            if (alive.current) setMemoAgent(true);
+          },
         },
       );
       memoAbort.current = null;
+      if (alive.current) setMemoAgent(false);
       const text = result.text.trim();
       if (result.status === "done" && text) {
         memo = text;
@@ -1150,6 +1155,7 @@ function ReviewSession({
         saving={memoSaving}
         stopped={back.memoStopped}
         strings={strings}
+        waitingForAgent={memoAgent}
         week={week}
         onClose={() => {
           memoAbort.current?.abort();

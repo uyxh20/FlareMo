@@ -39,7 +39,7 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | Data source | Part | Kind | lookBack | lookForward | search | memory | mcp | userExport | backup |
 |---|---|---|---|---|---|---|---|---|---|
 | `memos` | diary | content | yes | – | yes | yes | yes | yes | yes |
-| `memos:earlier-week` | diary | content | **gap** | – | yes | yes | yes | yes | yes |
+| `memos:earlier-week` | diary | content | yes | – | yes | yes | yes | yes | yes |
 | `memos:weekly-summary` | goals | content | yes | – | yes | yes | yes | yes | yes |
 | `memo_tags` | diary | structure | – | – | – | – | yes | – | yes |
 | `memo_revisions` | diary | history | – | – | – | – | – | – | yes |
@@ -89,7 +89,6 @@ System tables, none of which reach a consumer except the backup: `shortcuts`, `u
 
 Gaps (left out, and probably should not be):
 
-- `memos:earlier-week` → lookBack: only the reviewed week's entries and last week's summary are read; earlier weeks are not.
 - `attachments` → lookBack: the review is not told an entry had a photo or file, nor its name.
 - `memory_items` → lookForward: the goal check does not read memories (preferences, constraints).
 - `tasks` → search: tasks are not in keyword or semantic search.

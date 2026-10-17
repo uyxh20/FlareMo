@@ -18,13 +18,13 @@ It delivers the weekly review and the goal UI. The monthly review is not part of
 
 The cascade from the north star down to a week, one level per address:
 
-| Address | Shows |
-| --- | --- |
-| `/goals` | The current ISO year. |
-| `/goals?year=2026` | The Year map: the whole cascade on one page (see below). |
-| `/goals?year=2026&q=4` | A quarter: its months and quarter goals. |
-| `/goals?year=2026&q=4&m=10` | A month (1 to 12): its goals and weeks. |
-| `/goals?week=2026-10-05` | One week, by its Monday: its scores and weekly goals, with a link to its summary memo. |
+| Address                     | Shows                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------- |
+| `/goals`                    | The current ISO year.                                                                  |
+| `/goals?year=2026`          | The Year map: the whole cascade on one page (see below).                               |
+| `/goals?year=2026&q=4`      | A quarter: its months and quarter goals.                                               |
+| `/goals?year=2026&q=4&m=10` | A month (1 to 12): its goals and weeks.                                                |
+| `/goals?week=2026-10-05`    | One week, by its Monday: its scores and weekly goals, with a link to its summary memo. |
 
 - The Year map (`year-map.tsx`, `year-map-model.ts`) replaces the year's heatmap. The time column runs north star, year, Q1 to Q4 (each with its theme line, the quarter's first goal with no objective), months and weeks; the four objectives are the columns. Only the current month and current week are coloured cards; year and quarter goals keep larger type on plain cards, like every other month and week. Point chips have a plain grey border, never the pillar colour, and every goal card has the same small (7px) pillar dot. Goals have no parent link: a row lines them up by objective and period. A period's goals in one objective share one split row: one equal part per goal, its points as chips under its heading, the same at every level (the parts stack when all four objectives show, and sit side by side when one is followed); goals with no objective (most imported weekly goals) get one row across the four columns.
 - Each month shows its week chips (hover gives the scores); a chip opens that week's row, the month label opens or closes all of them, and the current week starts open. A week's label opens its own page. A weekly goal opens a pop-up with the year, quarter and month goals of its objective, its tasks from the board (a year of Done cards) and, for this week and later ones, a field that adds a task to the Backlog linked to the goal. Other goals open the editor; an empty slot adds one.
@@ -97,13 +97,13 @@ From the interview and the decision cards (2026-10-09 and 10):
 
 Additive, with no foreign key to an upstream table and no triggers (G10 to G13). The previous release keeps working on it.
 
-| Table or column | Holds |
-| --- | --- |
-| `planner_task_plan.goal_id` | The weekly goal a task serves (nullable). |
-| `planner_goal` | A goal at one level: `north_star`, `year`, `quarter`, `month` or `week`, with its period's first day, objective, title, points (`lines`, JSON), status, result and note. Soft-deleted, so a link or a flag can still name a removed goal. |
-| `planner_week` | One row per reviewed or imported week: the two scores, the key question for the next review, the verdict and the summary memo's id. |
-| `planner_review` | The review in progress, as one JSON document the page saves as it goes. Its `commit_log` is the server's record of the tasks Save week already created, so a retried save never makes a task twice. |
-| `planner_goal_flag` | What the conflict check flagged, open until it is kept or rewritten. |
+| Table or column             | Holds                                                                                                                                                                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `planner_task_plan.goal_id` | The weekly goal a task serves (nullable).                                                                                                                                                                                                 |
+| `planner_goal`              | A goal at one level: `north_star`, `year`, `quarter`, `month` or `week`, with its period's first day, objective, title, points (`lines`, JSON), status, result and note. Soft-deleted, so a link or a flag can still name a removed goal. |
+| `planner_week`              | One row per reviewed or imported week: the two scores, the key question for the next review, the verdict and the summary memo's id.                                                                                                       |
+| `planner_review`            | The review in progress, as one JSON document the page saves as it goes. Its `commit_log` is the server's record of the tasks Save week already created, so a retried save never makes a task twice.                                       |
+| `planner_goal_flag`         | What the conflict check flagged, open until it is kept or rewritten.                                                                                                                                                                      |
 
 All four tables are in `RESTORE_TABLES` (`scripts/persistence-manifest.mjs`).
 
@@ -111,15 +111,15 @@ All four tables are in `RESTORE_TABLES` (`scripts/persistence-manifest.mjs`).
 
 The full list, with each response type, is the comment block in `packages/contracts/src/planner-goals.ts`. The routes are in `apps/worker/src/routes/planner-goals-api.ts`, and `planner-api.ts` mounts them, so they share its lazy mount, authentication and JSON 404. The domain work is in `packages/domain/src/planner/goals.ts` and `review.ts`.
 
-| Routes | What they do |
-| --- | --- |
-| `GET/POST /goals`, `PATCH/DELETE /goals/:id` | Read a year of the cascade; create, edit and remove goals. |
-| `GET /review`, `GET /review/status`, `PATCH /review/:week/state` | Read the review, read whether it is due and done (for the sidebar dot), and save its progress. |
-| `POST /review/:week/start-over` | Start over: clears the page's state and both done marks. Saved results stay. |
-| `POST /review/:week/look-back` | The week's record, last week's goal results and the summary memo. Safe to send again. |
-| `POST /review/:week/look-forward` | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again. |
-| `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check` | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |
-| `POST /review/:week/ai/coach`, `/ai/memo` | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`. |
+| Routes                                                           | What they do                                                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET/POST /goals`, `PATCH/DELETE /goals/:id`                     | Read a year of the cascade; create, edit and remove goals.                                      |
+| `GET /review`, `GET /review/status`, `PATCH /review/:week/state` | Read the review, read whether it is due and done (for the sidebar dot), and save its progress.  |
+| `POST /review/:week/start-over`                                  | Start over: clears the page's state and both done marks. Saved results stay.                    |
+| `POST /review/:week/look-back`                                   | The week's record, last week's goal results and the summary memo. Safe to send again.           |
+| `POST /review/:week/look-forward`                                | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again.               |
+| `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check`        | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |
+| `POST /review/:week/ai/coach`, `/ai/memo`                        | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`.      |
 
 - `GET /board` also returns the cockpit's week and its goals.
 - `PATCH /tasks/:id` takes `goal_id` (a goal's id, or `null` to unlink), written through `plannerSetTaskGoal` with a `goal_changed` history event, as Save week does. An unknown goal is a 404.
@@ -130,13 +130,14 @@ The full list, with each response type, is the comment block in `packages/contra
 
 `apps/worker/src/routes/planner-review-ai.ts`. The prompts and their parsers are in `packages/domain/src/planner/review-prompts.ts`, and what the model reads is in `review-context.ts`.
 
-| Setting | Effect |
-| --- | --- |
-| Nothing set | Workers AI through the existing `AI` binding, with `plannerReviewDefaultModel`. Workers AI runs only remotely, so a local `wrangler dev` has no model and the review uses its own drafts. |
-| `FLAREMO_REVIEW_MODEL` | Another Workers AI text model. |
-| `OPENROUTER_API_KEY` (Worker secret) | Switches to OpenRouter with `plannerReviewDefaultOpenRouterModel` (GPT-6.1 Sol, the most accurate in the October 2026 model eval) unless `FLAREMO_REVIEW_OPENROUTER_MODEL` names another. Every call asks for zero-data-retention providers that do not train on prompts, low reasoning effort with the reasoning left out of the answer, and 4,000 tokens of reasoning room on top of the call's own limit. It wins over `ANTHROPIC_API_KEY`. It covers every call: Look back's opening, coach, close and memo, and Look forward's clash check. Set on dev only. |
-| `ANTHROPIC_API_KEY` (Worker secret) | Switches to Anthropic's Messages API, with `plannerReviewDefaultAnthropicModel` unless `FLAREMO_REVIEW_ANTHROPIC_MODEL` names another. It is optional and not set on dev or live. |
-| `FLAREMO_REVIEW_AI=off` | No model: the review uses its own drafts. |
+| Setting                                                                                | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Nothing set                                                                            | Workers AI through the existing `AI` binding, with `plannerReviewDefaultModel`. Workers AI runs only remotely, so a local `wrangler dev` has no model and the review uses its own drafts.                                                                                                                                                                                                                                                                                                                                                        |
+| `FLAREMO_REVIEW_MODEL`                                                                 | Another Workers AI text model.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `OPENROUTER_API_KEY` (Worker secret)                                                   | Switches to OpenRouter with `plannerReviewDefaultOpenRouterModel` (GPT-6.1 Sol, the most accurate in the October 2026 model eval) unless `FLAREMO_REVIEW_OPENROUTER_MODEL` names another. Every call asks for zero-data-retention providers that do not train on prompts, low reasoning effort with the reasoning left out of the answer, and 4,000 tokens of reasoning room on top of the call's own limit. `ANTHROPIC_API_KEY` wins over it. It covers every call: Look back's opening, coach, close and memo, and Look forward's clash check. |
+| `ANTHROPIC_API_KEY` (Worker secret)                                                    | Switches to Anthropic's Messages API, with `plannerReviewDefaultAnthropicModel` (Claude Sonnet 5.5) unless `FLAREMO_REVIEW_ANTHROPIC_MODEL` names another. No temperature (current Claude models refuse one) and 4,000 tokens of room for thinking on top of each call's own limit. Wins over `OPENROUTER_API_KEY` (from October 2026, to move the review off OpenRouter).                                                                                                                                                                       |
+| `FLAREMO_REVIEW_MEMO_AGENT`, `_ENVIRONMENT`, `_STORE` (vars), with `ANTHROPIC_API_KEY` | The Sunday memo is written by a Claude Managed Agent instead of one call, capped at `FLAREMO_REVIEW_MEMO_BUDGET_USD` (default 3) per memo. See [fork-review-memo-agent.md](fork-review-memo-agent.md).                                                                                                                                                                                                                                                                                                                                           |
+| `FLAREMO_REVIEW_AI=off`                                                                | No model: the review uses its own drafts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 **What the model reads**, each time a draft is asked for, comes from the owner's own data:
 
@@ -152,7 +153,7 @@ A week runs from Monday 00:00 to the next Monday 00:00 in the owner's zone (`FOR
 
 The context opens with rules for reading it, one for each kind of invented fact the model eval found: only what this week's material says happened is an event, an entry's day is when it was written and not always the day it describes, numbers are copied and never totalled, and #tags are not names. When the owner changes a drafted score, the memo is told which scores the drafts were written for and writes the basis afresh.
 
-With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes through OpenRouter to a provider that keeps nothing. With `ANTHROPIC_API_KEY` set it goes to Anthropic. Nothing is logged except the provider, the model and an error message: never a prompt, an answer or a key.
+With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes through OpenRouter to a provider that keeps nothing. With `ANTHROPIC_API_KEY` set it goes to Anthropic; the memo agent's files stay at Anthropic only until the memo is read, and its notes stay in its memory store. Nothing is logged except the provider, the model and an error message: never a prompt, an answer or a key.
 
 **When the model fails,** the page falls back to its drafts. After two failures in a row that were not rate limits (the opening counts), it stops calling the coach for the rest of the visit.
 

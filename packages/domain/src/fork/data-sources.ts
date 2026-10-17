@@ -135,7 +135,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "Diary entries (memos), including comments and weekly summaries",
     uses: {
       lookBack: yes(
-        "entries written in the reviewed week, up to 200, fitted to 12,000 or 40,000 characters",
+        "entries written in the reviewed week, up to 200, fitted to 12,000 or 40,000 characters; the memo agent, when set up, reads them whole",
       ),
       lookForward: no("the goal check reads goals only"),
       search: yes(
@@ -155,8 +155,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
     owner: "upstream",
     holds: "Diary entries from weeks before the one reviewed",
     uses: {
-      lookBack: gap(
-        "only the reviewed week's entries and last week's summary are read; earlier weeks are not",
+      lookBack: yes(
+        "only by the memo agent, when set up: the 8 weeks before, as files; the other steps read the reviewed week only",
       ),
       lookForward: no("the goal check reads goals only"),
       search: yes("same index as every entry"),
@@ -176,7 +176,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       "Last week's summary memo (tag #vault-summary, or written by the review)",
     uses: {
       lookBack: yes(
-        "the first 4,000 characters, its Next Steps and its key question",
+        "the first 4,000 characters, its Next Steps and its key question; the memo agent also reads the summaries of the 8 weeks before, whole",
       ),
       lookForward: no("the goal check reads goals only"),
       search: yes("same index as every entry"),

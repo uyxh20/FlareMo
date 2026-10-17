@@ -24,6 +24,13 @@ import {
 } from "./dev-env-guard.mjs";
 
 export const PLACEHOLDER_D1_ID = "00000000-0000-0000-0000-000000000000";
+
+/** The weekly memo agent's vars: ids of Anthropic objects, never secrets. */
+export const REVIEW_MEMO_VARS = Object.freeze({
+  FLAREMO_REVIEW_MEMO_AGENT: /^agent_[A-Za-z0-9]+$/,
+  FLAREMO_REVIEW_MEMO_ENVIRONMENT: /^env_[A-Za-z0-9]+$/,
+  FLAREMO_REVIEW_MEMO_STORE: /^memstore_[A-Za-z0-9]+$/,
+});
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -101,6 +108,7 @@ export function buildDevConfig({
   trustedOrigins = [],
   ratelimitNamespaceId = DEV.ratelimitNamespaceId,
   embeddingProvider = "none",
+  reviewMemo = {},
   migrationsDir,
 }) {
   const example = parseConfigText(exampleText, "wrangler.jsonc.example");
@@ -203,6 +211,22 @@ export function buildDevConfig({
     );
   }
   set(["vars", "FLAREMO_EMBEDDING_PROVIDER"], embeddingProvider);
+  const memoVars = Object.keys(REVIEW_MEMO_VARS).filter(
+    (name) => reviewMemo[name],
+  );
+  if (memoVars.length > 0) {
+    if (memoVars.length !== Object.keys(REVIEW_MEMO_VARS).length) {
+      throw new Error(
+        `The memo agent needs all of ${Object.keys(REVIEW_MEMO_VARS).join(", ")} (with FLAREMO_DEV_ in front).`,
+      );
+    }
+    for (const name of memoVars) {
+      if (!REVIEW_MEMO_VARS[name].test(reviewMemo[name])) {
+        throw new Error(`${name} does not look like an Anthropic id.`);
+      }
+      set(["vars", name], reviewMemo[name]);
+    }
+  }
 
   text = `${DEV_CONFIG_HEADER}${text}`;
   const built = parseConfigText(text, "generated dev config");
