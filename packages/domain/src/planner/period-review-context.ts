@@ -121,6 +121,8 @@ export type PlannerPeriodContext = {
     forecast: string | null;
     forecastGrade: "held" | "partly" | "missed" | null;
     memo: string | null;
+    /** The key question its chat left for this review. */
+    question: string | null;
   } | null;
   memories: {
     created: number;
@@ -134,6 +136,16 @@ export type PlannerPeriodContext = {
   evidence: PlannerEvidenceRow[];
   memo: { id: string; content: string } | null;
 };
+
+/** The key question a period review's chat saved in its state, if any. */
+function savedQuestion(state: Record<string, unknown>): string | null {
+  const back = state.back;
+  if (!back || typeof back !== "object") return null;
+  const question = (back as { question?: unknown }).question;
+  return typeof question === "string" && question.trim()
+    ? question.trim().slice(0, 500)
+    : null;
+}
 
 function weekOf(weeks: readonly string[], at: string): string | null {
   for (const monday of weeks) {
@@ -665,6 +677,7 @@ export async function plannerReadPeriodContext(
           memo: previous.memoId
             ? trimTo(memoText.get(previous.memoId) ?? "", SUMMARY_CHARS) || null
             : null,
+          question: savedQuestion(previous.state),
         }
       : null,
     memories: {

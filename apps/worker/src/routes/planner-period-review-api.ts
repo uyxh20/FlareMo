@@ -1,32 +1,56 @@
 import {
+  type PlannerAgentResponse,
+  type PlannerAiCloseResponse,
   type PlannerAiStreamLine,
   type PlannerPeriodAiChecksResponse,
   type PlannerPeriodAiThemesResponse,
+  type PlannerPeriodOpeningResponse,
   type PlannerPeriodReviewResponse,
   type PlannerPeriodStateResponse,
   type PlannerPeriodStatusResponse,
   type PlannerSavePeriodResponse,
+  plannerAiCloseSchema,
+  plannerAiCoachSchema,
+  plannerAiMemoSchema,
+  plannerAiOpeningSchema,
   plannerPeriodAiChecksSchema,
   plannerPeriodAiCoachSchema,
   plannerPeriodAiMemoSchema,
   plannerPeriodAiThemesSchema,
+  plannerPeriodHappenedSchema,
   plannerPeriodReviewQuerySchema,
   plannerPeriodStatusQuerySchema,
   plannerSavePeriodSchema,
   plannerSavePeriodStateSchema,
 } from "@flaremo/contracts";
 import {
+  PLANNER_MEMO_AGENT_DIARY_CHARS,
   PLANNER_PERIOD_DIARY_CHARS,
   PLANNER_PERIOD_DIARY_CHARS_SMALL,
   type PlannerChatMessage,
+  type PlannerCoachMode,
   type PlannerPeriodContext,
+  type PlannerReviewAnswers,
   plannerCoachStreamFilter,
   plannerMemoStreamFilter,
   plannerMergePeriodThemes,
+  plannerParseClose,
   plannerParsePeriodChecks,
+  plannerParsePeriodOpening,
+  plannerPeriodAgentCloseMessage,
+  plannerPeriodAgentCoachMessage,
+  plannerPeriodAgentFiles,
+  plannerPeriodAgentKey,
+  plannerPeriodAgentMemoFiles,
+  plannerPeriodAgentMemoKickoff,
+  plannerPeriodAgentOpeningMessage,
+  plannerPeriodChatMemoMessages,
   plannerPeriodChecksMessages,
+  plannerPeriodCloseMessages,
+  plannerPeriodCoachChatMessages,
   plannerPeriodCoachMessages,
   plannerPeriodMemoMessages,
+  plannerPeriodOpeningMessages,
   plannerPeriodStatus,
   plannerPeriodThemesMessages,
   plannerReadPeriodContext,
@@ -35,6 +59,7 @@ import {
   plannerSavePeriodReview,
   plannerSavePeriodState,
   plannerStartPeriodOver,
+  plannerVerifyQuote,
 } from "@flaremo/domain/src/planner";
 import { zValidator } from "@hono/zod-validator";
 import type { Context } from "hono";
@@ -46,6 +71,17 @@ import {
 } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
+import {
+  type PlannerMemoAgent,
+  type PlannerMemoAgentState,
+  plannerEndMemoAgent,
+  plannerLogAgentError,
+  plannerMemoAgent,
+  plannerPollMemoAgent,
+  plannerReadMemoAgentMemo,
+  plannerSendMemoAgent,
+  plannerStartMemoAgent,
+} from "./planner-memo-agent";
 import {
   type PlannerReviewModel,
   plannerLogModelError,
@@ -212,6 +248,7 @@ async function aiSetup(
   c: Context<HonoBindings>,
   today: string,
   limited: () => Response,
+  diaryChars?: number,
 ): Promise<AiSetup> {
   const context = await getRequestContext(c);
   const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
@@ -231,9 +268,10 @@ async function aiSetup(
     periodStart,
     today,
     diaryChars:
-      model.provider === "workers-ai"
+      diaryChars ??
+      (model.provider === "workers-ai"
         ? PLANNER_PERIOD_DIARY_CHARS_SMALL
-        : PLANNER_PERIOD_DIARY_CHARS,
+        : PLANNER_PERIOD_DIARY_CHARS),
   });
   return { model, review, context };
 }
@@ -449,3 +487,397 @@ plannerPeriodReviewApi.post(
     }
   },
 );
+
+// --- The month and quarter chat ---------------------------------------------------
+//
+// The weekly review's Look back over a month or a quarter: the same requests
+// and answers as /review/:week/ai/* (planner-goals-api.ts), so the page runs
+// it with the weekly review's own chat. With the review agent configured, one
+// agent session carries the whole review, as it does for a week; its key is
+// the period ("month:2026-10-01") in place of the week's Monday.
+
+const CHAT = "/period-review/:level/:period/chat/ai";
+
+/** The review's answers as the prompts read them. */
+function answersOf(body: {
+  last_answer: string[];
+  answers: string[][];
+  goal_results: Array<{
+    goal_id: string;
+    result: "met" | "partial" | "missed" | null;
+  }>;
+  coach_notes: string[];
+}): PlannerReviewAnswers {
+  return {
+    lastAnswer: body.last_answer,
+    answers: body.answers,
+    goalResults: body.goal_results.map((entry) => ({
+      goalId: entry.goal_id,
+      result: entry.result,
+    })),
+    coachNotes: body.coach_notes,
+  };
+}
+
+function agentOwner(
+  setup: { review: PlannerPeriodContext; context: RequestContext },
+  sessionId?: string,
+) {
+  return {
+    userId: setup.context.user.id,
+    weekStart: plannerPeriodAgentKey(
+      setup.review.level,
+      setup.review.periodStart,
+    ),
+    ...(sessionId ? { sessionId } : {}),
+  };
+}
+
+/** Gives a step to the period's agent session; null to use the model instead. */
+async function agentStep(
+  c: Context<HonoBindings>,
+  setup: { review: PlannerPeriodContext; context: RequestContext },
+  session: string | undefined,
+  message: () => string,
+  files?: Record<string, string>,
+): Promise<string | null> {
+  const agent: PlannerMemoAgent | null = plannerMemoAgent(c.env);
+  if (!agent || !session) return null;
+  try {
+    const sent = await plannerSendMemoAgent(agent, {
+      ...agentOwner(setup, session),
+      sessionId: session,
+      message: message(),
+      files,
+    });
+    return sent === "sent" ? session : null;
+  } catch (error) {
+    plannerLogAgentError("send", error);
+    return null;
+  }
+}
+
+plannerPeriodReviewApi.post(
+  `${CHAT}/opening`,
+  zValidator("json", plannerAiOpeningSchema),
+  async (c) => {
+    try {
+      const body = c.req.valid("json");
+      const agent = plannerMemoAgent(c.env);
+      const setup = await aiSetup(
+        c,
+        body.today,
+        tooMany(c),
+        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
+      );
+      if ("response" in setup) return setup.response;
+      const parse = (raw: string): PlannerPeriodOpeningResponse =>
+        plannerParsePeriodOpening(raw, setup.review);
+      if (agent) {
+        const owner = agentOwner(setup);
+        if (body.session) {
+          await plannerEndMemoAgent(agent, {
+            ...owner,
+            sessionId: body.session,
+          });
+        }
+        try {
+          const session = await plannerStartMemoAgent(agent, {
+            ...owner,
+            files: plannerPeriodAgentFiles(setup.review),
+            kickoff: plannerPeriodAgentOpeningMessage(setup.review),
+          });
+          return c.json({ agent: session });
+        } catch (error) {
+          // The review's model drafts the opening instead, from its own budget.
+          plannerLogAgentError("start", error);
+          const small = await aiSetup(c, body.today, tooMany(c));
+          if ("response" in small) return small.response;
+          return completeOr503(
+            c,
+            small.model,
+            "period-opening",
+            plannerPeriodOpeningMessages(small.review),
+            { maxTokens: 2_400, temperature: 0.3 },
+            (raw): PlannerPeriodOpeningResponse =>
+              plannerParsePeriodOpening(raw, small.review),
+          );
+        }
+      }
+      return completeOr503(
+        c,
+        setup.model,
+        "period-opening",
+        plannerPeriodOpeningMessages(setup.review),
+        { maxTokens: 2_400, temperature: 0.3 },
+        parse,
+      );
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+plannerPeriodReviewApi.post(
+  `${CHAT}/close`,
+  zValidator("json", plannerAiCloseSchema),
+  async (c) => {
+    try {
+      const body = c.req.valid("json");
+      const setup = await aiSetup(c, body.today, tooMany(c));
+      if ("response" in setup) return setup.response;
+      const sent = await agentStep(c, setup, body.session, () =>
+        plannerPeriodAgentCloseMessage(setup.review, answersOf(body)),
+      );
+      if (sent) return c.json({ agent: sent });
+      return completeOr503(
+        c,
+        setup.model,
+        "period-close",
+        plannerPeriodCloseMessages(setup.review, answersOf(body)),
+        { maxTokens: 1_400, temperature: 0.2 },
+        (raw): PlannerAiCloseResponse => plannerParseClose(raw),
+      );
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+plannerPeriodReviewApi.post(
+  `${CHAT}/coach`,
+  zValidator("json", plannerAiCoachSchema),
+  async (c) => {
+    try {
+      const body = c.req.valid("json");
+      const setup = await aiSetup(c, body.today, tooManyLines());
+      if ("response" in setup) return setup.response;
+      const { model, review } = setup;
+      const mode: PlannerCoachMode = body.mode;
+      const sent = await agentStep(c, setup, body.session, () =>
+        plannerPeriodAgentCoachMessage(review, mode, body.messages),
+      );
+      if (sent) {
+        return ndjson(async function* () {
+          yield { agent: sent };
+        }, c.req.raw);
+      }
+      const messages = plannerPeriodCoachChatMessages(
+        review,
+        mode,
+        body.messages,
+      );
+      return ndjson(async function* (signal) {
+        const filter = plannerCoachStreamFilter(mode);
+        try {
+          for await (const piece of model.stream(messages, {
+            maxTokens: 400,
+            temperature: 0.5,
+            signal,
+          })) {
+            const text = filter.push(piece);
+            if (text) yield { d: text };
+          }
+        } catch (error) {
+          if (signal.aborted) return;
+          plannerLogModelError(model, "period-coach", error);
+          yield { error: "failed" as const };
+          return;
+        }
+        const { tail, advance } = filter.finish();
+        if (tail) yield { d: tail };
+        yield { done: true as const, advance };
+      }, c.req.raw);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+/** The memo request: the weekly memo's, plus what happened (already checked). */
+const periodChatMemoSchema = plannerAiMemoSchema.extend({
+  happened: plannerPeriodHappenedSchema.array().max(16).optional(),
+});
+
+plannerPeriodReviewApi.post(
+  `${CHAT}/memo`,
+  zValidator("json", periodChatMemoSchema),
+  async (c) => {
+    try {
+      const body = c.req.valid("json");
+      const agent = plannerMemoAgent(c.env);
+      const setup = await aiSetup(
+        c,
+        body.today,
+        tooManyLines(),
+        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
+      );
+      if ("response" in setup) return setup.response;
+      const { model, review } = setup;
+      const request = {
+        ...answersOf(body),
+        reviewedOn: body.today,
+        scores: body.scores,
+        drafted: body.drafted ?? null,
+        question: body.question,
+        verdict: body.verdict,
+        recommended: body.recommended,
+        drafts: body.drafts,
+      };
+      // Each claim is checked again here: only words found in the rows stay.
+      const happened = (body.happened ?? []).filter(
+        (entry) => plannerVerifyQuote(entry.quote, review.raw).verified,
+      );
+      if (agent) {
+        return ndjson(async function* () {
+          try {
+            const files = plannerPeriodAgentMemoFiles(
+              review,
+              request,
+              happened,
+            );
+            const sent = await agentStep(
+              c,
+              setup,
+              body.session,
+              () => plannerPeriodAgentMemoKickoff(review),
+              files,
+            );
+            if (sent) {
+              yield { agent: sent };
+              return;
+            }
+            // No session to go on with: a session for the memo alone.
+            const session = await plannerStartMemoAgent(agent, {
+              ...agentOwner(setup),
+              files: { ...plannerPeriodAgentFiles(review), ...files },
+              kickoff: plannerPeriodAgentMemoKickoff(review),
+            });
+            yield { agent: session };
+          } catch (error) {
+            plannerLogAgentError("start", error);
+            yield { error: "failed" as const };
+          }
+        }, c.req.raw);
+      }
+      const messages = plannerPeriodChatMemoMessages(review, request, happened);
+      return ndjson(async function* (signal) {
+        const filter = plannerMemoStreamFilter();
+        try {
+          for await (const piece of model.stream(messages, {
+            maxTokens: 3_200,
+            temperature: 0.3,
+            signal,
+          })) {
+            const text = filter.push(piece);
+            if (text) yield { d: text };
+          }
+        } catch (error) {
+          if (signal.aborted) return;
+          plannerLogModelError(model, "period-memo", error);
+          yield { error: "failed" as const };
+          return;
+        }
+        const tail = filter.finish();
+        if (tail) yield { d: tail };
+        yield { done: true as const };
+      }, c.req.raw);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// The review agent's answer to a step, asked for every few seconds, as for a
+// week. The memo is the last step: once it is read, the session is deleted.
+plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const agent = plannerMemoAgent(c.env);
+    if (!agent) return c.json(AI_UNAVAILABLE, 503);
+    const today = c.req.query("today") ?? "";
+    plannerAssertToday(today, new Date());
+    const { level, periodStart } = plannerResolvePeriod(
+      today,
+      c.req.param("level"),
+      c.req.param("period"),
+    );
+    const step = c.req.query("step");
+    const mode = c.req.query("mode") ?? "free";
+    if (
+      (step !== "opening" &&
+        step !== "coach" &&
+        step !== "close" &&
+        step !== "memo") ||
+      (mode !== "free" && mode !== "force" && mode !== "chat")
+    ) {
+      return c.json({ error: { message: "Unknown step." } }, 400);
+    }
+    const owner = {
+      userId: context.user.id,
+      weekStart: plannerPeriodAgentKey(level, periodStart),
+      sessionId: c.req.param("session"),
+    };
+    let state: PlannerMemoAgentState;
+    try {
+      state = await plannerPollMemoAgent(agent, owner);
+    } catch (error) {
+      plannerLogAgentError("poll", error);
+      return c.json<PlannerAgentResponse>({ status: "running" });
+    }
+    if (state.status === "missing") {
+      return c.json({ error: { message: "Not found." } }, 404);
+    }
+    if (state.status !== "done") return c.json<PlannerAgentResponse>(state);
+    const texts = state.texts;
+    const json = [...texts].reverse().find((text) => text.includes("{")) ?? "";
+    if (step === "opening") {
+      // The receipts are checked against the period's rows, read again here.
+      const review = await plannerReadPeriodContext(context.db, {
+        userId: context.user.id,
+        ownerName: context.user.name,
+        level,
+        periodStart,
+        today,
+        diaryChars: PLANNER_PERIOD_DIARY_CHARS_SMALL,
+      });
+      return c.json<PlannerAgentResponse>({
+        status: "done",
+        step,
+        opening: plannerParsePeriodOpening(json, review),
+      });
+    }
+    if (step === "close") {
+      return c.json<PlannerAgentResponse>({
+        status: "done",
+        step,
+        close: plannerParseClose(json),
+      });
+    }
+    if (step === "coach") {
+      const filter = plannerCoachStreamFilter(mode);
+      const head = filter.push(texts.at(-1) ?? "");
+      const { tail, advance } = filter.finish();
+      return c.json<PlannerAgentResponse>({
+        status: "done",
+        step,
+        text: `${head}${tail}`.trim(),
+        advance: advance ?? null,
+      });
+    }
+    let raw: string | null;
+    try {
+      raw = await plannerReadMemoAgentMemo(agent, owner.sessionId);
+    } catch (error) {
+      plannerLogAgentError("memo", error);
+      return c.json<PlannerAgentResponse>({ status: "running" });
+    }
+    await plannerEndMemoAgent(agent, owner);
+    if (!raw) return c.json<PlannerAgentResponse>({ status: "failed" });
+    const filter = plannerMemoStreamFilter();
+    const memo = filter.push(raw) + filter.finish();
+    return c.json<PlannerAgentResponse>({ status: "done", step, memo });
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});

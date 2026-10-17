@@ -57,6 +57,7 @@ async function copyText(text: string): Promise<boolean> {
 export function PlannerMemoSheet({
   open,
   week,
+  name,
   memo,
   live,
   memoBy,
@@ -77,6 +78,8 @@ export function PlannerMemoSheet({
   open: boolean;
   /** The Monday of the week the memo is about. */
   week: string;
+  /** The memo's name in place of the week's ("October 2026"), for a period. */
+  name?: string;
   memo: string | null;
   /** The text so far while the model writes, else null. */
   live: string | null;
@@ -101,7 +104,7 @@ export function PlannerMemoSheet({
   const text = strings.review.memo;
   const streaming = live !== null;
   const markdown = live ?? memo ?? "";
-  const weekName = strings.week(plannerWeekNumber(week));
+  const weekName = name ?? strings.week(plannerWeekNumber(week));
   const [editing, setEditing] = useState(false);
 
   // A new memo starts in the preview.
