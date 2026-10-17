@@ -116,6 +116,8 @@ export function plannerPeriodChatReview(
     state: period.state,
     look_back_done_at: period.done_at,
     look_forward_done_at: null,
+    // The period chat shows its own counts (plannerPeriodStats).
+    reads: { entries: 0, health_rows: 0, tasks_done: 0, goals: 0 },
     last_question: period.previous?.question ?? null,
     week_goals: period.goals.map(goalDto),
     plan_goals: [],
@@ -164,7 +166,10 @@ export type PlannerPeriodChatState = PlannerReviewState & {
 
 const SOURCES = ["memo", "health", "task_event", "week"];
 
-function restoreHappened(value: unknown): PlannerPeriodHappened[] | null {
+/** The saved "what happened" list, or null where it is not one. */
+export function plannerRestoreHappened(
+  value: unknown,
+): PlannerPeriodHappened[] | null {
   if (!Array.isArray(value)) return null;
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
@@ -208,7 +213,9 @@ export function plannerRestorePeriodChat(
   return {
     ...base,
     happened:
-      base.back.stage === "start" ? null : restoreHappened(record.happened),
+      base.back.stage === "start"
+        ? null
+        : plannerRestoreHappened(record.happened),
     dropped:
       typeof record.dropped === "number" && record.dropped >= 0
         ? Math.floor(record.dropped)

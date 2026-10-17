@@ -2,6 +2,7 @@ import {
   type PlannerAiOpeningResponse,
   type PlannerBoardCard,
   type PlannerGoalResult,
+  type PlannerHappened,
   type PlannerPeriodLevel,
   type PlannerPillar,
   type PlannerReviewResponse,
@@ -73,6 +74,7 @@ import {
   plannerStartPeriodOverRequest,
 } from "./period-api";
 import { PlannerPeriodChat } from "./period-chat";
+import { plannerRestoreHappened } from "./period-chat-model";
 import {
   type PlannerPeriodStrings,
   usePlannerPeriodStrings,
@@ -117,6 +119,10 @@ import {
   plannerSysOnce,
   plannerTodoCount,
 } from "./review-model";
+import {
+  PlannerHappened as PlannerHappenedBlock,
+  PlannerReads,
+} from "./review-receipts";
 import { PlannerMemoSheet } from "./review-sheet";
 import { usePlannerStrings } from "./strings";
 import { usePlannerToday } from "./use-planner-clock";
@@ -512,6 +518,15 @@ function ChapterTile({
   );
 }
 
+/**
+ * The week's state as the page saves it: the review's, with what happened
+ * (receipts the server checked) and how many claims it dropped.
+ */
+type SessionState = PlannerReviewState & {
+  happened: PlannerHappened[] | null;
+  dropped: number;
+};
+
 function ReviewSession({
   review,
   startOver,
@@ -553,9 +568,22 @@ function ReviewSession({
 
   // --- The review's state, saved as it changes -----------------------------
 
-  const [state, setState] = useState<PlannerReviewState>(() =>
-    plannerRestoreReviewState(review.state, review),
-  );
+  const [state, setState] = useState<SessionState>(() => {
+    const base = plannerRestoreReviewState(review.state, review);
+    const saved =
+      review.state && typeof review.state === "object" ? review.state : {};
+    return {
+      ...base,
+      happened:
+        base.back.stage === "start"
+          ? null
+          : plannerRestoreHappened(saved.happened),
+      dropped:
+        typeof saved.dropped === "number" && saved.dropped >= 0
+          ? Math.floor(saved.dropped)
+          : 0,
+    };
+  });
   const stateRef = useRef(state);
   const dirty = useRef(false);
   const saveTimer = useRef<number | undefined>(undefined);
@@ -594,7 +622,7 @@ function ReviewSession({
   );
 
   const update = useCallback(
-    (change: (current: PlannerReviewState) => PlannerReviewState) => {
+    (change: (current: SessionState) => SessionState) => {
       const next = change(stateRef.current);
       if (next === stateRef.current) return;
       stateRef.current = next;
@@ -784,10 +812,19 @@ function ReviewSession({
       }
     }
     if (!alive.current) return;
-    setBack((current) => {
-      if (current.stage !== "drafting") return current;
-      const noted = note ? plannerSysOnce(current, note) : current;
-      return plannerOpenQuestions(noted, review, plannerMergeOpening(base, ai));
+    update((current) => {
+      if (current.back.stage !== "drafting") return current;
+      const noted = note ? plannerSysOnce(current.back, note) : current.back;
+      return {
+        ...current,
+        happened: ai ? (ai.happened ?? []) : null,
+        dropped: ai?.dropped ?? 0,
+        back: plannerOpenQuestions(
+          noted,
+          review,
+          plannerMergeOpening(base, ai),
+        ),
+      };
     });
   };
 
@@ -1367,6 +1404,30 @@ function ReviewSession({
             done={lookBackDone}
             drafts={drafts}
             live={live}
+            period={{
+              start: (
+                <PlannerReads
+                  items={[
+                    periodStrings.chat.entries(review.reads.entries),
+                    periodStrings.chat.healthRows(review.reads.health_rows),
+                    periodStrings.chat.tasksDone(review.reads.tasks_done),
+                    periodStrings.chat.goals(review.reads.goals),
+                  ]}
+                  strings={periodStrings}
+                  testId="planner-review-reads"
+                />
+              ),
+              recap: state.happened ? (
+                <PlannerHappenedBlock
+                  dropped={state.dropped}
+                  goalsStrings={strings}
+                  happened={state.happened}
+                  label={strings.week(plannerWeekNumber(week))}
+                  strings={periodStrings}
+                  testId="planner-review-happened"
+                />
+              ) : undefined,
+            }}
             review={review}
             strings={backStrings}
             writing={memoLive !== null}

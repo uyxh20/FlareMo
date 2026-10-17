@@ -140,6 +140,7 @@ function review(
     summary: null,
     suggested_goals: {},
     ai: true,
+    reads: { entries: 0, health_rows: 0, tasks_done: 0, goals: 0 },
     ...overrides,
   };
 }
@@ -154,6 +155,8 @@ function opening(
       `${prompt.label}: more`,
       `${prompt.label}: less`,
     ]),
+    happened: [],
+    dropped: 0,
     ...overrides,
   };
 }

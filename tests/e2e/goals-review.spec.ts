@@ -139,6 +139,11 @@ test("Look back starts and takes a typed answer without a model", async ({
   // review still needs starting, or a fresh review is never started.
   await expect(page.getByTestId("planner-review-chat")).toBeVisible();
   const start = page.getByTestId("planner-start-look-back");
+  // Before it starts, the chat says what it reads: entries, health rows,
+  // tasks done and goals, counted (the audit block, as in a period chapter).
+  if (await start.isVisible()) {
+    await expect(page.getByTestId("planner-review-reads")).toBeVisible();
+  }
   // A review already started in this database picks up where it was.
   if (await start.isVisible()) await start.click();
   const composer = page.getByTestId("planner-review-composer");

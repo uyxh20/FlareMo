@@ -123,6 +123,7 @@ export type PlannerPeriodStrings = {
     reads: string;
     entries: (count: number) => string;
     memos: (count: number) => string;
+    healthRows: (count: number) => string;
     tasksDone: (count: number) => string;
     goals: (count: number) => string;
     happened: (label: string) => string;
@@ -269,6 +270,7 @@ const en: PlannerPeriodStrings = {
     reads: "What this review reads",
     entries: (count) => `${count} diary ${count === 1 ? "entry" : "entries"}`,
     memos: (count) => `${count} weekly ${count === 1 ? "memo" : "memos"}`,
+    healthRows: (count) => `${count} health ${count === 1 ? "row" : "rows"}`,
     tasksDone: (count) => `${count} ${count === 1 ? "task" : "tasks"} done`,
     goals: (count) => `${count} ${count === 1 ? "goal" : "goals"}`,
     happened: (label) => `What happened in ${label}`,
@@ -422,6 +424,7 @@ const zhCN: PlannerPeriodStrings = {
     reads: "本复盘读取",
     entries: (count) => `${count} 篇日记`,
     memos: (count) => `${count} 份周总结`,
+    healthRows: (count) => `${count} 条健康记录`,
     tasksDone: (count) => `完成 ${count} 项任务`,
     goals: (count) => `${count} 个目标`,
     happened: (label) => `${label}发生了什么`,

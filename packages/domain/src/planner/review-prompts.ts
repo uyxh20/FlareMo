@@ -26,6 +26,9 @@ import {
 } from "@flaremo/contracts";
 import type { PlannerReviewContext } from "./review-context";
 
+/** How many "what happened" claims the opening asks for, at most (review-happened.ts). */
+export const PLANNER_WEEK_HAPPENED_MAX = 6;
+
 // The weekly review's prompts and the parsers for what comes back (fork-owned
 // add-on, docs/planning-cockpit-goals-review.md). Pure functions: the Worker sends
 // the messages to the model and hands the raw text back here.
@@ -417,11 +420,13 @@ ${plannerReviewPrompts.map((prompt, index) => `${index + 1}. ${prompt.question}`
 
 Also write a recap: the week in at most 35 plain, factual words.
 
+And what happened this week: up to ${PLANNER_WEEK_HAPPENED_MAX} claims, the things that mattered most for the goals, one per line, plain and factual, at most 20 words each. Each claim needs a "quote": words copied exactly from one diary entry, health row note, task title, task note or comment below, at least six words, no edits, no ellipsis. A claim without words to back it is left out, so never write one you cannot quote. "pillar" is the objective it belongs to (of, work, ai, health) or null.
+
 Context:
 ${plannerReviewContextBlock(context)}
 
 Reply with only JSON in this shape, where each string is your text:
-{"recap": string,${lastq} "prompts": [seven arrays, one per prompt in order, each with three answer options]}`,
+{"recap": string,${lastq} "prompts": [seven arrays, one per prompt in order, each with three answer options], "happened": [{"claim": string, "quote": string, "pillar": "of" or "work" or "ai" or "health" or null}]}`,
     },
   ];
 }

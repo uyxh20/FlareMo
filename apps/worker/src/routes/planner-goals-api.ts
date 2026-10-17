@@ -52,7 +52,7 @@ import {
   plannerOpeningMessages,
   plannerParseCheck,
   plannerParseClose,
-  plannerParseOpening,
+  plannerParseWeekOpening,
   plannerReadFlags,
   plannerReadGoalsYear,
   plannerReadMemoHistory,
@@ -527,21 +527,21 @@ plannerGoalsApi.post(
         } catch (error) {
           // The review's model drafts the opening instead, from its own budget.
           plannerLogAgentError("start", error);
+          const whole = await plannerReadReviewContext(context.db, {
+            userId: context.user.id,
+            ownerName: context.user.name,
+            weekStart: review.weekStart,
+            today: body.today,
+            diaryChars: PLANNER_DIARY_CHARS,
+          });
           return completeOr503(
             c,
             setup.model,
             "opening",
-            plannerOpeningMessages(
-              await plannerReadReviewContext(context.db, {
-                userId: context.user.id,
-                ownerName: context.user.name,
-                weekStart: review.weekStart,
-                today: body.today,
-                diaryChars: PLANNER_DIARY_CHARS,
-              }),
-            ),
-            { maxTokens: 1_600, temperature: 0.4 },
-            (raw): PlannerAiOpeningResponse => plannerParseOpening(raw),
+            plannerOpeningMessages(whole),
+            { maxTokens: 2_000, temperature: 0.4 },
+            (raw): PlannerAiOpeningResponse =>
+              plannerParseWeekOpening(raw, whole),
           );
         }
       }
@@ -550,8 +550,9 @@ plannerGoalsApi.post(
         setup.model,
         "opening",
         plannerOpeningMessages(setup.review),
-        { maxTokens: 1_600, temperature: 0.4 },
-        (raw): PlannerAiOpeningResponse => plannerParseOpening(raw),
+        { maxTokens: 2_000, temperature: 0.4 },
+        (raw): PlannerAiOpeningResponse =>
+          plannerParseWeekOpening(raw, setup.review),
       );
     } catch (error) {
       return jsonError(c, error);
@@ -628,10 +629,18 @@ plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
     // (the agent narrating what it reads) is not the answer.
     const json = [...texts].reverse().find((text) => text.includes("{")) ?? "";
     if (step === "opening") {
+      // The receipts are checked against the week as the agent's file showed it.
+      const review = await plannerReadReviewContext(context.db, {
+        userId: context.user.id,
+        ownerName: context.user.name,
+        weekStart,
+        today,
+        diaryChars: PLANNER_MEMO_AGENT_DIARY_CHARS,
+      });
       return c.json<PlannerAgentResponse>({
         status: "done",
         step,
-        opening: plannerParseOpening(json),
+        opening: plannerParseWeekOpening(json, review),
       });
     }
     if (step === "close") {

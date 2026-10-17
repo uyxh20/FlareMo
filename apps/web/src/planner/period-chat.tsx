@@ -8,7 +8,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { plannerErrorMessage } from "./api";
-import { PlannerPillarLabel } from "./goal-cards";
 import {
   plannerAiClose,
   plannerAiFailure,
@@ -55,6 +54,7 @@ import {
   plannerStepScore,
   plannerSysOnce,
 } from "./review-model";
+import { PlannerHappened, PlannerReads } from "./review-receipts";
 import { PlannerMemoSheet } from "./review-sheet";
 
 // The month, quarter and year chapters of the review (fork-owned add-on,
@@ -113,101 +113,6 @@ function chatStrings(
   };
 }
 
-function Stats({
-  period,
-  strings,
-}: {
-  period: PlannerPeriodReviewResponse;
-  strings: PlannerPeriodStrings;
-}) {
-  const stats = plannerPeriodStats(period);
-  const items = [
-    strings.chat.entries(stats.entries),
-    strings.chat.memos(stats.memos),
-    strings.chat.tasksDone(stats.tasksDone),
-    strings.chat.goals(stats.goals),
-  ];
-  return (
-    <div
-      className="flex flex-col items-center gap-2"
-      data-testid="planner-period-stats"
-    >
-      <span className="text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase">
-        {strings.chat.reads}
-      </span>
-      <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-        {items.map((item) => (
-          <li
-            className="rounded-[10px] border border-border bg-background px-3 py-2 text-sm tabular-nums"
-            key={item}
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Happened({
-  happened,
-  dropped,
-  label,
-  strings,
-  goalsStrings,
-}: {
-  happened: readonly PlannerPeriodHappened[];
-  dropped: number;
-  label: string;
-  strings: PlannerPeriodStrings;
-  goalsStrings: PlannerGoalsStrings;
-}) {
-  return (
-    <div
-      className="flex max-w-[600px] flex-col gap-2 rounded-xl border border-border bg-background px-3.5 py-3"
-      data-testid="planner-period-happened"
-    >
-      <span className="text-[13px] font-semibold">
-        {strings.chat.happened(label)}
-      </span>
-      {happened.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">
-          {strings.chat.nothingBacked}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {happened.map((entry) => (
-            <li
-              className="flex flex-col gap-0.5 leading-snug"
-              key={`${entry.claim}:${entry.source_id}`}
-            >
-              <span className="flex flex-wrap items-baseline gap-x-2">
-                {entry.pillar && (
-                  <PlannerPillarLabel
-                    pillar={entry.pillar}
-                    short
-                    strings={goalsStrings}
-                  />
-                )}
-                <span>{entry.claim}</span>
-              </span>
-              <span className="text-[12.5px] text-success">
-                ✓ {entry.source_day} · {strings.chat.sources[entry.source]}:{" "}
-                <q className="text-muted-foreground">{entry.quote}</q>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {dropped > 0 && (
-        <p className="text-[12.5px] text-muted-foreground">
-          {strings.chat.dropped(dropped)}
-        </p>
-      )}
-    </div>
-  );
-}
-
 export function PlannerPeriodChat({
   period,
   strings: periodStrings,
@@ -231,6 +136,15 @@ export function PlannerPeriodChat({
     () => plannerPeriodChatReview(period, today),
     [period, today],
   );
+  const statsItems = useMemo(() => {
+    const stats = plannerPeriodStats(period);
+    return [
+      periodStrings.chat.entries(stats.entries),
+      periodStrings.chat.memos(stats.memos),
+      periodStrings.chat.tasksDone(stats.tasksDone),
+      periodStrings.chat.goals(stats.goals),
+    ];
+  }, [period, periodStrings]);
   const strings = useMemo(
     () => chatStrings(goalsStrings, periodStrings, word, label, next.label),
     [goalsStrings, periodStrings, word, label, next.label],
@@ -725,9 +639,15 @@ export function PlannerPeriodChat({
         period={{
           label,
           word,
-          start: <Stats period={period} strings={periodStrings} />,
+          start: (
+            <PlannerReads
+              items={statsItems}
+              strings={periodStrings}
+              testId="planner-period-stats"
+            />
+          ),
           recap: state.happened ? (
-            <Happened
+            <PlannerHappened
               dropped={state.dropped}
               goalsStrings={goalsStrings}
               happened={state.happened}

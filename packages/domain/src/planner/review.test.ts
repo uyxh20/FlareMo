@@ -186,6 +186,7 @@ describe("the weekly review", () => {
         summary: null,
         suggested_goals: {},
         ai: true,
+        reads: { entries: 0, health_rows: 0, tasks_done: 0, goals: 0 },
       });
       expect(empty.scores).toHaveLength(19);
       expect(empty.scores[0]).toEqual({

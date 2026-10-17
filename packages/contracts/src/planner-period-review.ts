@@ -1,9 +1,13 @@
 import { z } from "zod";
 import {
+  type PlannerAiOpeningResponse,
   type PlannerGoalResult,
+  type PlannerHappened,
   type PlannerPillar,
   plannerAddDays,
+  plannerEvidenceSourceSchema,
   plannerGoalResultSchema,
+  plannerHappenedSchema,
   plannerIsDay,
   plannerPillarSchema,
   plannerQuarterStartOf,
@@ -376,13 +380,13 @@ export const plannerWeekMarks = ["repeat", "never"] as const;
 export type PlannerWeekMark = (typeof plannerWeekMarks)[number];
 
 /** Where a receipt comes from: a diary entry, a health row, a task event, a week record. */
-export const plannerEvidenceSources = [
-  "memo",
-  "health",
-  "task_event",
-  "week",
-] as const;
-export type PlannerEvidenceSource = (typeof plannerEvidenceSources)[number];
+// The evidence sources live in planner-goals.ts now, where the weekly opening
+// shares them; re-exported here for the period's own readers.
+export {
+  type PlannerEvidenceSource,
+  plannerEvidenceSourceSchema,
+  plannerEvidenceSources,
+} from "./planner-goals";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -394,7 +398,6 @@ export const plannerPeriodLevelSchema = z.enum(plannerPeriodLevels);
 export const plannerForecastGradeSchema = z.enum(plannerForecastGrades);
 export const plannerGoalDecisionSchema = z.enum(plannerGoalDecisions);
 export const plannerWeekMarkSchema = z.enum(plannerWeekMarks);
-export const plannerEvidenceSourceSchema = z.enum(plannerEvidenceSources);
 
 export const plannerPeriodReviewQuerySchema = z.object({
   today: daySchema,
@@ -657,30 +660,15 @@ export const plannerPeriodAiThemesResponseSchema = z.object({
 });
 
 /**
- * One line of "what happened" in a month or quarter: a claim and the owner's
- * own words it rests on, found by the model and checked word for word by the
- * server. Only claims whose words were found are sent; the rest are counted.
+ * One line of "what happened" in a month or quarter: the same receipt-checked
+ * claim as the week's (plannerHappenedSchema in planner-goals.ts).
  */
-export const plannerPeriodHappenedSchema = z.object({
-  pillar: plannerPillarSchema.nullable(),
-  claim: z.string(),
-  quote: z.string(),
-  source: plannerEvidenceSourceSchema,
-  source_id: z.string(),
-  source_day: z.string(),
-});
+export const plannerPeriodHappenedSchema = plannerHappenedSchema;
 
-export type PlannerPeriodHappened = z.infer<typeof plannerPeriodHappenedSchema>;
+export type PlannerPeriodHappened = PlannerHappened;
 
-/** The chat's opening: the weekly opening's drafts, plus what happened. */
-export type PlannerPeriodOpeningResponse = {
-  recap: string;
-  lastq: string[];
-  prompts: string[][];
-  happened: PlannerPeriodHappened[];
-  // Claims the model made whose words were not found in the period's rows.
-  dropped: number;
-};
+/** The chat's opening: the weekly opening, with what happened in the period. */
+export type PlannerPeriodOpeningResponse = PlannerAiOpeningResponse;
 
 export type PlannerEvidenceInput = z.input<typeof plannerEvidenceInputSchema>;
 export type PlannerEvidenceDto = z.infer<typeof plannerEvidenceDtoSchema>;

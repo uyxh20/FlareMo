@@ -3,25 +3,21 @@ import {
   type PlannerPeriodHappened,
   type PlannerPeriodLevel,
   type PlannerPeriodOpeningResponse,
-  type PlannerPillar,
   type PlannerVerdictKind,
   plannerFormatScore,
   plannerMemoDayLabel,
   plannerPeriodLabel,
   plannerPillarNames,
-  plannerPillars,
   plannerReviewPrompts,
   plannerScoreFloors,
 } from "@flaremo/contracts";
-import {
-  type PlannerPeriodContext,
-  plannerVerifyQuote,
-} from "./period-review-context";
+import type { PlannerPeriodContext } from "./period-review-context";
 import {
   plannerPeriodContextBlock,
   plannerPeriodMemoMarker,
   plannerPeriodMemoTitle,
 } from "./period-review-prompts";
+import { plannerParseHappened } from "./review-happened";
 import {
   type PlannerChatMessage,
   type PlannerCoachMode,
@@ -135,45 +131,14 @@ export function plannerParsePeriodOpening(
   raw: string,
   context: PlannerPeriodContext,
 ): PlannerPeriodOpeningResponse {
-  const base = plannerParseOpening(raw);
-  const parsed = plannerExtractJson(raw) ?? {};
-  const list = Array.isArray(parsed.happened) ? parsed.happened : [];
-  const happened: PlannerPeriodHappened[] = [];
-  let dropped = 0;
-  const seen = new Set<string>();
-  for (const item of list.slice(0, PLANNER_PERIOD_HAPPENED_MAX * 2)) {
-    if (!item || typeof item !== "object") continue;
-    const entry = item as Record<string, unknown>;
-    const claim =
-      typeof entry.claim === "string"
-        ? entry.claim.replace(/\s+/g, " ").trim().slice(0, 300)
-        : "";
-    const words =
-      typeof entry.quote === "string"
-        ? entry.quote.replace(/\s+/g, " ").trim().slice(0, 600)
-        : "";
-    if (!claim) continue;
-    const check = words
-      ? plannerVerifyQuote(words, context.raw)
-      : { verified: false, source: null };
-    if (!check.verified || !check.source) {
-      dropped += 1;
-      continue;
-    }
-    if (seen.has(claim.toLowerCase())) continue;
-    seen.add(claim.toLowerCase());
-    if (happened.length >= PLANNER_PERIOD_HAPPENED_MAX) continue;
-    const pillar = plannerPillars.find((value) => value === entry.pillar);
-    happened.push({
-      pillar: (pillar ?? null) as PlannerPillar | null,
-      claim,
-      quote: words,
-      source: check.source.source,
-      source_id: check.source.id,
-      source_day: check.source.day,
-    });
-  }
-  return { ...base, happened, dropped };
+  return {
+    ...plannerParseOpening(raw),
+    ...plannerParseHappened(
+      plannerExtractJson(raw) ?? {},
+      context.raw,
+      PLANNER_PERIOD_HAPPENED_MAX,
+    ),
+  };
 }
 
 // ---------------------------------------------------------------------------
