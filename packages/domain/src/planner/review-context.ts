@@ -19,6 +19,7 @@ import {
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
+import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
   plannerGoalFlag,
   plannerTaskComment,
@@ -73,6 +74,72 @@ export function plannerWeekInstants(weekStart: string): {
   return {
     from: healthLocalDayStart(weekStart),
     to: healthLocalDayStart(plannerAddDays(weekStart, 7)),
+  };
+}
+
+/**
+ * What the week's review reads, counted (the Look back shows it before it
+ * starts): diary entries, health rows and tasks done in the week. The goals
+ * are counted by the caller, which has them.
+ */
+export async function plannerCountWeekReads(
+  db: FlareMoDb,
+  input: { userId: string; weekStart: string },
+): Promise<{ entries: number; health_rows: number; tasks_done: number }> {
+  const week = plannerWeekInstants(input.weekStart);
+  const summaries = db
+    .select({ id: memoTags.memoId })
+    .from(memoTags)
+    .where(
+      and(
+        eq(memoTags.userId, input.userId),
+        eq(memoTags.tag, plannerSummaryMemoTag),
+      ),
+    );
+  const [entries, health, done] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(memos)
+      .where(
+        and(
+          eq(memos.userId, input.userId),
+          LIVE_MEMO,
+          gte(memos.createdAt, week.from),
+          lt(memos.createdAt, week.to),
+          ne(memos.source, plannerSummaryMemoSource),
+          notInArray(memos.id, summaries),
+        ),
+      )
+      .get(),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(healthEntry)
+      .where(
+        and(
+          eq(healthEntry.userId, input.userId),
+          gte(healthEntry.day, input.weekStart),
+          lt(healthEntry.day, plannerAddDays(input.weekStart, 7)),
+        ),
+      )
+      .get(),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, input.userId),
+          isNull(tasks.deletedAt),
+          eq(tasks.status, "done"),
+          gte(tasks.completedAt, week.from),
+          lt(tasks.completedAt, week.to),
+        ),
+      )
+      .get(),
+  ]);
+  return {
+    entries: Number(entries?.count ?? 0),
+    health_rows: Number(health?.count ?? 0),
+    tasks_done: Number(done?.count ?? 0),
   };
 }
 

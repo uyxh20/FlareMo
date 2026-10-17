@@ -49,6 +49,7 @@ import {
 } from "./goals";
 import { plannerApplyColumnMove, plannerCreateTask } from "./plans";
 import {
+  plannerCountWeekReads,
   plannerFindSummaryMemo,
   plannerReadFlagGoals,
   plannerReadLastQuestion,
@@ -264,6 +265,7 @@ export async function plannerReadReview(
     scores,
     week,
     summary,
+    reads,
   ] = await Promise.all([
     readReviewRow(db, userId, reviewWeek),
     plannerReadLastQuestion(db, { userId, weekStart: reviewWeek }),
@@ -273,6 +275,7 @@ export async function plannerReadReview(
     readScores(db, userId, reviewWeek),
     plannerReadWeek(db, { userId, weekStart: reviewWeek }),
     plannerFindSummaryMemo(db, { userId, weekStart: reviewWeek }),
+    plannerCountWeekReads(db, { userId, weekStart: reviewWeek }),
   ]);
   const flagGoals = await plannerReadFlagGoals(db, { userId, flags });
   // The plan starts from the Next Steps of this week's summary once Look back
@@ -301,6 +304,7 @@ export async function plannerReadReview(
     summary: summary ? { id: summary.id, content: summary.content } : null,
     suggested_goals: stepsFrom ? plannerMemoNextSteps(stepsFrom.content) : {},
     ai: input.ai,
+    reads: { ...reads, goals: weekGoals.length },
   };
 }
 

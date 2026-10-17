@@ -45,7 +45,7 @@ One Sunday review in chapters: Look back on the week, then, on the Sunday a mont
 - From Saturday to Monday the sidebar link "Review" carries a dot until both parts, and every period chapter, are done.
 - **Start over** in the header clears the open chapter's progress, after a confirmation: the week's (and opens a fresh Look back), or a period chapter's own, leaving the week's progress alone. What the two saves already wrote stays: the week's record, the summary memo, goals and tasks. Saving again updates them, and the server's commit log is kept, so a task Save week already created is not made twice.
 
-**Look back** is a chat over the week. It goes through:
+**Look back** is a chat over the week. Before it starts it says what it reads, counted: diary entries, health rows, tasks done and goals (`reads` on the review response). Its first message is the recap with **What happened in Week 42**: up to six claims, each with the owner's own words, the day and where they were found (entry, health log, task). The model must quote each claim; the server checks every quote word for word against the rows the prompt showed it (`plannerParseWeekOpening`, `review-happened.ts`) and drops the claims it cannot find, saying how many it left out. The month, quarter and year chapters show the same two blocks over their period. Then it goes through:
 
 1. Last week's key question.
 2. Last week's goals, each marked met, partial or missed.
@@ -159,7 +159,7 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 
 ## Web: `apps/web/src/planner/`
 
-The files are named by feature: `goals-*` and `goal-*` (the Goals page, editor, API client, search validators, strings, CSS), `year-map*` (the Year map), `review-*` (the weekly review and its pure model), `goal-cards.tsx` (the cockpit's goal cards) and `nav-link.tsx` (the Goals and Review sidebar links, beside Cockpit through `PlannerNavLink`). The goal and review pages are covered by tests of their pure modules (`review-model.ts`, `goals-model.ts`, `year-map-model.ts`); the page components themselves have none.
+The files are named by feature: `goals-*` and `goal-*` (the Goals page, editor, API client, search validators, strings, CSS), `year-map*` (the Year map), `review-*` (the weekly review and its pure model; `review-receipts.tsx` is the counts and What happened blocks the week and the period chapters share), `goal-cards.tsx` (the cockpit's goal cards) and `nav-link.tsx` (the Goals and Review sidebar links, beside Cockpit through `PlannerNavLink`). The goal and review pages are covered by tests of their pure modules (`review-model.ts`, `goals-model.ts`, `year-map-model.ts`); the page components themselves have none.
 
 ## Upstream files with a hook-in
 

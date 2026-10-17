@@ -710,6 +710,18 @@ export const plannerCockpitWeekSchema = z.object({
   goals: z.array(plannerGoalDtoSchema),
 });
 
+/** What the week's review reads, counted, shown before it starts. */
+export const plannerReviewReadsSchema = z.object({
+  // Diary entries written in the week (summary memos left out).
+  entries: z.number().int(),
+  // Health tracker rows logged in the week.
+  health_rows: z.number().int(),
+  // Tasks completed in the week.
+  tasks_done: z.number().int(),
+  // The week's goals.
+  goals: z.number().int(),
+});
+
 export const plannerReviewResponseSchema = z.object({
   today: z.string(),
   // The Monday of the week looked back on, and of the week it plans.
@@ -744,6 +756,8 @@ export const plannerReviewResponseSchema = z.object({
   suggested_goals: z.partialRecord(plannerPillarSchema, z.string()),
   // Whether a language model is configured (Workers AI or Anthropic).
   ai: z.boolean(),
+  // What the Look back reads, counted (fork: docs/planning-cockpit-goals-review.md).
+  reads: plannerReviewReadsSchema,
 });
 
 export const plannerReviewStatusResponseSchema = z.object({
@@ -770,6 +784,32 @@ export const plannerCommitResponseSchema = z.object({
   created: z.record(z.string(), z.string()),
 });
 
+/** Where a receipt's words were found: an entry, a health row, a task or a week record. */
+export const plannerEvidenceSources = [
+  "memo",
+  "health",
+  "task_event",
+  "week",
+] as const;
+export type PlannerEvidenceSource = (typeof plannerEvidenceSources)[number];
+export const plannerEvidenceSourceSchema = z.enum(plannerEvidenceSources);
+
+/**
+ * One line of "what happened" in the week, month or quarter: a claim and the
+ * owner's own words it rests on, found by the model and checked word for word
+ * by the server. Only claims whose words were found are sent; the rest are
+ * counted (fork: docs/planning-cockpit-period-review.md).
+ */
+export const plannerHappenedSchema = z.object({
+  pillar: plannerPillarSchema.nullable(),
+  claim: z.string(),
+  quote: z.string(),
+  source: plannerEvidenceSourceSchema,
+  source_id: z.string(),
+  source_day: z.string(),
+});
+export type PlannerHappened = z.infer<typeof plannerHappenedSchema>;
+
 export const plannerAiOpeningResponseSchema = z.object({
   // The week in a few plain words.
   recap: z.string(),
@@ -777,6 +817,10 @@ export const plannerAiOpeningResponseSchema = z.object({
   lastq: z.array(z.string()),
   // Answer options for each of the seven prompts.
   prompts: z.array(z.array(z.string())),
+  // What happened, each claim backed by the owner's words (fork).
+  happened: z.array(plannerHappenedSchema),
+  // Claims the model made whose words were not found in the week's rows.
+  dropped: z.number().int(),
 });
 
 export const plannerAiCloseResponseSchema = z.object({
@@ -895,6 +939,7 @@ export type PlannerCommitResponse = z.infer<typeof plannerCommitResponseSchema>;
 export type PlannerAiOpeningResponse = z.infer<
   typeof plannerAiOpeningResponseSchema
 >;
+export type PlannerReviewReads = z.infer<typeof plannerReviewReadsSchema>;
 export type PlannerAiCloseResponse = z.infer<
   typeof plannerAiCloseResponseSchema
 >;
