@@ -635,7 +635,17 @@ describe("the review agent's steps", () => {
     expect(opening).toContain("This session is Anon's whole weekly review");
     expect(opening).toContain("Step 1, the opening:");
     expect(opening).toContain('{"recap": string,');
-    expect(opening).toContain("(in /data/this-week.md;");
+    // Mounted files land under /mnt/session/uploads: the text must say so.
+    expect(opening).toContain("(in /mnt/session/uploads/data/this-week.md;");
+    for (const text of [
+      opening,
+      plannerMemoAgentSystem("Anon"),
+      plannerMemoAgentKickoff(CONTEXT.weekStart),
+    ]) {
+      expect(text.replaceAll("/mnt/session/uploads/data", "")).not.toContain(
+        "/data",
+      );
+    }
     expect(opening).not.toContain(block);
 
     const coach = plannerAgentCoachMessage(CONTEXT, "force", [

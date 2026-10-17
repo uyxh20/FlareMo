@@ -163,7 +163,7 @@ describe("the period chat's words", () => {
       "month:2026-10-01",
     );
     const opening = plannerPeriodAgentOpeningMessage(context());
-    expect(opening).toContain("/data/this-period.md");
+    expect(opening).toContain("/mnt/session/uploads/data/this-period.md");
     expect(opening).toContain(
       'Read "week" in your standing instructions as "month"',
     );

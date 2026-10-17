@@ -46,10 +46,10 @@ export function plannerMemoAgentSystem(ownerName: string): string {
 
 The kickoff message tells you which week this is and where its files are. Expect:
 
-- \`/data/this-week.md\`: the goal cascade (north star, year, quarter, month and week goals by pillar), recent Authenticity and Achievement scores, last week's key question and Next Steps, the task board, health tracker totals, and every diary entry of the week with the day it was written.
-- \`/data/review.md\`: what ${name} answered in the interactive review this evening, the scores they set, and the drafted Pattern, Risk and Opportunity.
-- \`/data/template.md\`: the memo's exact skeleton for this week. Text in parentheses is an instruction to you, not text to copy.
-- \`/data/history/\`: the diary and saved summary of earlier weeks, one file per week, named by the Monday.
+- \`/mnt/session/uploads/data/this-week.md\`: the goal cascade (north star, year, quarter, month and week goals by pillar), recent Authenticity and Achievement scores, last week's key question and Next Steps, the task board, health tracker totals, and every diary entry of the week with the day it was written.
+- \`/mnt/session/uploads/data/review.md\`: what ${name} answered in the interactive review this evening, the scores they set, and the drafted Pattern, Risk and Opportunity.
+- \`/mnt/session/uploads/data/template.md\`: the memo's exact skeleton for this week. Text in parentheses is an instruction to you, not text to copy.
+- \`/mnt/session/uploads/data/history/\`: the diary and saved summary of earlier weeks, one file per week, named by the Monday.
 - Your memory store: notes you wrote at earlier reviews of ${name}. Read it before anything else.
 
 Read all of this week's material before you write. Open history files when you are about to say something repeats, changed, or was promised earlier: check it there rather than relying on memory or on an earlier summary.
@@ -65,7 +65,7 @@ Read all of this week's material before you write. Open history files when you a
 
 ## What to write
 
-Fill \`/data/template.md\` exactly: its headings in order, its bullet labels, the scores table, and the lines it says to copy unchanged. Keep ${name}'s own words for their reflection answers, fixing typos only. Under 900 words.
+Fill \`/mnt/session/uploads/data/template.md\` exactly: its headings in order, its bullet labels, the scores table, and the lines it says to copy unchanged. Keep ${name}'s own words for their reflection answers, fixing typos only. Under 900 words.
 
 - Be specific. In the Executive Summary, Evidence and Learnings, name the days, people and numbers the diary gives, and quote ${name}'s own words exactly, inside quotation marks, at least once for each objective the diary covers.
 - The Pattern must be something you can point to in at least two weeks, with the weeks named. If you only see it this week, call it a signal, not a pattern.
@@ -158,7 +158,7 @@ export function plannerMemoAgentFiles(
 
 /** The memo step's message, and a memo-only session's first message. */
 export function plannerMemoAgentKickoff(weekStart: string): string {
-  return `This is the review of the week starting Monday ${weekStart}. Its files are in /data: this-week.md, review.md, template.md and history/ (the weeks before it). Your memory store is mounted under /mnt/memory/.`;
+  return `This is the review of the week starting Monday ${weekStart}. Its files are in /mnt/session/uploads/data: this-week.md, review.md, template.md and history/ (the weeks before it). Your memory store is mounted under /mnt/memory/.`;
 }
 
 /**
@@ -190,7 +190,7 @@ export function plannerMemoAgentStepFiles(
 }
 
 const CONTEXT_FILE =
-  "(in /data/this-week.md; the weeks before it are in /data/history/)";
+  "(in /mnt/session/uploads/data/this-week.md; the weeks before it are in /mnt/session/uploads/data/history/)";
 
 /** A step's prompt, with the week's context pointing at its file. */
 function stepPrompt(
@@ -212,7 +212,7 @@ export function plannerAgentOpeningMessage(
 
 Until the memo step, follow each message's instructions and reply with only what it asks for, in the format it asks for: no preamble, no notes, nothing after it. Your standing instructions about writing the memo apply only when the memo step comes. Don't change your memory store before then.
 
-The week's files: /data/this-week.md is the context the instructions refer to, and /data/history/ holds the weeks before it. Read your memory store's notes and this-week.md before this first reply; open history files when a step needs them.
+The week's files: /mnt/session/uploads/data/this-week.md is the context the instructions refer to, and /mnt/session/uploads/data/history/ holds the weeks before it. Read your memory store's notes and this-week.md before this first reply; open history files when a step needs them.
 
 Step 1, the opening:
 

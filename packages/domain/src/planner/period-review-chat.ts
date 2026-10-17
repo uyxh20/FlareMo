@@ -495,7 +495,9 @@ export function plannerPeriodAgentKey(
 }
 
 const PERIOD_FILE = "/data/this-period.md";
-const CONTEXT_FILE = `(in ${PERIOD_FILE})`;
+// Where the session mounts its files: every mount path lands under this folder.
+const UPLOADS = "/mnt/session/uploads";
+const CONTEXT_FILE = `(in ${UPLOADS}${PERIOD_FILE})`;
 
 /** The files a period review's session starts with. */
 export function plannerPeriodAgentFiles(
@@ -519,11 +521,11 @@ export function plannerPeriodAgentOpeningMessage(
 ): string {
   const name = nameOf(context).trim().split(/\s+/)[0] || "the owner";
   const word = plannerPeriodWord(context.level);
-  return `This session is ${name}'s whole ${word} review for ${labelOf(context)} (${context.periodStart} to ${context.periodEnd}, ${context.weeks.length} weeks), not a weekly review. It runs like the weekly review over the whole ${word}. Read "week" in your standing instructions as "${word}": ${PERIOD_FILE} takes the place of this-week.md and holds every week of the ${word} with its record, its saved weekly summary and its diary, so there is no history folder. The review reaches you one step at a time, each as a message: first the opening (this message), then the coach chat (one message for each of ${name}'s answers), then the scores and trajectory, and last the memo. ${name} is waiting on each reply in the app.
+  return `This session is ${name}'s whole ${word} review for ${labelOf(context)} (${context.periodStart} to ${context.periodEnd}, ${context.weeks.length} weeks), not a weekly review. It runs like the weekly review over the whole ${word}. Read "week" in your standing instructions as "${word}": ${UPLOADS}${PERIOD_FILE} takes the place of this-week.md and holds every week of the ${word} with its record, its saved weekly summary and its diary, so there is no history folder. The review reaches you one step at a time, each as a message: first the opening (this message), then the coach chat (one message for each of ${name}'s answers), then the scores and trajectory, and last the memo. ${name} is waiting on each reply in the app.
 
 Until the memo step, follow each message's instructions and reply with only what it asks for, in the format it asks for: no preamble, no notes, nothing after it. Your standing instructions about writing the memo apply only when the memo step comes. Don't change your memory store before then.
 
-Read your memory store's notes and ${PERIOD_FILE} before this first reply.
+Read your memory store's notes and ${UPLOADS}${PERIOD_FILE} before this first reply.
 
 Step 1, the opening:
 
@@ -585,5 +587,5 @@ export function plannerPeriodAgentMemoKickoff(
   context: PlannerPeriodContext,
 ): string {
   const word = plannerPeriodWord(context.level);
-  return `This is the ${word} review of ${labelOf(context)}, not a weekly review: read "week" in your standing instructions as "${word}". Its files are in /data: this-period.md (every week of the ${word}), review.md (this review's answers and drafts) and template.md (the memo's skeleton and rules). Your memory store is mounted under /mnt/memory/; your notes there are about weeks, so add a line about this ${word} too.`;
+  return `This is the ${word} review of ${labelOf(context)}, not a weekly review: read "week" in your standing instructions as "${word}". Its files are in ${UPLOADS}/data: this-period.md (every week of the ${word}), review.md (this review's answers and drafts) and template.md (the memo's skeleton and rules). Your memory store is mounted under /mnt/memory/; your notes there are about weeks, so add a line about this ${word} too.`;
 }
