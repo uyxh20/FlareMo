@@ -22,6 +22,7 @@ import {
   type PlannerPeriodReviewRow,
   plannerEvidence,
   plannerPeriodReview,
+  plannerTaskComment,
   plannerTaskPlan,
   plannerWeek,
 } from "@flaremo/db/src/schema/planner";
@@ -94,9 +95,15 @@ export type PlannerPeriodWeekContext = PlannerPeriodWeek & {
   goals: PlannerGoalDto[];
   /** Health rows of the week, one line each. */
   health: string[];
-  /** Titles of the tasks done in the week. */
+  /**
+   * The tasks done in the week: the title, then the task's notes and its
+   * comments (the owner's receipts on the task), trimmed.
+   */
   done: string[];
 };
+
+/** Characters of a done task's notes and comments shown per task. */
+const TASK_RECEIPT_CHARS = 240;
 
 export type PlannerPeriodContext = {
   ownerName: string;
@@ -369,6 +376,7 @@ export async function plannerReadPeriodContext(
       .select({
         id: tasks.id,
         title: tasks.title,
+        notes: tasks.notes,
         completedAt: tasks.completedAt,
       })
       .from(tasks)
@@ -515,15 +523,36 @@ export async function plannerReadPeriodContext(
     const monday = weekOfDay(weeks, entry.day);
     if (monday) byWeek.get(monday)?.health.push(entry);
   }
+  // The owner's receipts on a task: its notes and its comments. Each is a raw
+  // row of its own, so a receipt can quote it, and the week's done line carries
+  // them trimmed.
+  const comments = await readTaskComments(
+    db,
+    userId,
+    doneRows.map((task) => task.id),
+  );
   for (const task of doneRows) {
-    raw.push({
-      source: "task_event",
-      id: task.id,
-      day: (task.completedAt ?? "").slice(0, 10),
-      text: task.title,
-    });
+    const day = (task.completedAt ?? "").slice(0, 10);
+    raw.push({ source: "task_event", id: task.id, day, text: task.title });
+    const receipts: string[] = [];
+    if (task.notes?.trim()) {
+      raw.push({ source: "task_event", id: task.id, day, text: task.notes });
+      receipts.push(task.notes.trim());
+    }
+    for (const comment of comments.get(task.id) ?? []) {
+      raw.push({
+        source: "task_event",
+        id: task.id,
+        day: comment.createdAt.slice(0, 10),
+        text: comment.body,
+      });
+      receipts.push(comment.body.trim());
+    }
+    const line = receipts.length
+      ? `${task.title} (${trimTo(receipts.join(" / "), TASK_RECEIPT_CHARS)})`
+      : task.title;
     const monday = task.completedAt ? weekOf(weeks, task.completedAt) : null;
-    if (monday) byWeek.get(monday)?.done.push(task.title);
+    if (monday) byWeek.get(monday)?.done.push(line);
   }
   for (const week of weekRows) {
     for (const text of [week.question, week.verdict, week.note]) {
@@ -683,6 +712,42 @@ async function readChildGoals(
     ),
   );
   return lists.flat();
+}
+
+/** The live comments on the given tasks, oldest first, by task id. */
+async function readTaskComments(
+  db: FlareMoDb,
+  userId: string,
+  taskIds: readonly string[],
+): Promise<Map<string, Array<{ body: string; createdAt: string }>>> {
+  const out = new Map<string, Array<{ body: string; createdAt: string }>>();
+  const ids = [...new Set(taskIds)].filter(Boolean);
+  for (let start = 0; start < ids.length; start += CHUNK) {
+    const rows = await db
+      .select({
+        taskId: plannerTaskComment.taskId,
+        body: plannerTaskComment.body,
+        createdAt: plannerTaskComment.createdAt,
+      })
+      .from(plannerTaskComment)
+      .where(
+        and(
+          eq(plannerTaskComment.userId, userId),
+          inArray(plannerTaskComment.taskId, ids.slice(start, start + CHUNK)),
+          isNull(plannerTaskComment.deletedAt),
+        ),
+      )
+      .orderBy(asc(plannerTaskComment.createdAt))
+      .limit(2_000)
+      .all();
+    for (const row of rows) {
+      if (!row.body.trim()) continue;
+      const list = out.get(row.taskId) ?? [];
+      list.push({ body: row.body, createdAt: row.createdAt });
+      out.set(row.taskId, list);
+    }
+  }
+  return out;
 }
 
 /** How many tasks each goal has linked, and how many of those are done. */
