@@ -1,7 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// Goals and the weekly review (fork-owned add-on,
-// docs/planning-cockpit-goals-review.md). Registered in the opt-in memo-ui
+// Goals and the review (fork-owned add-on,
+// docs/planning-cockpit-goals-review.md; /review is the week plus the month,
+// quarter or year closing with it, docs/planning-cockpit-period-review.md). Registered in the opt-in memo-ui
 // project through the regex in playwright.config.ts and, like every e2e spec
 // here, written to be run only when the maintainer asks for it (AGENTS.md: e2e is
 // opt-in).
@@ -11,12 +12,14 @@ import { expect, type Page, test } from "@playwright/test";
 // drafts, which is the path these tests cover.
 
 const GOALS = /^(目标|Goals)$/;
-const REVIEW = /^(每周复盘|Weekly review)$/;
+const REVIEW = /^(复盘|Review)$/;
+// The sidebar link's name carries "due" from Saturday to Monday.
+const REVIEW_LINK = /^(复盘|Review)( due|待完成)?$/;
 
 const heading = (page: Page, name: RegExp) =>
   page.getByRole("heading", { level: 1, name });
 
-for (const path of ["/goals", "/weekly-review"]) {
+for (const path of ["/goals", "/review"]) {
   test(`anonymous ${path} deep link keeps its destination through sign-in`, async ({
     page,
   }) => {
@@ -76,23 +79,51 @@ test("the Year map follows one pillar and opens a month's weeks", async ({
   ).toBeVisible();
 });
 
-test("the sidebar links to Goals and the weekly review", async ({ page }) => {
+test("the sidebar links to Goals and the review", async ({ page }) => {
   await page.goto("/cockpit");
   await page.getByRole("link", { name: GOALS }).first().click();
   await expect(page).toHaveURL(/\/goals$/);
   await expect(page.getByTestId("planner-goals")).toBeVisible();
 
-  await page.getByRole("link", { name: REVIEW }).first().click();
-  await expect(page).toHaveURL(/\/weekly-review/);
+  await page.getByRole("link", { name: REVIEW_LINK }).first().click();
+  await expect(page).toHaveURL(/\/review$/);
   await expect(heading(page, REVIEW)).toBeVisible();
 });
 
-test("the weekly review opens each part from its address", async ({ page }) => {
-  await page.goto("/weekly-review?part=back");
+test("the old review addresses go to /review and keep their part", async ({
+  page,
+}) => {
+  await page.goto("/review?part=forward&step=2");
+  await expect(page).toHaveURL(/\/review\?part=forward&step=2$/);
+  await expect(page.getByTestId("planner-forward-step")).toBeVisible();
+
+  await page.goto("/period-review?level=month");
+  await expect(page).toHaveURL(/\/review$/);
+  await expect(page.getByTestId("planner-review")).toBeVisible();
+});
+
+test("the chapters run in order: the ones ahead are not links", async ({
+  page,
+}) => {
+  await page.goto("/review?part=back");
+  await expect(page.getByTestId("planner-review-chapter-back")).toBeVisible();
+  // Look forward is a chapter, but Look back is still open, so it waits.
+  const forward = page.getByTestId("planner-review-chapter-forward");
+  await expect(forward).toBeVisible();
+  const linked = (await forward.getAttribute("href")) !== null;
+  const backDone = await page
+    .getByTestId("planner-review-chapter-back")
+    .getByText(/Done|完成/)
+    .isVisible();
+  expect(linked).toBe(backDone);
+});
+
+test("the review opens each chapter from its address", async ({ page }) => {
+  await page.goto("/review?part=back");
   await expect(page.getByTestId("planner-review")).toBeVisible();
   await expect(page.getByTestId("planner-review-chat")).toBeVisible();
 
-  await page.goto("/weekly-review?part=forward&step=2");
+  await page.goto("/review?part=forward&step=2");
   await expect(page.getByTestId("planner-forward-step")).toBeVisible();
   await expect(page.getByTestId("planner-plan-slot").first()).toBeVisible();
 
@@ -103,7 +134,7 @@ test("the weekly review opens each part from its address", async ({ page }) => {
 test("Look back starts and takes a typed answer without a model", async ({
   page,
 }) => {
-  await page.goto("/weekly-review?part=back");
+  await page.goto("/review?part=back");
   // isVisible() does not wait: let the chat render before asking whether the
   // review still needs starting, or a fresh review is never started.
   await expect(page.getByTestId("planner-review-chat")).toBeVisible();
@@ -123,7 +154,7 @@ test("Look back starts and takes a typed answer without a model", async ({
 test("Start over clears the review and opens a fresh Look back", async ({
   page,
 }) => {
-  await page.goto("/weekly-review?part=back");
+  await page.goto("/review?part=back");
   // isVisible() does not wait: let the chat render before asking whether the
   // review still needs starting, or a fresh review is never started.
   await expect(page.getByTestId("planner-review-chat")).toBeVisible();
@@ -151,7 +182,7 @@ test("a week planned in Look forward lands on the cockpit", async ({
   page,
 }) => {
   const goal = `E2E weekly goal ${Date.now()}`;
-  await page.goto("/weekly-review?part=forward&step=2");
+  await page.goto("/review?part=forward&step=2");
   const slot = page.getByTestId("planner-plan-slot").first();
   await expect(slot).toBeVisible();
   await slot.getByRole("textbox").fill(goal);

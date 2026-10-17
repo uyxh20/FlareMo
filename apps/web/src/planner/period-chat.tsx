@@ -5,7 +5,6 @@ import type {
   PlannerPeriodReviewResponse,
 } from "@flaremo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { plannerErrorMessage } from "./api";
@@ -58,7 +57,7 @@ import {
 } from "./review-model";
 import { PlannerMemoSheet } from "./review-sheet";
 
-// The month and quarter reviews (fork-owned add-on,
+// The month, quarter and year chapters of the review (fork-owned add-on,
 // docs/planning-cockpit-period-review.md): the weekly review's Look back chat
 // over a bigger period, the owner's decision of 17 October 2026. The same
 // steps (last period's question, the period's goals, the seven prompts, the
@@ -67,7 +66,8 @@ import { PlannerMemoSheet } from "./review-sheet";
 // ones in kind. Two things are added: what the review reads, counted, before
 // it starts, and what happened in the period under the recap, where every
 // claim carries the owner's own words, found and checked by the server.
-// There is nothing to grade, enter or forecast by hand.
+// There is nothing to grade, enter or forecast by hand. review-page.tsx renders
+// it as the chapter between Look back and Look forward.
 
 const SAVE_DELAY = 800;
 
@@ -75,12 +75,13 @@ function agentSession(back: PlannerBackState): { session?: string } {
   return back.agent ? { session: back.agent } : {};
 }
 
-/** The weekly chat's words, said of the period. */
+/** The weekly chat's words, said of the period; `next` names the chapter after it. */
 function chatStrings(
   goals: PlannerGoalsStrings,
   period: PlannerPeriodStrings,
   word: string,
   label: string,
+  next: string,
 ): PlannerGoalsStrings {
   const chat = period.chat;
   return {
@@ -97,7 +98,7 @@ function chatStrings(
       summaryTitle: chat.summaryTitle,
       writeSummary: chat.writeSummary,
       openSummary: chat.openSummary,
-      toLookForward: chat.toLookForward,
+      toLookForward: next,
       lastQuestionItem: chat.lastQuestion(word),
       lastGoalsItem: chat.goalsItem(word),
       nextQuestionItem: chat.nextQuestionItem(word),
@@ -211,16 +212,18 @@ export function PlannerPeriodChat({
   period,
   strings: periodStrings,
   today,
+  next,
   onSaved,
 }: {
   period: PlannerPeriodReviewResponse;
   strings: PlannerPeriodStrings;
   today: string;
+  /** The chapter after this one: its button label, and what opens it. */
+  next: { label: string; go: () => void };
   onSaved: (doneAt: string) => void;
 }) {
   const goalsStrings = usePlannerGoalsStrings();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const { level, period_start: periodStart, label } = period;
   const word = level;
   const base = plannerPeriodChatBase(level, periodStart);
@@ -229,8 +232,8 @@ export function PlannerPeriodChat({
     [period, today],
   );
   const strings = useMemo(
-    () => chatStrings(goalsStrings, periodStrings, word, label),
-    [goalsStrings, periodStrings, word, label],
+    () => chatStrings(goalsStrings, periodStrings, word, label, next.label),
+    [goalsStrings, periodStrings, word, label, next.label],
   );
 
   // --- The review's state, saved as it changes -----------------------------
@@ -660,7 +663,8 @@ export function PlannerPeriodChat({
     if (memo?.trim()) void save(memo);
   };
 
-  // After a period review comes the weekly review's Look forward.
+  // After a period's chapter comes the next one: a bigger period closing with
+  // the same week, or the weekly review's Look forward.
   const toLookForward = () => {
     const current = stateRef.current.back;
     if (current.memo && !current.memoSaved) {
@@ -668,10 +672,7 @@ export function PlannerPeriodChat({
       return;
     }
     setSheetOpen(false);
-    void navigate({
-      to: "/weekly-review",
-      search: { part: "forward", step: 1 },
-    });
+    next.go();
   };
 
   const actions = {

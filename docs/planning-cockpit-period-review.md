@@ -1,6 +1,6 @@
 # The month, quarter and year reviews
 
-Status: built 2026-10-17 on `feat/period-reviews`. It goes to `flaremo-dev` first; live gets it only on the owner's word. A fork-only add-on next to the weekly review ([planning-cockpit-goals-review.md](planning-cockpit-goals-review.md)), under the same guardrails. Not proposed upstream. The agreed design is the page at https://claude.ai/artifact/FgfZ4ZR84bL6JoCabp7Jh4: a deeper version of the weekly review, not a bigger one.
+Status: built 2026-10-17 on `feat/period-reviews`, folded into the one review page on `feat/unified-review` the same day. It goes to `flaremo-dev` first; live gets it only on the owner's word. A fork-only add-on inside the weekly review ([planning-cockpit-goals-review.md](planning-cockpit-goals-review.md)), under the same guardrails. Not proposed upstream. The agreed design is the page at https://claude.ai/artifact/Q2GCUEXzJBbdouPa6KJyrJ: every Sunday one Review, the date picks the chapters, nothing to choose.
 
 ## The idea in one paragraph
 
@@ -8,7 +8,7 @@ A month, a quarter and a year each close on the Sunday of their last week (a wee
 
 ## Month and quarter: the weekly chat
 
-The owner's decision of 17 October 2026, after a click-through mock: the month and quarter reviews are the weekly review's Look back, conversational and the same steps, over the bigger period. No step strip, no goal walk, no forecast, nothing to enter or grade by hand. The year keeps the five steps below for now (parked).
+The owner's decision of 17 October 2026, after a click-through mock: the month, quarter and year reviews are the weekly review's Look back, conversational and the same steps, over the bigger period. No step strip, no goal walk, no forecast, nothing to enter or grade by hand. Later the same day the owner folded them into the weekly page: there is one sidebar link, Review, at `/review`, and the page works out from the date which chapters to run, with no level or period to pick.
 
 1. Before it starts, the chat shows what the review reads: diary entries, weekly memos, tasks done and goals, counted from the period's weeks.
 2. Start: the review agent (or the review's model) reads the whole period. Its first message is the recap with **What happened in October 2026**: up to eight claims, each with the owner's own words, the day and where they were found (entry, health log, task, week record). The model must quote each claim; the server checks every quote word for word against the period's rows (`plannerVerifyQuote`) and drops the claims it cannot find, saying how many it left out. The owner does nothing with receipts.
@@ -17,9 +17,11 @@ The owner's decision of 17 October 2026, after a click-through mock: the month a
 
 The chat is the weekly one (`review-back.tsx`, `review-model.ts`, `review-sheet.tsx`) fed the period's review shaped as a week's (`period-chat-model.ts`), and its AI requests go to the period's own routes, which take and answer the weekly ones' shapes (`/period-review/:level/:period/chat/ai/*`). With the review agent configured (docs/fork-review-memo-agent.md), one agent session carries the whole review, keyed by the period (`month:2026-10-01`) instead of a week; it reads `/data/this-period.md` (every week of the period with its record, saved summary and diary) and is told to read "week" in its standing instructions as "month" or "quarter".
 
-## What the owner sees (the year, and the month and quarter before 17 October)
+## What the owner sees
 
-`/period-review` opens the review due this Sunday (the biggest level closing with the reviewed week), else the latest closed month. `?level=quarter` picks a level; `?period=2026-10-01` a period (its first day); `?step=3` a step. The sidebar link "Period review" carries a dot from Saturday to Monday while a period closes with the reviewed week and its review is not done. The weekly review shows a hand-off tile under its two parts on the same days.
+`/review` (the page in [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md)) shows a strip of chapters: Look back, then one tile per period closing with the reviewed week (a week belongs to the month of its Thursday, so a month, quarter or year closes on the Sunday of its last week), biggest last, then Look forward. The strip only shows where the review stands; tiles ahead of the open chapter are not links, and each chapter's "next" button names the chapter that follows ("October 2026 →", then "Look forward →"). A period's chapter is the chat above, read from `GET /period-review?level&period` and saved on its own routes; `?part=month` opens it directly when it exists. The sidebar link "Review" carries a dot from Saturday to Monday while anything, the week or a period, is not done (`GET /period-review/status`). On a weekday the page still shows last Sunday's chapters, so a missed one can be finished. Start over in the header clears the open chapter only. The old `/period-review` address goes to `/review`.
+
+The five-step designs below (checks, themes, two readers, forecasts, the calendar walk) are no longer rendered: their routes and domain code stay for now, unused by the page.
 
 | Level | Steps | Answered from |
 | --- | --- | --- |
@@ -62,7 +64,7 @@ Both tables are registered in `packages/domain/src/fork/data-sources.ts` with pr
 | `apps/worker/src/routes/planner-period-review-api.ts` | The routes, mounted from `planner-api.ts` like the weekly review's; the same model (`planner-review-ai.ts`), buckets and NDJSON streaming. |
 | `packages/domain/src/planner/period-review-chat.ts` | The month and quarter chat's prompts: the opening with What happened and its check, the close, the coach, the memo, and the review agent's messages and files for a period. |
 | `apps/web/src/planner/period-chat.tsx`, `period-chat-model.ts` | The month and quarter chat: the weekly chat on the period's routes, what the review reads, What happened, the save. |
-| `apps/web/src/planner/period-*.ts(x)` | The page, its state model, API client, strings, and the hand-off tile the weekly review renders. |
+| `apps/web/src/planner/period-*.ts(x)` | The chat (`period-chat.tsx`, `period-chat-model.ts`), the API client and the strings. `review-page.tsx` renders the chat as a chapter and decides the chapters from the date (`plannerPeriodsClosingWith`). |
 
 Routes, under `/api/app/planner`:
 
@@ -82,8 +84,8 @@ The model's diary budget is the whole period's: 60,000 characters for OpenRouter
 
 ## Hook-ins
 
-The weekly review is on hold for other work, so this adds to it in one place: `apps/web/src/planner/review-page.tsx` imports `PlannerPeriodHandoff` and renders it under the two parts. The month and quarter chat adds three small hooks to the weekly review's own files: `review-back.tsx` takes an optional `period` (its name, its word, and what to draw at the start and under the recap), `review-sheet.tsx` an optional `name`, and `goals-api.ts`'s request paths accept the period chat's route path in place of a week. The sidebar link lives in the fork-owned `nav-link.tsx`. The upstream files gain one line each: `apps/worker/src/spa-routes.ts` and `apps/web/public/sw.js` list `/period-review`; `planner-wiring.test.ts` checks both and the route.
+The weekly review is on hold for other work, so the page change is contained: `apps/web/src/planner/review-page.tsx` lists the chapters (the week's two parts and the periods closing with the week), draws the strip, renders `PlannerPeriodChat` for an open period chapter and points each chapter's next button at the one that follows. The chat adds three small hooks to the weekly review's own files: `review-back.tsx` takes an optional `period` (its name, its word, and what to draw at the start and under the recap), `review-sheet.tsx` an optional `name`, and `goals-api.ts`'s request paths accept the period chat's route path in place of a week. The sidebar link lives in the fork-owned `nav-link.tsx`. The upstream files gain one line each: `apps/worker/src/spa-routes.ts` lists `/review` and the old `/period-review` (`apps/web/public/sw.js` already listed both); `planner-wiring.test.ts` checks them and the routes.
 
 ## Undoing it
 
-Delete the `period-*` files, the route file and its mount line, the hand-off line in `review-page.tsx`, the sidebar link, the `period-review` entries in `spa-routes.ts`, `sw.js` and `planner-wiring.test.ts`, the contracts file and its re-export, the three domain files and their index lines, and the registry, probe, manifest and reset-list entries. The migration stays (G12): the two tables are harmless when nothing reads them. The memos it wrote are ordinary diary memos.
+Delete the `period-*` files, the route file and its mount line, the chapter code in `review-page.tsx` (`periodChapters`, `PeriodChapter`, and the period branches of `Chapters`), the `period-review` entries in `spa-routes.ts`, `sw.js` and `planner-wiring.test.ts`, the contracts file and its re-export, the three domain files and their index lines, and the registry, probe, manifest and reset-list entries. The migration stays (G12): the two tables are harmless when nothing reads them. The memos it wrote are ordinary diary memos.

@@ -10,13 +10,12 @@
 //   /goals?year=2026&q=4&m=10        a month (1 to 12) inside its quarter
 //   /goals?week=2026-10-05           one week, by its Monday
 //
-//   /weekly-review                   wherever the review stands
-//   /weekly-review?part=back         Look back
-//   /weekly-review?part=forward&step=2
+//   /review                          the Sunday review, wherever it stands
+//   /review?part=back                Look back
+//   /review?part=month               the month chapter, when a month closes
+//   /review?part=forward&step=2      Look forward
 //
-//   /period-review                   the review due this Sunday, or the last month
-//   /period-review?level=quarter     a level: its latest closed period
-//   /period-review?level=month&period=2026-10-01&step=3
+// /weekly-review and /period-review are the old addresses; both go to /review.
 
 export type PlannerGoalsSearch = {
   year?: number;
@@ -25,14 +24,17 @@ export type PlannerGoalsSearch = {
   week?: string;
 };
 
-export type PlannerReviewSearch = {
-  part?: "back" | "forward";
-  step?: number;
-};
+export const plannerReviewParts = [
+  "back",
+  "month",
+  "quarter",
+  "year",
+  "forward",
+] as const;
+export type PlannerReviewPart = (typeof plannerReviewParts)[number];
 
-export type PlannerPeriodSearch = {
-  level?: "month" | "quarter" | "year";
-  period?: string;
+export type PlannerReviewSearch = {
+  part?: PlannerReviewPart;
   step?: number;
 };
 
@@ -90,40 +92,9 @@ export function plannerGoalsSearch(
 export function plannerReviewSearch(
   search: Record<string, unknown>,
 ): PlannerReviewSearch {
-  const part =
-    search.part === "back" || search.part === "forward"
-      ? search.part
-      : undefined;
+  const part = plannerReviewParts.find((item) => item === search.part);
   return {
     part,
     step: part === "forward" ? whole(search.step, 1, 4) : undefined,
   };
-}
-
-/** The period review's level, period (the first day of a period) and step (1 to 5). */
-export function plannerPeriodSearch(
-  search: Record<string, unknown>,
-): PlannerPeriodSearch {
-  const level =
-    search.level === "month" ||
-    search.level === "quarter" ||
-    search.level === "year"
-      ? search.level
-      : undefined;
-  let period: string | undefined;
-  if (
-    level &&
-    typeof search.period === "string" &&
-    /^\d{4}-\d{2}-01$/.test(search.period)
-  ) {
-    const month = Number(search.period.slice(5, 7));
-    const fits =
-      level === "month"
-        ? month >= 1 && month <= 12
-        : level === "quarter"
-          ? [1, 4, 7, 10].includes(month)
-          : month === 1;
-    if (fits) period = search.period;
-  }
-  return { level, period, step: whole(search.step, 1, 5) };
 }

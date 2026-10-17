@@ -2,9 +2,13 @@ import {
   type PlannerAiOpeningResponse,
   type PlannerBoardCard,
   type PlannerGoalResult,
+  type PlannerPeriodLevel,
   type PlannerPillar,
   type PlannerReviewResponse,
   plannerComposeSummaryMemo,
+  plannerPeriodLabel,
+  plannerPeriodsClosingWith,
+  plannerPeriodWeeks,
   plannerPillars,
   plannerTodoCap,
 } from "@flaremo/contracts";
@@ -16,9 +20,11 @@ import {
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { CalendarCheck2Icon } from "lucide-react";
 import {
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -56,11 +62,21 @@ import {
   plannerStreamMemo,
 } from "./goals-api";
 import { plannerWeekNumber, plannerWeekRange } from "./goals-model";
+import type { PlannerReviewPart } from "./goals-search";
 import {
   type PlannerGoalsStrings,
   usePlannerGoalsStrings,
 } from "./goals-strings";
-import { PlannerPeriodHandoff } from "./period-handoff"; // fork: month, quarter and year reviews
+import {
+  plannerFetchPeriodReview,
+  plannerFetchPeriodStatus,
+  plannerStartPeriodOverRequest,
+} from "./period-api";
+import { PlannerPeriodChat } from "./period-chat";
+import {
+  type PlannerPeriodStrings,
+  usePlannerPeriodStrings,
+} from "./period-strings";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerLookBack } from "./review-back";
 import { type PlannerCheck, PlannerLookForward } from "./review-forward";
@@ -106,12 +122,15 @@ import { usePlannerStrings } from "./strings";
 import { usePlannerToday } from "./use-planner-clock";
 import "./goals.css";
 
-// The weekly review at /weekly-review (fork-owned add-on,
-// docs/planning-cockpit-goals-review.md): Look back, a chat over the week that
-// ends in scores, a question for next Sunday, a verdict and the summary memo;
-// then Look forward, which plans the next week's goals and tasks. Both parts can
-// be done in any order and left at any point: the page saves where the review
-// stands as it goes, and picks it up again on the next visit.
+// The review at /review (fork-owned add-on, docs/planning-cockpit-goals-review.md
+// and docs/planning-cockpit-period-review.md): one Sunday conversation in
+// chapters. Look back, a chat over the week that ends in scores, a question for
+// next Sunday, a verdict and the summary memo; then, on the Sunday a month, a
+// quarter or a year closes with that week, the same chat over the bigger
+// period, one chapter each, biggest last; then Look forward, which plans the
+// next week's goals and tasks. The date picks the chapters (the owner's
+// decision of 17 October 2026: nothing to choose), they run in order, and the
+// page saves where each stands as it goes and picks it up on the next visit.
 //
 // The model drafts answer options, coaches in the chat, drafts the scores and
 // writes the memo. Without one the page drafts what it can itself, so the
@@ -119,8 +138,39 @@ import "./goals.css";
 
 const SAVE_DELAY = 800;
 
-/** What the session does to start over, given to the page's header button. */
-type StartOver = { current: (() => Promise<void>) | null };
+/**
+ * What the session does to start over the chapter that is open, given to the
+ * page's header button; it answers with the chapter to land on.
+ */
+type StartOver = { current: (() => Promise<PlannerReviewPart>) | null };
+
+/** A chapter of the review: the week's two parts, and the periods closing with it. */
+type Chapter =
+  | { id: "back" }
+  | { id: "forward" }
+  | {
+      id: PlannerPeriodLevel;
+      level: PlannerPeriodLevel;
+      period: string;
+      label: string;
+      weeks: number;
+      done: boolean;
+    };
+
+/** The periods closing with the reviewed week, as chapters, biggest last. */
+function periodChapters(
+  reviewWeek: string,
+  done: ReadonlyMap<string, boolean>,
+): Chapter[] {
+  return plannerPeriodsClosingWith(reviewWeek).map((entry) => ({
+    id: entry.level,
+    level: entry.level,
+    period: entry.period_start,
+    label: plannerPeriodLabel(entry.level, entry.period_start),
+    weeks: plannerPeriodWeeks(entry.level, entry.period_start).length,
+    done: done.get(`${entry.level}:${entry.period_start}`) ?? false,
+  }));
+}
 
 /** The review agent's session to give a step to, when the review has one. */
 function agentSession(back: PlannerBackState): { session?: string } {
@@ -133,8 +183,8 @@ export function PlannerReviewPage() {
   const { t } = useI18n();
   const today = usePlannerToday();
   const queryClient = useQueryClient();
-  const navigate = useNavigate({ from: "/weekly-review" });
-  const startOver = useRef<(() => Promise<void>) | null>(null);
+  const navigate = useNavigate({ from: "/review" });
+  const startOver = useRef<(() => Promise<PlannerReviewPart>) | null>(null);
   // Bumped after starting over, so the session mounts again on the cleared state.
   const [run, setRun] = useState(0);
   const [confirming, setConfirming] = useState(false);
@@ -175,13 +225,21 @@ export function PlannerReviewPage() {
     if (!startOver.current) return;
     setRestarting(true);
     try {
-      await startOver.current();
-      await query.refetch();
+      const part = await startOver.current();
+      await Promise.all([
+        query.refetch(),
+        queryClient.invalidateQueries({
+          queryKey: ["planner", "period-review", today],
+        }),
+      ]);
       setRun((current) => current + 1);
       void queryClient.invalidateQueries({
         queryKey: plannerQueryKeys.reviewStatus(today),
       });
-      void navigate({ search: { part: "back" } });
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.periodStatus(today),
+      });
+      void navigate({ search: { part } });
     } catch (error) {
       toast.error(
         plannerErrorMessage(
@@ -280,8 +338,9 @@ function ReviewSkeleton() {
   );
 }
 
-/** The two parts of the review, each with where it stands. */
-function Parts({
+/** The chapters of the review, each with where it stands; the open one is outlined. */
+function Chapters({
+  chapters,
   part,
   review,
   back,
@@ -289,18 +348,80 @@ function Parts({
   step,
   lookBackDone,
   strings,
+  periodStrings,
 }: {
-  part: "back" | "forward";
+  chapters: readonly Chapter[];
+  part: PlannerReviewPart;
   review: PlannerReviewResponse;
   back: PlannerBackState;
   forward: PlannerForwardState;
   step: number;
   lookBackDone: boolean;
   strings: PlannerGoalsStrings;
+  periodStrings: PlannerPeriodStrings;
+}) {
+  const current = chapters.findIndex((chapter) => chapter.id === part);
+  // The chapters run in order: the ones after the open chapter wait their turn.
+  const open = chapters.findIndex((chapter) =>
+    chapter.id === "back"
+      ? !lookBackDone
+      : chapter.id === "forward"
+        ? !review.look_forward_done_at
+        : !chapter.done,
+  );
+  const last = Math.max(current, open === -1 ? chapters.length : open);
+  return (
+    <nav
+      aria-label={strings.review.parts}
+      className="sticky top-0 z-10 -mx-1 grid grid-cols-2 gap-1.5 bg-background px-1 py-2 sm:grid-cols-[repeat(var(--chapters),minmax(0,1fr))] sm:gap-2.5"
+      style={{ "--chapters": chapters.length } as CSSProperties}
+    >
+      {chapters.map((chapter, index) => (
+        <ChapterTile
+          back={back}
+          chapter={chapter}
+          current={index === current}
+          forward={forward}
+          key={chapter.id}
+          lookBackDone={lookBackDone}
+          periodStrings={periodStrings}
+          reachable={index <= last}
+          review={review}
+          step={step}
+          strings={strings}
+        />
+      ))}
+    </nav>
+  );
+}
+
+/** One chapter's tile: its name, its span, and where it stands. */
+function ChapterTile({
+  chapter,
+  current,
+  reachable,
+  review,
+  back,
+  forward,
+  step,
+  lookBackDone,
+  strings,
+  periodStrings,
+}: {
+  chapter: Chapter;
+  current: boolean;
+  reachable: boolean;
+  review: PlannerReviewResponse;
+  back: PlannerBackState;
+  forward: PlannerForwardState;
+  step: number;
+  lookBackDone: boolean;
+  strings: PlannerGoalsStrings;
+  periodStrings: PlannerPeriodStrings;
 }) {
   const text = strings.review;
   const tile =
-    "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-xl border border-border bg-card px-2.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:flex sm:gap-3.5 sm:px-4 sm:py-3 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)]";
+    "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-xl border border-border bg-card px-2.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:flex sm:gap-3.5 sm:px-4 sm:py-3 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)] aria-disabled:opacity-60";
   const arrow =
     "row-span-2 grid size-7 flex-none place-items-center rounded-[10px] bg-muted text-sm sm:size-[34px] sm:text-[17px] in-aria-[current=step]:bg-brand-500 in-aria-[current=step]:text-white";
   // "Week 42 · 12 – 18 Oct", or "W42 · 12 – 18 Oct" where the tile is narrow.
@@ -314,68 +435,80 @@ function Parts({
       </>
     );
   };
-  const backState = lookBackDone ? (
-    <span className="text-success">✓ {text.done}</span>
-  ) : back.stage !== "start" ? (
-    text.inProgress
-  ) : (
-    text.toDo
+  let mark: string;
+  let name: string;
+  let line: ReactNode;
+  let state: ReactNode;
+  if (chapter.id === "back") {
+    mark = "←";
+    name = text.lookBack;
+    line = weekLine(review.review_week);
+    state = lookBackDone ? (
+      <span className="text-success">✓ {text.done}</span>
+    ) : back.stage !== "start" ? (
+      text.inProgress
+    ) : (
+      text.toDo
+    );
+  } else if (chapter.id === "forward") {
+    mark = "→";
+    name = text.lookForward;
+    line = weekLine(review.plan_week);
+    state = review.look_forward_done_at ? (
+      <span className="text-success">✓ {text.saved}</span>
+    ) : forward.seen ? (
+      text.stepOf(step, 4)
+    ) : (
+      text.toDo
+    );
+  } else {
+    mark = periodStrings.levels[chapter.level].slice(0, 1);
+    name = chapter.label;
+    line = `${periodStrings.levels[chapter.level]} · ${periodStrings.weeks(chapter.weeks)}`;
+    state = chapter.done ? (
+      <span className="text-success">✓ {text.saved}</span>
+    ) : (
+      text.toDo
+    );
+  }
+  const body = (
+    <>
+      <span aria-hidden="true" className={arrow}>
+        {mark}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold sm:text-base">{name}</span>
+        <span className="block truncate text-xs text-muted-foreground sm:text-[13px]">
+          {line}
+        </span>
+      </span>
+      <span className="col-start-2 text-xs whitespace-nowrap text-muted-foreground sm:ml-auto">
+        {state}
+      </span>
+    </>
   );
-  const forwardState = review.look_forward_done_at ? (
-    <span className="text-success">✓ {text.saved}</span>
-  ) : forward.seen ? (
-    text.stepOf(step, 4)
-  ) : (
-    text.toDo
-  );
+  const testId = `planner-review-chapter-${chapter.id}`;
+  if (!reachable) {
+    return (
+      <span aria-disabled="true" className={tile} data-testid={testId}>
+        {body}
+      </span>
+    );
+  }
   return (
-    <nav
-      aria-label={text.parts}
-      className="sticky top-0 z-10 -mx-1 grid grid-cols-2 gap-1.5 bg-background px-1 py-2 sm:gap-2.5"
+    <Link
+      aria-current={current ? "step" : undefined}
+      className={tile}
+      data-testid={testId}
+      search={
+        chapter.id === "forward"
+          ? { part: "forward", step }
+          : { part: chapter.id }
+      }
+      to="/review"
     >
-      <Link
-        aria-current={part === "back" ? "step" : undefined}
-        className={tile}
-        search={{ part: "back" }}
-        to="/weekly-review"
-      >
-        <span aria-hidden="true" className={arrow}>
-          ←
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold sm:text-base">
-            {text.lookBack}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground sm:text-[13px]">
-            {weekLine(review.review_week)}
-          </span>
-        </span>
-        <span className="col-start-2 text-xs whitespace-nowrap text-muted-foreground sm:ml-auto">
-          {backState}
-        </span>
-      </Link>
-      <Link
-        aria-current={part === "forward" ? "step" : undefined}
-        className={tile}
-        search={{ part: "forward", step }}
-        to="/weekly-review"
-      >
-        <span aria-hidden="true" className={arrow}>
-          →
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold sm:text-base">
-            {text.lookForward}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground sm:text-[13px]">
-            {weekLine(review.plan_week)}
-          </span>
-        </span>
-        <span className="col-start-2 text-xs whitespace-nowrap text-muted-foreground sm:ml-auto">
-          {forwardState}
-        </span>
-      </Link>
-    </nav>
+      {body}
+    </Link>
   );
 }
 
@@ -389,11 +522,34 @@ function ReviewSession({
   today: string;
 }) {
   const strings = usePlannerGoalsStrings();
+  const periodStrings = usePlannerPeriodStrings();
   const cockpit = usePlannerStrings();
   const queryClient = useQueryClient();
-  const navigate = useNavigate({ from: "/weekly-review" });
-  const search = useSearch({ from: "/weekly-review" });
+  const navigate = useNavigate({ from: "/review" });
+  const search = useSearch({ from: "/review" });
   const week = review.review_week;
+
+  // --- The chapters: the week, and the periods closing with it -------------
+
+  // Which period chapters are saved comes from the server; a chapter saved on
+  // this page is marked at once, before the status is read again.
+  const periodStatus = useQuery({
+    queryKey: plannerQueryKeys.periodStatus(today),
+    queryFn: () => plannerFetchPeriodStatus(today),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const [savedHere, setSavedHere] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const chapters = useMemo<Chapter[]>(() => {
+    const done = new Map<string, boolean>();
+    for (const entry of periodStatus.data?.due ?? []) {
+      done.set(`${entry.level}:${entry.period_start}`, entry.done);
+    }
+    for (const key of savedHere) done.set(key, true);
+    return [{ id: "back" }, ...periodChapters(week, done), { id: "forward" }];
+  }, [periodStatus.data, savedHere, week]);
 
   // --- The review's state, saved as it changes -----------------------------
 
@@ -472,8 +628,19 @@ function ReviewSession({
   // Starting over stops the saves and the model, waits for a save already on
   // its way, then clears the review on the server. The page then loads it again
   // and mounts a new session; if the server refuses, saving picks up again.
+  const partRef = useRef<PlannerReviewPart>("back");
+  const chaptersRef = useRef(chapters);
+  chaptersRef.current = chapters;
   useEffect(() => {
     startOver.current = async () => {
+      // A period's chapter starts over on its own; the week's progress stays.
+      const open = chaptersRef.current.find(
+        (chapter) => chapter.id === partRef.current,
+      );
+      if (open && open.id !== "back" && open.id !== "forward") {
+        await plannerStartPeriodOverRequest(open.level, open.period);
+        return open.id;
+      }
       stopped.current = true;
       window.clearTimeout(saveTimer.current);
       coachAbort.current?.abort();
@@ -486,6 +653,7 @@ function ReviewSession({
         void flush();
         throw error;
       }
+      return "back";
     };
     return () => {
       startOver.current = null;
@@ -511,8 +679,60 @@ function ReviewSession({
 
   const { back, forward } = state;
   const lookBackDone = back.memoSaved || Boolean(review.look_back_done_at);
-  const part = search.part ?? (lookBackDone ? "forward" : "back");
+  // The chapter open: the address's, when it is one of this week's, else the
+  // first not done (Look forward once everything before it is saved).
+  const firstOpen =
+    chapters.find((chapter) =>
+      chapter.id === "back"
+        ? !lookBackDone
+        : chapter.id === "forward"
+          ? true
+          : !chapter.done,
+    )?.id ?? "forward";
+  const part: PlannerReviewPart =
+    search.part && chapters.some((chapter) => chapter.id === search.part)
+      ? search.part
+      : firstOpen;
+  partRef.current = part;
   const step = search.step ?? forward.step;
+  /** The chapter after `id`: the next one not saved, else Look forward. */
+  const nextChapter = (id: PlannerReviewPart): Chapter => {
+    const index = chapters.findIndex((chapter) => chapter.id === id);
+    return (
+      chapters
+        .slice(index + 1)
+        .find(
+          (chapter) =>
+            chapter.id === "forward" ||
+            (chapter.id !== "back" && !chapter.done),
+        ) ?? { id: "forward" }
+    );
+  };
+  const chapterName = (chapter: Chapter) =>
+    chapter.id === "forward"
+      ? strings.review.lookForward
+      : chapter.id === "back"
+        ? strings.review.lookBack
+        : chapter.label;
+  const openChapter = (chapter: Chapter) =>
+    void navigate({
+      search:
+        chapter.id === "forward"
+          ? { part: "forward", step: stateRef.current.forward.step }
+          : { part: chapter.id },
+    });
+  // Look back's "Look forward →" button names the chapter that really follows.
+  const afterBack = nextChapter("back");
+  const backStrings =
+    afterBack.id === "forward"
+      ? strings
+      : {
+          ...strings,
+          review: {
+            ...strings.review,
+            toLookForward: `${chapterName(afterBack)} →`,
+          },
+        };
   const drafts = plannerDraftsOf(back, review);
   const failureNote = (kind: "unavailable" | "limited" | "failed") =>
     kind === "limited" ? strings.review.modelLimited : strings.review.modelDown;
@@ -858,9 +1078,7 @@ function ReviewSession({
       return;
     }
     setSheetOpen(false);
-    void navigate({
-      search: { part: "forward", step: stateRef.current.forward.step },
-    });
+    openChapter(nextChapter("back"));
   };
 
   const backActions = {
@@ -1121,19 +1339,24 @@ function ReviewSession({
     save: () => void saveWeek(),
   };
 
+  const periodOpen = chapters.find(
+    (chapter): chapter is Extract<Chapter, { level: PlannerPeriodLevel }> =>
+      chapter.id === part && chapter.id !== "back" && chapter.id !== "forward",
+  );
+
   return (
     <>
-      <Parts
+      <Chapters
         back={back}
+        chapters={chapters}
         forward={forward}
         lookBackDone={lookBackDone}
         part={part}
+        periodStrings={periodStrings}
         review={review}
         step={step}
         strings={strings}
       />
-      {/* fork: the hand-off to the month, quarter or year review closing with this week */}
-      <PlannerPeriodHandoff lookBackDone={lookBackDone} today={today} />
       <div className={cn(part === "forward" && "pt-1")}>
         {part === "back" ? (
           <PlannerLookBack
@@ -1145,8 +1368,27 @@ function ReviewSession({
             drafts={drafts}
             live={live}
             review={review}
-            strings={strings}
+            strings={backStrings}
             writing={memoLive !== null}
+          />
+        ) : periodOpen ? (
+          <PeriodChapter
+            chapter={periodOpen}
+            next={{
+              label: `${chapterName(nextChapter(periodOpen.id))} →`,
+              go: () => openChapter(nextChapter(periodOpen.id)),
+            }}
+            strings={periodStrings}
+            today={today}
+            onSaved={() =>
+              setSavedHere(
+                (current) =>
+                  new Set([
+                    ...current,
+                    `${periodOpen.level}:${periodOpen.period}`,
+                  ]),
+              )
+            }
           />
         ) : (
           <PlannerLookForward
@@ -1179,7 +1421,7 @@ function ReviewSession({
         }
         saving={memoSaving}
         stopped={back.memoStopped}
-        strings={strings}
+        strings={backStrings}
         waitingForAgent={memoAgent}
         week={week}
         onClose={() => {
@@ -1193,5 +1435,69 @@ function ReviewSession({
         onWriteAgain={() => void writeMemo(true)}
       />
     </>
+  );
+}
+
+/** A month, quarter or year closing with the reviewed week: the weekly chat over it. */
+function PeriodChapter({
+  chapter,
+  next,
+  strings,
+  today,
+  onSaved,
+}: {
+  chapter: Extract<Chapter, { level: PlannerPeriodLevel }>;
+  next: { label: string; go: () => void };
+  strings: PlannerPeriodStrings;
+  today: string;
+  onSaved: () => void;
+}) {
+  const query = useQuery({
+    queryKey: plannerQueryKeys.periodReview(
+      today,
+      chapter.level,
+      chapter.period,
+    ),
+    queryFn: () =>
+      plannerFetchPeriodReview({
+        today,
+        level: chapter.level,
+        period: chapter.period,
+      }),
+    // Like the week's: the chat keeps its own state once loaded.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const period = query.data;
+  if (!period && query.isError) {
+    return (
+      <QueryErrorState
+        className="min-h-56"
+        isRetrying={query.isRefetching}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
+  if (!period) {
+    return (
+      <div
+        className="flex flex-col gap-3 py-2"
+        data-testid="planner-period-loading"
+      >
+        <Skeleton className="h-12" />
+        <Skeleton className="h-[420px]" />
+      </div>
+    );
+  }
+  return (
+    <PlannerPeriodChat
+      key={`${period.level}:${period.period_start}`}
+      next={next}
+      period={period}
+      strings={strings}
+      today={today}
+      onSaved={onSaved}
+    />
   );
 }

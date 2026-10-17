@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { type Locale, useI18n } from "@/i18n";
 import {
-  plannerPeriodNavLabelEn,
-  plannerPeriodNavLabelZhCN,
+  plannerReviewNavLabelEn,
+  plannerReviewNavLabelZhCN,
 } from "./nav-label";
 
 // The copy of the month, quarter and year reviews, English and Simplified
@@ -150,7 +150,7 @@ export type PlannerPeriodStrings = {
 };
 
 const en: PlannerPeriodStrings = {
-  title: plannerPeriodNavLabelEn,
+  title: plannerReviewNavLabelEn,
   levels: { month: "Month", quarter: "Quarter", year: "Year" },
   weeks: (count) => `${count} weeks`,
   dueNow: "Closes with this week's review",
@@ -307,7 +307,7 @@ const en: PlannerPeriodStrings = {
 
 const zhCN: PlannerPeriodStrings = {
   ...en,
-  title: plannerPeriodNavLabelZhCN,
+  title: plannerReviewNavLabelZhCN,
   levels: { month: "月", quarter: "季度", year: "年" },
   weeks: (count) => `${count} 周`,
   dueNow: "随本周复盘一起结束",
