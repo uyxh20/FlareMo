@@ -298,7 +298,9 @@ export async function plannerReadPeriodContext(
   const from = plannerWeekInstants(first).from;
   const to = plannerWeekInstants(last).to;
   const budget = input.diaryChars ?? PLANNER_PERIOD_DIARY_CHARS_SMALL;
-  const perWeek = Math.max(600, Math.floor(budget / Math.max(1, weeks.length)));
+  // Each week gets an even share of the budget, with no floor: a floor lifted
+  // a year (53 weeks) far over a small model's context.
+  const perWeek = Math.max(1, Math.floor(budget / Math.max(1, weeks.length)));
 
   const summariesByTag = db
     .select({ id: memoTags.memoId })
