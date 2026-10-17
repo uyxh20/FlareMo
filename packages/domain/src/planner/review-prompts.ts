@@ -709,10 +709,16 @@ export type PlannerMemoRequest = PlannerReviewAnswers & {
   };
 };
 
-export function plannerMemoMessages(
+/**
+ * The memo prompt's parts: the skeleton to fill (with what to write in each
+ * part), the writing rules, and the evening's material (answers, scores and
+ * drafts). The memo agent gets them as files; plannerMemoMessages joins them
+ * with the week's context into one prompt.
+ */
+export function plannerMemoParts(
   context: PlannerReviewContext,
   request: PlannerMemoRequest,
-): PlannerChatMessage[] {
+): { system: string; template: string; rules: string; material: string } {
   const name = context.ownerName;
   const code = plannerWeekCode(context.weekStart);
   const next = plannerWeekCode(context.planWeek);
@@ -748,14 +754,9 @@ export function plannerMemoMessages(
       return `${plannerMemoPillarHeadings[pillar]}\n(the same four bullets)`;
     })
     .join("\n\n");
-  return [
-    {
-      role: "system",
-      content: `You write ${name}'s weekly summary memo in Markdown, in the exact format of their past weekly summaries. You use only the material given and keep ${name}'s own words.`,
-    },
-    {
-      role: "user",
-      content: `Write ${name}'s ${code} weekly summary in Markdown. It is saved next to their past weekly summaries, so copy that format exactly: the headings and their order, the bullet labels, the scores table and the bold run-in labels in the trajectory. Keep ${name}'s own words for the reflection answers (fix typos only) and quote their words where it helps. Text in parentheses below is an instruction for you, not text to copy.
+  return {
+    system: `You write ${name}'s weekly summary memo in Markdown, in the exact format of their past weekly summaries. You use only the material given and keep ${name}'s own words.`,
+    template: `Write ${name}'s ${code} weekly summary in Markdown. It is saved next to their past weekly summaries, so copy that format exactly: the headings and their order, the bullet labels, the scores table and the bold run-in labels in the trajectory. Keep ${name}'s own words for the reflection answers (fix typos only) and quote their words where it helps. Text in parentheses below is an instruction for you, not text to copy.
 
 ${plannerMemoTitle(context.weekStart)}
 
@@ -795,39 +796,46 @@ ${plannerVerdictLine(request.verdict, request.recommended)}
 
 ${plannerDiaryLine(context.weekStart)}
 
-${plannerDiaryMarker(context.weekStart)}
-
-Rules:
+${plannerDiaryMarker(context.weekStart)}`,
+    rules: `Rules:
 - Use only the material below. Don't invent events, names or numbers.
 - Be specific. In the Executive Summary, Evidence and Learnings, name the days, people and numbers the diary gives, and quote ${name}'s own words, copied exactly inside quotation marks, at least once for each objective the diary covers.
 - Write "Skipped." for a skipped prompt and "None stated." for a bullet with nothing behind it.
 - Each Next Steps bullet is one concrete step for ${next} in at most 15 words; it becomes the suggested weekly goal for that objective.
 - Pattern, Risk and Opportunity: start from the drafts below and keep their meaning${
-        changed ? ", unless it contradicts the scores" : ""
-      }.${
-        changed
-          ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
-          : ""
-      }
+      changed ? ", unless it contradicts the scores" : ""
+    }.${
+      changed
+        ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
+        : ""
+    }
 - Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.
-- No preamble: start with the H1 line. Under 900 words.
-
-Material:
-${answersBlock(context, request)}
+- No preamble: start with the H1 line. Under 900 words.`,
+    material: `${answersBlock(context, request)}
 
 Scores ${name} set: Authenticity ${plannerFormatScore(request.scores.auth)}, Achievement ${plannerFormatScore(request.scores.ach)}, Gap ${plannerFormatScore(Math.abs(request.scores.auth - request.scores.ach))}.${
-        changed
-          ? `\nDrafted scores, which the drafts were written for: Authenticity ${plannerFormatScore(changed.auth)}, Achievement ${plannerFormatScore(changed.ach)}.`
-          : ""
-      }
+      changed
+        ? `\nDrafted scores, which the drafts were written for: Authenticity ${plannerFormatScore(changed.auth)}, Achievement ${plannerFormatScore(changed.ach)}.`
+        : ""
+    }
 Authenticity basis (draft): ${request.drafts.auth_evidence || "none"}
 Achievement basis (draft): ${request.drafts.ach_evidence || "none"}
 Pattern (draft): ${request.drafts.pattern || "none"}
 Risk (draft): ${request.drafts.risk || "none"}
-Opportunity (draft): ${request.drafts.opportunity || "none"}
+Opportunity (draft): ${request.drafts.opportunity || "none"}`,
+  };
+}
 
-Context:
-${plannerReviewContextBlock(context)}`,
+export function plannerMemoMessages(
+  context: PlannerReviewContext,
+  request: PlannerMemoRequest,
+): PlannerChatMessage[] {
+  const parts = plannerMemoParts(context, request);
+  return [
+    { role: "system", content: parts.system },
+    {
+      role: "user",
+      content: `${parts.template}\n\n${parts.rules}\n\nMaterial:\n${parts.material}\n\nContext:\n${plannerReviewContextBlock(context)}`,
     },
   ];
 }

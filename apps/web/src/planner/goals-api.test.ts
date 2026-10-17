@@ -557,3 +557,73 @@ describe("plannerReadAiStream", () => {
     expect(bodyOf(calls[1])).toEqual(memoInput);
   });
 });
+
+describe("the memo agent", () => {
+  /** The memo route starts the agent; each later ask answers the next state. */
+  function stubAgent(states: Array<{ status: number; body?: unknown }>) {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.endsWith("/ai/memo")) {
+          return new Response(line({ agent: "sesn_1" }), { status: 200 });
+        }
+        const next = states.shift() ?? { status: 500 };
+        return new Response(JSON.stringify(next.body ?? {}), {
+          status: next.status,
+        });
+      }),
+    );
+    return calls;
+  }
+
+  it("asks every few seconds until the agent's memo is there, then shows it whole", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls = stubAgent([
+        { status: 200, body: { status: "running" } },
+        { status: 502 },
+        { status: 200, body: { status: "done", memo: "# Week 41" } },
+      ]);
+      const onText = vi.fn();
+      const onAgent = vi.fn();
+      const result = plannerStreamMemo(WEEK, memoInput, { onText, onAgent });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await result).toEqual({ status: "done", text: "# Week 41" });
+      expect(onAgent).toHaveBeenCalledOnce();
+      expect(onText).toHaveBeenCalledWith("# Week 41");
+      expect(calls.slice(1)).toEqual(
+        Array(3).fill(`${REVIEW}/ai/memo/sesn_1?today=${TODAY}`),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails when the agent failed or its session is gone, and stops when the page does", async () => {
+    vi.useFakeTimers();
+    try {
+      stubAgent([{ status: 200, body: { status: "failed" } }]);
+      const failed = plannerStreamMemo(WEEK, memoInput, {});
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await failed).toEqual({ status: "failed", text: "" });
+
+      stubAgent([{ status: 404 }]);
+      const gone = plannerStreamMemo(WEEK, memoInput, {});
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await gone).toEqual({ status: "failed", text: "" });
+
+      stubAgent([]);
+      const stop = new AbortController();
+      const stopped = plannerStreamMemo(WEEK, memoInput, {
+        signal: stop.signal,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      stop.abort();
+      expect(await stopped).toEqual({ status: "aborted", text: "" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

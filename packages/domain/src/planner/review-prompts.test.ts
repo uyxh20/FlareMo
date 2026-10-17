@@ -1,5 +1,10 @@
 import type { PlannerGoalDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
+import {
+  plannerMemoAgentFiles,
+  plannerMemoAgentKickoff,
+  plannerMemoAgentSystem,
+} from "./memo-agent";
 import type { PlannerReviewContext } from "./review-context";
 import {
   plannerCheckMessages,
@@ -553,6 +558,52 @@ describe("what each call asks for", () => {
     );
     expect(check).toContain(
       "Anon already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n- Work weekly goal against Year · Work: The year goal says stay; the note says go. Kept for now in an earlier review.",
+    );
+  });
+});
+
+describe("the memo agent's files", () => {
+  it("splits the memo prompt into the skeleton, the evening's material and the week", () => {
+    const files = plannerMemoAgentFiles(CONTEXT, MEMO_REQUEST, [
+      {
+        weekStart: "2026-09-28",
+        diary: [{ at: "2026-09-29T08:00:00.000Z", text: "Gym." }],
+        summary: "# Week 40",
+      },
+      { weekStart: "2026-09-21", diary: [], summary: null },
+    ]);
+    expect(Object.keys(files)).toEqual([
+      "/data/this-week.md",
+      "/data/review.md",
+      "/data/template.md",
+      "/data/history/2026-09-28.md",
+      "/data/history/2026-09-21.md",
+    ]);
+    const prompt =
+      plannerMemoMessages(CONTEXT, MEMO_REQUEST).at(-1)?.content ?? "";
+    expect(prompt.startsWith(files["/data/template.md"] ?? "-")).toBe(true);
+    expect(files["/data/template.md"]).not.toContain("Rules:");
+    expect(files["/data/template.md"]).toContain("## Executive Summary");
+    expect(files["/data/review.md"]).toContain(
+      "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.",
+    );
+    expect(files["/data/this-week.md"]).toBe(
+      plannerReviewContextBlock(CONTEXT),
+    );
+    expect(files["/data/history/2026-09-28.md"]).toContain("[2026-09-29] Gym.");
+    expect(files["/data/history/2026-09-28.md"]).toContain("# Week 40");
+    expect(files["/data/history/2026-09-21.md"]).toContain(
+      "No summary was saved for this week.",
+    );
+  });
+
+  it("names the owner in the prompt and the week in the kickoff", () => {
+    const system = plannerMemoAgentSystem("Anon Example");
+    expect(system).toContain("You write Anon's weekly summary memo");
+    expect(system).not.toContain("{NAME}");
+    expect(system).toContain("/mnt/session/outputs/memo.md");
+    expect(plannerMemoAgentKickoff("2026-10-05")).toContain(
+      "week starting Monday 2026-10-05",
     );
   });
 });

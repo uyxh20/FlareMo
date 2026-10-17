@@ -61,6 +61,7 @@ export function PlannerMemoSheet({
   live,
   memoBy,
   stopped,
+  waitingForAgent = false,
   canWriteAgain,
   saved,
   saving,
@@ -81,6 +82,8 @@ export function PlannerMemoSheet({
   live: string | null;
   memoBy: "model" | "page" | null;
   stopped: boolean;
+  /** The memo agent is reading the week; its memo arrives whole. */
+  waitingForAgent?: boolean;
   canWriteAgain: boolean;
   /** The memo as shown is the one saved in the owner's memos. */
   saved: boolean;
@@ -235,7 +238,7 @@ export function PlannerMemoSheet({
             />
           ) : (
             <span className="planner-thinking text-sm text-muted-foreground">
-              {text.writing}
+              {waitingForAgent ? text.writingAgent : text.writing}
             </span>
           )}
         </div>

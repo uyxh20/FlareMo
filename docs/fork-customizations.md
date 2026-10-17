@@ -123,7 +123,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/worker/src/spa-routes.ts` | `"/cockpit"`, `"/goals"`, `"/weekly-review"` and `"/health"` in the SPA routes. |
 | `apps/worker/src/index.ts` | `mountLazyRoute` for `/api/app/planner` and `/api/app/health-tracker`. |
 | `apps/worker/src/scheduled-tasks.ts` | Product name: imports `resolveProductName`; the two push titles use the live name. Planner: imports `plannerSyncAllUsers` and calls it right before `hardDeleteExpiredProjects` and right after `hardDeleteExpiredTasks`; when the first call reports `paused`, both purge calls are skipped that night, so nothing is purged before it is archived (the loop and error handling live in `packages/domain/src/planner/history-sync-nightly.ts`). Health: imports `healthNightlySweep` and awaits it once in the nightly block. |
-| `apps/worker/src/env.ts` | Types and a comment for the weekly review's model settings (`FLAREMO_REVIEW_*`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`). |
+| `apps/worker/src/env.ts` | Types and a comment for the weekly review's model settings (`FLAREMO_REVIEW_*`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) and the memo agent's (`FLAREMO_REVIEW_MEMO_AGENT`, `_ENVIRONMENT`, `_STORE`, `_BUDGET_USD`). |
 | `apps/worker/src/auth.ts` | Imports the constant; Better Auth `appName` (the 2FA issuer). |
 | `apps/worker/src/email-templates.ts` | `emailCopy` returns `brandCopy(COPY[locale])`, and imports it. |
 | `apps/worker/src/email.ts` | Imports the constant; the test email's subject and text. |
@@ -190,6 +190,7 @@ All new, none in conflict with anything upstream ships.
 | `migrations/9012_planner_health_bookmark.sql`                                        | The projection's bookmark: three nullable columns on `health_sync_state`. Hand-written, additive.                                                                                                                                              |
 | `apps/worker/src/routes/health-api.ts`, `health-api.test.ts`                         | `/api/app/health-tracker` and its tests.                                                                                                                                                                                                       |
 | `docs/fork-health-tracker.md`                                                        | What the tracker reads, the rules, the API and how to undo it.                                                                                                                                                                                 |
+| `packages/domain/src/planner/memo-agent.ts`, `apps/worker/src/routes/planner-memo-agent.ts` (+ test), `scripts/fork/review-memo-agent.ts`, `docs/fork-review-memo-agent.md` | The weekly memo agent: its prompt and files, the Managed Agents client, the setup script and the doc (see `docs/fork-review-memo-agent.md`). |
 | `docs/fork-customizations.md`                                                        | This file.                                                                                                                                                                                                                                     |
 
 ## Removed fork code (14 Oct 2026, cleanup wave 1)

@@ -7,8 +7,10 @@ import {
   plannerCheckMessages,
   plannerCloseMessages,
   plannerCoachMessages,
+  plannerMemoAgentFiles,
   plannerMemoMessages,
   plannerOpeningMessages,
+  plannerReadMemoHistory,
   plannerReadReviewContext,
 } from "../planner";
 import {
@@ -344,32 +346,45 @@ export async function consumerTexts(
     goalResults: [],
     coachNotes: [],
   };
+  const memoRequest = {
+    ...answers,
+    reviewedOn: TODAY,
+    scores: { auth: 7, ach: 6 },
+    question: null,
+    verdict: null,
+    recommended: "continue" as const,
+    drafts: {
+      auth_evidence: "",
+      ach_evidence: "",
+      pattern: "",
+      risk: "",
+      opportunity: "",
+    },
+  };
   const lookBack = [
     ...plannerOpeningMessages(context),
     ...plannerCoachMessages(context, "free", [
       { role: "user", content: "It was a good week." },
     ]),
     ...plannerCloseMessages(context, answers),
-    ...plannerMemoMessages(context, {
-      ...answers,
-      reviewedOn: TODAY,
-      scores: { auth: 7, ach: 6 },
-      question: null,
-      verdict: null,
-      recommended: "continue",
-      drafts: {
-        auth_evidence: "",
-        ach_evidence: "",
-        pattern: "",
-        risk: "",
-        opportunity: "",
-      },
-    }),
+    ...plannerMemoMessages(context, memoRequest),
   ];
   const lookForward = plannerCheckMessages(context, [], []);
   const bundle = await exportData(rt.db, rt.user);
+  // The memo agent, when set up, gets the same week and the weeks before it as files.
+  const agentFiles = plannerMemoAgentFiles(
+    context,
+    memoRequest,
+    await plannerReadMemoHistory(rt.db, {
+      userId: rt.user.id,
+      weekStart: WEEK,
+    }),
+  );
   return {
-    lookBack: lookBack.map((message) => message.content).join("\n"),
+    lookBack: [
+      ...lookBack.map((message) => message.content),
+      ...Object.values(agentFiles),
+    ].join("\n"),
     lookForward: lookForward.map((message) => message.content).join("\n"),
     userExport: JSON.stringify(bundle),
   };

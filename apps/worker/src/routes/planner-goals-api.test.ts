@@ -690,10 +690,12 @@ describe("planner goals and weekly review API", () => {
     expect(opening.recap).toBe("From Claude.");
     expect(sent[0]?.url).toBe("https://api.anthropic.com/v1/messages");
     expect(sent[0]?.headers.get("x-api-key")).toBe("test-anthropic-key");
+    // The call's own 1,600 tokens plus room to think, and no temperature.
     expect(sent[0]?.body).toMatchObject({
       model: "claude-sonnet-5-5",
-      max_tokens: 1600,
+      max_tokens: 5600,
     });
+    expect(sent[0]?.body).not.toHaveProperty("temperature");
     expect(typeof sent[0]?.body.system).toBe("string");
     expect(
       ((sent[0]?.body.messages ?? []) as Array<{ role: string }>).map(
@@ -730,6 +732,114 @@ describe("planner goals and weekly review API", () => {
     }
   });
 
+  it("hands the memo to the memo agent and gives it back when it is done", async () => {
+    const realFetch = globalThis.fetch;
+    const sent: Array<{ method: string; url: string; body: unknown }> = [];
+    let uploads = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://api.anthropic.com/")) {
+        return realFetch(input, init);
+      }
+      const method = init?.method ?? "GET";
+      sent.push({
+        method,
+        url,
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
+      });
+      const path = url.split("/v1")[1] ?? "";
+      if (method === "POST" && path === "/files") {
+        return Response.json({ id: `file_${++uploads}` });
+      }
+      if (method === "POST" && path === "/sessions") {
+        return Response.json({ id: "sesn_test" });
+      }
+      if (method === "GET" && path === "/sessions/sesn_test") {
+        const started = sent.find((call) => call.url.endsWith("/sessions"))
+          ?.body as { metadata: Record<string, string> };
+        return Response.json({
+          status: "idle",
+          updated_at: "2026-01-01T00:00:00Z",
+          metadata: started.metadata,
+          usage: { output_tokens: 500 },
+        });
+      }
+      if (path.startsWith("/files?scope_id=sesn_test")) {
+        return Response.json({
+          data: [{ id: "file_out", filename: "memo.md" }],
+        });
+      }
+      if (path === "/files/file_out/content") {
+        return new Response("Done:\n\n# Week 41: October\n\nThe agent's memo.");
+      }
+      return Response.json({});
+    });
+    const agentEnv = withEnv({
+      ANTHROPIC_API_KEY: "test-anthropic-key",
+      FLAREMO_REVIEW_MEMO_AGENT: "agent_test",
+      FLAREMO_REVIEW_MEMO_ENVIRONMENT: "env_test",
+      FLAREMO_REVIEW_MEMO_STORE: "memstore_test",
+    });
+    const started = await lines(
+      await call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/memo`,
+        {
+          today: TODAY,
+          ...ANSWERS,
+          scores: { auth: 4, ach: 3 },
+          question: null,
+          verdict: null,
+          recommended: "continue",
+          drafts: {
+            auth_evidence: "",
+            ach_evidence: "",
+            pattern: "",
+            risk: "",
+            opportunity: "",
+          },
+        },
+        { env: agentEnv },
+      ),
+    );
+    expect(started).toEqual([{ agent: "sesn_test" }]);
+    // This week, the evening's material, the skeleton, and 8 earlier weeks.
+    expect(uploads).toBe(11);
+    expect(
+      sent.find((call) => call.url.endsWith("/sessions/sesn_test/events"))
+        ?.body,
+    ).toMatchObject({ events: [{ type: "user.message" }] });
+
+    const done = await body<{ status: string; memo: string }>(
+      call(
+        "GET",
+        `/review/${REVIEW_WEEK}/ai/memo/sesn_test?today=${TODAY}`,
+        undefined,
+        { env: agentEnv },
+      ),
+    );
+    expect(done).toEqual({
+      status: "done",
+      memo: "# Week 41: October\n\nThe agent's memo.",
+    });
+    expect(
+      sent.filter((call) => call.method === "DELETE").map((call) => call.url),
+    ).toHaveLength(13);
+
+    await body(
+      call(
+        "GET",
+        `/review/${REVIEW_WEEK}/ai/memo/sesn_other?today=${TODAY}`,
+        undefined,
+        { env: withEnv({ ANTHROPIC_API_KEY: "k" }) },
+      ),
+      503,
+    );
+    for (const logged of vi.mocked(console.error).mock.calls) {
+      expect(JSON.stringify(logged)).not.toContain("test-anthropic-key");
+    }
+  });
+
   it("uses OpenRouter when its key is set, zero retention only", async () => {
     const realFetch = globalThis.fetch;
     const sent: Array<{
@@ -763,11 +873,8 @@ describe("planner goals and weekly review API", () => {
         choices: [{ message: { role: "assistant", content: answer } }],
       });
     });
-    // OpenRouter wins over Anthropic and Workers AI when both are set.
-    const openRouter = withEnv({
-      OPENROUTER_API_KEY: "test-openrouter-key",
-      ANTHROPIC_API_KEY: "test-anthropic-key",
-    });
+    // OpenRouter, when there is no Anthropic key, wins over Workers AI.
+    const openRouter = withEnv({ OPENROUTER_API_KEY: "test-openrouter-key" });
 
     const opening = await body<{ recap: string }>(
       call(

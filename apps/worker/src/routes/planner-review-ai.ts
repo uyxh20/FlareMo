@@ -3,9 +3,9 @@ import type { FlareMoEnv } from "../env";
 
 // The weekly review's language model (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md). Workers AI through the AI binding by
-// default; the Worker secret OPENROUTER_API_KEY switches to OpenRouter (zero
-// data retention providers only), and ANTHROPIC_API_KEY to Anthropic's Messages
-// API. Either way the routes see one small interface: a whole answer, or the
+// default; the Worker secret ANTHROPIC_API_KEY switches to Anthropic's
+// Messages API, and without it OPENROUTER_API_KEY to OpenRouter (zero data
+// retention providers only). Either way the routes see one small interface: a whole answer, or the
 // answer's text as it arrives. The prompts and the parsers are in the domain
 // (review-prompts.ts); nothing here knows what is being asked.
 //
@@ -61,20 +61,20 @@ export type PlannerReviewModel = {
 /** The configured model, or null when the review has none (it then uses its own drafts). */
 export function plannerReviewModel(env: FlareMoEnv): PlannerReviewModel | null {
   if (env.FLAREMO_REVIEW_AI?.trim().toLowerCase() === "off") return null;
-  const openRouterKey = env.OPENROUTER_API_KEY?.trim();
-  if (openRouterKey) {
-    return openRouterModel(
-      openRouterKey,
-      env.FLAREMO_REVIEW_OPENROUTER_MODEL?.trim() ||
-        plannerReviewDefaultOpenRouterModel,
-    );
-  }
   const key = env.ANTHROPIC_API_KEY?.trim();
   if (key) {
     return anthropicModel(
       key,
       env.FLAREMO_REVIEW_ANTHROPIC_MODEL?.trim() ||
         plannerReviewDefaultAnthropicModel,
+    );
+  }
+  const openRouterKey = env.OPENROUTER_API_KEY?.trim();
+  if (openRouterKey) {
+    return openRouterModel(
+      openRouterKey,
+      env.FLAREMO_REVIEW_OPENROUTER_MODEL?.trim() ||
+        plannerReviewDefaultOpenRouterModel,
     );
   }
   if (env.AI) {

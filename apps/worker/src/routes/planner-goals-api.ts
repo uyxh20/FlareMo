@@ -7,6 +7,7 @@ import {
   type PlannerGoalResponse,
   type PlannerGoalsYearResponse,
   type PlannerLookBackResponse,
+  type PlannerMemoAgentResponse,
   type PlannerOkResponse,
   type PlannerReviewResponse,
   type PlannerReviewStateResponse,
@@ -28,6 +29,7 @@ import {
 import {
   PLANNER_DIARY_CHARS,
   PLANNER_DIARY_CHARS_SMALL,
+  PLANNER_MEMO_AGENT_DIARY_CHARS,
   type PlannerChatMessage,
   type PlannerCoachMode,
   type PlannerReviewAnswers,
@@ -39,6 +41,8 @@ import {
   plannerCommitPlan,
   plannerCreateGoal,
   plannerDeleteGoal,
+  plannerMemoAgentFiles,
+  plannerMemoAgentKickoff,
   plannerMemoMessages,
   plannerMemoStreamFilter,
   plannerOpeningMessages,
@@ -47,6 +51,7 @@ import {
   plannerParseOpening,
   plannerReadFlags,
   plannerReadGoalsYear,
+  plannerReadMemoHistory,
   plannerReadReview,
   plannerReadReviewContext,
   plannerResolveReviewWeek,
@@ -66,6 +71,13 @@ import {
 } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
+import {
+  type PlannerMemoAgentState,
+  plannerLogAgentError,
+  plannerMemoAgent,
+  plannerPollMemoAgent,
+  plannerStartMemoAgent,
+} from "./planner-memo-agent";
 import {
   type PlannerReviewModel,
   plannerLogModelError,
@@ -364,6 +376,7 @@ async function aiSetup(
   c: Context<HonoBindings>,
   today: string,
   limited: () => Response,
+  diaryChars?: number,
 ): Promise<AiSetup> {
   const context = await getRequestContext(c);
   const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
@@ -379,9 +392,10 @@ async function aiSetup(
     today,
     // Workers AI's model has a small context; the others read most weeks whole.
     diaryChars:
-      model.provider === "workers-ai"
+      diaryChars ??
+      (model.provider === "workers-ai"
         ? PLANNER_DIARY_CHARS_SMALL
-        : PLANNER_DIARY_CHARS,
+        : PLANNER_DIARY_CHARS),
   });
   return { model, review, context };
 }
@@ -478,6 +492,39 @@ plannerGoalsApi.post(
     }
   },
 );
+
+// The memo agent's session, asked for every few seconds after it started.
+// Not rate limited: each ask is one status read until the memo is there.
+plannerGoalsApi.get("/review/:week/ai/memo/:session", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const agent = plannerMemoAgent(c.env);
+    if (!agent) return c.json(AI_UNAVAILABLE, 503);
+    const today = c.req.query("today") ?? "";
+    plannerAssertToday(today, new Date());
+    const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
+    let state: PlannerMemoAgentState;
+    try {
+      state = await plannerPollMemoAgent(agent, {
+        userId: context.user.id,
+        weekStart,
+        sessionId: c.req.param("session"),
+      });
+    } catch (error) {
+      plannerLogAgentError("poll", error);
+      return c.json<PlannerMemoAgentResponse>({ status: "running" });
+    }
+    if (state.status === "missing") {
+      return c.json({ error: { message: "Not found." } }, 404);
+    }
+    if (state.status !== "done") return c.json<PlannerMemoAgentResponse>(state);
+    const filter = plannerMemoStreamFilter();
+    const memo = filter.push(state.memo) + filter.finish();
+    return c.json<PlannerMemoAgentResponse>({ status: "done", memo });
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
 
 plannerGoalsApi.post(
   "/review/:week/ai/check",
@@ -613,10 +660,16 @@ plannerGoalsApi.post(
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const setup = await aiSetup(c, body.today, tooManyLines());
+      const agent = plannerMemoAgent(c.env);
+      const setup = await aiSetup(
+        c,
+        body.today,
+        tooManyLines(),
+        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
+      );
       if ("response" in setup) return setup.response;
-      const { model, review } = setup;
-      const messages = plannerMemoMessages(review, {
+      const { model, review, context } = setup;
+      const request = {
         ...answersOf(body),
         reviewedOn: body.today,
         scores: body.scores,
@@ -625,7 +678,28 @@ plannerGoalsApi.post(
         verdict: body.verdict,
         recommended: body.recommended,
         drafts: body.drafts,
-      });
+      };
+      if (agent) {
+        return ndjson(async function* () {
+          try {
+            const history = await plannerReadMemoHistory(context.db, {
+              userId: context.user.id,
+              weekStart: review.weekStart,
+            });
+            const session = await plannerStartMemoAgent(agent, {
+              userId: context.user.id,
+              weekStart: review.weekStart,
+              files: plannerMemoAgentFiles(review, request, history),
+              kickoff: plannerMemoAgentKickoff(review.weekStart),
+            });
+            yield { agent: session };
+          } catch (error) {
+            plannerLogAgentError("start", error);
+            yield { error: "failed" };
+          }
+        }, c.req.raw);
+      }
+      const messages = plannerMemoMessages(review, request);
       return ndjson(async function* (signal) {
         const filter = plannerMemoStreamFilter();
         try {
