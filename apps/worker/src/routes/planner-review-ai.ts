@@ -31,6 +31,11 @@ const OPENROUTER_REASONING_ROOM = 4_000;
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+/**
+ * Current Claude models think before they answer, and the thinking counts
+ * against max_tokens, so each call gets this much room on top of its own limit.
+ */
+const ANTHROPIC_THINKING_ROOM = 4_000;
 
 export type PlannerModelOptions = {
   maxTokens: number;
@@ -278,8 +283,12 @@ function openRouterModel(apiKey: string, model: string): PlannerReviewModel {
   };
 }
 
-/** Anthropic takes the system prompt apart from the turns, which start with the user. */
-function anthropicBody(
+/**
+ * Anthropic takes the system prompt apart from the turns, which start with the
+ * user. No temperature: current Claude models (Sonnet 5.5, Opus 5.5) answer 400
+ * to any sampling setting, and they think first, so the limit gets room for it.
+ */
+export function anthropicBody(
   model: string,
   messages: readonly PlannerChatMessage[],
   options: PlannerModelOptions,
@@ -294,8 +303,7 @@ function anthropicBody(
     .map((message) => ({ role: message.role, content: message.content }));
   return JSON.stringify({
     model,
-    max_tokens: options.maxTokens,
-    temperature: options.temperature,
+    max_tokens: options.maxTokens + ANTHROPIC_THINKING_ROOM,
     ...(system ? { system } : {}),
     messages: turns,
     ...(stream ? { stream: true } : {}),
