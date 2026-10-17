@@ -291,12 +291,31 @@ Answer with exactly this JSON:
   ];
 }
 
+/** Short words that carry no theme on their own. */
+const THEME_FILLER = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "but",
+  "not",
+  "are",
+  "was",
+  "too",
+  "its",
+  "out",
+]);
+
+/**
+ * A theme label's words for matching. Words of three letters count, so short
+ * names ("Wim Hof", "gym") still match; filler words don't.
+ */
 function themeKey(label: string): string {
   return label
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, " ")
     .split(/\s+/)
-    .filter((word) => word.length > 3)
+    .filter((word) => word.length >= 3 && !THEME_FILLER.has(word))
     .sort()
     .join(" ");
 }
