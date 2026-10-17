@@ -21,6 +21,8 @@ import type { FlareMoDb } from "@flaremo/db";
 import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
 import {
   plannerGoalFlag,
+  plannerTaskComment,
+  plannerTaskEvent,
   plannerTaskPlan,
   plannerWeek,
 } from "@flaremo/db/src/schema/planner";
@@ -494,6 +496,11 @@ export type PlannerReviewContext = {
    */
   previousSteps: Partial<Record<PlannerPillar, string>>;
   tasks: { done: string[]; doing: string[]; todo: string[] };
+  /**
+   * The tasks done, worked on or touched this week, and the ones in Doing,
+   * with what was written on them: notes, comments and the week's history.
+   */
+  taskDetails: PlannerReviewTask[];
   /** Clashes flagged by earlier checks and not settled. */
   openFlags: Array<{
     pillar: PlannerPillar | null;
@@ -512,6 +519,27 @@ export type PlannerReviewContext = {
   /** Memories made or changed during the week. */
   memories: PlannerWeekMemory[];
 };
+
+/** One task as the review reads it, beyond its title. */
+export type PlannerReviewTask = {
+  title: string;
+  /** todo, in_progress or done; `gone` for a task deleted or purged since. */
+  status: string;
+  notes: string | null;
+  /** Its live comments, oldest first. */
+  comments: Array<{ at: string; text: string }>;
+  /** What happened to it during the week, oldest first. */
+  history: Array<{ at: string; what: string }>;
+};
+
+/** At most this many tasks get their details, the most recently touched first. */
+const TASK_DETAIL_MAX = 60;
+/**
+ * Characters of notes and comments per task: small for the chat models' prompt,
+ * whole for the review agent, which reads the week as files.
+ */
+const TASK_DETAIL_CHARS = 600;
+const TASK_DETAIL_CHARS_WHOLE = 20_000;
 
 const PREVIOUS_SUMMARY_MAX = 4_000;
 const PREVIOUS_STEP_MAX = 600;
@@ -612,7 +640,7 @@ export async function plannerReadReviewContext(
       weekStart: plannerAddDays(weekStart, -7),
     }),
     db
-      .select({ title: tasks.title })
+      .select({ id: tasks.id, title: tasks.title })
       .from(tasks)
       .where(
         and(
@@ -628,6 +656,7 @@ export async function plannerReadReviewContext(
       .all(),
     db
       .select({
+        id: tasks.id,
         title: tasks.title,
         status: tasks.status,
         horizon: plannerTaskPlan.horizon,
@@ -667,6 +696,22 @@ export async function plannerReadReviewContext(
 
   const live = open.filter((row) => !row.droppedAt);
   const recentKept = plannerAddDays(weekStart, -7 * 8);
+  // Extra detail: a review still works if it cannot be read.
+  const taskDetails = await plannerReadTaskDetails(db, {
+    userId,
+    from: week.from,
+    to: week.to,
+    taskIds: [
+      ...done.map((row) => row.id),
+      ...live
+        .filter((row) => row.status === "in_progress")
+        .map((row) => row.id),
+    ],
+    chars:
+      (input.diaryChars ?? 0) >= 200_000
+        ? TASK_DETAIL_CHARS_WHOLE
+        : TASK_DETAIL_CHARS,
+  }).catch(() => []);
   return {
     ownerName: input.ownerName.trim().split(/\s+/)[0] || "the owner",
     weekStart,
@@ -710,6 +755,7 @@ export async function plannerReadReviewContext(
         .map((row) => row.title)
         .slice(0, 30),
     },
+    taskDetails,
     openFlags: flags
       .filter((flag) => flag.state === "open" && flag.weekStart <= weekStart)
       .map((flag) => ({
@@ -745,6 +791,163 @@ export async function plannerReadFlagGoals(
         (id): id is string => typeof id === "string",
       ),
     ),
+  });
+}
+
+function trimTo(text: string, max: number): string {
+  const clean = text.trim();
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+/** One history event in words: its type, and where it went when it says. */
+function taskEventWhat(type: string, data: Record<string, unknown>): string {
+  const to = data.to;
+  if (typeof data.status === "string") return `${type} to ${data.status}`;
+  if (to && typeof to === "object" && "horizon" in to) {
+    const horizon = (to as { horizon?: unknown }).horizon;
+    if (typeof horizon === "string") return `${type} to ${horizon}`;
+  }
+  if (type === "updated") {
+    const fields = Object.keys(data).filter((key) => key !== "updated_at");
+    if (fields.length) return `updated (${fields.join(", ")})`;
+  }
+  return type;
+}
+
+/**
+ * The tasks done, worked on or touched in [from, to), plus `taskIds`, with
+ * their notes, live comments and the period's history. A task the period
+ * touched that is gone since keeps the title its history recorded.
+ */
+export async function plannerReadTaskDetails(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    from: string;
+    to: string;
+    taskIds: readonly string[];
+    chars: number;
+  },
+): Promise<PlannerReviewTask[]> {
+  const { userId, from, to } = input;
+  const [events, weekComments] = await Promise.all([
+    db
+      .select({
+        taskId: plannerTaskEvent.taskId,
+        taskTitle: plannerTaskEvent.taskTitle,
+        type: plannerTaskEvent.type,
+        data: plannerTaskEvent.data,
+        at: plannerTaskEvent.occurredAt,
+      })
+      .from(plannerTaskEvent)
+      .where(
+        and(
+          eq(plannerTaskEvent.userId, userId),
+          gte(plannerTaskEvent.occurredAt, from),
+          lt(plannerTaskEvent.occurredAt, to),
+        ),
+      )
+      .orderBy(asc(plannerTaskEvent.occurredAt), asc(plannerTaskEvent.id))
+      .limit(1_000)
+      .all(),
+    db
+      .select({ taskId: plannerTaskComment.taskId })
+      .from(plannerTaskComment)
+      .where(
+        and(
+          eq(plannerTaskComment.userId, userId),
+          isNull(plannerTaskComment.deletedAt),
+          gte(plannerTaskComment.createdAt, from),
+          lt(plannerTaskComment.createdAt, to),
+        ),
+      )
+      .limit(1_000)
+      .all(),
+  ]);
+  // The most recently touched first, then the listed ones.
+  const order: string[] = [];
+  const add = (id: string) => {
+    if (id && !order.includes(id)) order.push(id);
+  };
+  for (const event of [...events].reverse()) add(event.taskId);
+  for (const comment of weekComments) add(comment.taskId);
+  for (const id of input.taskIds) add(id);
+  const ids = order.slice(0, TASK_DETAIL_MAX);
+  if (!ids.length) return [];
+
+  const chunks = (list: readonly string[]) =>
+    Array.from({ length: Math.ceil(list.length / 80) }, (_, index) =>
+      list.slice(index * 80, index * 80 + 80),
+    );
+  const [rows, comments] = await Promise.all([
+    Promise.all(
+      chunks(ids).map((chunk) =>
+        db
+          .select({
+            id: tasks.id,
+            title: tasks.title,
+            notes: tasks.notes,
+            status: tasks.status,
+            deletedAt: tasks.deletedAt,
+          })
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), inArray(tasks.id, chunk)))
+          .all(),
+      ),
+    ).then((lists) => lists.flat()),
+    Promise.all(
+      chunks(ids).map((chunk) =>
+        db
+          .select({
+            taskId: plannerTaskComment.taskId,
+            body: plannerTaskComment.body,
+            at: plannerTaskComment.createdAt,
+          })
+          .from(plannerTaskComment)
+          .where(
+            and(
+              eq(plannerTaskComment.userId, userId),
+              inArray(plannerTaskComment.taskId, chunk),
+              isNull(plannerTaskComment.deletedAt),
+            ),
+          )
+          .orderBy(asc(plannerTaskComment.createdAt))
+          .limit(2_000)
+          .all(),
+      ),
+    ).then((lists) => lists.flat()),
+  ]);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id): PlannerReviewTask[] => {
+    const row = byId.get(id);
+    const history = events.filter((event) => event.taskId === id);
+    const title = row?.title ?? history.find((e) => e.taskTitle)?.taskTitle;
+    if (!title) return [];
+    // Notes first, then comments, within the task's budget.
+    let left = input.chars;
+    const take = (text: string) => {
+      const kept = trimTo(text, Math.max(left, 0));
+      left -= kept.length;
+      return kept;
+    };
+    const notes = row?.notes?.trim() ? take(row.notes) : null;
+    return [
+      {
+        title,
+        status: !row || row.deletedAt ? "gone" : row.status,
+        notes,
+        comments: comments
+          .filter((comment) => comment.taskId === id && comment.body.trim())
+          .flatMap((comment) => {
+            if (left <= 0) return [];
+            return [{ at: comment.at, text: take(comment.body) }];
+          }),
+        history: history.map((event) => ({
+          at: event.at,
+          what: taskEventWhat(event.type, event.data ?? {}),
+        })),
+      },
+    ];
   });
 }
 

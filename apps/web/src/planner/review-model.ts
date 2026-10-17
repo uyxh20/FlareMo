@@ -116,6 +116,11 @@ export type PlannerBackState = {
   memoStopped: boolean;
   /** The memo, scores and results were saved (Look back is done). */
   memoSaved: boolean;
+  /**
+   * The review agent's session, when the agent runs this review: every step
+   * after the opening goes to it.
+   */
+  agent?: string | null;
 };
 
 /** A goal of the plan. Its id is the page's UUID, which the server keeps. */

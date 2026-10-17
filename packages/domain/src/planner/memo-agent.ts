@@ -7,16 +7,25 @@ import {
   plannerReadWeekDiary,
 } from "./review-context";
 import {
+  type PlannerChatMessage,
+  type PlannerCoachMode,
   type PlannerMemoRequest,
+  type PlannerReviewAnswers,
+  plannerCloseMessages,
+  plannerCoachSystem,
   plannerMemoParts,
+  plannerOpeningMessages,
   plannerReviewContextBlock,
 } from "./review-prompts";
 
-// The weekly memo agent (fork-owned, docs/fork-review-memo-agent.md): a Claude
-// Managed Agent that writes the Sunday summary memo in place of a single model
-// call. It reads the whole week and the weeks before it as files, and keeps its
-// own notes from one review to the next. This module builds what it reads; the
-// Worker (routes/planner-memo-agent.ts) sends it.
+// The weekly review agent (fork-owned, docs/fork-review-memo-agent.md): a
+// Claude Managed Agent that runs the Look back part of the weekly review in
+// place of single model calls. One session per review: the opening starts it
+// with the whole week and the weeks before it as files, and each later step
+// (every coach reply, the scores, the memo) is one message to it, so it carries
+// the whole evening. It keeps its own notes from one review to the next. It
+// was first set up for the memo alone, hence the names. This module builds
+// what it reads; the Worker (routes/planner-memo-agent.ts) sends it.
 
 /** Earlier weeks the agent can open to check a pattern before claiming it. */
 export const PLANNER_MEMO_AGENT_HISTORY_WEEKS = 8;
@@ -147,7 +156,98 @@ export function plannerMemoAgentFiles(
   return files;
 }
 
-/** The first message of each session. */
+/** The memo step's message, and a memo-only session's first message. */
 export function plannerMemoAgentKickoff(weekStart: string): string {
   return `This is the review of the week starting Monday ${weekStart}. Its files are in /data: this-week.md, review.md, template.md and history/ (the weeks before it). Your memory store is mounted under /mnt/memory/.`;
+}
+
+/**
+ * The files a review's session starts with: the week and the weeks before it.
+ * The evening's answers and the memo's skeleton come at the memo step
+ * (plannerMemoAgentStepFiles).
+ */
+export function plannerReviewAgentFiles(
+  context: PlannerReviewContext,
+  history: readonly PlannerMemoHistoryWeek[],
+): Record<string, string> {
+  const files: Record<string, string> = {
+    "/data/this-week.md": plannerReviewContextBlock(context),
+  };
+  for (const week of history) {
+    files[`/data/history/${week.weekStart}.md`] = historyFile(week);
+  }
+  return files;
+}
+
+/** The files added for the memo step: the evening's answers and the skeleton. */
+export function plannerMemoAgentStepFiles(
+  context: PlannerReviewContext,
+  request: PlannerMemoRequest,
+): Record<string, string> {
+  const files = plannerMemoAgentFiles(context, request, []);
+  delete files["/data/this-week.md"];
+  return files;
+}
+
+const CONTEXT_FILE =
+  "(in /data/this-week.md; the weeks before it are in /data/history/)";
+
+/** A step's prompt, with the week's context pointing at its file. */
+function stepPrompt(
+  context: PlannerReviewContext,
+  messages: readonly PlannerChatMessage[],
+): string {
+  const block = plannerReviewContextBlock(context);
+  return messages
+    .map((message) => message.content.replace(block, CONTEXT_FILE))
+    .join("\n\n");
+}
+
+/** The opening: how the session runs, then the opening's own prompt. */
+export function plannerAgentOpeningMessage(
+  context: PlannerReviewContext,
+): string {
+  const name = context.ownerName.trim().split(/\s+/)[0] || "the owner";
+  return `This session is ${name}'s whole weekly review for the week starting Monday ${context.weekStart}, not only the memo. The review reaches you one step at a time, each as a message: first the opening drafts (this message), then the coach chat (one message for each of ${name}'s answers), then the scores and trajectory, and last the memo. ${name} is waiting on each reply in the app.
+
+Until the memo step, follow each message's instructions and reply with only what it asks for, in the format it asks for: no preamble, no notes, nothing after it. Your standing instructions about writing the memo apply only when the memo step comes. Don't change your memory store before then.
+
+The week's files: /data/this-week.md is the context the instructions refer to, and /data/history/ holds the weeks before it. Read your memory store's notes and this-week.md before this first reply; open history files when a step needs them.
+
+Step 1, the opening:
+
+${stepPrompt(context, plannerOpeningMessages(context))}`;
+}
+
+/** One coach reply: the coach's rules for this reply, then how the chat ends. */
+export function plannerAgentCoachMessage(
+  context: PlannerReviewContext,
+  mode: PlannerCoachMode,
+  chat: ReadonlyArray<{ role: "user" | "assistant"; content: string }>,
+): string {
+  const name = context.ownerName.trim().split(/\s+/)[0] || "the owner";
+  const recent = chat
+    .slice(-6)
+    .map(
+      (message) =>
+        `${message.role === "user" ? name : "Review"}: ${message.content}`,
+    )
+    .join("\n\n");
+  return `Coach step: reply to ${name}'s latest answer.
+
+${stepPrompt(context, [{ role: "system", content: plannerCoachSystem(context, mode) }])}
+
+The chat ends like this (earlier turns are in this session already; "Review" lines are the app's prompts and your earlier replies):
+
+${recent}`;
+}
+
+/** The scores and the trajectory, from the evening's answers. */
+export function plannerAgentCloseMessage(
+  context: PlannerReviewContext,
+  answers: PlannerReviewAnswers,
+): string {
+  return `Scores step: the chat is over.
+
+${stepPrompt(context, plannerCloseMessages(context, answers))}`;
 }

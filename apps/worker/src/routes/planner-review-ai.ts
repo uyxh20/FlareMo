@@ -40,6 +40,8 @@ const ANTHROPIC_THINKING_ROOM = 4_000;
 export type PlannerModelOptions = {
   maxTokens: number;
   temperature: number;
+  /** How hard a Claude model thinks (output_config.effort); others ignore it. */
+  effort?: "low" | "medium" | "high";
   signal?: AbortSignal;
 };
 
@@ -306,6 +308,7 @@ export function anthropicBody(
     max_tokens: options.maxTokens + ANTHROPIC_THINKING_ROOM,
     ...(system ? { system } : {}),
     messages: turns,
+    ...(options.effort ? { output_config: { effort: options.effort } } : {}),
     ...(stream ? { stream: true } : {}),
   });
 }

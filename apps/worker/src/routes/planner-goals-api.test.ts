@@ -727,42 +727,107 @@ describe("planner goals and weekly review API", () => {
       ),
     ).toEqual(["user"]);
 
+    // The goal check thinks at medium effort; the other steps at the default.
+    await call(
+      "POST",
+      `/review/${REVIEW_WEEK}/ai/check`,
+      { today: TODAY, goals: [], settled: [] },
+      { env: anthropic },
+    );
+    expect(sent[2]?.body).toMatchObject({
+      model: "claude-sonnet-5-5",
+      output_config: { effort: "medium" },
+    });
+    expect(sent[0]?.body).not.toHaveProperty("output_config");
+
     for (const call of vi.mocked(console.error).mock.calls) {
       expect(JSON.stringify(call)).not.toContain("test-anthropic-key");
     }
   });
 
-  it("hands the memo to the memo agent and gives it back when it is done", async () => {
+  it("runs the whole look back through one review agent session", async () => {
     const realFetch = globalThis.fetch;
     const sent: Array<{ method: string; url: string; body: unknown }> = [];
     let uploads = 0;
+    let metadata: Record<string, string> = {};
+    const events: Array<Record<string, unknown>> = [];
+    const resources: Array<Record<string, unknown>> = [];
+    let clock = Date.parse("2026-01-01T00:00:00Z");
+    const at = () => {
+      clock += 1000;
+      return new Date(clock).toISOString();
+    };
+    const text = (value: string) => [{ type: "text", text: value }];
+    // The agent's answer to each step, by what the step's message says.
+    const reply = (message: string): string =>
+      message.includes("Step 1, the opening")
+        ? JSON.stringify({
+            recap: "A week of calls.",
+            prompts: Array.from({ length: 7 }, () => ["a", "b", "c"]),
+          })
+        : message.startsWith("Coach step")
+          ? 'Which call? @@ {"advance": false}'
+          : message.startsWith("Scores step")
+            ? JSON.stringify({
+                scores: {
+                  auth: 4,
+                  ach: 3.5,
+                  auth_evidence: "Named the miss.",
+                  ach_evidence: "Most goals met.",
+                },
+                trajectory: {
+                  pattern: "p",
+                  risk: "r",
+                  opportunity: "o",
+                  questions: ["Did I a?", "Did I b?", "Did I c?"],
+                  verdicts: { continue: "Continue. x.", pivot: "", pause: "" },
+                  recommended: "continue",
+                },
+              })
+            : "done";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
       if (!url.startsWith("https://api.anthropic.com/")) {
         return realFetch(input, init);
       }
       const method = init?.method ?? "GET";
-      sent.push({
-        method,
-        url,
-        body: typeof init?.body === "string" ? JSON.parse(init.body) : null,
-      });
+      const payload =
+        typeof init?.body === "string" ? JSON.parse(init.body) : null;
+      sent.push({ method, url, body: payload });
       const path = url.split("/v1")[1] ?? "";
       if (method === "POST" && path === "/files") {
         return Response.json({ id: `file_${++uploads}` });
       }
       if (method === "POST" && path === "/sessions") {
+        metadata = payload.metadata;
         return Response.json({ id: "sesn_test" });
       }
       if (method === "GET" && path === "/sessions/sesn_test") {
-        const started = sent.find((call) => call.url.endsWith("/sessions"))
-          ?.body as { metadata: Record<string, string> };
         return Response.json({
           status: "idle",
           updated_at: "2026-01-01T00:00:00Z",
-          metadata: started.metadata,
-          usage: { output_tokens: 500 },
+          metadata,
         });
+      }
+      if (method === "POST" && path === "/sessions/sesn_test/events") {
+        const message = payload.events[0].content[0].text as string;
+        events.push(
+          { type: "user.message", processed_at: at(), content: text(message) },
+          {
+            type: "agent.message",
+            processed_at: at(),
+            content: text(reply(message)),
+          },
+          { type: "session.status_idle", processed_at: at() },
+        );
+        return Response.json({});
+      }
+      if (path.startsWith("/sessions/sesn_test/events")) {
+        return Response.json({ data: events, next_page: null });
+      }
+      if (path === "/sessions/sesn_test/resources") {
+        if (method === "POST") resources.push(payload);
+        return Response.json({ data: method === "GET" ? resources : {} });
       }
       if (path.startsWith("/files?scope_id=sesn_test")) {
         return Response.json({
@@ -780,56 +845,122 @@ describe("planner goals and weekly review API", () => {
       FLAREMO_REVIEW_MEMO_ENVIRONMENT: "env_test",
       FLAREMO_REVIEW_MEMO_STORE: "memstore_test",
     });
-    const started = await lines(
-      await call(
-        "POST",
-        `/review/${REVIEW_WEEK}/ai/memo`,
-        {
-          today: TODAY,
-          ...ANSWERS,
-          scores: { auth: 4, ach: 3 },
-          question: null,
-          verdict: null,
-          recommended: "continue",
-          drafts: {
-            auth_evidence: "",
-            ach_evidence: "",
-            pattern: "",
-            risk: "",
-            opportunity: "",
-          },
-        },
-        { env: agentEnv },
-      ),
-    );
-    expect(started).toEqual([{ agent: "sesn_test" }]);
-    // This week, the evening's material, the skeleton, and 8 earlier weeks.
-    expect(uploads).toBe(11);
-    expect(
-      sent.find((call) => call.url.endsWith("/sessions/sesn_test/events"))
-        ?.body,
-    ).toMatchObject({ events: [{ type: "user.message" }] });
+    const ask = <T>(step: string, extra = "") =>
+      body<T>(
+        call(
+          "GET",
+          `/review/${REVIEW_WEEK}/ai/agent/sesn_test?today=${TODAY}&step=${step}${extra}`,
+          undefined,
+          { env: agentEnv },
+        ),
+      );
 
-    const done = await body<{ status: string; memo: string }>(
-      call(
-        "GET",
-        `/review/${REVIEW_WEEK}/ai/memo/sesn_test?today=${TODAY}`,
-        undefined,
-        { env: agentEnv },
+    // The opening starts the session on the week and the 8 weeks before it.
+    expect(
+      await body(
+        call(
+          "POST",
+          `/review/${REVIEW_WEEK}/ai/opening`,
+          { today: TODAY },
+          { env: agentEnv },
+        ),
       ),
-    );
-    expect(done).toEqual({
+    ).toEqual({ agent: "sesn_test" });
+    expect(uploads).toBe(9);
+    expect(await ask<{ opening: { recap: string } }>("opening")).toMatchObject({
       status: "done",
+      step: "opening",
+      opening: { recap: "A week of calls." },
+    });
+
+    // A coach reply goes to the same session.
+    expect(
+      await lines(
+        await call(
+          "POST",
+          `/review/${REVIEW_WEEK}/ai/coach`,
+          {
+            today: TODAY,
+            mode: "free",
+            messages: [{ role: "user", content: "I made calls." }],
+            session: "sesn_test",
+          },
+          { env: agentEnv },
+        ),
+      ),
+    ).toEqual([{ agent: "sesn_test" }]);
+    expect(await ask("coach", "&mode=free")).toEqual({
+      status: "done",
+      step: "coach",
+      text: "Which call?",
+      advance: false,
+    });
+
+    // So do the scores.
+    expect(
+      await body(
+        call(
+          "POST",
+          `/review/${REVIEW_WEEK}/ai/close`,
+          { today: TODAY, ...ANSWERS, session: "sesn_test" },
+          { env: agentEnv },
+        ),
+      ),
+    ).toEqual({ agent: "sesn_test" });
+    expect(await ask("close")).toMatchObject({
+      status: "done",
+      step: "close",
+      close: { scores: { auth: 4, ach: 3.5 } },
+    });
+
+    // The memo step adds the evening's answers and the skeleton.
+    expect(
+      await lines(
+        await call(
+          "POST",
+          `/review/${REVIEW_WEEK}/ai/memo`,
+          {
+            today: TODAY,
+            ...ANSWERS,
+            scores: { auth: 4, ach: 3 },
+            question: null,
+            verdict: null,
+            recommended: "continue",
+            drafts: {
+              auth_evidence: "",
+              ach_evidence: "",
+              pattern: "",
+              risk: "",
+              opportunity: "",
+            },
+            session: "sesn_test",
+          },
+          { env: agentEnv },
+        ),
+      ),
+    ).toEqual([{ agent: "sesn_test" }]);
+    expect(resources.map((r) => r.mount_path)).toEqual([
+      "/data/review.md",
+      "/data/template.md",
+    ]);
+    expect(await ask("memo")).toEqual({
+      status: "done",
+      step: "memo",
       memo: "# Week 41: October\n\nThe agent's memo.",
     });
-    expect(
-      sent.filter((call) => call.method === "DELETE").map((call) => call.url),
-    ).toHaveLength(13);
+    // Every upload and the session are deleted once the memo is read.
+    const deleted = sent
+      .filter((entry) => entry.method === "DELETE")
+      .map((entry) => entry.url.split("/v1")[1]);
+    expect(deleted).toContain("/sessions/sesn_test");
+    expect(deleted.filter((path) => path?.startsWith("/files/"))).toHaveLength(
+      12,
+    );
 
     await body(
       call(
         "GET",
-        `/review/${REVIEW_WEEK}/ai/memo/sesn_other?today=${TODAY}`,
+        `/review/${REVIEW_WEEK}/ai/agent/sesn_other?today=${TODAY}&step=memo`,
         undefined,
         { env: withEnv({ ANTHROPIC_API_KEY: "k" }) },
       ),

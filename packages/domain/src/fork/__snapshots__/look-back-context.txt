@@ -15,6 +15,12 @@ Last week's review question: "Will ZqplannerweekProbe hold?"
 Tasks done this week: Ship ZqtasksProbe; Call the bank; Draft the proposal
 Doing: none
 To Do: none
+
+Task details: the tasks done, worked on or touched this week and those in Doing, with Owner's notes and comments on them (their own words, as written on the task) and what happened to each this week:
+- "Old task ZqplannertaskeventProbe" (gone) · this week: Wed 30 Sep purged
+- "Draft the proposal" (done) · comments: [Wed 30 Sep] "Blocked on ZqplannertaskcommentProbe."
+- "Ship ZqtasksProbe" (done)
+- "Call the bank" (done) · notes: "They said ZqtasksnotesProbe."
 Open clashes from earlier checks: Year · Work: Pulls against ZqplannergoalflagProbe.
 
 Health tracker for this week, read from the diary by fixed word rules or set by hand. Its totals are exact; copy them:

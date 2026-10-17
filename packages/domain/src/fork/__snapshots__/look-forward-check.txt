@@ -13,6 +13,13 @@ Year 2026: Work: Grow ZqplannergoalProbe
 Quarter Q4 2026: none written
 Month October: none written
 
+Task details: the tasks done, worked on or touched this week and those in Doing, with Owner's notes and comments on them (their own words, as written on the task) and what happened to each this week:
+- "Old task ZqplannertaskeventProbe" (gone) · this week: Wed 30 Sep purged
+- "Draft the proposal" (done) · comments: [Wed 30 Sep] "Blocked on ZqplannertaskcommentProbe."
+- "Ship ZqtasksProbe" (done)
+- "Call the bank" (done) · notes: "They said ZqtasksnotesProbe."
+Use these to see what the plan's tasks really involve and how this week went; flag only clashes between goals.
+
 Owner already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:
 - Work weekly goal against Year · Work: Pulls against ZqplannergoalflagProbe. Kept for now in an earlier review.
 
