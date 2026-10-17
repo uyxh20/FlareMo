@@ -297,6 +297,18 @@ describe("the period review", () => {
       [1, false],
     ]);
     expect(merged.agreement).toBe(0.5);
+
+    const short = plannerMergePeriodThemes(
+      JSON.stringify({
+        themes: [{ label: "Wim Hof breathing", pillar: "health", quote: "" }],
+      }),
+      JSON.stringify({
+        themes: [{ label: "wim hof practice", pillar: "health", quote: "" }],
+      }),
+      context,
+    );
+    expect(short.themes.map((theme) => theme.readers)).toEqual([2]);
+    expect(short.agreement).toBe(1);
   });
 
   it("builds prompts from the raw rows and never asks the model for goals", async () => {
