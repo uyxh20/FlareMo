@@ -163,6 +163,8 @@ export type PlannerGoalsStrings = {
 
     start: string;
     drafting: string;
+    /** The review agent reads the whole week before its first drafts. */
+    draftingAgent: string;
     scoring: string;
     thinking: string;
     answer: string;
@@ -462,6 +464,7 @@ const en: PlannerGoalsStrings = {
 
     start: "Start Look back",
     drafting: "Drafting from your week",
+    draftingAgent: "Reading your whole week · this takes a few minutes",
     scoring: "Scoring your week",
     thinking: "Thinking",
     answer: "Your answer",
@@ -745,6 +748,7 @@ const zhCN: PlannerGoalsStrings = {
 
     start: "开始回顾",
     drafting: "正在根据你的一周起草",
+    draftingAgent: "正在读完这一周 · 需要几分钟",
     scoring: "正在为你的一周打分",
     thinking: "思考中",
     answer: "你的回答",

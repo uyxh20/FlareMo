@@ -428,10 +428,10 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "Tasks on the board (title, status, priority, due date)",
     uses: {
       lookBack: yes(
-        "titles only: done this week (40), Doing (30) and planned To Do (30)",
+        "done this week (40), Doing (30) and planned To Do (30) by title; the ones done, worked on or touched this week and Doing also with their status and details (up to 60)",
       ),
-      lookForward: no(
-        "the page sends next week's goals and their tasks; nothing is read from the database",
+      lookForward: yes(
+        "the goal check reads the week's task details too; the plan's own tasks come from the page",
       ),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
@@ -448,7 +448,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
     owner: "upstream",
     holds: "Backlog tasks (To Do with no week or month planned)",
     uses: {
-      lookBack: no("only To Do tasks planned for a period are listed"),
+      lookBack: no(
+        "only To Do tasks planned for a period are listed, unless touched this week (then in the task details)",
+      ),
       lookForward: no("the page sends next week's goals and their tasks"),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
@@ -465,8 +467,10 @@ export const forkDataSources: readonly ForkDataSource[] = [
     owner: "upstream",
     holds: "A task's notes",
     uses: {
-      lookBack: gap("the review sees task titles, not their notes"),
-      lookForward: no("the page sends next week's goals and their tasks"),
+      lookBack: yes(
+        "for the tasks done, worked on or touched this week and Doing: 600 characters each, whole for the review agent",
+      ),
+      lookForward: yes("with the task details the goal check reads"),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: gap("agents cannot read or change tasks over MCP"),
@@ -507,10 +511,10 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds:
       "The permanent task history archive (the data flywheel), kept after a task is purged",
     uses: {
-      lookBack: gap(
-        "the review does not see how tasks moved (carried over, reopened, dropped)",
+      lookBack: yes(
+        "the week's events of each task in the details (created, moved, done, carried over, dropped), and a task purged since keeps its title",
       ),
-      lookForward: no("the goal check reads goals only"),
+      lookForward: yes("with the task details the goal check reads"),
       search: no("history is not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: no("not exposed to agents"),
@@ -526,8 +530,10 @@ export const forkDataSources: readonly ForkDataSource[] = [
     owner: "fork",
     holds: "Comments on tasks",
     uses: {
-      lookBack: gap("the review does not read task comments"),
-      lookForward: no("the goal check reads goals only"),
+      lookBack: yes(
+        "the live comments of the tasks in the details, oldest first, within each task's budget",
+      ),
+      lookForward: yes("with the task details the goal check reads"),
       search: gap("task comments are not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: no("not exposed to agents"),

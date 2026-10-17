@@ -695,7 +695,11 @@ export function PlannerLookBack(props: Props) {
                 <Entry entry={entry} key={index} props={props} />
               ))}
               {stage === "drafting" && (
-                <Thinking>{strings.review.drafting}</Thinking>
+                <Thinking>
+                  {back.agent
+                    ? strings.review.draftingAgent
+                    : strings.review.drafting}
+                </Thinking>
               )}
               {stage === "scoring" && (
                 <Thinking>{strings.review.scoring}</Thinking>

@@ -1,11 +1,16 @@
 import type {
+  PlannerAgentResponse,
+  PlannerAgentStep,
   PlannerAiCheckInput,
   PlannerAiCheckResponse,
   PlannerAiCloseInput,
   PlannerAiCloseResponse,
+  PlannerAiCloseResult,
   PlannerAiCoachInput,
   PlannerAiMemoInput,
+  PlannerAiOpeningInput,
   PlannerAiOpeningResponse,
+  PlannerAiOpeningResult,
   PlannerAiStreamLine,
   PlannerCommitInput,
   PlannerCommitResponse,
@@ -14,7 +19,6 @@ import type {
   PlannerGoalsYearResponse,
   PlannerLookBackInput,
   PlannerLookBackResponse,
-  PlannerMemoAgentResponse,
   PlannerOkResponse,
   PlannerReviewResponse,
   PlannerReviewStateResponse,
@@ -140,10 +144,13 @@ export function plannerLookForwardRequest(
   });
 }
 
-export function plannerAiOpeningRequest(week: string, today: string) {
-  return apiRequest<PlannerAiOpeningResponse>(reviewPath(week, "ai/opening"), {
+export function plannerAiOpeningRequest(
+  week: string,
+  input: PlannerAiOpeningInput,
+) {
+  return apiRequest<PlannerAiOpeningResult>(reviewPath(week, "ai/opening"), {
     method: "POST",
-    body: JSON.stringify({ today }),
+    body: JSON.stringify(input),
   });
 }
 
@@ -151,10 +158,58 @@ export function plannerAiCloseRequest(
   week: string,
   input: PlannerAiCloseInput,
 ) {
-  return apiRequest<PlannerAiCloseResponse>(reviewPath(week, "ai/close"), {
+  return apiRequest<PlannerAiCloseResult>(reviewPath(week, "ai/close"), {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/** The review agent did not answer the step (it failed, or ran out of time). */
+export class PlannerAgentFailed extends Error {
+  constructor() {
+    super("The review agent did not answer.");
+    this.name = "PlannerAgentFailed";
+  }
+}
+
+/**
+ * The opening's drafts. When the review agent runs the review, the server
+ * starts its session and the drafts come from it a few minutes later; the
+ * session is returned to give the later steps to. Throws like apiRequest, or
+ * PlannerAgentFailed.
+ */
+export async function plannerAiOpening(
+  week: string,
+  input: PlannerAiOpeningInput,
+  options: { signal?: AbortSignal; onAgent?: (session: string) => void } = {},
+): Promise<{ opening: PlannerAiOpeningResponse; agent?: string }> {
+  const result = await plannerAiOpeningRequest(week, input);
+  if (!("agent" in result)) return { opening: result };
+  options.onAgent?.(result.agent);
+  const answer = await plannerWaitForAgent(week, result.agent, {
+    today: input.today,
+    step: "opening",
+    signal: options.signal,
+  });
+  if (answer?.step !== "opening") throw new PlannerAgentFailed();
+  return { opening: answer.opening, agent: result.agent };
+}
+
+/** The scores and trajectory drafts, from the review agent when it has the step. */
+export async function plannerAiClose(
+  week: string,
+  input: PlannerAiCloseInput,
+  options: { signal?: AbortSignal } = {},
+): Promise<PlannerAiCloseResponse> {
+  const result = await plannerAiCloseRequest(week, input);
+  if (!("agent" in result)) return result;
+  const answer = await plannerWaitForAgent(week, result.agent, {
+    today: input.today,
+    step: "close",
+    signal: options.signal,
+  });
+  if (answer?.step !== "close") throw new PlannerAgentFailed();
+  return answer.close;
 }
 
 export function plannerAiCheckRequest(
@@ -306,41 +361,61 @@ export async function plannerReadAiStream(
   }
 }
 
-/** One coach reply, streamed. */
-export function plannerStreamCoach(
+/** One coach reply, streamed; or, from the review agent, shown whole. */
+export async function plannerStreamCoach(
   week: string,
   input: PlannerAiCoachInput,
   options: { signal?: AbortSignal; onText?: (text: string) => void },
-) {
-  return plannerReadAiStream(reviewPath(week, "ai/coach"), input, options);
-}
-
-/** How often the page asks the memo agent for its memo, and for how long. */
-const AGENT_POLL_MS = 5_000;
-const AGENT_WAIT_MS = 15 * 60_000;
-
-/**
- * The summary memo, streamed; or, when the memo agent writes it, asked for
- * every few seconds until the agent is done (a few minutes), then shown whole.
- */
-export async function plannerStreamMemo(
-  week: string,
-  input: PlannerAiMemoInput,
-  options: {
-    signal?: AbortSignal;
-    onText?: (text: string) => void;
-    /** The agent started: the memo comes whole, in a few minutes. */
-    onAgent?: () => void;
-  },
 ): Promise<PlannerStreamResult> {
   const result = await plannerReadAiStream(
-    reviewPath(week, "ai/memo"),
+    reviewPath(week, "ai/coach"),
     input,
     options,
   );
   if (!result.agent) return result;
-  options.onAgent?.();
-  const path = `${reviewPath(week, `ai/memo/${encodeURIComponent(result.agent)}`)}?today=${encodeURIComponent(input.today)}`;
+  const answer = await plannerWaitForAgent(week, result.agent, {
+    today: input.today,
+    step: "coach",
+    mode: input.mode,
+    signal: options.signal,
+  });
+  if (options.signal?.aborted) return { status: "aborted", text: "" };
+  if (answer?.step !== "coach" || !answer.text) {
+    return { status: "failed", text: "" };
+  }
+  options.onText?.(answer.text);
+  return {
+    status: "done",
+    text: answer.text,
+    ...(answer.advance === null ? {} : { advance: answer.advance }),
+  };
+}
+
+/** How often the page asks the review agent for an answer, and for how long. */
+const AGENT_POLL_MS = 4_000;
+const AGENT_WAIT_MS = 15 * 60_000;
+
+/**
+ * Asks the review agent's session every few seconds for its answer to `step`
+ * until it is there (a reply takes seconds, the opening and the memo a few
+ * minutes). Null when it failed, ran out of time or was stopped.
+ */
+export async function plannerWaitForAgent(
+  week: string,
+  session: string,
+  options: {
+    today: string;
+    step: PlannerAgentStep;
+    mode?: PlannerAiCoachInput["mode"];
+    signal?: AbortSignal;
+  },
+): Promise<Extract<PlannerAgentResponse, { status: "done" }> | null> {
+  const query = new URLSearchParams({
+    today: options.today,
+    step: options.step,
+    ...(options.mode ? { mode: options.mode } : {}),
+  });
+  const path = `${reviewPath(week, `ai/agent/${encodeURIComponent(session)}`)}?${query}`;
   const deadline = Date.now() + AGENT_WAIT_MS;
   const wait = () =>
     new Promise<void>((resolve) => {
@@ -356,8 +431,8 @@ export async function plannerStreamMemo(
     });
   while (Date.now() < deadline) {
     await wait();
-    if (options.signal?.aborted) return { status: "aborted", text: "" };
-    let state: PlannerMemoAgentResponse;
+    if (options.signal?.aborted) return null;
+    let state: PlannerAgentResponse;
     try {
       const response = await fetch(path, {
         credentials: "same-origin",
@@ -366,20 +441,47 @@ export async function plannerStreamMemo(
       if (response.status === 401 && typeof window !== "undefined") {
         window.dispatchEvent(new Event(AUTHENTICATION_REQUIRED_EVENT));
       }
-      if (response.status === 404 || response.status === 401) {
-        return { status: "failed", text: "" };
-      }
+      if ([400, 401, 404, 503].includes(response.status)) return null;
       if (!response.ok) continue;
-      state = (await response.json()) as PlannerMemoAgentResponse;
+      state = (await response.json()) as PlannerAgentResponse;
     } catch {
-      if (options.signal?.aborted) return { status: "aborted", text: "" };
+      if (options.signal?.aborted) return null;
       continue;
     }
-    if (state.status === "done") {
-      options.onText?.(state.memo);
-      return { status: "done", text: state.memo };
-    }
-    if (state.status === "failed") return { status: "failed", text: "" };
+    if (state.status === "done") return state;
+    if (state.status === "failed") return null;
   }
-  return { status: "failed", text: "" };
+  return null;
+}
+
+/**
+ * The summary memo, streamed; or, when the review agent writes it, asked for
+ * every few seconds until the agent is done (a few minutes), then shown whole.
+ */
+export async function plannerStreamMemo(
+  week: string,
+  input: PlannerAiMemoInput,
+  options: {
+    signal?: AbortSignal;
+    onText?: (text: string) => void;
+    /** The agent has it: the memo comes whole, in a few minutes. */
+    onAgent?: () => void;
+  },
+): Promise<PlannerStreamResult> {
+  const result = await plannerReadAiStream(
+    reviewPath(week, "ai/memo"),
+    input,
+    options,
+  );
+  if (!result.agent) return result;
+  options.onAgent?.();
+  const answer = await plannerWaitForAgent(week, result.agent, {
+    today: input.today,
+    step: "memo",
+    signal: options.signal,
+  });
+  if (options.signal?.aborted) return { status: "aborted", text: "" };
+  if (answer?.step !== "memo") return { status: "failed", text: "" };
+  options.onText?.(answer.memo);
+  return { status: "done", text: answer.memo };
 }

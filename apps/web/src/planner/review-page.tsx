@@ -44,9 +44,9 @@ import { plannerErrorMessage, plannerFetchBoard } from "./api";
 import { plannerMarkWeekFresh } from "./goal-cards";
 import {
   plannerAiCheckRequest,
-  plannerAiCloseRequest,
+  plannerAiClose,
   plannerAiFailure,
-  plannerAiOpeningRequest,
+  plannerAiOpening,
   plannerFetchReview,
   plannerLookBackRequest,
   plannerLookForwardRequest,
@@ -120,6 +120,11 @@ const SAVE_DELAY = 800;
 
 /** What the session does to start over, given to the page's header button. */
 type StartOver = { current: (() => Promise<void>) | null };
+
+/** The review agent's session to give a step to, when the review has one. */
+function agentSession(back: PlannerBackState): { session?: string } {
+  return back.agent ? { session: back.agent } : {};
+}
 
 export function PlannerReviewPage() {
   const strings = usePlannerGoalsStrings();
@@ -537,7 +542,20 @@ function ReviewSession({
     let note: string | null = review.ai ? null : strings.review.noModel;
     if (review.ai) {
       try {
-        ai = await plannerAiOpeningRequest(week, today);
+        const session = stateRef.current.back.agent ?? undefined;
+        ai = (
+          await plannerAiOpening(
+            week,
+            { today, ...(session ? { session } : {}) },
+            {
+              onAgent: (agent) => {
+                if (alive.current) {
+                  setBack((current) => ({ ...current, agent }));
+                }
+              },
+            },
+          )
+        ).opening;
       } catch (error) {
         const kind = plannerAiFailure(error);
         note = failureNote(kind);
@@ -560,9 +578,10 @@ function ReviewSession({
       try {
         next = plannerMergeClose(
           next,
-          await plannerAiCloseRequest(week, {
+          await plannerAiClose(week, {
             today,
             ...plannerAnswersInput(current, review),
+            ...agentSession(current),
           }),
         );
       } catch (error) {
@@ -603,7 +622,12 @@ function ReviewSession({
     setLive("");
     const result = await plannerStreamCoach(
       week,
-      { today, mode, messages: plannerCoachMessages(stateRef.current.back) },
+      {
+        today,
+        mode,
+        messages: plannerCoachMessages(stateRef.current.back),
+        ...agentSession(stateRef.current.back),
+      },
       {
         signal: controller.signal,
         onText: (text) => {
@@ -748,6 +772,7 @@ function ReviewSession({
         {
           today,
           ...plannerAnswersInput(current, review),
+          ...agentSession(current),
           scores,
           question: current.question?.trim()
             ? current.question.trim().slice(0, 500)

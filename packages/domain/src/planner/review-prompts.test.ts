@@ -1,9 +1,14 @@
 import type { PlannerGoalDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  plannerAgentCloseMessage,
+  plannerAgentCoachMessage,
+  plannerAgentOpeningMessage,
   plannerMemoAgentFiles,
   plannerMemoAgentKickoff,
+  plannerMemoAgentStepFiles,
   plannerMemoAgentSystem,
+  plannerReviewAgentFiles,
 } from "./memo-agent";
 import type { PlannerReviewContext } from "./review-context";
 import {
@@ -113,6 +118,7 @@ const CONTEXT: PlannerReviewContext = {
   previousSummary: null,
   previousSteps: {},
   tasks: { done: ["Call Acme"], doing: [], todo: ["Email Zeta"] },
+  taskDetails: [],
   openFlags: [],
   keptFlags: [],
   diary: [{ at: "2026-10-07T20:00:00.000Z", text: "Long talk with Acme." }],
@@ -605,6 +611,76 @@ describe("the memo agent's files", () => {
     expect(plannerMemoAgentKickoff("2026-10-05")).toContain(
       "week starting Monday 2026-10-05",
     );
+  });
+});
+
+describe("the review agent's steps", () => {
+  const block = plannerReviewContextBlock(CONTEXT);
+
+  it("starts the session on the week and its history, and adds the evening at the memo", () => {
+    expect(
+      Object.keys(
+        plannerReviewAgentFiles(CONTEXT, [
+          { weekStart: "2026-09-28", diary: [], summary: null },
+        ]),
+      ),
+    ).toEqual(["/data/this-week.md", "/data/history/2026-09-28.md"]);
+    expect(
+      Object.keys(plannerMemoAgentStepFiles(CONTEXT, MEMO_REQUEST)),
+    ).toEqual(["/data/review.md", "/data/template.md"]);
+  });
+
+  it("sends each step's own prompt, pointing at the week's file instead of repeating it", () => {
+    const opening = plannerAgentOpeningMessage(CONTEXT);
+    expect(opening).toContain("This session is Anon's whole weekly review");
+    expect(opening).toContain("Step 1, the opening:");
+    expect(opening).toContain('{"recap": string,');
+    expect(opening).toContain("(in /data/this-week.md;");
+    expect(opening).not.toContain(block);
+
+    const coach = plannerAgentCoachMessage(CONTEXT, "force", [
+      { role: "assistant", content: "What did you accomplish?" },
+      { role: "user", content: "Signed with Acme." },
+    ]);
+    expect(coach.startsWith("Coach step")).toBe(true);
+    expect(coach).toContain('end with @@ {"advance": true}');
+    expect(coach).toContain(
+      "Review: What did you accomplish?\n\nAnon: Signed with Acme.",
+    );
+    expect(coach).not.toContain(block);
+
+    const close = plannerAgentCloseMessage(CONTEXT, MEMO_REQUEST);
+    expect(close.startsWith("Scores step")).toBe(true);
+    expect(close).toContain("Authenticity (1 to 5, 0.5 steps)");
+    expect(close).not.toContain(block);
+  });
+});
+
+describe("task details", () => {
+  it("shows each task's status, notes, comments and the week's history", () => {
+    const lines = plannerReviewContextBlock({
+      ...CONTEXT,
+      taskDetails: [
+        {
+          title: "Call Acme",
+          status: "in_progress",
+          notes: "Ask about the price.",
+          comments: [
+            { at: "2026-10-07T09:00:00.000Z", text: "Left a message." },
+          ],
+          history: [
+            {
+              at: "2026-10-06T09:00:00.000Z",
+              what: "status_changed to in_progress",
+            },
+          ],
+        },
+      ],
+    });
+    expect(lines).toContain(
+      '- "Call Acme" (in progress) · notes: "Ask about the price." · comments: [Wed 7 Oct] "Left a message." · this week: Tue 6 Oct status_changed to in_progress',
+    );
+    expect(plannerReviewContextBlock(CONTEXT)).not.toContain("Task details");
   });
 });
 

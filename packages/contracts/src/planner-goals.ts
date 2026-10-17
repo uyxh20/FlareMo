@@ -544,11 +544,28 @@ const reviewAnswersShape = {
   coach_notes: z.array(z.string().trim().min(1).max(2000)).max(20),
 };
 
-export const plannerAiOpeningSchema = z.strictObject({ today: daySchema });
+/**
+ * The review agent's session (docs/fork-review-memo-agent.md), when it runs the
+ * review: the opening starts one, every later step goes to it. The opening's is
+ * a session to replace, deleted before the new one starts.
+ */
+const agentSessionShape = {
+  session: z
+    .string()
+    .regex(/^sesn_[A-Za-z0-9]+$/)
+    .max(100)
+    .optional(),
+};
+
+export const plannerAiOpeningSchema = z.strictObject({
+  today: daySchema,
+  ...agentSessionShape,
+});
 
 export const plannerAiCloseSchema = z.strictObject({
   today: daySchema,
   ...reviewAnswersShape,
+  ...agentSessionShape,
 });
 
 export const plannerReviewChatMessageSchema = z.strictObject({
@@ -564,6 +581,7 @@ export const plannerAiCoachSchema = z.strictObject({
   today: daySchema,
   mode: z.enum(["free", "force", "chat"]),
   messages: z.array(plannerReviewChatMessageSchema).min(1).max(60),
+  ...agentSessionShape,
 });
 
 export const plannerAiMemoSchema = z.strictObject({
@@ -585,6 +603,7 @@ export const plannerAiMemoSchema = z.strictObject({
     risk: z.string().trim().max(1000),
     opportunity: z.string().trim().max(1000),
   }),
+  ...agentSessionShape,
 });
 
 export const plannerAiCheckSchema = z.strictObject({
@@ -801,14 +820,30 @@ export type PlannerAiStreamLine =
   | { d: string }
   | { done: true; advance?: boolean }
   | { error: "limited" | "failed" }
-  /** The memo agent started this session: ask for the memo with it. */
+  /** The review agent has the step: ask its session for the answer. */
   | { agent: string };
 
-/** The memo agent's session, asked for every few seconds until it is done. */
-export type PlannerMemoAgentResponse =
+/** The review agent's steps, each answered in its own shape. */
+export type PlannerAgentStep = "opening" | "coach" | "close" | "memo";
+
+/**
+ * The review agent's answer to the step it was given, asked for every few
+ * seconds until it is done (GET /review/:week/ai/agent/:session).
+ */
+export type PlannerAgentResponse =
   | { status: "running" }
-  | { status: "done"; memo: string }
-  | { status: "failed" };
+  | { status: "failed" }
+  | { status: "done"; step: "opening"; opening: PlannerAiOpeningResponse }
+  | { status: "done"; step: "close"; close: PlannerAiCloseResponse }
+  | { status: "done"; step: "coach"; text: string; advance: boolean | null }
+  | { status: "done"; step: "memo"; memo: string };
+
+/** The opening's answer: the drafts, or the review agent's new session. */
+export type PlannerAiOpeningResult =
+  | PlannerAiOpeningResponse
+  | { agent: string };
+/** The close's answer: the drafts, or the review agent has the step. */
+export type PlannerAiCloseResult = PlannerAiCloseResponse | { agent: string };
 
 // --- Types ------------------------------------------------------------------
 

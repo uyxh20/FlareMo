@@ -274,6 +274,43 @@ export function plannerMemoryLines(context: PlannerReviewContext): string[] {
 }
 
 /** The context block every prompt ends with. */
+/**
+ * The tasks done, worked on or touched this week, each with its status, notes,
+ * comments and the week's history. Empty when there are none.
+ */
+export function plannerTaskDetailLines(
+  context: PlannerReviewContext,
+): string[] {
+  if (!context.taskDetails?.length) return [];
+  return [
+    "",
+    `Task details: the tasks done, worked on or touched this week and those in Doing, with ${context.ownerName}'s notes and comments on them (their own words, as written on the task) and what happened to each this week:`,
+    ...context.taskDetails.map((task) => {
+      const parts = [
+        `- ${quote(task.title)} (${task.status.replace("_", " ")})`,
+      ];
+      if (task.notes) parts.push(`notes: ${quote(task.notes)}`);
+      if (task.comments.length) {
+        parts.push(
+          `comments: ${task.comments
+            .map(
+              (comment) => `[${diaryDay(comment.at)}] ${quote(comment.text)}`,
+            )
+            .join("; ")}`,
+        );
+      }
+      if (task.history.length) {
+        parts.push(
+          `this week: ${task.history
+            .map((event) => `${dayName(localDayKey(event.at))} ${event.what}`)
+            .join(", ")}`,
+        );
+      }
+      return parts.join(" · ");
+    }),
+  ];
+}
+
 export function plannerReviewContextBlock(
   context: PlannerReviewContext,
 ): string {
@@ -311,6 +348,7 @@ export function plannerReviewContextBlock(
     `Doing: ${context.tasks.doing.join("; ") || "none"}`,
     `To Do: ${context.tasks.todo.join("; ") || "none"}`,
   ];
+  lines.push(...plannerTaskDetailLines(context));
   if (context.openFlags.length) {
     lines.push(
       `Open clashes from earlier checks: ${context.openFlags
@@ -1004,7 +1042,12 @@ North star: ${context.northStar ? goalText(context.northStar) : "not written"}
 Year ${cascade.year}: ${goalsByPillar(cascade.yearGoals)}
 Quarter Q${cascade.quarter} ${cascade.year}: ${goalsByPillar(cascade.quarterGoals)}
 Month ${MONTHS[cascade.month]}: ${goalsByPillar(cascade.monthGoals)}
-${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
+${(() => {
+  const tasks = plannerTaskDetailLines(context);
+  return tasks.length
+    ? `\n${tasks.join("\n").trim()}\nUse these to see what the plan's tasks really involve and how this week went; flag only clashes between goals.\n`
+    : "";
+})()}${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
 Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}`,
     },
   ];
