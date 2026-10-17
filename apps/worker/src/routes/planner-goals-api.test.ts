@@ -454,10 +454,12 @@ describe("planner goals and weekly review API", () => {
       recap: "Busy week.",
       lastq: ["Yes", "No"],
       prompts: [["a", "b"], ["c", "d"], [], [], [], [], []],
+      happened: [],
+      dropped: 0,
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
-    expect(calls[0]?.inputs).toMatchObject({ max_tokens: 1600 });
+    expect(calls[0]?.inputs).toMatchObject({ max_tokens: 2000 });
     const messages = calls[0]?.inputs.messages as Array<{
       role: string;
       content: string;
@@ -693,7 +695,7 @@ describe("planner goals and weekly review API", () => {
     // The call's own 1,600 tokens plus room to think, and no temperature.
     expect(sent[0]?.body).toMatchObject({
       model: "claude-sonnet-5-5",
-      max_tokens: 5600,
+      max_tokens: 6000,
     });
     expect(sent[0]?.body).not.toHaveProperty("temperature");
     expect(typeof sent[0]?.body.system).toBe("string");
@@ -1022,7 +1024,7 @@ describe("planner goals and weekly review API", () => {
     );
     expect(sent[0]?.body).toMatchObject({
       model: "openai/gpt-6.1-sol",
-      max_tokens: 5600,
+      max_tokens: 6000,
       temperature: 0.4,
       reasoning: { effort: "low", exclude: true },
       provider: { zdr: true, data_collection: "deny" },
