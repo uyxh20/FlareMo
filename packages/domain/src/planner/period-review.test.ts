@@ -233,6 +233,29 @@ describe("the period review", () => {
     ]);
   });
 
+  it("keeps a year's diary inside a small model's budget", async () => {
+    const text = "x".repeat(1_000);
+    for (let week = 0; week < 20; week += 1) {
+      const day = new Date(Date.UTC(2026, 0, 7 + week * 7, 12));
+      await entry(`Week ${week} ${text}`, day.toISOString());
+    }
+    const context = await plannerReadPeriodContext(rt.db, {
+      userId: rt.user.id,
+      ownerName: "Owner",
+      level: "year",
+      periodStart: "2026-01-01",
+      today: SUNDAY,
+      diaryChars: 9_000,
+    });
+    const chars = context.weeks.reduce(
+      (sum, week) =>
+        sum + week.diary.reduce((inner, row) => inner + row.text.length, 0),
+      0,
+    );
+    expect(chars).toBeLessThanOrEqual(9_000);
+    expect(context.weeks.filter((week) => week.diary.length).length).toBe(20);
+  });
+
   it("merges two readers' themes and counts their agreement", async () => {
     await entry(
       "Late nights after shipping, again.",
