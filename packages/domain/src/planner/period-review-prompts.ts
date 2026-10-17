@@ -124,7 +124,15 @@ export function plannerPeriodContextBlock(
       : [goalsBlock(childLabel, context.childGoals)]),
     `Weekly scores, Authenticity/Achievement (floors ${plannerFormatScore(plannerScoreFloors.auth)} and ${plannerFormatScore(plannerScoreFloors.ach)}): ${context.weeks.map(scoreLine).join(", ")}`,
     context.previous
-      ? `Last period (${plannerPeriodLabel(context.level, context.previous.periodStart)}): verdict "${context.previous.verdict ?? "none"}"; forecast "${context.previous.forecast ?? "none"}".`
+      ? `Last period (${plannerPeriodLabel(context.level, context.previous.periodStart)}): verdict "${context.previous.verdict ?? "none"}"${
+          context.previous.forecast
+            ? `; forecast "${context.previous.forecast}"`
+            : ""
+        }${
+          context.previous.question
+            ? `; key question for this review "${context.previous.question}"`
+            : ""
+        }.`
       : "Last period: no review recorded.",
     `Memories: ${context.memories.created} created in the period, ${context.memories.revised} older ones revised.`,
     "",

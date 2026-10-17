@@ -36,6 +36,15 @@ import {
 //   POST   /period-review/:level/:period/ai/themes two readers over the diary (JSON)
 //   POST   /period-review/:level/:period/ai/coach  one step's reply (NDJSON)
 //   POST   /period-review/:level/:period/ai/memo   the memo (NDJSON)
+//
+// The month and quarter reviews run as the weekly review's Look back chat over
+// the bigger period (planner-period-chat in the web app): the same request and
+// response shapes as /review/:week/ai/*, under /period-review/:level/:period/chat:
+//   POST   .../chat/ai/opening   the recap with its receipts, and the drafts
+//   POST   .../chat/ai/close     the scores and trajectory drafts
+//   POST   .../chat/ai/coach     one coach reply (NDJSON)
+//   POST   .../chat/ai/memo      the memo (NDJSON)
+//   GET    .../chat/ai/agent/:session   the review agent's answer to a step
 
 export const plannerPeriodLevels = ["month", "quarter", "year"] as const;
 export type PlannerPeriodLevel = (typeof plannerPeriodLevels)[number];
@@ -541,6 +550,8 @@ export const plannerPeriodGoalSchema = z.object({
 
 export const plannerPeriodPreviousSchema = z.object({
   period_start: z.string(),
+  // The key question that review left for this one (its chat's question).
+  question: z.string().nullable(),
   verdict: z.string().nullable(),
   forecast: z.string().nullable(),
   forecast_grade: plannerForecastGradeSchema.nullable(),
@@ -644,6 +655,32 @@ export const plannerPeriodAiThemesResponseSchema = z.object({
   // Share of themes both readers named, 0 to 1.
   agreement: z.number(),
 });
+
+/**
+ * One line of "what happened" in a month or quarter: a claim and the owner's
+ * own words it rests on, found by the model and checked word for word by the
+ * server. Only claims whose words were found are sent; the rest are counted.
+ */
+export const plannerPeriodHappenedSchema = z.object({
+  pillar: plannerPillarSchema.nullable(),
+  claim: z.string(),
+  quote: z.string(),
+  source: plannerEvidenceSourceSchema,
+  source_id: z.string(),
+  source_day: z.string(),
+});
+
+export type PlannerPeriodHappened = z.infer<typeof plannerPeriodHappenedSchema>;
+
+/** The chat's opening: the weekly opening's drafts, plus what happened. */
+export type PlannerPeriodOpeningResponse = {
+  recap: string;
+  lastq: string[];
+  prompts: string[][];
+  happened: PlannerPeriodHappened[];
+  // Claims the model made whose words were not found in the period's rows.
+  dropped: number;
+};
 
 export type PlannerEvidenceInput = z.input<typeof plannerEvidenceInputSchema>;
 export type PlannerEvidenceDto = z.infer<typeof plannerEvidenceDtoSchema>;

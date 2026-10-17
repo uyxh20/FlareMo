@@ -225,6 +225,7 @@ export function plannerPeriodResponse(
           forecast: context.previous.forecast,
           forecast_grade: context.previous.forecastGrade,
           memo_id: null,
+          question: context.previous.question,
         }
       : null,
     memories: {

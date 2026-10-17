@@ -118,6 +118,35 @@ export type PlannerPeriodStrings = {
   rungs: string;
   rungsHint: string;
   memories: string;
+  /** The month and quarter chat (period-chat.tsx): the weekly chat's words for a period. */
+  chat: {
+    reads: string;
+    entries: (count: number) => string;
+    memos: (count: number) => string;
+    tasksDone: (count: number) => string;
+    goals: (count: number) => string;
+    happened: (label: string) => string;
+    dropped: (count: number) => string;
+    nothingBacked: string;
+    sources: { memo: string; health: string; task_event: string; week: string };
+    fallbackRecap: (goals: number, word: string) => string;
+    start: (word: string) => string;
+    drafting: (word: string) => string;
+    draftingAgent: (word: string) => string;
+    scoring: (word: string) => string;
+    lastQuestion: (word: string) => string;
+    goalsOf: (label: string) => string;
+    goalsItem: (word: string) => string;
+    nextQuestion: (word: string) => string;
+    nextQuestionItem: (word: string) => string;
+    summaryTitle: string;
+    writeSummary: string;
+    openSummary: string;
+    toLookForward: string;
+    memoTitle: (name: string) => string;
+    memoLabel: (name: string) => string;
+    savedToast: string;
+  };
 };
 
 const en: PlannerPeriodStrings = {
@@ -236,6 +265,44 @@ const en: PlannerPeriodStrings = {
   rungsHint:
     "Entries, health rows, tasks done and week records are evidence. Summaries and memories are claims to test.",
   memories: "Memories",
+  chat: {
+    reads: "What this review reads",
+    entries: (count) => `${count} diary ${count === 1 ? "entry" : "entries"}`,
+    memos: (count) => `${count} weekly ${count === 1 ? "memo" : "memos"}`,
+    tasksDone: (count) => `${count} ${count === 1 ? "task" : "tasks"} done`,
+    goals: (count) => `${count} ${count === 1 ? "goal" : "goals"}`,
+    happened: (label) => `What happened in ${label}`,
+    dropped: (count) =>
+      `Left out ${count} ${count === 1 ? "claim" : "claims"} it couldn't back with your own words.`,
+    nothingBacked: "Nothing it said could be backed with your own words.",
+    sources: {
+      memo: "entry",
+      health: "health log",
+      task_event: "task",
+      week: "week record",
+    },
+    fallbackRecap: (goals, word) =>
+      goals === 0
+        ? `No ${word} goals were set.`
+        : `${goals} ${word} ${goals === 1 ? "goal" : "goals"} to look back on.`,
+    start: (word) => `Start the ${word} review`,
+    drafting: (word) => `Reading your ${word}`,
+    draftingAgent: (word) =>
+      `Reading your whole ${word} · this takes a few minutes`,
+    scoring: (word) => `Scoring your ${word}`,
+    lastQuestion: (word) => `Last ${word}'s question`,
+    goalsOf: (label) => `${label} goals`,
+    goalsItem: (word) => `The ${word}'s goals`,
+    nextQuestion: (word) => `Question for next ${word}'s review`,
+    nextQuestionItem: (word) => `Next ${word}'s question`,
+    summaryTitle: "Review memo",
+    writeSummary: "Write the review",
+    openSummary: "Open the review",
+    toLookForward: "Weekly Look forward →",
+    memoTitle: (name) => `${name} review`,
+    memoLabel: (name) => `${name} review memo`,
+    savedToast: "Review saved to your memos",
+  },
 };
 
 const zhCN: PlannerPeriodStrings = {
@@ -350,6 +417,28 @@ const zhCN: PlannerPeriodStrings = {
   rungsHint:
     "日记、健康记录、完成的任务和周记录是证据。总结和记忆是待检验的说法。",
   memories: "记忆",
+  chat: {
+    ...en.chat,
+    reads: "本复盘读取",
+    entries: (count) => `${count} 篇日记`,
+    memos: (count) => `${count} 份周总结`,
+    tasksDone: (count) => `完成 ${count} 项任务`,
+    goals: (count) => `${count} 个目标`,
+    happened: (label) => `${label}发生了什么`,
+    dropped: (count) => `略去 ${count} 条无法用你自己的话佐证的说法。`,
+    nothingBacked: "没有能用你自己的话佐证的说法。",
+    sources: {
+      memo: "日记",
+      health: "健康记录",
+      task_event: "任务",
+      week: "周记录",
+    },
+    summaryTitle: "复盘备忘",
+    writeSummary: "写复盘",
+    openSummary: "打开复盘",
+    toLookForward: "周复盘 · 展望 →",
+    savedToast: "复盘已保存到备忘录",
+  },
 };
 
 export function plannerPeriodStringsFor(locale: Locale): PlannerPeriodStrings {

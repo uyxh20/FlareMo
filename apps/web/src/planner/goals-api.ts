@@ -43,8 +43,12 @@ import { plannerFitsKeepalive } from "./api";
 
 const PLANNER_API = "/api/app/planner";
 
+// `week` can also be the path of a month or quarter review's chat routes
+// (period-chat.tsx), which answer the weekly review's AI requests in kind.
 const reviewPath = (week: string, rest: string) =>
-  `${PLANNER_API}/review/${encodeURIComponent(week)}/${rest}`;
+  week.startsWith("/")
+    ? `${week}/${rest}`
+    : `${PLANNER_API}/review/${encodeURIComponent(week)}/${rest}`;
 
 /** Everything the Goals page draws for one ISO year. */
 export function plannerFetchGoalsYear(input: { year: number; today: string }) {

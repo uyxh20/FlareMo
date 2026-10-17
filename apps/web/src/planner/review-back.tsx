@@ -52,8 +52,25 @@ export type PlannerBackActions = {
   lookForward: () => void;
 };
 
+/**
+ * A month or quarter review run through this chat (period-chat.tsx): its name
+ * in place of the week's, the prompts said of the period, and what it adds
+ * to the start and the recap.
+ */
+export type PlannerLookBackPeriod = {
+  /** "October 2026", where the week's number and days would be. */
+  label: string;
+  /** "month" or "quarter": the prompts' "this week" becomes "this month". */
+  word: string;
+  /** Above the start button: what the review reads. */
+  start?: ReactNode;
+  /** Under the recap: what happened, with its receipts. */
+  recap?: ReactNode;
+};
+
 type Props = {
   review: PlannerReviewResponse;
+  period?: PlannerLookBackPeriod;
   back: PlannerBackState;
   drafts: PlannerReviewDrafts;
   /** A coach reply is on its way. */
@@ -186,8 +203,19 @@ function ScoreRow({
   );
 }
 
+/** The prompt as this review asks it: a period's says "this month". */
+function promptQuestion(
+  question: string,
+  period: PlannerLookBackPeriod | undefined,
+) {
+  return period
+    ? question.replace(/\bthis week\b/g, `this ${period.word}`)
+    : question;
+}
+
 function Entry({ entry, props }: { entry: PlannerReviewEntry; props: Props }) {
   const { review, back, drafts, busy, done, writing, strings, actions } = props;
+  const { period } = props;
   const reviewWeek = review.review_week;
   switch (entry.k) {
     case "sys":
@@ -214,10 +242,12 @@ function Entry({ entry, props }: { entry: PlannerReviewEntry; props: Props }) {
       return (
         <AiMessage>
           <Label>
-            {strings.week(plannerWeekNumber(reviewWeek))} ·{" "}
-            {plannerWeekRange(reviewWeek, strings)}
+            {period
+              ? period.label
+              : `${strings.week(plannerWeekNumber(reviewWeek))} · ${plannerWeekRange(reviewWeek, strings)}`}
           </Label>
           <p>{drafts.recap}</p>
+          {period?.recap}
         </AiMessage>
       );
     case "lastq":
@@ -282,7 +312,7 @@ function Entry({ entry, props }: { entry: PlannerReviewEntry; props: Props }) {
           <Label>
             {strings.review.promptOf(entry.i + 1, plannerReviewPrompts.length)}
           </Label>
-          <Question>{prompt.question}</Question>
+          <Question>{promptQuestion(prompt.question, period)}</Question>
           <Options
             live={
               back.stage === "p" &&
@@ -666,9 +696,11 @@ export function PlannerLookBack(props: Props) {
           {stage === "start" ? (
             <div className="m-auto flex flex-col items-center gap-3 text-center">
               <span className="font-mono text-[13px] text-muted-foreground tabular-nums">
-                {strings.week(plannerWeekNumber(review.review_week))} ·{" "}
-                {plannerWeekRange(review.review_week, strings)}
+                {props.period
+                  ? props.period.label
+                  : `${strings.week(plannerWeekNumber(review.review_week))} · ${plannerWeekRange(review.review_week, strings)}`}
               </span>
+              {props.period?.start}
               {done ? (
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button variant="outline" onClick={actions.openMemo}>

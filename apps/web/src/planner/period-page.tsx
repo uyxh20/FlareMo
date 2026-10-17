@@ -64,6 +64,7 @@ import {
   plannerStreamPeriodCoach,
   plannerStreamPeriodMemo,
 } from "./period-api";
+import { PlannerPeriodChat } from "./period-chat";
 import {
   type PlannerPeriodState,
   plannerGradeAboveReceipts,
@@ -82,7 +83,8 @@ import { usePlannerToday } from "./use-planner-clock";
 // The month, quarter and year reviews (fork-owned add-on,
 // docs/planning-cockpit-period-review.md): the "superset" that runs after the
 // weekly review's Look back on the Sunday a period closes, before its Look
-// forward. One page, three levels, five steps each. Every step has the same
+// forward. The month and quarter run as the weekly review's chat over the
+// period (period-chat.tsx); the year keeps the five steps below. Every step has the same
 // shape as the weekly review: the raw rows on the right, the owner's own words
 // and a chat with the reader on the left, then a memo the owner edits and
 // saves. The page owns the state and the model calls; the pure parts are in
@@ -156,15 +158,24 @@ export function PlannerPeriodPage() {
       </div>
     );
   } else {
-    content = (
-      <PeriodSession
-        key={`${review.level}:${review.period_start}:${run}`}
-        review={review}
-        step={search.step}
-        strings={strings}
-        today={today}
-      />
-    );
+    // The year review keeps its own steps for now (parked, 17 October 2026).
+    content =
+      review.level === "year" ? (
+        <PeriodSession
+          key={`${review.level}:${review.period_start}:${run}`}
+          review={review}
+          step={search.step}
+          strings={strings}
+          today={today}
+        />
+      ) : (
+        <PeriodChatSession
+          key={`${review.level}:${review.period_start}:${run}`}
+          review={review}
+          strings={strings}
+          today={today}
+        />
+      );
   }
 
   return (
@@ -230,6 +241,145 @@ export function PlannerPeriodPage() {
         </AlertDialogContent>
       </AlertDialog>
     </WorkspaceLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The header: level, period, and where the review stands
+// ---------------------------------------------------------------------------
+
+function PeriodNav({
+  review,
+  savedAt,
+  strings,
+  today,
+}: {
+  review: PlannerPeriodReviewResponse;
+  savedAt: string | null;
+  strings: PlannerPeriodStrings;
+  today: string;
+}) {
+  const { level, period_start: period } = review;
+  const due = review.due.find(
+    (entry) => entry.level === level && entry.period_start === period,
+  );
+  const previousPeriod = plannerPreviousPeriodStartOf(level, period);
+  const nextPeriod = plannerNextPeriodStartOf(level, period);
+  return (
+    <>
+      <nav
+        aria-label={strings.title}
+        className="flex flex-wrap items-center gap-2"
+      >
+        <div
+          className="flex gap-1 rounded-xl border border-border bg-card p-1"
+          role="tablist"
+        >
+          {plannerPeriodLevels.map((item) => (
+            <Link
+              aria-current={item === level ? "page" : undefined}
+              className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground aria-[current=page]:bg-brand-500 aria-[current=page]:text-white aria-[current=page]:font-medium hover:text-foreground"
+              data-testid={`planner-period-level-${item}`}
+              key={item}
+              search={{ level: item, period: undefined, step: undefined }}
+              to="/period-review"
+            >
+              {strings.levels[item]}
+            </Link>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          <Link
+            aria-label={strings.previous}
+            className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
+            search={{ level, period: previousPeriod, step: undefined }}
+            to="/period-review"
+          >
+            ←
+          </Link>
+          <span
+            className="px-1 text-base font-semibold"
+            data-testid="planner-period-label"
+          >
+            {review.label}
+          </span>
+          {nextPeriod <= today ? (
+            <Link
+              aria-label={strings.next}
+              className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
+              search={{ level, period: nextPeriod, step: undefined }}
+              to="/period-review"
+            >
+              →
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-border px-2 py-1 text-sm opacity-40">
+              →
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {review.period_start} – {review.period_end} ·{" "}
+          {strings.weeks(review.weeks.length)}
+        </span>
+        <span className="ml-auto flex items-center gap-2 text-xs">
+          {due ? (
+            <PlannerBadge tone={due.done ? "met" : "brand"}>
+              {due.done ? strings.done : strings.dueNow}
+            </PlannerBadge>
+          ) : (
+            <span className="text-muted-foreground">{strings.notClosing}</span>
+          )}
+          {savedAt && (
+            <span className="text-success">
+              ✓ {strings.savedOn(savedAt.slice(0, 10))}
+            </span>
+          )}
+        </span>
+      </nav>
+
+      {due && !review.look_back_done && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-sm">
+          <span>{strings.lookBackFirst}</span>
+          <Link
+            className="font-medium underline"
+            search={{ part: "back" }}
+            to="/weekly-review"
+          >
+            {strings.openWeekly}
+          </Link>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The month and quarter reviews: the weekly review's chat over the period. */
+function PeriodChatSession({
+  review,
+  strings,
+  today,
+}: {
+  review: PlannerPeriodReviewResponse;
+  strings: PlannerPeriodStrings;
+  today: string;
+}) {
+  const [savedAt, setSavedAt] = useState<string | null>(review.done_at);
+  return (
+    <>
+      <PeriodNav
+        review={review}
+        savedAt={savedAt}
+        strings={strings}
+        today={today}
+      />
+      <PlannerPeriodChat
+        period={review}
+        strings={strings}
+        today={today}
+        onSaved={setSavedAt}
+      />
+    </>
   );
 }
 
@@ -579,97 +729,14 @@ function PeriodSession({
       },
     }));
 
-  const due = review.due.find(
-    (entry) => entry.level === level && entry.period_start === period,
-  );
-  const previousPeriod = plannerPreviousPeriodStartOf(level, period);
-  const nextPeriod = plannerNextPeriodStartOf(level, period);
-
   return (
     <>
-      <nav
-        aria-label={strings.title}
-        className="flex flex-wrap items-center gap-2"
-      >
-        <div
-          className="flex gap-1 rounded-xl border border-border bg-card p-1"
-          role="tablist"
-        >
-          {plannerPeriodLevels.map((item) => (
-            <Link
-              aria-current={item === level ? "page" : undefined}
-              className="rounded-lg px-3 py-1.5 text-sm text-muted-foreground aria-[current=page]:bg-brand-500 aria-[current=page]:text-white aria-[current=page]:font-medium hover:text-foreground"
-              data-testid={`planner-period-level-${item}`}
-              key={item}
-              search={{ level: item, period: undefined, step: undefined }}
-              to="/period-review"
-            >
-              {strings.levels[item]}
-            </Link>
-          ))}
-        </div>
-        <div className="flex items-center gap-1">
-          <Link
-            aria-label={strings.previous}
-            className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
-            search={{ level, period: previousPeriod, step: undefined }}
-            to="/period-review"
-          >
-            ←
-          </Link>
-          <span
-            className="px-1 text-base font-semibold"
-            data-testid="planner-period-label"
-          >
-            {review.label}
-          </span>
-          {nextPeriod <= today ? (
-            <Link
-              aria-label={strings.next}
-              className="rounded-lg border border-border px-2 py-1 text-sm hover:bg-muted"
-              search={{ level, period: nextPeriod, step: undefined }}
-              to="/period-review"
-            >
-              →
-            </Link>
-          ) : (
-            <span className="rounded-lg border border-border px-2 py-1 text-sm opacity-40">
-              →
-            </span>
-          )}
-        </div>
-        <span className="text-xs text-muted-foreground">
-          {review.period_start} – {review.period_end} ·{" "}
-          {strings.weeks(review.weeks.length)}
-        </span>
-        <span className="ml-auto flex items-center gap-2 text-xs">
-          {due ? (
-            <PlannerBadge tone={due.done ? "met" : "brand"}>
-              {due.done ? strings.done : strings.dueNow}
-            </PlannerBadge>
-          ) : (
-            <span className="text-muted-foreground">{strings.notClosing}</span>
-          )}
-          {savedAt && (
-            <span className="text-success">
-              ✓ {strings.savedOn(savedAt.slice(0, 10))}
-            </span>
-          )}
-        </span>
-      </nav>
-
-      {due && !review.look_back_done && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-2 text-sm">
-          <span>{strings.lookBackFirst}</span>
-          <Link
-            className="font-medium underline"
-            search={{ part: "back" }}
-            to="/weekly-review"
-          >
-            {strings.openWeekly}
-          </Link>
-        </div>
-      )}
+      <PeriodNav
+        review={review}
+        savedAt={savedAt}
+        strings={strings}
+        today={today}
+      />
 
       <ol
         className="grid grid-cols-5 gap-1.5"
