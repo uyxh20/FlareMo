@@ -274,6 +274,43 @@ export function plannerMemoryLines(context: PlannerReviewContext): string[] {
 }
 
 /** The context block every prompt ends with. */
+/**
+ * The tasks done, worked on or touched this week, each with its status, notes,
+ * comments and the week's history. Empty when there are none.
+ */
+export function plannerTaskDetailLines(
+  context: PlannerReviewContext,
+): string[] {
+  if (!context.taskDetails?.length) return [];
+  return [
+    "",
+    `Task details: the tasks done, worked on or touched this week and those in Doing, with ${context.ownerName}'s notes and comments on them (their own words, as written on the task) and what happened to each this week:`,
+    ...context.taskDetails.map((task) => {
+      const parts = [
+        `- ${quote(task.title)} (${task.status.replace("_", " ")})`,
+      ];
+      if (task.notes) parts.push(`notes: ${quote(task.notes)}`);
+      if (task.comments.length) {
+        parts.push(
+          `comments: ${task.comments
+            .map(
+              (comment) => `[${diaryDay(comment.at)}] ${quote(comment.text)}`,
+            )
+            .join("; ")}`,
+        );
+      }
+      if (task.history.length) {
+        parts.push(
+          `this week: ${task.history
+            .map((event) => `${dayName(localDayKey(event.at))} ${event.what}`)
+            .join(", ")}`,
+        );
+      }
+      return parts.join(" · ");
+    }),
+  ];
+}
+
 export function plannerReviewContextBlock(
   context: PlannerReviewContext,
 ): string {
@@ -311,6 +348,7 @@ export function plannerReviewContextBlock(
     `Doing: ${context.tasks.doing.join("; ") || "none"}`,
     `To Do: ${context.tasks.todo.join("; ") || "none"}`,
   ];
+  lines.push(...plannerTaskDetailLines(context));
   if (context.openFlags.length) {
     lines.push(
       `Open clashes from earlier checks: ${context.openFlags
@@ -709,10 +747,16 @@ export type PlannerMemoRequest = PlannerReviewAnswers & {
   };
 };
 
-export function plannerMemoMessages(
+/**
+ * The memo prompt's parts: the skeleton to fill (with what to write in each
+ * part), the writing rules, and the evening's material (answers, scores and
+ * drafts). The memo agent gets them as files; plannerMemoMessages joins them
+ * with the week's context into one prompt.
+ */
+export function plannerMemoParts(
   context: PlannerReviewContext,
   request: PlannerMemoRequest,
-): PlannerChatMessage[] {
+): { system: string; template: string; rules: string; material: string } {
   const name = context.ownerName;
   const code = plannerWeekCode(context.weekStart);
   const next = plannerWeekCode(context.planWeek);
@@ -748,14 +792,9 @@ export function plannerMemoMessages(
       return `${plannerMemoPillarHeadings[pillar]}\n(the same four bullets)`;
     })
     .join("\n\n");
-  return [
-    {
-      role: "system",
-      content: `You write ${name}'s weekly summary memo in Markdown, in the exact format of their past weekly summaries. You use only the material given and keep ${name}'s own words.`,
-    },
-    {
-      role: "user",
-      content: `Write ${name}'s ${code} weekly summary in Markdown. It is saved next to their past weekly summaries, so copy that format exactly: the headings and their order, the bullet labels, the scores table and the bold run-in labels in the trajectory. Keep ${name}'s own words for the reflection answers (fix typos only) and quote their words where it helps. Text in parentheses below is an instruction for you, not text to copy.
+  return {
+    system: `You write ${name}'s weekly summary memo in Markdown, in the exact format of their past weekly summaries. You use only the material given and keep ${name}'s own words.`,
+    template: `Write ${name}'s ${code} weekly summary in Markdown. It is saved next to their past weekly summaries, so copy that format exactly: the headings and their order, the bullet labels, the scores table and the bold run-in labels in the trajectory. Keep ${name}'s own words for the reflection answers (fix typos only) and quote their words where it helps. Text in parentheses below is an instruction for you, not text to copy.
 
 ${plannerMemoTitle(context.weekStart)}
 
@@ -795,39 +834,46 @@ ${plannerVerdictLine(request.verdict, request.recommended)}
 
 ${plannerDiaryLine(context.weekStart)}
 
-${plannerDiaryMarker(context.weekStart)}
-
-Rules:
+${plannerDiaryMarker(context.weekStart)}`,
+    rules: `Rules:
 - Use only the material below. Don't invent events, names or numbers.
 - Be specific. In the Executive Summary, Evidence and Learnings, name the days, people and numbers the diary gives, and quote ${name}'s own words, copied exactly inside quotation marks, at least once for each objective the diary covers.
 - Write "Skipped." for a skipped prompt and "None stated." for a bullet with nothing behind it.
 - Each Next Steps bullet is one concrete step for ${next} in at most 15 words; it becomes the suggested weekly goal for that objective.
 - Pattern, Risk and Opportunity: start from the drafts below and keep their meaning${
-        changed ? ", unless it contradicts the scores" : ""
-      }.${
-        changed
-          ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
-          : ""
-      }
+      changed ? ", unless it contradicts the scores" : ""
+    }.${
+      changed
+        ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
+        : ""
+    }
 - Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.
-- No preamble: start with the H1 line. Under 900 words.
-
-Material:
-${answersBlock(context, request)}
+- No preamble: start with the H1 line. Under 900 words.`,
+    material: `${answersBlock(context, request)}
 
 Scores ${name} set: Authenticity ${plannerFormatScore(request.scores.auth)}, Achievement ${plannerFormatScore(request.scores.ach)}, Gap ${plannerFormatScore(Math.abs(request.scores.auth - request.scores.ach))}.${
-        changed
-          ? `\nDrafted scores, which the drafts were written for: Authenticity ${plannerFormatScore(changed.auth)}, Achievement ${plannerFormatScore(changed.ach)}.`
-          : ""
-      }
+      changed
+        ? `\nDrafted scores, which the drafts were written for: Authenticity ${plannerFormatScore(changed.auth)}, Achievement ${plannerFormatScore(changed.ach)}.`
+        : ""
+    }
 Authenticity basis (draft): ${request.drafts.auth_evidence || "none"}
 Achievement basis (draft): ${request.drafts.ach_evidence || "none"}
 Pattern (draft): ${request.drafts.pattern || "none"}
 Risk (draft): ${request.drafts.risk || "none"}
-Opportunity (draft): ${request.drafts.opportunity || "none"}
+Opportunity (draft): ${request.drafts.opportunity || "none"}`,
+  };
+}
 
-Context:
-${plannerReviewContextBlock(context)}`,
+export function plannerMemoMessages(
+  context: PlannerReviewContext,
+  request: PlannerMemoRequest,
+): PlannerChatMessage[] {
+  const parts = plannerMemoParts(context, request);
+  return [
+    { role: "system", content: parts.system },
+    {
+      role: "user",
+      content: `${parts.template}\n\n${parts.rules}\n\nMaterial:\n${parts.material}\n\nContext:\n${plannerReviewContextBlock(context)}`,
     },
   ];
 }
@@ -996,7 +1042,12 @@ North star: ${context.northStar ? goalText(context.northStar) : "not written"}
 Year ${cascade.year}: ${goalsByPillar(cascade.yearGoals)}
 Quarter Q${cascade.quarter} ${cascade.year}: ${goalsByPillar(cascade.quarterGoals)}
 Month ${MONTHS[cascade.month]}: ${goalsByPillar(cascade.monthGoals)}
-${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
+${(() => {
+  const tasks = plannerTaskDetailLines(context);
+  return tasks.length
+    ? `\n${tasks.join("\n").trim()}\nUse these to see what the plan's tasks really involve and how this week went; flag only clashes between goals.\n`
+    : "";
+})()}${reviewed.length ? `\n${name} already reviewed these clashes. Don't flag them again. A clash kept for now covers that objective's weekly goal at every level: don't flag it for the same reason against another goal or level:\n${reviewed.join("\n")}\n` : ""}
 Reply with only JSON: {"flags":[{"goal":"of|work|ai|health","with_level":"north_star|year|quarter|month|week","with_goal":"of|work|ai|health or null for the north star","why":"one plain sentence, at most 20 words"}]}`,
     },
   ];

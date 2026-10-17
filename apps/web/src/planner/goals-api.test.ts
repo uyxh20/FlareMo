@@ -9,9 +9,12 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, AUTHENTICATION_REQUIRED_EVENT } from "@/api/client";
 import {
+  PlannerAgentFailed,
   plannerAiCheckRequest,
+  plannerAiClose,
   plannerAiCloseRequest,
   plannerAiFailure,
+  plannerAiOpening,
   plannerAiOpeningRequest,
   plannerCreateGoalRequest,
   plannerDeleteGoalRequest,
@@ -238,7 +241,7 @@ describe("the review's JSON routes", () => {
     const calls = stubFetch(200, {});
     const close: PlannerAiCloseInput = { today: TODAY, ...noAnswers() };
     const check: PlannerAiCheckInput = { today: TODAY, goals: [], settled: [] };
-    await plannerAiOpeningRequest(WEEK, TODAY);
+    await plannerAiOpeningRequest(WEEK, { today: TODAY });
     await plannerAiCloseRequest(WEEK, close);
     await plannerAiCheckRequest(WEEK, check);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([
@@ -253,7 +256,7 @@ describe("the review's JSON routes", () => {
 
   it("encodes the week into the path", async () => {
     const calls = stubFetch(200, {});
-    await plannerAiOpeningRequest("2026-10-05/../x", TODAY);
+    await plannerAiOpeningRequest("2026-10-05/../x", { today: TODAY });
     expect(calls[0]?.url).toBe(
       "/api/app/planner/review/2026-10-05%2F..%2Fx/ai/opening",
     );
@@ -268,7 +271,7 @@ describe("plannerAiFailure", () => {
         code: "ai_unavailable",
       },
     });
-    const down = await plannerAiOpeningRequest(WEEK, TODAY).catch(
+    const down = await plannerAiOpeningRequest(WEEK, { today: TODAY }).catch(
       (caught: unknown) => caught,
     );
     expect(plannerAiFailure(down)).toBe("unavailable");
@@ -555,5 +558,152 @@ describe("plannerReadAiStream", () => {
     expect(calls[1]?.url).toBe(`${REVIEW}/ai/memo`);
     expect(calls[1]?.init.signal).toBeUndefined();
     expect(bodyOf(calls[1])).toEqual(memoInput);
+  });
+});
+
+describe("the review agent", () => {
+  /** A step's route hands it to the agent; each later ask answers the next state. */
+  function stubAgent(
+    states: Array<{ status: number; body?: unknown }>,
+    started: (url: string) => Response | null = (url) =>
+      url.endsWith("/ai/memo")
+        ? new Response(line({ agent: "sesn_1" }), { status: 200 })
+        : null,
+  ) {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        const first = started(url);
+        if (first) return first;
+        const next = states.shift() ?? { status: 500 };
+        return new Response(JSON.stringify(next.body ?? {}), {
+          status: next.status,
+        });
+      }),
+    );
+    return calls;
+  }
+
+  it("asks every few seconds until the agent's memo is there, then shows it whole", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls = stubAgent([
+        { status: 200, body: { status: "running" } },
+        { status: 502 },
+        {
+          status: 200,
+          body: { status: "done", step: "memo", memo: "# Week 41" },
+        },
+      ]);
+      const onText = vi.fn();
+      const onAgent = vi.fn();
+      const result = plannerStreamMemo(WEEK, memoInput, { onText, onAgent });
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(await result).toEqual({ status: "done", text: "# Week 41" });
+      expect(onAgent).toHaveBeenCalledOnce();
+      expect(onText).toHaveBeenCalledWith("# Week 41");
+      expect(calls.slice(1)).toEqual(
+        Array(3).fill(`${REVIEW}/ai/agent/sesn_1?today=${TODAY}&step=memo`),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gets the opening from the agent's new session, and the coach's reply with its mode", async () => {
+    vi.useFakeTimers();
+    try {
+      const opening = { recap: "A week.", lastq: [], prompts: [] };
+      const calls = stubAgent(
+        [{ status: 200, body: { status: "done", step: "opening", opening } }],
+        (url) =>
+          url.endsWith("/ai/opening")
+            ? Response.json({ agent: "sesn_1" })
+            : null,
+      );
+      const onAgent = vi.fn();
+      const result = plannerAiOpening(WEEK, { today: TODAY }, { onAgent });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await result).toEqual({ opening, agent: "sesn_1" });
+      expect(onAgent).toHaveBeenCalledWith("sesn_1");
+      expect(calls[1]).toBe(
+        `${REVIEW}/ai/agent/sesn_1?today=${TODAY}&step=opening`,
+      );
+
+      const coachCalls = stubAgent(
+        [
+          {
+            status: 200,
+            body: {
+              status: "done",
+              step: "coach",
+              text: "Which call?",
+              advance: false,
+            },
+          },
+        ],
+        (url) =>
+          url.endsWith("/ai/coach")
+            ? new Response(line({ agent: "sesn_1" }), { status: 200 })
+            : null,
+      );
+      const reply = plannerStreamCoach(
+        WEEK,
+        {
+          today: TODAY,
+          mode: "free",
+          messages: [{ role: "user", content: "Calls." }],
+          session: "sesn_1",
+        },
+        {},
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await reply).toEqual({
+        status: "done",
+        text: "Which call?",
+        advance: false,
+      });
+      expect(coachCalls[1]).toBe(
+        `${REVIEW}/ai/agent/sesn_1?today=${TODAY}&step=coach&mode=free`,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails when the agent failed or its session is gone, and stops when the page does", async () => {
+    vi.useFakeTimers();
+    try {
+      stubAgent([{ status: 200, body: { status: "failed" } }]);
+      const failed = plannerStreamMemo(WEEK, memoInput, {});
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await failed).toEqual({ status: "failed", text: "" });
+
+      stubAgent([{ status: 404 }]);
+      const gone = plannerStreamMemo(WEEK, memoInput, {});
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await gone).toEqual({ status: "failed", text: "" });
+
+      stubAgent([{ status: 200, body: { status: "failed" } }], (url) =>
+        url.endsWith("/ai/close") ? Response.json({ agent: "sesn_1" }) : null,
+      );
+      const close = plannerAiClose(WEEK, { today: TODAY, ...noAnswers() });
+      const closed = expect(close).rejects.toBeInstanceOf(PlannerAgentFailed);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await closed;
+
+      stubAgent([]);
+      const stop = new AbortController();
+      const stopped = plannerStreamMemo(WEEK, memoInput, {
+        signal: stop.signal,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      stop.abort();
+      expect(await stopped).toEqual({ status: "aborted", text: "" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

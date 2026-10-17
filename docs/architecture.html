@@ -270,7 +270,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-17 · describes main, live version 28 (sprint 2); dev also has upstream v0.22.1 and the period reviews</p>
+      <p class="meta">Last updated 2026-10-17 · describes main, live version 28 (sprint 2); dev also has upstream v0.22.1, the period reviews and the weekly memo agent</p>
     </header>
 
     <!-- ============================================================ -->
@@ -678,16 +678,16 @@
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 110" role="img" aria-label="The model is chosen in order: OpenRouter if its key is set, else Anthropic if its key is set, else Workers AI Llama 3.3 70B, which is what live uses today.">
+          <svg viewBox="0 0 900 110" role="img" aria-label="The model is chosen in order: Anthropic if its key is set, else OpenRouter if its key is set, else Workers AI Llama 3.3 70B, which is what live uses today.">
             <text x="20" y="20" class="t-s t-m">WHICH MODEL ANSWERS · first one configured wins</text>
             <rect x="20" y="36" width="250" height="64" rx="10" class="n n-ai dash" />
-            <text x="36" y="60" class="t-b">OpenRouter key set?</text>
-            <text x="36" y="82" class="t-m t-s">openai/gpt-6.1-sol</text>
+            <text x="36" y="60" class="t-b">Anthropic key set?</text>
+            <text x="36" y="82" class="t-m t-s">claude-sonnet-5-5</text>
             <line x1="270" y1="68" x2="316" y2="68" class="a" marker-end="url(#ah)" />
             <text x="284" y="60" class="t-s">no</text>
             <rect x="320" y="36" width="250" height="64" rx="10" class="n n-ai dash" />
-            <text x="336" y="60" class="t-b">Anthropic key set?</text>
-            <text x="336" y="82" class="t-m t-s">claude-sonnet-5-5</text>
+            <text x="336" y="60" class="t-b">OpenRouter key set?</text>
+            <text x="336" y="82" class="t-m t-s">openai/gpt-6.1-sol</text>
             <line x1="570" y1="68" x2="616" y2="68" class="a" marker-end="url(#ah)" />
             <text x="584" y="60" class="t-s">no</text>
             <rect x="620" y="36" width="260" height="64" rx="10" class="n n-acc fill-acc" />
@@ -695,8 +695,9 @@
             <text x="636" y="82" class="t-m t-s">llama-3.3-70b-instruct-fp8-fast</text>
           </svg>
         </div>
-        <figcaption>Per <code>docs/planning-cockpit-goals-review.md</code>, the OpenRouter key is set on dev only. If the AI fails, the page uses its own drafts.</figcaption>
+        <figcaption>Per <code>docs/planning-cockpit-goals-review.md</code>. Since 2026-10-17 dev has the Anthropic key (the OpenRouter key stays as a dormant fallback); live has neither yet. If the AI fails, the page uses its own drafts.</figcaption>
       </figure>
+      <p class="note"><b>Memo agent</b> <span class="chip">fork</span> <span class="chip">dev only</span>. When <code>FLAREMO_REVIEW_MEMO_AGENT</code>, <code>_ENVIRONMENT</code> and <code>_STORE</code> are set, the Sunday memo is written by a Claude Managed Agent (Opus 5.5) instead: the Worker uploads the whole week (no 40,000 cap) plus the 8 weeks before as files, starts a session with a memory store of the agent's own notes and a $3 budget, and the page asks every 5 seconds until the memo is ready (a few minutes). The session and its files are deleted once the memo is read. About $0.80 a memo in the 4-week test. Code: <code>apps/worker/src/routes/planner-memo-agent.ts</code>, <code>packages/domain/src/planner/memo-agent.ts</code>; details: <code>docs/fork-review-memo-agent.md</code>.</p>
       <figure>
         <div class="fig">
           <svg viewBox="0 0 900 150" role="img" aria-label="Saving look back writes the summary diary entry, as you edited it, and the week's scores. Finishing look forward saves next week's goals, links tasks and reorders To Do.">

@@ -17,6 +17,7 @@ export * from "./goals";
 export * from "./history-read";
 export * from "./history-sync";
 export * from "./history-sync-nightly";
+export * from "./memo-agent";
 export * from "./period-review";
 export * from "./period-review-context";
 export * from "./period-review-prompts";

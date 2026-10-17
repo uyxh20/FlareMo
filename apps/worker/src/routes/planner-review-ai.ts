@@ -3,9 +3,9 @@ import type { FlareMoEnv } from "../env";
 
 // The weekly review's language model (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md). Workers AI through the AI binding by
-// default; the Worker secret OPENROUTER_API_KEY switches to OpenRouter (zero
-// data retention providers only), and ANTHROPIC_API_KEY to Anthropic's Messages
-// API. Either way the routes see one small interface: a whole answer, or the
+// default; the Worker secret ANTHROPIC_API_KEY switches to Anthropic's
+// Messages API, and without it OPENROUTER_API_KEY to OpenRouter (zero data
+// retention providers only). Either way the routes see one small interface: a whole answer, or the
 // answer's text as it arrives. The prompts and the parsers are in the domain
 // (review-prompts.ts); nothing here knows what is being asked.
 //
@@ -31,10 +31,17 @@ const OPENROUTER_REASONING_ROOM = 4_000;
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+/**
+ * Current Claude models think before they answer, and the thinking counts
+ * against max_tokens, so each call gets this much room on top of its own limit.
+ */
+const ANTHROPIC_THINKING_ROOM = 4_000;
 
 export type PlannerModelOptions = {
   maxTokens: number;
   temperature: number;
+  /** How hard a Claude model thinks (output_config.effort); others ignore it. */
+  effort?: "low" | "medium" | "high";
   signal?: AbortSignal;
 };
 
@@ -56,20 +63,20 @@ export type PlannerReviewModel = {
 /** The configured model, or null when the review has none (it then uses its own drafts). */
 export function plannerReviewModel(env: FlareMoEnv): PlannerReviewModel | null {
   if (env.FLAREMO_REVIEW_AI?.trim().toLowerCase() === "off") return null;
-  const openRouterKey = env.OPENROUTER_API_KEY?.trim();
-  if (openRouterKey) {
-    return openRouterModel(
-      openRouterKey,
-      env.FLAREMO_REVIEW_OPENROUTER_MODEL?.trim() ||
-        plannerReviewDefaultOpenRouterModel,
-    );
-  }
   const key = env.ANTHROPIC_API_KEY?.trim();
   if (key) {
     return anthropicModel(
       key,
       env.FLAREMO_REVIEW_ANTHROPIC_MODEL?.trim() ||
         plannerReviewDefaultAnthropicModel,
+    );
+  }
+  const openRouterKey = env.OPENROUTER_API_KEY?.trim();
+  if (openRouterKey) {
+    return openRouterModel(
+      openRouterKey,
+      env.FLAREMO_REVIEW_OPENROUTER_MODEL?.trim() ||
+        plannerReviewDefaultOpenRouterModel,
     );
   }
   if (env.AI) {
@@ -278,8 +285,12 @@ function openRouterModel(apiKey: string, model: string): PlannerReviewModel {
   };
 }
 
-/** Anthropic takes the system prompt apart from the turns, which start with the user. */
-function anthropicBody(
+/**
+ * Anthropic takes the system prompt apart from the turns, which start with the
+ * user. No temperature: current Claude models (Sonnet 5.5, Opus 5.5) answer 400
+ * to any sampling setting, and they think first, so the limit gets room for it.
+ */
+export function anthropicBody(
   model: string,
   messages: readonly PlannerChatMessage[],
   options: PlannerModelOptions,
@@ -294,10 +305,10 @@ function anthropicBody(
     .map((message) => ({ role: message.role, content: message.content }));
   return JSON.stringify({
     model,
-    max_tokens: options.maxTokens,
-    temperature: options.temperature,
+    max_tokens: options.maxTokens + ANTHROPIC_THINKING_ROOM,
     ...(system ? { system } : {}),
     messages: turns,
+    ...(options.effort ? { output_config: { effort: options.effort } } : {}),
     ...(stream ? { stream: true } : {}),
   });
 }

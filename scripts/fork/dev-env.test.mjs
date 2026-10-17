@@ -2952,6 +2952,33 @@ e2e("dev environment against a fake Cloudflare", () => {
     );
   });
 
+  test("the dev config sets the memo agent's ids only when all are given", (t) => {
+    const vars = (env) => {
+      const h = harness(t, { env });
+      h.devEnv.writeConfig(h.devEnv.resolveSettings({ d1Id: DEV_D1_ID }));
+      return parseConfigText(readFileSync(h.devEnv.paths.devConfig, "utf8"))
+        .vars;
+    };
+    assert.equal(vars({}).FLAREMO_REVIEW_MEMO_AGENT, undefined);
+    const ids = {
+      FLAREMO_DEV_REVIEW_MEMO_AGENT: "agent_01abc",
+      FLAREMO_DEV_REVIEW_MEMO_ENVIRONMENT: "env_01abc",
+      FLAREMO_DEV_REVIEW_MEMO_STORE: "memstore_01abc",
+    };
+    const set = vars(ids);
+    assert.equal(set.FLAREMO_REVIEW_MEMO_AGENT, "agent_01abc");
+    assert.equal(set.FLAREMO_REVIEW_MEMO_ENVIRONMENT, "env_01abc");
+    assert.equal(set.FLAREMO_REVIEW_MEMO_STORE, "memstore_01abc");
+    assert.throws(
+      () => vars({ FLAREMO_DEV_REVIEW_MEMO_AGENT: "agent_01abc" }),
+      /needs all of/,
+    );
+    assert.throws(
+      () => vars({ ...ids, FLAREMO_DEV_REVIEW_MEMO_STORE: "sk-ant-oops" }),
+      /does not look like an Anthropic id/,
+    );
+  });
+
   test("provision refuses the production D1 id before anything runs", (t) => {
     const h = harness(t);
     assert.throws(

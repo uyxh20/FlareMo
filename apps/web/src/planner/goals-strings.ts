@@ -163,6 +163,8 @@ export type PlannerGoalsStrings = {
 
     start: string;
     drafting: string;
+    /** The review agent reads the whole week before its first drafts. */
+    draftingAgent: string;
     scoring: string;
     thinking: string;
     answer: string;
@@ -219,6 +221,8 @@ export type PlannerGoalsStrings = {
       copyBlocked: string;
       close: string;
       writing: string;
+      /** While the memo agent reads the week, which takes a few minutes. */
+      writingAgent: string;
       diary: (range: string) => string;
       stoppedToast: string;
       templateToast: string;
@@ -460,6 +464,7 @@ const en: PlannerGoalsStrings = {
 
     start: "Start Look back",
     drafting: "Drafting from your week",
+    draftingAgent: "Reading your whole week · this takes a few minutes",
     scoring: "Scoring your week",
     thinking: "Thinking",
     answer: "Your answer",
@@ -510,6 +515,7 @@ const en: PlannerGoalsStrings = {
       copyBlocked: "Copy is blocked here",
       close: "Close",
       writing: "Writing",
+      writingAgent: "Reading your whole week · this takes a few minutes",
       diary: (range) => `Diary entries · ${range}`,
       stoppedToast: "Stopped",
       templateToast: "The model didn't finish · template used",
@@ -742,6 +748,7 @@ const zhCN: PlannerGoalsStrings = {
 
     start: "开始回顾",
     drafting: "正在根据你的一周起草",
+    draftingAgent: "正在读完这一周 · 需要几分钟",
     scoring: "正在为你的一周打分",
     thinking: "思考中",
     answer: "你的回答",
@@ -792,6 +799,7 @@ const zhCN: PlannerGoalsStrings = {
       copyBlocked: "这里无法复制",
       close: "关闭",
       writing: "写作中",
+      writingAgent: "正在读完这一周 · 需要几分钟",
       diary: (range) => `日记 · ${range}`,
       stoppedToast: "已停止",
       templateToast: "模型没有写完 · 已使用模板",
