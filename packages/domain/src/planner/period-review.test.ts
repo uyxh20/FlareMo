@@ -180,36 +180,57 @@ describe("the period review", () => {
     ).toBe(false);
     // Too short to mean anything.
     expect(plannerVerifyQuote("the", context.raw).verified).toBe(false);
+  });
 
-    const parsed = plannerParsePeriodChecks(
-      JSON.stringify({
-        checks: [
-          {
-            week_start: W41,
-            claim: "The exporter shipped",
-            quote: "Shipped the exporter on Tuesday",
-            holds: true,
-          },
-          {
-            week_start: W41,
-            claim: "Rested all week",
-            quote: "slept all week",
-            holds: true,
-          },
-        ],
-        left_out: [
-          { quote: "Tuesday, late night", why: "No summary says it ran late." },
-        ],
-      }),
-      context,
+  it("reads a done task's notes and comments as rows a receipt can rest on", async () => {
+    await plannerTestInsertTask(rt.database, {
+      id: "tasks/done-2",
+      userId: rt.user.id,
+      title: "Write the exporter",
+      status: "done",
+      completedAt: "2026-10-07T12:00:00.000Z",
+    });
+    await plannerTestRun(
+      rt.database,
+      "UPDATE tasks SET notes = ? WHERE id = ?",
+      "Shipped behind a flag; the import side waits for November.",
+      "tasks/done-2",
     );
-    expect(parsed.checks.map((check) => [check.holds, check.verified])).toEqual(
-      [
-        [true, true],
-        [false, false],
-      ],
+    await plannerTestRun(
+      rt.database,
+      `INSERT INTO planner_task_comment (id, user_id, task_id, body, created_at, updated_at)
+       VALUES ('c1', ?, 'tasks/done-2', 'Receipt: the exporter ran on the live data without a retry.', '2026-10-08T09:00:00.000Z', '2026-10-08T09:00:00.000Z'),
+              ('c2', ?, 'tasks/done-2', 'A deleted comment is not read.', '2026-10-08T10:00:00.000Z', '2026-10-08T10:00:00.000Z')`,
+      rt.user.id,
+      rt.user.id,
     );
-    expect(parsed.left_out[0]?.verified).toBe(true);
+    await plannerTestRun(
+      rt.database,
+      "UPDATE planner_task_comment SET deleted_at = '2026-10-09T00:00:00.000Z' WHERE id = 'c2'",
+    );
+    const context = await plannerReadPeriodContext(rt.db, {
+      userId: rt.user.id,
+      ownerName: "Owner",
+      level: "month",
+      periodStart: OCTOBER,
+      today: SUNDAY,
+    });
+    expect(
+      plannerVerifyQuote("ran on the live data without a retry", context.raw),
+    ).toMatchObject({
+      verified: true,
+      source: { source: "task_event", id: "tasks/done-2", day: "2026-10-08" },
+    });
+    expect(
+      plannerVerifyQuote("the import side waits for November", context.raw),
+    ).toMatchObject({ verified: true, source: { source: "task_event" } });
+    expect(
+      plannerVerifyQuote("A deleted comment is not read", context.raw).verified,
+    ).toBe(false);
+    const w41 = context.weeks.find((week) => week.week_start === W41);
+    expect(w41?.done).toEqual([
+      "Write the exporter (Shipped behind a flag; the import side waits for November. / Receipt: the exporter ran on the live data without a retry.)",
+    ]);
   });
 
   it("merges two readers' themes and counts their agreement", async () => {

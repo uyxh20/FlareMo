@@ -20,7 +20,7 @@ The steps and their questions are the owner's method, word for word, in `package
 
 ## The proof checks
 
-- **Receipts.** A claim and the words it rests on. On save, each quote is normalised (case, punctuation, spacing) and searched in every raw row of the period: diary entries, health rows' notes, done tasks' titles, week records' question, verdict and note. Found: `verified` with the row as its source. Not found: kept, shown as "unsourced". A quote under twelve characters never verifies.
+- **Receipts.** A claim and the words it rests on. On save, each quote is normalised (case, punctuation, spacing) and searched in every raw row of the period: diary entries, health rows' notes, done tasks' titles, notes and comments, week records' question, verdict and note. Found: `verified` with the row as its source. Not found: kept, shown as "unsourced". A quote under twelve characters never verifies.
 - **The model's checks** (month, step 1) and **themes** (quarter, step 2) go through the same check: what the model says "holds" is its opinion; `verified` is the server's.
 - **Two readers.** The themes call runs the model twice, with the weeks in opposite order, one after the other. Themes both readers named (half their long words in common) count for two readers; `agreement` is their share of all themes.
 - **Forecasts graded.** Each review ends with one forecast sentence. The next review of the same level shows it and the owner grades it held, partly or missed; the grade is written on the earlier period's row.
@@ -45,7 +45,7 @@ Both tables are registered in `packages/domain/src/fork/data-sources.ts` with pr
 | Where | What |
 | --- | --- |
 | `packages/contracts/src/planner-period-review.ts` | Period maths (the Thursday rule, the weeks of a period, what closes with a week, what is due), the steps, the schemas and routes. |
-| `packages/domain/src/planner/period-review-context.ts` | Reads the period: weeks with records and counts, the raw rows kept whole, goals with linked-task counts, memories created and revised, the last review. `plannerVerifyQuote`. |
+| `packages/domain/src/planner/period-review-context.ts` | Reads the period: weeks with records and counts, the raw rows kept whole (done tasks carry their notes and comments, so a receipt can rest on them), goals with linked-task counts, memories created and revised, the last review. `plannerVerifyQuote`. |
 | `packages/domain/src/planner/period-review-prompts.ts` | The prompts (checks, themes per reader, coach per step, memo), their parsers, the memo cleaner, the rewrite rate. |
 | `packages/domain/src/planner/period-review.ts` | Read, status, state autosave, start over, save. |
 | `apps/worker/src/routes/planner-period-review-api.ts` | The routes, mounted from `planner-api.ts` like the weekly review's; the same model (`planner-review-ai.ts`), buckets and NDJSON streaming. |
