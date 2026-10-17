@@ -910,9 +910,10 @@ describe("planner and upstream flows", () => {
               .all<{ name: string }>()
           ).results.length;
         expect(await tableNames(without)).toBe(0);
-        // 9000 made five planner tables, 9001 added the comments, and 9004 and
-        // 9005 added the sync state, the goals, weeks, flags and reviews.
-        expect(await tableNames(withPlanner)).toBe(10);
+        // 9000 made five planner tables, 9001 added the comments, 9004 and
+        // 9005 added the sync state, the goals, weeks, flags and reviews, and
+        // 9013 the period reviews and their receipts (planner_evidence).
+        expect(await tableNames(withPlanner)).toBe(12);
       } finally {
         await without.runtime.dispose();
         await withPlanner.runtime.dispose();
