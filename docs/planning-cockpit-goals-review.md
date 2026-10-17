@@ -37,13 +37,13 @@ The cascade from the north star down to a week, one level per address:
 - Every goal opens in the goal editor: its objective, its title, the points under it (each with an optional short note, or struck through), its status, its result and a note.
 - An address that is not valid shows the year instead of an error.
 
-### Weekly review (`/weekly-review`)
+### Review (`/review`)
 
-Two parts, done in any order and left at any point. The page saves where the review stands as it goes, and picks it up on the next visit. `?part=back` and `?part=forward&step=1..4` open a part or a step directly.
+One Sunday review in chapters: Look back on the week, then, on the Sunday a month, a quarter or a year closes with that week, one chapter per period (biggest last, see [planning-cockpit-period-review.md](planning-cockpit-period-review.md)), then Look forward. The date picks the chapters and they run in order: a chapter's strip tile is a link only once its turn has come (the owner's decision of 17 October 2026: one Review link, nothing to choose). The page saves where each chapter stands as it goes, and picks it up on the next visit. `?part=back`, `?part=month|quarter|year` and `?part=forward&step=1..4` open a chapter or a step directly; `/weekly-review` and `/period-review` are the old addresses and go to `/review`.
 
 - The week looked back on is the current week on Saturday and Sunday. From Monday to Friday it is the week before.
-- From Saturday to Monday the sidebar link carries a dot until both parts are done.
-- **Start over** in the header clears the review's progress for that week, after a confirmation, and opens a fresh Look back. What the two saves already wrote stays: the week's record, the summary memo, goals and tasks. Saving again updates them, and the server's commit log is kept, so a task Save week already created is not made twice.
+- From Saturday to Monday the sidebar link "Review" carries a dot until both parts, and every period chapter, are done.
+- **Start over** in the header clears the open chapter's progress, after a confirmation: the week's (and opens a fresh Look back), or a period chapter's own, leaving the week's progress alone. What the two saves already wrote stays: the week's record, the summary memo, goals and tasks. Saving again updates them, and the server's commit log is kept, so a task Save week already created is not made twice.
 
 **Look back** is a chat over the week. It goes through:
 
@@ -159,7 +159,7 @@ With Workers AI this stays on Cloudflare. With `OPENROUTER_API_KEY` set it goes 
 
 ## Web: `apps/web/src/planner/`
 
-The files are named by feature: `goals-*` and `goal-*` (the Goals page, editor, API client, search validators, strings, CSS), `year-map*` (the Year map), `review-*` (the weekly review and its pure model), `goal-cards.tsx` (the cockpit's goal cards) and `nav-link.tsx` (the Goals and Weekly review sidebar links, beside Cockpit through `PlannerNavLink`). The goal and review pages are covered by tests of their pure modules (`review-model.ts`, `goals-model.ts`, `year-map-model.ts`); the page components themselves have none.
+The files are named by feature: `goals-*` and `goal-*` (the Goals page, editor, API client, search validators, strings, CSS), `year-map*` (the Year map), `review-*` (the weekly review and its pure model), `goal-cards.tsx` (the cockpit's goal cards) and `nav-link.tsx` (the Goals and Review sidebar links, beside Cockpit through `PlannerNavLink`). The goal and review pages are covered by tests of their pure modules (`review-model.ts`, `goals-model.ts`, `year-map-model.ts`); the page components themselves have none.
 
 ## Upstream files with a hook-in
 

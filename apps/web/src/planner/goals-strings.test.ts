@@ -144,7 +144,7 @@ describe("plannerGoalsStringsFor", () => {
     expect(zh.goals.title).toBe(plannerGoalsNavLabelFor("zh-CN"));
     expect(zh.review.title).toBe(plannerReviewNavLabelFor("zh-CN"));
     expect(en.goals.title).toBe("Goals");
-    expect(en.review.title).toBe("Weekly review");
+    expect(en.review.title).toBe("Review");
   });
 
   it("always writes a week chip's Monday with its month", () => {

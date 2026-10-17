@@ -10,8 +10,7 @@
 
 const names = { en: "Cockpit", zhCN: "驾驶舱" } as const;
 const goalsNames = { en: "Goals", zhCN: "目标" } as const;
-const reviewNames = { en: "Weekly review", zhCN: "每周复盘" } as const;
-const periodNames = { en: "Period review", zhCN: "阶段复盘" } as const;
+const reviewNames = { en: "Review", zhCN: "复盘" } as const;
 
 /** What the cockpit is called in an app language: Chinese for zh-CN, English otherwise. */
 export function plannerNavLabelFor(locale: string): string {
@@ -23,14 +22,9 @@ export function plannerGoalsNavLabelFor(locale: string): string {
   return locale === "zh-CN" ? goalsNames.zhCN : goalsNames.en;
 }
 
-/** The weekly review's name, like `plannerNavLabelFor`. */
+/** The review's name (the week, month, quarter and year in one), like `plannerNavLabelFor`. */
 export function plannerReviewNavLabelFor(locale: string): string {
   return locale === "zh-CN" ? reviewNames.zhCN : reviewNames.en;
-}
-
-/** The month, quarter and year reviews' name, like `plannerNavLabelFor`. */
-export function plannerPeriodNavLabelFor(locale: string): string {
-  return locale === "zh-CN" ? periodNames.zhCN : periodNames.en;
 }
 
 export const plannerNavLabelEn = names.en;
@@ -39,8 +33,6 @@ export const plannerGoalsNavLabelEn = goalsNames.en;
 export const plannerGoalsNavLabelZhCN = goalsNames.zhCN;
 export const plannerReviewNavLabelEn = reviewNames.en;
 export const plannerReviewNavLabelZhCN = reviewNames.zhCN;
-export const plannerPeriodNavLabelEn = periodNames.en;
-export const plannerPeriodNavLabelZhCN = periodNames.zhCN;
 
 /** What a screen reader hears after the review's link while a review is due. */
 export function plannerReviewDueLabelFor(locale: string): string {
