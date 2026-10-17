@@ -487,6 +487,9 @@ const messages = {
   "auth.password": "Password",
   "auth.signIn": "Sign in",
   "auth.signingIn": "Signing in…",
+  "auth.confirmingSession": "Signed in, opening your workspace…",
+  "auth.sessionNotStored":
+    "Sign-in succeeded, but the browser did not keep the session. Check whether cookies for this site are blocked, then try again.",
   "auth.loginFailed":
     "Sign-in failed. Check your username and password, then try again.",
   "auth.statusUnavailable":
