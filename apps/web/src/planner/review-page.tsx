@@ -387,6 +387,7 @@ function Chapters({
           periodStrings={periodStrings}
           reachable={index <= last}
           review={review}
+          stacked={chapters.length > 3}
           step={step}
           strings={strings}
         />
@@ -405,12 +406,15 @@ function ChapterTile({
   forward,
   step,
   lookBackDone,
+  stacked,
   strings,
   periodStrings,
 }: {
   chapter: Chapter;
   current: boolean;
   reachable: boolean;
+  /** Four or five tiles in a row: the state goes under the name, as on a phone. */
+  stacked: boolean;
   review: PlannerReviewResponse;
   back: PlannerBackState;
   forward: PlannerForwardState;
@@ -420,14 +424,14 @@ function ChapterTile({
   periodStrings: PlannerPeriodStrings;
 }) {
   const text = strings.review;
-  const tile =
-    "grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-xl border border-border bg-card px-2.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 sm:flex sm:gap-3.5 sm:px-4 sm:py-3 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)] aria-disabled:opacity-60";
+  const tile = `grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-xl border border-border bg-card px-2.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${stacked ? "sm:gap-x-3 sm:px-3.5" : "sm:flex sm:gap-3.5 sm:px-4"} sm:py-3 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)] aria-disabled:opacity-60`;
   const arrow =
     "row-span-2 grid size-7 flex-none place-items-center rounded-[10px] bg-muted text-sm sm:size-[34px] sm:text-[17px] in-aria-[current=step]:bg-brand-500 in-aria-[current=step]:text-white";
   // "Week 42 · 12 – 18 Oct", or "W42 · 12 – 18 Oct" where the tile is narrow.
   const weekLine = (monday: string) => {
     const number = plannerWeekNumber(monday);
     const range = plannerWeekRange(monday, strings);
+    if (stacked) return `${strings.weekCode(number)} · ${range}`;
     return (
       <>
         <span className="sm:hidden">{`${strings.weekCode(number)} · ${range}`}</span>
@@ -482,7 +486,9 @@ function ChapterTile({
           {line}
         </span>
       </span>
-      <span className="col-start-2 text-xs whitespace-nowrap text-muted-foreground sm:ml-auto">
+      <span
+        className={`col-start-2 text-xs whitespace-nowrap text-muted-foreground ${stacked ? "" : "sm:ml-auto"}`}
+      >
         {state}
       </span>
     </>
