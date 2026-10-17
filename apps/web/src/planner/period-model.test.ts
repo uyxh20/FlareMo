@@ -128,6 +128,37 @@ describe("restoring the saved state", () => {
     expect(state.memoSaved).toBe(true);
   });
 
+  it("falls back to the saved review's receipts, verdict and forecast", () => {
+    const state = plannerRestorePeriodState(
+      {},
+      {
+        ...review,
+        verdict: "pivot: the operator did not keep up",
+        forecast: "By Dec 31 one decision is signed.",
+        evidence: [
+          {
+            id: "e1",
+            pillar: "work",
+            claim: "c",
+            quote: "the words it rests on",
+            source: "memo",
+            source_id: "memos/1",
+            source_day: "2026-10-06",
+            verified: true,
+          },
+        ],
+      },
+    );
+    expect(state.evidence).toEqual([
+      { pillar: "work", claim: "c", quote: "the words it rests on" },
+    ]);
+    expect(state.verdict).toEqual({
+      kind: "pivot",
+      text: "the operator did not keep up",
+    });
+    expect(state.forecast).toBe("By Dec 31 one decision is signed.");
+  });
+
   it("starts from the goals' recorded results and the saved memo", () => {
     const state = plannerRestorePeriodState(
       {},

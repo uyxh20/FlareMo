@@ -139,7 +139,17 @@ export function plannerRestorePeriodState(
       if (weeks.has(monday) && found) weekMarks[monday] = found;
     }
   }
-  const evidence = (Array.isArray(saved.evidence) ? saved.evidence : [])
+  // The page's state is the draft; the saved review is the fallback, so a
+  // review saved from another device, or whose state was cleared, still shows
+  // its receipts, verdict and forecast.
+  const savedEvidence: unknown[] = Array.isArray(saved.evidence)
+    ? saved.evidence
+    : review.evidence.map((item) => ({
+        pillar: item.pillar,
+        claim: item.claim,
+        quote: item.quote,
+      }));
+  const evidence = savedEvidence
     .flatMap((item: unknown) => {
       if (!isRecord(item)) return [];
       const claim = str(item.claim, 600).trim();
@@ -154,10 +164,16 @@ export function plannerRestorePeriodState(
       return claim && quote ? [{ pillar, claim, quote }] : [];
     })
     .slice(0, 200);
-  const verdictKind = isRecord(saved.verdict)
-    ? plannerVerdictKinds.find(
-        (k) => k === (saved.verdict as Record<string, unknown>).kind,
-      )
+  const reviewVerdict = /^(continue|pivot|pause)(?::\s*([\s\S]*))?$/.exec(
+    review.verdict ?? "",
+  );
+  const savedVerdict: Record<string, unknown> | null = isRecord(saved.verdict)
+    ? saved.verdict
+    : reviewVerdict
+      ? { kind: reviewVerdict[1], text: reviewVerdict[2] ?? "" }
+      : null;
+  const verdictKind = savedVerdict
+    ? plannerVerdictKinds.find((k) => k === savedVerdict.kind)
     : undefined;
   const step =
     typeof saved.step === "number"
@@ -185,13 +201,14 @@ export function plannerRestorePeriodState(
     goals,
     weekMarks,
     evidence,
-    verdict: verdictKind
-      ? {
-          kind: verdictKind,
-          text: str((saved.verdict as Record<string, unknown>).text, 2_000),
-        }
-      : null,
-    forecast: str(saved.forecast, 2_000),
+    verdict:
+      verdictKind && savedVerdict
+        ? { kind: verdictKind, text: str(savedVerdict.text, 2_000) }
+        : null,
+    forecast:
+      typeof saved.forecast === "string"
+        ? str(saved.forecast, 2_000)
+        : str(review.forecast, 2_000),
     previousGrade:
       plannerForecastGrades.find((g) => g === saved.previousGrade) ?? null,
     memo:
