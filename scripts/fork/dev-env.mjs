@@ -55,7 +55,7 @@ import {
   describeConfig,
   PLACEHOLDER_D1_ID,
   parseConfigText,
-  REVIEW_MEMO_VARS,
+  AGENT_VARS,
 } from "./dev-env-config.mjs";
 import {
   buildCountsQuery,
@@ -338,10 +338,10 @@ export class DevEnv {
       // Vectorize allowance with live, and a clone re-embeds the whole diary.
       embeddingProvider:
         clean(this.env.FLAREMO_DEV_EMBEDDING_PROVIDER) ?? "none",
-      // The weekly memo agent (scripts/fork/review-memo-agent.ts prints the
-      // ids); off unless all three are given.
-      reviewMemo: Object.fromEntries(
-        Object.keys(REVIEW_MEMO_VARS).flatMap((name) => {
+      // The general agent (scripts/fork/general-agent.ts prints the ids);
+      // off unless all four are given.
+      agent: Object.fromEntries(
+        Object.keys(AGENT_VARS).flatMap((name) => {
           const value = clean(
             this.env[name.replace("FLAREMO_", "FLAREMO_DEV_")],
           );
@@ -1490,9 +1490,10 @@ Embedding is off on dev (FLAREMO_EMBEDDING_PROVIDER "none"): dev shares the free
 plan's daily AI allowance with live. To test search on dev, set
 FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai before deploy.
 
-The weekly memo agent is off on dev unless FLAREMO_DEV_REVIEW_MEMO_AGENT,
-FLAREMO_DEV_REVIEW_MEMO_ENVIRONMENT and FLAREMO_DEV_REVIEW_MEMO_STORE are set
-before deploy (scripts/fork/review-memo-agent.ts --store dev prints them).
+The general agent is off on dev unless FLAREMO_DEV_AGENT,
+FLAREMO_DEV_AGENT_ENVIRONMENT, FLAREMO_DEV_AGENT_STORE and FLAREMO_DEV_AGENT_VAULT
+are set before deploy (scripts/fork/general-agent.ts --target dev prints them).
+Its Sunday prep never runs on dev.
 
 Auth: wrangler reads CLOUDFLARE_API_TOKEN. The script passes
 CLOUDFLARE_API_TOKEN, else CLOUDFLARE_API, else the placeholder "proxy-injected"

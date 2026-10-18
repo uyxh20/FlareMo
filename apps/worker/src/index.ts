@@ -24,6 +24,7 @@ import {
 } from "./context";
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
+import { forkAgentScheduled } from "./fork/agent-schedule";
 import { jsonError } from "./http";
 import { resolveOauthIntegration } from "./integrations/config";
 import { betterAuthRateLimitBucket, rateLimitGuard } from "./rate-limit";
@@ -493,6 +494,8 @@ export function createFlareMoWorker(
       return response;
     },
     async scheduled(controller, env) {
+      // fork: the general agent's Sunday prep (fork/agent-schedule.ts)
+      if (await forkAgentScheduled(controller, env)) return;
       await runScheduledMaintenance(
         env,
         controller.scheduledTime,

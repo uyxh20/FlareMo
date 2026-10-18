@@ -412,7 +412,7 @@ async function ownedSession(
 ): Promise<{ run: PlannerAgentRunRow; session: Session } | null> {
   if (!/^sesn_[A-Za-z0-9]+$/.test(input.sessionId)) return null;
   const run = await plannerAgentRunOfSession(db, input);
-  if (!run || run.state !== "open" || run.ownerKey !== input.ownerKey) {
+  if (run?.state !== "open" || run.ownerKey !== input.ownerKey) {
     return null;
   }
   let session: Session;
@@ -607,7 +607,7 @@ export async function plannerEndAgent(
   input: { userId: string; sessionId: string; failed?: boolean },
 ): Promise<void> {
   const run = await plannerAgentRunOfSession(db, input).catch(() => null);
-  if (!run || run.state !== "open") return;
+  if (run?.state !== "open") return;
   let cost: number | null = null;
   try {
     const session = await call<Session>(

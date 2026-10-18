@@ -25,12 +25,19 @@ import {
 
 export const PLACEHOLDER_D1_ID = "00000000-0000-0000-0000-000000000000";
 
-/** The weekly memo agent's vars: ids of Anthropic objects, never secrets. */
-export const REVIEW_MEMO_VARS = Object.freeze({
-  FLAREMO_REVIEW_MEMO_AGENT: /^agent_[A-Za-z0-9]+$/,
-  FLAREMO_REVIEW_MEMO_ENVIRONMENT: /^env_[A-Za-z0-9]+$/,
-  FLAREMO_REVIEW_MEMO_STORE: /^memstore_[A-Za-z0-9]+$/,
+/** The general agent's vars: ids of Anthropic objects, never secrets. */
+export const AGENT_VARS = Object.freeze({
+  FLAREMO_AGENT: /^agent_[A-Za-z0-9]+$/,
+  FLAREMO_AGENT_ENVIRONMENT: /^env_[A-Za-z0-9]+$/,
+  FLAREMO_AGENT_STORE: /^memstore_[A-Za-z0-9]+$/,
+  FLAREMO_AGENT_VAULT: /^vlt_[A-Za-z0-9]+$/,
 });
+
+/**
+ * The general agent's Sunday prep (apps/worker/src/fork/agent-schedule.ts).
+ * Dev leaves it out: nobody reviews on dev on Sunday, and it would spend.
+ */
+export const AGENT_SUNDAY_CRON = "0 10,11 * * SUN";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -108,7 +115,7 @@ export function buildDevConfig({
   trustedOrigins = [],
   ratelimitNamespaceId = DEV.ratelimitNamespaceId,
   embeddingProvider = "none",
-  reviewMemo = {},
+  agent = {},
   migrationsDir,
 }) {
   const example = parseConfigText(exampleText, "wrangler.jsonc.example");
@@ -211,21 +218,26 @@ export function buildDevConfig({
     );
   }
   set(["vars", "FLAREMO_EMBEDDING_PROVIDER"], embeddingProvider);
-  const memoVars = Object.keys(REVIEW_MEMO_VARS).filter(
-    (name) => reviewMemo[name],
-  );
-  if (memoVars.length > 0) {
-    if (memoVars.length !== Object.keys(REVIEW_MEMO_VARS).length) {
+  const agentVars = Object.keys(AGENT_VARS).filter((name) => agent[name]);
+  if (agentVars.length > 0) {
+    if (agentVars.length !== Object.keys(AGENT_VARS).length) {
       throw new Error(
-        `The memo agent needs all of ${Object.keys(REVIEW_MEMO_VARS).join(", ")} (with FLAREMO_DEV_ in front).`,
+        `The general agent needs all of ${Object.keys(AGENT_VARS).join(", ")} (with FLAREMO_DEV_ in front).`,
       );
     }
-    for (const name of memoVars) {
-      if (!REVIEW_MEMO_VARS[name].test(reviewMemo[name])) {
+    for (const name of agentVars) {
+      if (!AGENT_VARS[name].test(agent[name])) {
         throw new Error(`${name} does not look like an Anthropic id.`);
       }
-      set(["vars", name], reviewMemo[name]);
+      set(["vars", name], agent[name]);
     }
+  }
+  const crons = example.triggers?.crons ?? [];
+  if (crons.includes(AGENT_SUNDAY_CRON)) {
+    set(
+      ["triggers", "crons"],
+      crons.filter((cron) => cron !== AGENT_SUNDAY_CRON),
+    );
   }
 
   text = `${DEV_CONFIG_HEADER}${text}`;

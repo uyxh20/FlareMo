@@ -44,6 +44,10 @@ import { cleanupFlaremoArtifacts } from "./artifact-cleanup";
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
 import { runDataExportTask } from "./export-task";
+import {
+  forkAgentNightly,
+  forkAgentReplacesDreaming,
+} from "./fork/agent-schedule";
 import { resolveProductName } from "./fork/product-name";
 import { hardDeleteMemoWithAttachments } from "./memo-hard-delete";
 import { runMemoryConflictPatrol, runMemoryDreaming } from "./memory-dreaming";
@@ -198,7 +202,9 @@ export async function runScheduledMaintenance(
   // not index — are consistently accounted for in the same pass. It is an
   // LLM pass, deliberately last of the deterministic sweeps.
   try {
-    const dreaming = await runMemoryDreaming(env, new Date(scheduledTime));
+    const dreaming = forkAgentReplacesDreaming(env) // fork: the general agent proposes memories instead
+      ? { proposals: 0 }
+      : await runMemoryDreaming(env, new Date(scheduledTime));
     if (dreaming.proposals > 0) {
       console.log(
         JSON.stringify({ message: "memory dreaming proposals", ...dreaming }),
@@ -324,6 +330,7 @@ export async function runScheduledMaintenance(
     }
   }
   await healthNightlySweep(db, new Date(scheduledTime)); // fork: health tracker safety net
+  await forkAgentNightly(env, db, new Date(scheduledTime)); // fork: end idle agent sessions
   // Reconcile data-transfer tasks: expire stale queued/running tasks whose
   // lease lapsed (interrupted request), then garbage-collect completed task
   // rows older than the TTL along with their R2 export artifacts.
