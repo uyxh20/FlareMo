@@ -13,6 +13,9 @@ import {
   plannerMigrationFiles,
 } from "./planner-migrations";
 import {
+  plannerAgentChat,
+  plannerAgentProposal,
+  plannerAgentRun,
   plannerEvidence,
   plannerGoal,
   plannerGoalFlag,
@@ -125,6 +128,36 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "level", "period_start"],
     },
   ],
+  planner_agent_run: [
+    {
+      name: "planner_agent_run_user_created_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "created_at"],
+    },
+    {
+      name: "planner_agent_run_user_key_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "owner_key", "state"],
+    },
+  ],
+  planner_agent_proposal: [
+    {
+      name: "planner_agent_proposal_user_week_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "week_start", "state"],
+    },
+  ],
+  planner_agent_chat: [
+    {
+      name: "planner_agent_chat_user_conversation_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "conversation_id", "created_at"],
+    },
+  ],
 };
 
 const PLANNER_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -142,6 +175,9 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_goal_flag: plannerGoalFlag,
   planner_period_review: plannerPeriodReview,
   planner_evidence: plannerEvidence,
+  planner_agent_run: plannerAgentRun,
+  planner_agent_proposal: plannerAgentProposal,
+  planner_agent_chat: plannerAgentChat,
 };
 
 let mf: Miniflare;
@@ -308,6 +344,9 @@ describe("planner migrations", () => {
         targets[table] = keys.map((key) => key.table);
       }
       expect(targets).toEqual({
+        planner_agent_chat: [],
+        planner_agent_proposal: [],
+        planner_agent_run: [],
         planner_evidence: [],
         planner_goal: [],
         planner_goal_flag: [],

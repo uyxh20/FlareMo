@@ -448,7 +448,7 @@ export function plannerPeriodChatMemoMessages(
 }
 
 // ---------------------------------------------------------------------------
-// The review agent (docs/fork-review-memo-agent.md), for a period
+// The general agent (docs/fork-general-agent.md), for a period
 // ---------------------------------------------------------------------------
 
 /** The agent session's key in place of a week's Monday: "month:2026-10-01". */
@@ -457,100 +457,4 @@ export function plannerPeriodAgentKey(
   periodStart: string,
 ): string {
   return `${level}:${periodStart}`;
-}
-
-const PERIOD_FILE = "/data/this-period.md";
-// Where the session mounts its files: every mount path lands under this folder.
-const UPLOADS = "/mnt/session/uploads";
-const CONTEXT_FILE = `(in ${UPLOADS}${PERIOD_FILE})`;
-
-/** The files a period review's session starts with. */
-export function plannerPeriodAgentFiles(
-  context: PlannerPeriodContext,
-): Record<string, string> {
-  return { [PERIOD_FILE]: plannerPeriodChatContextBlock(context) };
-}
-
-function stepPrompt(
-  context: PlannerPeriodContext,
-  messages: readonly PlannerChatMessage[],
-): string {
-  const block = plannerPeriodChatContextBlock(context);
-  return messages
-    .map((message) => message.content.replace(block, CONTEXT_FILE))
-    .join("\n\n");
-}
-
-export function plannerPeriodAgentOpeningMessage(
-  context: PlannerPeriodContext,
-): string {
-  const name = nameOf(context).trim().split(/\s+/)[0] || "the owner";
-  const word = plannerPeriodWord(context.level);
-  return `This session is ${name}'s whole ${word} review for ${labelOf(context)} (${context.periodStart} to ${context.periodEnd}, ${context.weeks.length} weeks), not a weekly review. It runs like the weekly review over the whole ${word}. Read "week" in your standing instructions as "${word}": ${UPLOADS}${PERIOD_FILE} takes the place of this-week.md and holds every week of the ${word} with its record, its saved weekly summary and its diary, so there is no history folder. The review reaches you one step at a time, each as a message: first the opening (this message), then the coach chat (one message for each of ${name}'s answers), then the scores and trajectory, and last the memo. ${name} is waiting on each reply in the app.
-
-Until the memo step, follow each message's instructions and reply with only what it asks for, in the format it asks for: no preamble, no notes, nothing after it. Your standing instructions about writing the memo apply only when the memo step comes. Don't change your memory store before then.
-
-Read your memory store's notes and ${UPLOADS}${PERIOD_FILE} before this first reply.
-
-Step 1, the opening:
-
-${stepPrompt(context, plannerPeriodOpeningMessages(context))}`;
-}
-
-export function plannerPeriodAgentCoachMessage(
-  context: PlannerPeriodContext,
-  mode: PlannerCoachMode,
-  chat: ReadonlyArray<{ role: "user" | "assistant"; content: string }>,
-): string {
-  const name = nameOf(context).trim().split(/\s+/)[0] || "the owner";
-  const recent = chat
-    .slice(-6)
-    .map(
-      (message) =>
-        `${message.role === "user" ? name : "Review"}: ${message.content}`,
-    )
-    .join("\n\n");
-  return `Coach step: reply to ${name}'s latest answer.
-
-${stepPrompt(context, [{ role: "system", content: plannerPeriodCoachSystem(context, mode) }])}
-
-The chat ends like this (earlier turns are in this session already; "Review" lines are the app's prompts and your earlier replies):
-
-${recent}`;
-}
-
-export function plannerPeriodAgentCloseMessage(
-  context: PlannerPeriodContext,
-  answers: PlannerReviewAnswers,
-): string {
-  return `Scores step: the chat is over.
-
-${stepPrompt(context, plannerPeriodCloseMessages(context, answers))}`;
-}
-
-/** The memo step's files: the evening's answers and the skeleton. */
-export function plannerPeriodAgentMemoFiles(
-  context: PlannerPeriodContext,
-  request: PlannerPeriodChatMemoRequest,
-  happened: readonly PlannerPeriodHappened[],
-): Record<string, string> {
-  const parts = plannerPeriodChatMemoParts(context, request);
-  return {
-    "/data/review.md": [
-      `# ${context.ownerName}'s review of ${labelOf(context)}`,
-      "",
-      plannerPeriodHappenedLines(happened),
-      "",
-      parts.material,
-    ].join("\n"),
-    "/data/template.md": `${parts.template}\n\n${parts.rules}`,
-  };
-}
-
-/** The memo step's message, and a memo-only session's first message. */
-export function plannerPeriodAgentMemoKickoff(
-  context: PlannerPeriodContext,
-): string {
-  const word = plannerPeriodWord(context.level);
-  return `This is the ${word} review of ${labelOf(context)}, not a weekly review: read "week" in your standing instructions as "${word}". Its files are in ${UPLOADS}/data: this-period.md (every week of the ${word}), review.md (this review's answers and drafts) and template.md (the memo's skeleton and rules). Your memory store is mounted under /mnt/memory/; your notes there are about weeks, so add a line about this ${word} too.`;
 }

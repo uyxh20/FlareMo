@@ -69,6 +69,11 @@ export const RESTORE_TABLES = [
   // The month, quarter and year reviews (migrations/9013_planner_period_review.sql).
   "planner_period_review",
   "planner_evidence",
+  // The general agent's sessions, its proposals and the Ask chat
+  // (migrations/9014_planner_agent.sql).
+  "planner_agent_run",
+  "planner_agent_proposal",
+  "planner_agent_chat",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo
   // ids by value, no foreign keys, so any order restores. The events table is
   // the append-only history and is restored like the rest.

@@ -25,6 +25,7 @@ import {
 //
 // - every prompt of the weekly review's look back (recap, coach, close, memo),
 // - the look forward's goal check prompt,
+// - what the general agent's read tools return, every entry opened,
 // - the personal export bundle,
 //
 // and checks the marker is in each one marked `yes` in data-sources.ts and in no

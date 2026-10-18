@@ -1,16 +1,18 @@
-import { plannerSummaryMemoClientId } from "@flaremo/contracts";
+import {
+  type PlannerAgentToolName,
+  plannerSummaryMemoClientId,
+} from "@flaremo/contracts";
 import type { UserRow } from "@flaremo/db";
 import { exportData } from "../import-export";
 import { createMemory } from "../memory";
 import {
   PLANNER_DIARY_CHARS,
+  plannerAgentCallTool,
   plannerCheckMessages,
   plannerCloseMessages,
   plannerCoachMessages,
-  plannerMemoAgentFiles,
   plannerMemoMessages,
   plannerOpeningMessages,
-  plannerReadMemoHistory,
   plannerReadReviewContext,
 } from "../planner";
 import {
@@ -305,6 +307,32 @@ export const PROBES: Record<string, Probe> = {
       IN_WEEK,
     );
   },
+  planner_agent_proposal: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_agent_proposal (id, user_id, week_start, kind, pillar, title, why, created_at)
+       VALUES (?, ?, '2026-10-05', 'task', 'work', ?, ?, ?)`,
+      nextId("proposal"),
+      p.user.id,
+      `Book ${p.marker}`,
+      `The diary keeps coming back to ${p.marker}.`,
+      IN_WEEK,
+    );
+  },
+  planner_agent_chat: async (p) => {
+    for (const role of ["owner", "agent"]) {
+      await plannerTestRun(
+        p.rt.database,
+        `INSERT INTO planner_agent_chat (id, user_id, conversation_id, role, text, created_at)
+         VALUES (?, ?, 'conversation', ?, ?, ?)`,
+        nextId("chat"),
+        p.user.id,
+        role,
+        `When did I last mention ${p.marker}?`,
+        IN_WEEK,
+      );
+    }
+  },
   articles: async (p) => {
     await plannerTestRun(
       p.rt.database,
@@ -322,7 +350,12 @@ export const PROBES: Record<string, Probe> = {
 };
 
 /** The consumers this file measures; the others are checked in data-sources.test.ts. */
-export const MEASURED = ["lookBack", "lookForward", "userExport"] as const;
+export const MEASURED = [
+  "lookBack",
+  "lookForward",
+  "agent",
+  "userExport",
+] as const;
 export type Measured = (typeof MEASURED)[number];
 
 /** Rows a probe can write outside the planner runtime's own reset. */
@@ -396,23 +429,46 @@ export async function consumerTexts(
   ];
   const lookForward = plannerCheckMessages(context, [], []);
   const bundle = await exportData(rt.db, rt.user);
-  // The memo agent, when set up, gets the same week and the weeks before it as files.
-  const agentFiles = plannerMemoAgentFiles(
-    context,
-    memoRequest,
-    await plannerReadMemoHistory(rt.db, {
-      userId: rt.user.id,
-      weekStart: WEEK,
-    }),
-  );
   return {
-    lookBack: [
-      ...lookBack.map((message) => message.content),
-      ...Object.values(agentFiles),
-    ].join("\n"),
+    lookBack: lookBack.map((message) => message.content).join("\n"),
     lookForward: lookForward.map((message) => message.content).join("\n"),
+    agent: await agentReads(rt),
     userExport: JSON.stringify(bundle),
   };
+}
+
+/**
+ * Everything the general agent's read tools hand it about the probed weeks,
+ * opening every entry the index lists, as an agent reading the whole record
+ * would. The propose tools write, so they are left out.
+ */
+async function agentReads(rt: PlannerTestRuntime): Promise<string> {
+  const context = {
+    db: rt.db,
+    user: rt.user,
+    now: new Date(`${TODAY}T12:00:00.000Z`),
+  };
+  const call = (name: PlannerAgentToolName, args: Record<string, unknown>) =>
+    plannerAgentCallTool(context, name, args);
+  const index = await call("list_entries", {
+    from: "2026-01-01",
+    to: TODAY,
+  });
+  const ids = [...index.matchAll(/^(\S+) \| /gm)].map((match) => match[1]);
+  const reads = await Promise.all([
+    call("review_week", { week: WEEK }),
+    call("review_period", { level: "month", period_start: "2026-09-01" }),
+    call("week_diary", { week: PREVIOUS_WEEK }),
+    call("read_goals", { year: 2026 }),
+    call("read_tasks", { done_days: 90 }),
+    call("read_health", { from: "2026-09-01", to: TODAY }),
+    call("read_memories", {}),
+  ]);
+  const opened = [];
+  for (let at = 0; at < ids.length; at += 20) {
+    opened.push(await call("read_entries", { ids: ids.slice(at, at + 20) }));
+  }
+  return [index, ...reads, ...opened].join("\n");
 }
 
 export const markerOf = (id: string) =>

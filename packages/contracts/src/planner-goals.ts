@@ -545,9 +545,10 @@ const reviewAnswersShape = {
 };
 
 /**
- * The review agent's session (docs/fork-review-memo-agent.md), when it runs the
- * review: the opening starts one, every later step goes to it. The opening's is
- * a session to replace, deleted before the new one starts.
+ * The general agent's session (docs/fork-general-agent.md), when it runs the
+ * review: the opening starts one (or picks up the one the Sunday schedule
+ * prepared), every later step goes to it. The opening's is a session to
+ * replace, deleted before the new one starts.
  */
 const agentSessionShape = {
   session: z
@@ -619,6 +620,7 @@ export const plannerAiCheckSchema = z.strictObject({
     )
     .max(12),
   settled: z.array(plannerSettleFlagSchema).max(24),
+  ...agentSessionShape,
 });
 
 // --- Responses --------------------------------------------------------------
@@ -867,8 +869,18 @@ export type PlannerAiStreamLine =
   /** The review agent has the step: ask its session for the answer. */
   | { agent: string };
 
-/** The review agent's steps, each answered in its own shape. */
-export type PlannerAgentStep = "opening" | "coach" | "close" | "memo";
+/**
+ * The review agent's steps, each answered in its own shape. `propose` (the
+ * agent's proposals for next week, sent by the server once the memo is read)
+ * and `check` (the goal check) belong to the weekly review only.
+ */
+export type PlannerAgentStep =
+  | "opening"
+  | "coach"
+  | "close"
+  | "memo"
+  | "propose"
+  | "check";
 
 /**
  * The review agent's answer to the step it was given, asked for every few
@@ -880,7 +892,9 @@ export type PlannerAgentResponse =
   | { status: "done"; step: "opening"; opening: PlannerAiOpeningResponse }
   | { status: "done"; step: "close"; close: PlannerAiCloseResponse }
   | { status: "done"; step: "coach"; text: string; advance: boolean | null }
-  | { status: "done"; step: "memo"; memo: string };
+  | { status: "done"; step: "memo"; memo: string }
+  | { status: "done"; step: "propose" }
+  | { status: "done"; step: "check"; check: PlannerAiCheckResponse };
 
 /** The opening's answer: the drafts, or the review agent's new session. */
 export type PlannerAiOpeningResult =
@@ -888,6 +902,8 @@ export type PlannerAiOpeningResult =
   | { agent: string };
 /** The close's answer: the drafts, or the review agent has the step. */
 export type PlannerAiCloseResult = PlannerAiCloseResponse | { agent: string };
+/** The goal check's answer: the flags, or the review agent has the step. */
+export type PlannerAiCheckResult = PlannerAiCheckResponse | { agent: string };
 
 // --- Types ------------------------------------------------------------------
 

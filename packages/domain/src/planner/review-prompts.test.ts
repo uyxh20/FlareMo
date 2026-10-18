@@ -1,15 +1,15 @@
 import type { PlannerGoalDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  PLANNER_AGENT_MEMO_FILE,
+  plannerAgentCheckMessage,
   plannerAgentCloseMessage,
   plannerAgentCoachMessage,
+  plannerAgentMemoMessage,
   plannerAgentOpeningMessage,
-  plannerMemoAgentFiles,
-  plannerMemoAgentKickoff,
-  plannerMemoAgentStepFiles,
-  plannerMemoAgentSystem,
-  plannerReviewAgentFiles,
-} from "./memo-agent";
+  plannerAgentProposeMessage,
+  plannerAgentSystem,
+} from "./agent-prompts";
 import type { PlannerReviewContext } from "./review-context";
 import {
   plannerCheckMessages,
@@ -568,85 +568,28 @@ describe("what each call asks for", () => {
   });
 });
 
-describe("the memo agent's files", () => {
-  it("splits the memo prompt into the skeleton, the evening's material and the week", () => {
-    const files = plannerMemoAgentFiles(CONTEXT, MEMO_REQUEST, [
-      {
-        weekStart: "2026-09-28",
-        diary: [{ at: "2026-09-29T08:00:00.000Z", text: "Gym." }],
-        summary: "# Week 40",
-      },
-      { weekStart: "2026-09-21", diary: [], summary: null },
-    ]);
-    expect(Object.keys(files)).toEqual([
-      "/data/this-week.md",
-      "/data/review.md",
-      "/data/template.md",
-      "/data/history/2026-09-28.md",
-      "/data/history/2026-09-21.md",
-    ]);
-    const prompt =
-      plannerMemoMessages(CONTEXT, MEMO_REQUEST).at(-1)?.content ?? "";
-    expect(prompt.startsWith(files["/data/template.md"] ?? "-")).toBe(true);
-    expect(files["/data/template.md"]).not.toContain("Rules:");
-    expect(files["/data/template.md"]).toContain("## Executive Summary");
-    expect(files["/data/review.md"]).toContain(
-      "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.",
-    );
-    expect(files["/data/this-week.md"]).toBe(
-      plannerReviewContextBlock(CONTEXT),
-    );
-    expect(files["/data/history/2026-09-28.md"]).toContain("[2026-09-29] Gym.");
-    expect(files["/data/history/2026-09-28.md"]).toContain("# Week 40");
-    expect(files["/data/history/2026-09-21.md"]).toContain(
-      "No summary was saved for this week.",
-    );
-  });
-
-  it("names the owner in the prompt and the week in the kickoff", () => {
-    const system = plannerMemoAgentSystem("Anon Example");
-    expect(system).toContain("You write Anon's weekly summary memo");
-    expect(system).not.toContain("{NAME}");
-    expect(system).toContain("/mnt/session/outputs/memo.md");
-    expect(plannerMemoAgentKickoff("2026-10-05")).toContain(
-      "week starting Monday 2026-10-05",
-    );
-  });
-});
-
-describe("the review agent's steps", () => {
+describe("the general agent's review steps", () => {
   const block = plannerReviewContextBlock(CONTEXT);
 
-  it("starts the session on the week and its history, and adds the evening at the memo", () => {
-    expect(
-      Object.keys(
-        plannerReviewAgentFiles(CONTEXT, [
-          { weekStart: "2026-09-28", diary: [], summary: null },
-        ]),
-      ),
-    ).toEqual(["/data/this-week.md", "/data/history/2026-09-28.md"]);
-    expect(
-      Object.keys(plannerMemoAgentStepFiles(CONTEXT, MEMO_REQUEST)),
-    ).toEqual(["/data/review.md", "/data/template.md"]);
+  it("says who it works for, that it changes nothing, and how to read", () => {
+    const system = plannerAgentSystem("Anon Example");
+    expect(system).toContain("You are the agent inside Anon's diary app");
+    expect(system).toContain("You change nothing.");
+    expect(system).toContain("weekly-review, period-review, ask-my-diary, goal-check");
+    expect(system).toContain("review memo (a model wrote it)");
   });
 
-  it("sends each step's own prompt, pointing at the week's file instead of repeating it", () => {
+  it("sends each step's own prompt, pointing at review_week instead of pasting the week", () => {
     const opening = plannerAgentOpeningMessage(CONTEXT);
-    expect(opening).toContain("This session is Anon's whole weekly review");
+    expect(opening).toContain("This session is Anon's weekly review");
+    expect(opening).toContain("Use your weekly-review skill.");
     expect(opening).toContain("Step 1, the opening:");
     expect(opening).toContain('{"recap": string,');
-    // Mounted files land under /mnt/session/uploads: the text must say so.
-    expect(opening).toContain("(in /mnt/session/uploads/data/this-week.md;");
-    for (const text of [
-      opening,
-      plannerMemoAgentSystem("Anon"),
-      plannerMemoAgentKickoff(CONTEXT.weekStart),
-    ]) {
-      expect(text.replaceAll("/mnt/session/uploads/data", "")).not.toContain(
-        "/data",
-      );
-    }
+    expect(opening).toContain(
+      `(read it with review_week for the week of ${CONTEXT.weekStart};`,
+    );
     expect(opening).not.toContain(block);
+    expect(opening).not.toContain("/mnt/session/uploads");
 
     const coach = plannerAgentCoachMessage(CONTEXT, "force", [
       { role: "assistant", content: "What did you accomplish?" },
@@ -663,6 +606,30 @@ describe("the review agent's steps", () => {
     expect(close.startsWith("Scores step")).toBe(true);
     expect(close).toContain("Authenticity (1 to 5, 0.5 steps)");
     expect(close).not.toContain(block);
+  });
+
+  it("puts the memo's skeleton, rules and the evening in the memo step", () => {
+    const memo = plannerAgentMemoMessage(CONTEXT, MEMO_REQUEST);
+    expect(memo.startsWith("Memo step")).toBe(true);
+    expect(memo).toContain("## Executive Summary");
+    expect(memo).toContain(
+      "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.",
+    );
+    expect(memo).toContain(`Write it to ${PLANNER_AGENT_MEMO_FILE}.`);
+    expect(memo).not.toContain(block);
+  });
+
+  it("proposes for the week being planned, then checks the plan", () => {
+    const propose = plannerAgentProposeMessage(CONTEXT);
+    expect(propose).toContain(`propose_goal, week ${CONTEXT.planWeek}`);
+    expect(propose).toContain("at most six tasks");
+    const check = plannerAgentCheckMessage(
+      CONTEXT,
+      [{ id: "g1", pillar: "work", title: "Sign with Acme", tasks: [] }],
+      [],
+    );
+    expect(check).toContain("Use your goal-check skill.");
+    expect(check).not.toContain(block);
   });
 });
 

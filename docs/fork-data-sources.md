@@ -36,60 +36,64 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 
 <!-- data-sources:start -->
 
-| Data source | Part | Kind | lookBack | lookForward | search | memory | mcp | userExport | backup |
-|---|---|---|---|---|---|---|---|---|---|
-| `memos` | diary | content | yes | – | yes | yes | yes | yes | yes |
-| `memos:earlier-week` | diary | content | yes | – | yes | yes | yes | yes | yes |
-| `memos:weekly-summary` | goals | content | yes | – | yes | yes | yes | yes | yes |
-| `memo_tags` | diary | structure | – | – | – | – | yes | – | yes |
-| `memo_revisions` | diary | history | – | – | – | – | – | – | yes |
-| `memo_relations` | diary | structure | – | – | – | – | yes | yes | yes |
-| `reactions` | diary | structure | – | – | – | – | yes | – | yes |
-| `attachments` | diary | content | **gap** | – | – | – | yes | yes | yes |
-| `shares` | diary | bookkeeping | – | – | – | – | – | yes | yes |
-| `memos_sse_events` | diary | bookkeeping | – | – | – | – | – | – | yes |
-| `memo_hourly_counts` | diary | derived | – | – | – | – | – | – | – |
-| `memory_items` | memory | content | yes | **gap** | yes | yes | yes | yes | yes |
-| `memory_revisions` | memory | history | – | – | – | yes | – | yes | yes |
-| `memory_relations` | memory | structure | – | – | – | yes | – | yes | yes |
-| `memory_resource_links` | memory | structure | – | – | – | yes | – | yes | yes |
-| `memory_evidence` | memory | structure | – | – | – | yes | – | yes | yes |
-| `memory_events` | memory | history | – | – | – | yes | – | yes | yes |
-| `memory_rejections` | memory | bookkeeping | – | – | – | yes | – | – | yes |
-| `memory_compile_archives` | memory | bookkeeping | – | – | – | yes | – | – | yes |
-| `embedding_tasks` | search | derived | – | – | – | – | – | – | – |
-| `memos_fts` | search | derived | – | – | – | – | – | – | – |
-| `memory_fts` | search | derived | – | – | – | – | – | – | – |
-| `tasks` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes |
-| `tasks:backlog` | cockpit | content | – | – | **gap** | – | **gap** | yes | yes |
-| `tasks.notes` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes |
-| `projects` | cockpit | structure | – | – | – | – | – | yes | yes |
-| `task_activity` | cockpit | history | – | – | – | – | – | yes | yes |
-| `planner_task_event` | cockpit | history | yes | yes | – | – | – | **gap** | yes |
-| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | – | **gap** | yes |
-| `planner_task_plan` | cockpit | structure | yes | – | – | – | – | **gap** | yes |
-| `planner_project_node` | cockpit | structure | – | – | – | – | – | **gap** | yes |
-| `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | yes |
-| `planner_sync_state` | cockpit | bookkeeping | – | – | – | – | – | – | yes |
-| `planner_goal` | goals | content | yes | yes | **gap** | – | **gap** | **gap** | yes |
-| `planner_week` | goals | content | yes | – | – | – | **gap** | **gap** | yes |
-| `planner_review` | goals | content | – | – | – | – | – | **gap** | yes |
-| `planner_goal_flag` | goals | content | yes | yes | – | – | – | **gap** | yes |
-| `planner_period_review` | goals | content | – | – | – | – | – | **gap** | yes |
-| `planner_evidence` | goals | content | – | – | – | – | – | **gap** | yes |
-| `health_entry` | health | content | yes | – | – | – | **gap** | **gap** | yes |
-| `health_entry_event` | health | history | – | – | – | – | – | **gap** | yes |
-| `health_target` | health | bookkeeping | – | – | – | – | – | – | yes |
-| `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | yes |
-| `health_tracker` | health | bookkeeping | – | – | – | – | – | – | yes |
-| `health_tracker_event` | health | history | – | – | – | – | – | – | yes |
-| `articles` | articles | content | – | – | – | – | – | – | yes |
+| Data source | Part | Kind | lookBack | lookForward | search | memory | mcp | agent | userExport | backup |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `memos` | diary | content | yes | – | yes | yes | yes | yes | yes | yes |
+| `memos:earlier-week` | diary | content | – | – | yes | yes | yes | yes | yes | yes |
+| `memos:weekly-summary` | goals | content | yes | – | yes | yes | yes | yes | yes | yes |
+| `memo_tags` | diary | structure | – | – | – | – | yes | – | – | yes |
+| `memo_revisions` | diary | history | – | – | – | – | – | – | – | yes |
+| `memo_relations` | diary | structure | – | – | – | – | yes | – | yes | yes |
+| `reactions` | diary | structure | – | – | – | – | yes | – | – | yes |
+| `attachments` | diary | content | **gap** | – | – | – | yes | **gap** | yes | yes |
+| `shares` | diary | bookkeeping | – | – | – | – | – | – | yes | yes |
+| `memos_sse_events` | diary | bookkeeping | – | – | – | – | – | – | – | yes |
+| `memo_hourly_counts` | diary | derived | – | – | – | – | – | – | – | – |
+| `memory_items` | memory | content | yes | **gap** | yes | yes | yes | yes | yes | yes |
+| `memory_revisions` | memory | history | – | – | – | yes | – | – | yes | yes |
+| `memory_relations` | memory | structure | – | – | – | yes | – | – | yes | yes |
+| `memory_resource_links` | memory | structure | – | – | – | yes | – | – | yes | yes |
+| `memory_evidence` | memory | structure | – | – | – | yes | – | – | yes | yes |
+| `memory_events` | memory | history | – | – | – | yes | – | – | yes | yes |
+| `memory_rejections` | memory | bookkeeping | – | – | – | yes | – | yes | – | yes |
+| `memory_compile_archives` | memory | bookkeeping | – | – | – | yes | – | – | – | yes |
+| `embedding_tasks` | search | derived | – | – | – | – | – | – | – | – |
+| `memos_fts` | search | derived | – | – | – | – | – | – | – | – |
+| `memory_fts` | search | derived | – | – | – | – | – | – | – | – |
+| `tasks` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
+| `tasks:backlog` | cockpit | content | – | – | **gap** | – | **gap** | yes | yes | yes |
+| `tasks.notes` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
+| `projects` | cockpit | structure | – | – | – | – | – | yes | yes | yes |
+| `task_activity` | cockpit | history | – | – | – | – | – | – | yes | yes |
+| `planner_task_event` | cockpit | history | yes | yes | – | – | – | yes | **gap** | yes |
+| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | – | yes | **gap** | yes |
+| `planner_task_plan` | cockpit | structure | yes | – | – | – | – | yes | **gap** | yes |
+| `planner_project_node` | cockpit | structure | – | – | – | – | – | – | **gap** | yes |
+| `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
+| `planner_sync_state` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
+| `planner_goal` | goals | content | yes | yes | **gap** | – | **gap** | yes | **gap** | yes |
+| `planner_week` | goals | content | yes | – | – | – | **gap** | yes | **gap** | yes |
+| `planner_review` | goals | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_goal_flag` | goals | content | yes | yes | – | – | – | yes | **gap** | yes |
+| `planner_period_review` | goals | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_evidence` | goals | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_agent_proposal` | agent | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_agent_chat` | agent | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_agent_run` | agent | bookkeeping | – | – | – | – | – | – | – | yes |
+| `health_entry` | health | content | yes | – | – | – | **gap** | yes | **gap** | yes |
+| `health_entry_event` | health | history | – | – | – | – | – | – | **gap** | yes |
+| `health_target` | health | bookkeeping | – | – | – | – | – | – | – | yes |
+| `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | – | yes |
+| `health_tracker` | health | bookkeeping | – | – | – | – | – | – | – | yes |
+| `health_tracker_event` | health | history | – | – | – | – | – | – | – | yes |
+| `articles` | articles | content | – | – | – | – | – | – | – | yes |
 
 System tables, none of which reach a consumer except the backup: `shortcuts`, `users`, `auth_users`, `auth_sessions`, `auth_accounts`, `auth_verifications`, `auth_apikeys`, `auth_user_links`, `auth_bootstrap`, `auth_organizations`, `auth_members`, `auth_invitations`, `settings`, `voice_service_config`, `integration_config`, `usage_counters`, `memos_webhooks`, `memos_webhook_events`, `memos_webhook_deliveries`, `push_subscriptions`, `memos_notifications`, `data_tasks`, `member_removal_jobs`.
 
 Gaps (left out, and probably should not be):
 
 - `attachments` → lookBack: the review is not told an entry had a photo or file, nor its name.
+- `attachments` → agent: the agent is not told an entry had a photo or file, nor its name.
 - `memory_items` → lookForward: the goal check does not read memories (preferences, constraints).
 - `tasks` → search: tasks are not in keyword or semantic search.
 - `tasks` → mcp: agents cannot read or change tasks over MCP.
@@ -111,6 +115,8 @@ Gaps (left out, and probably should not be):
 - `planner_goal_flag` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_period_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_evidence` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `planner_agent_proposal` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `planner_agent_chat` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry` → mcp: agents cannot read health entries over MCP.
 - `health_entry` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).

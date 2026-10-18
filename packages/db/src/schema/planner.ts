@@ -387,6 +387,111 @@ export const plannerEvidence = sqliteTable(
   ],
 );
 
+// One row per session of the general agent (migration 9014,
+// docs/fork-general-agent.md): what it was started for, the last step it was
+// given, its hard budget and its last known cost, in US cents at list price.
+export const plannerAgentRun = sqliteTable(
+  "planner_agent_run",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    job: text("job", { enum: ["review", "period", "ask"] }).notNull(),
+    // "week:<monday>", "<level>:<period start>" or "ask:<conversation>".
+    ownerKey: text("owner_key").notNull(),
+    sessionId: text("session_id"),
+    state: text("state", { enum: ["open", "ended", "failed"] })
+      .notNull()
+      .default("open"),
+    startedBy: text("started_by", { enum: ["owner", "schedule"] })
+      .notNull()
+      .default("owner"),
+    step: text("step"),
+    stepInput: text("step_input", { mode: "json" }).$type<unknown>(),
+    stepAt: text("step_at"),
+    stepDoneAt: text("step_done_at"),
+    budgetCents: integer("budget_cents").notNull(),
+    costCents: integer("cost_cents").notNull().default(0),
+    error: text("error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    endedAt: text("ended_at"),
+  },
+  (table) => [
+    index("planner_agent_run_user_key_idx").on(
+      table.userId,
+      table.ownerKey,
+      table.state,
+    ),
+    index("planner_agent_run_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);
+
+// A goal or task the agent proposed for a week's plan (migration 9014). The
+// owner accepts it into the plan or dismisses it; nothing reaches the goals or
+// tasks until the plan is saved.
+export const plannerAgentProposal = sqliteTable(
+  "planner_agent_proposal",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    runId: text("run_id"),
+    // The Monday of the week being planned.
+    weekStart: text("week_start").notNull(),
+    kind: text("kind", { enum: ["goal", "task"] }).notNull(),
+    pillar: text("pillar", { enum: ["of", "work", "ai", "health"] }),
+    title: text("title").notNull(),
+    lines: text("lines", { mode: "json" })
+      .$type<PlannerGoalLine[]>()
+      .notNull()
+      .default([]),
+    // A task's goal: an existing goal's id or a goal proposal's id.
+    goalRef: text("goal_ref"),
+    why: text("why").notNull(),
+    quote: text("quote"),
+    // Upstream memos.id by value, with no foreign key.
+    sourceId: text("source_id"),
+    sourceDay: text("source_day"),
+    verified: integer("verified").notNull().default(0),
+    state: text("state", { enum: ["open", "accepted", "dismissed"] })
+      .notNull()
+      .default("open"),
+    createdAt: text("created_at").notNull(),
+    settledAt: text("settled_at"),
+  },
+  (table) => [
+    index("planner_agent_proposal_user_week_idx").on(
+      table.userId,
+      table.weekStart,
+      table.state,
+    ),
+  ],
+);
+
+// The Ask chat (migration 9014): the owner's questions and the agent's answers,
+// one row per message, grouped by conversation.
+export const plannerAgentChat = sqliteTable(
+  "planner_agent_chat",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    role: text("role", { enum: ["owner", "agent"] }).notNull(),
+    text: text("text").notNull(),
+    runId: text("run_id"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("planner_agent_chat_user_conversation_idx").on(
+      table.userId,
+      table.conversationId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
 export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
@@ -399,3 +504,6 @@ export type PlannerTaskSeenRow = typeof plannerTaskSeen.$inferSelect;
 export type PlannerSyncStateRow = typeof plannerSyncState.$inferSelect;
 export type PlannerProjectNodeRow = typeof plannerProjectNode.$inferSelect;
 export type PlannerTaskCommentRow = typeof plannerTaskComment.$inferSelect;
+export type PlannerAgentRunRow = typeof plannerAgentRun.$inferSelect;
+export type PlannerAgentProposalRow = typeof plannerAgentProposal.$inferSelect;
+export type PlannerAgentChatRow = typeof plannerAgentChat.$inferSelect;

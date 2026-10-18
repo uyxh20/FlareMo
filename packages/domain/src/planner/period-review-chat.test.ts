@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { plannerAgentPeriodOpeningMessage } from "./agent-prompts";
 import {
   plannerParsePeriodOpening,
   plannerPeriodAgentKey,
-  plannerPeriodAgentOpeningMessage,
   plannerPeriodChatMemoParts,
   plannerPeriodCoachSystem,
   plannerPeriodOpeningMessages,
@@ -162,10 +162,10 @@ describe("the period chat's words", () => {
     expect(plannerPeriodAgentKey("month", "2026-10-01")).toBe(
       "month:2026-10-01",
     );
-    const opening = plannerPeriodAgentOpeningMessage(context());
-    expect(opening).toContain("/mnt/session/uploads/data/this-period.md");
+    const opening = plannerAgentPeriodOpeningMessage(context());
+    expect(opening).toContain("Use your period-review skill.");
     expect(opening).toContain(
-      'Read "week" in your standing instructions as "month"',
+      "(read it with review_period for the month starting 2026-10-01;",
     );
   });
 
