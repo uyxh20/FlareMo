@@ -11,6 +11,7 @@
 const names = { en: "Cockpit", zhCN: "驾驶舱" } as const;
 const goalsNames = { en: "Goals", zhCN: "目标" } as const;
 const reviewNames = { en: "Review", zhCN: "复盘" } as const;
+const askNames = { en: "Ask my diary", zhCN: "问日记" } as const;
 
 /** What the cockpit is called in an app language: Chinese for zh-CN, English otherwise. */
 export function plannerNavLabelFor(locale: string): string {
@@ -25,6 +26,11 @@ export function plannerGoalsNavLabelFor(locale: string): string {
 /** The review's name (the week, month, quarter and year in one), like `plannerNavLabelFor`. */
 export function plannerReviewNavLabelFor(locale: string): string {
   return locale === "zh-CN" ? reviewNames.zhCN : reviewNames.en;
+}
+
+/** Ask my diary's name (docs/fork-general-agent.md), like `plannerNavLabelFor`. */
+export function plannerAskNavLabelFor(locale: string): string {
+  return locale === "zh-CN" ? askNames.zhCN : askNames.en;
 }
 
 export const plannerNavLabelEn = names.en;

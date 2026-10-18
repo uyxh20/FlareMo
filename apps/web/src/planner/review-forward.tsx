@@ -1,4 +1,5 @@
 import {
+  type PlannerAgentProposalsResponse,
   type PlannerBoardResponse,
   type PlannerCommitInput,
   type PlannerGoalFlagDto,
@@ -34,6 +35,11 @@ import {
   plannerPickableCards,
   plannerTodoCount,
 } from "./review-model";
+import {
+  PlannerGoalProposals,
+  type PlannerProposalActions,
+  PlannerTaskProposals,
+} from "./review-proposals";
 
 // Look forward, the second part of the weekly review (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md), in four steps: settle the clashes the
@@ -47,6 +53,8 @@ export type PlannerCheck = {
   sig: string;
   status: "running" | "done" | "off" | "failed";
   flags: PlannerCommitInput["flags"];
+  /** Who checked: the review's agent session or the model. */
+  by?: "agent" | "model";
 };
 
 export type PlannerForwardActions = {
@@ -78,6 +86,9 @@ type Props = {
   saved: boolean;
   strings: PlannerGoalsStrings;
   actions: PlannerForwardActions;
+  /** The general agent's proposals for the week, when it made any. */
+  proposals?: PlannerAgentProposalsResponse;
+  proposalActions: PlannerProposalActions;
 };
 
 /**
@@ -343,7 +354,7 @@ function GoalSlot({ goal, props }: { goal: PlannerPlanGoal; props: Props }) {
 }
 
 function ChooseWeek(props: Props) {
-  const { forward, strings, actions } = props;
+  const { forward, strings, actions, proposals, proposalActions } = props;
   const text = strings.review.forward;
   return (
     <>
@@ -362,6 +373,12 @@ function ChooseWeek(props: Props) {
           {text.addGoal}
         </Button>
       </div>
+      <PlannerGoalProposals
+        actions={proposalActions}
+        forward={forward}
+        proposals={proposals}
+        strings={strings}
+      />
     </>
   );
 }
@@ -473,7 +490,8 @@ function BoardPickForm({
 }
 
 function PlanTasks(props: Props) {
-  const { forward, board, strings, actions } = props;
+  const { forward, board, strings, actions, proposals, proposalActions } =
+    props;
   const text = strings.review.forward;
   const heading = <StepTitle>{text.steps[2]}</StepTitle>;
   if (!board) {
@@ -616,6 +634,13 @@ function PlanTasks(props: Props) {
           })
         )}
       </div>
+      <PlannerTaskProposals
+        actions={proposalActions}
+        board={board}
+        forward={forward}
+        proposals={proposals}
+        strings={strings}
+      />
     </>
   );
 }
@@ -685,7 +710,9 @@ function Commit(props: Props) {
               </span>
             )}
             {check?.status === "done" && (
-              <PlannerBadge>{text.model}</PlannerBadge>
+              <PlannerBadge>
+                {check.by === "agent" ? text.agent : text.model}
+              </PlannerBadge>
             )}
           </div>
           {check?.status === "off" && (

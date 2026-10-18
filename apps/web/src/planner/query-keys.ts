@@ -38,4 +38,9 @@ export const plannerQueryKeys = {
   ) => ["planner", "period-review", today, level ?? "", period ?? ""] as const,
   /** Whether a period review closes with this week, for the sidebar's dot and the hand-off. */
   periodStatus: (today: string) => ["planner", "period-status", today] as const,
+  /** The general agent's proposals for the week a review plans (docs/fork-general-agent.md). */
+  proposals: (week: string) => ["planner", "proposals", week] as const,
+  /** An Ask my diary conversation; "latest" before one is chosen. */
+  ask: (conversation: string | null) =>
+    ["planner", "ask", conversation ?? "latest"] as const,
 } as const;

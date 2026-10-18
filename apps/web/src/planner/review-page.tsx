@@ -50,14 +50,16 @@ import { cn } from "@/lib/utils";
 import { plannerErrorMessage, plannerFetchBoard } from "./api";
 import { plannerMarkWeekFresh } from "./goal-cards";
 import {
-  plannerAiCheckRequest,
+  plannerAiCheck,
   plannerAiClose,
   plannerAiFailure,
   plannerAiOpening,
+  plannerFetchProposals,
   plannerFetchReview,
   plannerLookBackRequest,
   plannerLookForwardRequest,
   plannerSaveReviewStateRequest,
+  plannerSettleProposalRequest,
   plannerStartReviewOverRequest,
   plannerStreamCoach,
   plannerStreamMemo,
@@ -119,6 +121,11 @@ import {
   plannerSysOnce,
   plannerTodoCount,
 } from "./review-model";
+import {
+  type PlannerProposalActions,
+  plannerAddProposedGoal,
+  plannerFindBoardCard,
+} from "./review-proposals";
 import {
   PlannerHappened as PlannerHappenedBlock,
   PlannerReads,
@@ -1206,13 +1213,24 @@ function ReviewSession({
     }
     setCheck({ sig: signature, status: "running", flags: [] });
     let cancelled = false;
-    plannerAiCheckRequest(week, plannerCheckInput(plan, today))
+    const abort = new AbortController();
+    // In the review's agent session when it has one: the agent checks the
+    // plan with everything it read this evening.
+    plannerAiCheck(
+      week,
+      {
+        ...plannerCheckInput(plan, today),
+        ...agentSession(stateRef.current.back),
+      },
+      { signal: abort.signal },
+    )
       .then((result) => {
         if (cancelled) return;
         setCheck({
           sig: signature,
           status: "done",
           flags: plannerCheckFlags(result.flags, plan),
+          by: result.by,
         });
       })
       .catch((error) => {
@@ -1225,8 +1243,38 @@ function ReviewSession({
       });
     return () => {
       cancelled = true;
+      abort.abort();
     };
   }, [part, step, signature]);
+
+  // The general agent's proposals for the week being planned
+  // (docs/fork-general-agent.md): drafted after the memo, asked for again
+  // every few seconds while the agent is still at it.
+  const proposalsQuery = useQuery({
+    queryKey: plannerQueryKeys.proposals(week),
+    queryFn: () => plannerFetchProposals(week, today),
+    enabled: part === "forward" && review.ai,
+    refetchInterval: (current) => (current.state.data?.pending ? 5_000 : false),
+    retry: false,
+  });
+  const settleProposal = (id: string, state: "accepted" | "dismissed") => {
+    queryClient.setQueryData(
+      plannerQueryKeys.proposals(week),
+      (current: typeof proposalsQuery.data) =>
+        current && {
+          ...current,
+          proposals: current.proposals.map((proposal) =>
+            proposal.id === id ? { ...proposal, state } : proposal,
+          ),
+        },
+    );
+    plannerSettleProposalRequest(id, state).catch(() => {
+      toast.error(strings.review.forward.proposals.settleFailed);
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.proposals(week),
+      });
+    });
+  };
 
   const [savingWeek, setSavingWeek] = useState(false);
 
@@ -1382,6 +1430,30 @@ function ReviewSession({
     save: () => void saveWeek(),
   };
 
+  const proposalActions: PlannerProposalActions = {
+    addGoal: (proposal) => {
+      setForward((current) => plannerAddProposedGoal(current, proposal));
+      settleProposal(proposal.id, "accepted");
+    },
+    addTask: (proposal, goalId) => {
+      // A card already on the board joins the plan rather than a copy of it.
+      const found = board ? plannerFindBoardCard(board, proposal.title) : null;
+      const full =
+        board !== undefined &&
+        plannerTodoCount(stateRef.current.forward, board) >= plannerTodoCap;
+      if (full && found?.column !== "todo" && found?.column !== "doing") {
+        return;
+      }
+      setForward((current) =>
+        found
+          ? plannerAddBoardTask(current, goalId, found.card, found.column)
+          : plannerAddNewTask(current, goalId, proposal.title),
+      );
+      settleProposal(proposal.id, "accepted");
+    },
+    dismiss: (proposal) => settleProposal(proposal.id, "dismissed"),
+  };
+
   const periodOpen = chapters.find(
     (chapter): chapter is Extract<Chapter, { level: PlannerPeriodLevel }> =>
       chapter.id === part && chapter.id !== "back" && chapter.id !== "forward",
@@ -1463,6 +1535,8 @@ function ReviewSession({
             board={board}
             check={check}
             forward={forward}
+            proposalActions={proposalActions}
+            proposals={proposalsQuery.data}
             question={question}
             review={review}
             saved={Boolean(review.look_forward_done_at)}

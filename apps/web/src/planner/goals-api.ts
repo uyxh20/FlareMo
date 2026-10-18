@@ -1,8 +1,11 @@
 import type {
+  PlannerAgentProposalResponse,
+  PlannerAgentProposalsResponse,
   PlannerAgentResponse,
   PlannerAgentStep,
   PlannerAiCheckInput,
   PlannerAiCheckResponse,
+  PlannerAiCheckResult,
   PlannerAiCloseInput,
   PlannerAiCloseResponse,
   PlannerAiCloseResult,
@@ -220,10 +223,49 @@ export function plannerAiCheckRequest(
   week: string,
   input: PlannerAiCheckInput,
 ) {
-  return apiRequest<PlannerAiCheckResponse>(reviewPath(week, "ai/check"), {
+  return apiRequest<PlannerAiCheckResult>(reviewPath(week, "ai/check"), {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+/**
+ * The goal check's flags, and who checked: the review's agent session when
+ * the review has one (its answer comes in a minute or so), else the model.
+ * Throws like apiRequest, or PlannerAgentFailed.
+ */
+export async function plannerAiCheck(
+  week: string,
+  input: PlannerAiCheckInput,
+  options: { signal?: AbortSignal } = {},
+): Promise<PlannerAiCheckResponse & { by: "agent" | "model" }> {
+  const result = await plannerAiCheckRequest(week, input);
+  if (!("agent" in result)) return { ...result, by: "model" };
+  const answer = await plannerWaitForAgent(week, result.agent, {
+    today: input.today,
+    step: "check",
+    signal: options.signal,
+  });
+  if (answer?.step !== "check") throw new PlannerAgentFailed();
+  return { ...answer.check, by: "agent" };
+}
+
+/** The agent's goal and task proposals for the week being planned. */
+export function plannerFetchProposals(week: string, today: string) {
+  return apiRequest<PlannerAgentProposalsResponse>(
+    `${reviewPath(week, "proposals")}?${new URLSearchParams({ today })}`,
+  );
+}
+
+/** Accepts or dismisses one of the agent's proposals. */
+export function plannerSettleProposalRequest(
+  id: string,
+  state: "accepted" | "dismissed" | "open",
+) {
+  return apiRequest<PlannerAgentProposalResponse>(
+    `${PLANNER_API}/agent/proposals/${encodeURIComponent(id)}`,
+    { method: "POST", body: JSON.stringify({ state }) },
+  );
 }
 
 /**

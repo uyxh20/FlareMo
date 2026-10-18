@@ -283,6 +283,18 @@ export type PlannerGoalsStrings = {
       noCheck: string;
       checkFailed: string;
       model: string;
+      /** The badge on what the general agent did (docs/fork-general-agent.md). */
+      agent: string;
+      proposals: {
+        title: string;
+        drafting: string;
+        add: string;
+        dismiss: string;
+        goalLabel: string;
+        needsGoal: string;
+        full: string;
+        settleFailed: string;
+      };
       saveWeek: string;
       saving: string;
       savedToast: (week: string) => string;
@@ -577,6 +589,17 @@ const en: PlannerGoalsStrings = {
       noCheck: "No model to check with",
       checkFailed: "The check didn't run",
       model: "Model",
+      agent: "Agent",
+      proposals: {
+        title: "Proposed",
+        drafting: "Drafting proposals",
+        add: "Add",
+        dismiss: "Dismiss",
+        goalLabel: "The goal it serves",
+        needsGoal: "Name a goal first",
+        full: "To Do is full",
+        settleFailed: "Couldn't save that. Try again.",
+      },
       saveWeek: "Save week",
       saving: "Saving",
       savedToast: (week) => `${week} saved`,
@@ -860,6 +883,17 @@ const zhCN: PlannerGoalsStrings = {
       noCheck: "没有模型可以检查",
       checkFailed: "检查没有运行",
       model: "模型",
+      agent: "代理",
+      proposals: {
+        title: "提议",
+        drafting: "正在起草提议",
+        add: "添加",
+        dismiss: "忽略",
+        goalLabel: "服务的目标",
+        needsGoal: "请先写下一个目标",
+        full: "待办已满",
+        settleFailed: "没能保存，请重试。",
+      },
       saveWeek: "保存本周",
       saving: "保存中",
       savedToast: (week) => `${week} 已保存`,
