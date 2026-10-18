@@ -21,29 +21,30 @@ import {
   plannerPeriodReviewQuerySchema,
   plannerPeriodStatusQuerySchema,
   plannerSavePeriodSchema,
+  plannerPeriodLabel,
   plannerSavePeriodStateSchema,
 } from "@flaremo/contracts";
 import {
-  PLANNER_MEMO_AGENT_DIARY_CHARS,
+  PLANNER_AGENT_DIARY_CHARS,
   PLANNER_PERIOD_DIARY_CHARS,
   PLANNER_PERIOD_DIARY_CHARS_SMALL,
   type PlannerChatMessage,
   type PlannerCoachMode,
   type PlannerPeriodContext,
   type PlannerReviewAnswers,
+  plannerAgentFindOpenRun,
+  plannerAgentPeriodCloseMessage,
+  plannerAgentPeriodCoachMessage,
+  plannerAgentPeriodMemoKickoff,
+  plannerAgentPeriodMemoMessage,
+  plannerAgentPeriodOpeningMessage,
   plannerCoachStreamFilter,
   plannerMemoStreamFilter,
   plannerMergePeriodThemes,
   plannerParseClose,
   plannerParsePeriodChecks,
   plannerParsePeriodOpening,
-  plannerPeriodAgentCloseMessage,
-  plannerPeriodAgentCoachMessage,
-  plannerPeriodAgentFiles,
   plannerPeriodAgentKey,
-  plannerPeriodAgentMemoFiles,
-  plannerPeriodAgentMemoKickoff,
-  plannerPeriodAgentOpeningMessage,
   plannerPeriodChatMemoMessages,
   plannerPeriodChecksMessages,
   plannerPeriodCloseMessages,
@@ -72,16 +73,17 @@ import {
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
-  type PlannerMemoAgent,
-  type PlannerMemoAgentState,
-  plannerEndMemoAgent,
+  type PlannerAgent,
+  PlannerAgentUnavailableError,
+  type PlannerAgentState,
+  plannerAgent,
+  plannerEndAgent,
   plannerLogAgentError,
-  plannerMemoAgent,
-  plannerPollMemoAgent,
-  plannerReadMemoAgentMemo,
-  plannerSendMemoAgent,
-  plannerStartMemoAgent,
-} from "./planner-memo-agent";
+  plannerPollAgent,
+  plannerReadAgentMemo,
+  plannerSendAgent,
+  plannerStartAgent,
+} from "./planner-agent";
 import {
   type PlannerReviewModel,
   plannerLogModelError,
@@ -129,7 +131,8 @@ plannerPeriodReviewApi.get(
           today: query.today,
           level: query.level,
           period: query.period,
-          ai: plannerReviewModel(c.env) !== null,
+          ai:
+            plannerReviewModel(c.env) !== null || plannerAgent(c.env) !== null,
         });
       return c.json(response);
     } catch (error) {
@@ -492,11 +495,60 @@ plannerPeriodReviewApi.post(
 //
 // The weekly review's Look back over a month or a quarter: the same requests
 // and answers as /review/:week/ai/* (planner-goals-api.ts), so the page runs
-// it with the weekly review's own chat. With the review agent configured, one
+// it with the weekly review's own chat. With the general agent configured, one
 // agent session carries the whole review, as it does for a week; its key is
 // the period ("month:2026-10-01") in place of the week's Monday.
 
 const CHAT = "/period-review/:level/:period/chat/ai";
+
+type ChatSetup =
+  | { response: Response }
+  | {
+      model: PlannerReviewModel | null;
+      agent: PlannerAgent | null;
+      review: PlannerPeriodContext;
+      context: RequestContext;
+    };
+
+/** aiSetup for the chat: the agent or the model will do. */
+async function chatSetup(
+  c: Context<HonoBindings>,
+  today: string,
+  limited: () => Response,
+): Promise<ChatSetup> {
+  const context = await getRequestContext(c);
+  const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
+  if (throttled) return { response: limited() };
+  plannerAssertToday(today, new Date());
+  const { level, periodStart } = plannerResolvePeriod(
+    today,
+    c.req.param("level"),
+    c.req.param("period"),
+  );
+  const model = plannerReviewModel(c.env);
+  const agent = plannerAgent(c.env);
+  if (!model && !agent) return { response: c.json(AI_UNAVAILABLE, 503) };
+  const review = await plannerReadPeriodContext(context.db, {
+    userId: context.user.id,
+    ownerName: context.user.name,
+    level,
+    periodStart,
+    today,
+    // The agent reads the period itself, so this is the model's.
+    diaryChars:
+      model?.provider === "workers-ai"
+        ? PLANNER_PERIOD_DIARY_CHARS_SMALL
+        : PLANNER_PERIOD_DIARY_CHARS,
+  });
+  return { model, agent, review, context };
+}
+
+/** The 503 for an agent that could not take the job, with its reason. */
+function agentUnavailable(c: Context<HonoBindings>, error: unknown) {
+  return error instanceof PlannerAgentUnavailableError
+    ? c.json({ error: { message: error.message, code: error.code } }, 503)
+    : c.json(AI_UNAVAILABLE, 503);
+}
 
 /** The review's answers as the prompts read them. */
 function answersOf(body: {
@@ -519,36 +571,30 @@ function answersOf(body: {
   };
 }
 
-function agentOwner(
-  setup: { review: PlannerPeriodContext; context: RequestContext },
-  sessionId?: string,
-) {
-  return {
-    userId: setup.context.user.id,
-    weekStart: plannerPeriodAgentKey(
-      setup.review.level,
-      setup.review.periodStart,
-    ),
-    ...(sessionId ? { sessionId } : {}),
-  };
+function agentKey(review: PlannerPeriodContext): string {
+  return plannerPeriodAgentKey(review.level, review.periodStart);
 }
 
 /** Gives a step to the period's agent session; null to use the model instead. */
 async function agentStep(
-  c: Context<HonoBindings>,
-  setup: { review: PlannerPeriodContext; context: RequestContext },
+  setup: {
+    agent: PlannerAgent | null;
+    review: PlannerPeriodContext;
+    context: RequestContext;
+  },
   session: string | undefined,
+  step: string,
   message: () => string,
-  files?: Record<string, string>,
 ): Promise<string | null> {
-  const agent: PlannerMemoAgent | null = plannerMemoAgent(c.env);
+  const { agent, review, context } = setup;
   if (!agent || !session) return null;
   try {
-    const sent = await plannerSendMemoAgent(agent, {
-      ...agentOwner(setup, session),
+    const sent = await plannerSendAgent(agent, context.db, {
+      userId: context.user.id,
+      ownerKey: agentKey(review),
       sessionId: session,
+      step,
       message: message(),
-      files,
     });
     return sent === "sent" ? session : null;
   } catch (error) {
@@ -557,60 +603,76 @@ async function agentStep(
   }
 }
 
+/** Starts the period's session, ending any other one it has open. */
+async function startPeriodAgent(
+  c: Context<HonoBindings>,
+  agent: PlannerAgent,
+  setup: { review: PlannerPeriodContext; context: RequestContext },
+  input: { step: string; message: string },
+): Promise<string> {
+  const { review, context } = setup;
+  const ownerKey = agentKey(review);
+  const open = await plannerAgentFindOpenRun(context.db, {
+    userId: context.user.id,
+    ownerKey,
+  });
+  if (open?.sessionId) {
+    await plannerEndAgent(agent, context.db, {
+      userId: context.user.id,
+      sessionId: open.sessionId,
+    });
+  }
+  const started = await plannerStartAgent(agent, {
+    db: context.db,
+    env: c.env,
+    user: context.user,
+    authUserId: context.authUserId,
+    job: "period",
+    ownerKey,
+    step: input.step,
+    message: input.message,
+    title: `${plannerPeriodLabel(review.level, review.periodStart)} review`,
+  });
+  return started.sessionId;
+}
+
 plannerPeriodReviewApi.post(
   `${CHAT}/opening`,
   zValidator("json", plannerAiOpeningSchema),
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const agent = plannerMemoAgent(c.env);
-      const setup = await aiSetup(
-        c,
-        body.today,
-        tooMany(c),
-        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
-      );
+      const setup = await chatSetup(c, body.today, tooMany(c));
       if ("response" in setup) return setup.response;
-      const parse = (raw: string): PlannerPeriodOpeningResponse =>
-        plannerParsePeriodOpening(raw, setup.review);
+      const { agent, model, review, context } = setup;
       if (agent) {
-        const owner = agentOwner(setup);
-        if (body.session) {
-          await plannerEndMemoAgent(agent, {
-            ...owner,
-            sessionId: body.session,
-          });
-        }
         try {
-          const session = await plannerStartMemoAgent(agent, {
-            ...owner,
-            files: plannerPeriodAgentFiles(setup.review),
-            kickoff: plannerPeriodAgentOpeningMessage(setup.review),
+          if (body.session) {
+            await plannerEndAgent(agent, context.db, {
+              userId: context.user.id,
+              sessionId: body.session,
+            });
+          }
+          const session = await startPeriodAgent(c, agent, setup, {
+            step: "opening",
+            message: plannerAgentPeriodOpeningMessage(review),
           });
           return c.json({ agent: session });
         } catch (error) {
-          // The review's model drafts the opening instead, from its own budget.
+          // The review's model drafts the opening instead, when there is one.
           plannerLogAgentError("start", error);
-          const small = await aiSetup(c, body.today, tooMany(c));
-          if ("response" in small) return small.response;
-          return completeOr503(
-            c,
-            small.model,
-            "period-opening",
-            plannerPeriodOpeningMessages(small.review),
-            { maxTokens: 2_400, temperature: 0.3 },
-            (raw): PlannerPeriodOpeningResponse =>
-              plannerParsePeriodOpening(raw, small.review),
-          );
+          if (!model) return agentUnavailable(c, error);
         }
       }
+      if (!model) return c.json(AI_UNAVAILABLE, 503);
       return completeOr503(
         c,
-        setup.model,
+        model,
         "period-opening",
-        plannerPeriodOpeningMessages(setup.review),
+        plannerPeriodOpeningMessages(review),
         { maxTokens: 2_400, temperature: 0.3 },
-        parse,
+        (raw): PlannerPeriodOpeningResponse =>
+          plannerParsePeriodOpening(raw, review),
       );
     } catch (error) {
       return jsonError(c, error);
@@ -624,12 +686,13 @@ plannerPeriodReviewApi.post(
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const setup = await aiSetup(c, body.today, tooMany(c));
+      const setup = await chatSetup(c, body.today, tooMany(c));
       if ("response" in setup) return setup.response;
-      const sent = await agentStep(c, setup, body.session, () =>
-        plannerPeriodAgentCloseMessage(setup.review, answersOf(body)),
+      const sent = await agentStep(setup, body.session, "close", () =>
+        plannerAgentPeriodCloseMessage(setup.review, answersOf(body)),
       );
       if (sent) return c.json({ agent: sent });
+      if (!setup.model) return c.json(AI_UNAVAILABLE, 503);
       return completeOr503(
         c,
         setup.model,
@@ -650,12 +713,12 @@ plannerPeriodReviewApi.post(
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const setup = await aiSetup(c, body.today, tooManyLines());
+      const setup = await chatSetup(c, body.today, tooManyLines());
       if ("response" in setup) return setup.response;
       const { model, review } = setup;
       const mode: PlannerCoachMode = body.mode;
-      const sent = await agentStep(c, setup, body.session, () =>
-        plannerPeriodAgentCoachMessage(review, mode, body.messages),
+      const sent = await agentStep(setup, body.session, "coach", () =>
+        plannerAgentPeriodCoachMessage(review, mode, body.messages),
       );
       if (sent) {
         return ndjson(async function* () {
@@ -668,6 +731,10 @@ plannerPeriodReviewApi.post(
         body.messages,
       );
       return ndjson(async function* (signal) {
+        if (!model) {
+          yield { error: "failed" as const };
+          return;
+        }
         const filter = plannerCoachStreamFilter(mode);
         try {
           for await (const piece of model.stream(messages, {
@@ -705,15 +772,9 @@ plannerPeriodReviewApi.post(
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const agent = plannerMemoAgent(c.env);
-      const setup = await aiSetup(
-        c,
-        body.today,
-        tooManyLines(),
-        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
-      );
+      const setup = await chatSetup(c, body.today, tooManyLines());
       if ("response" in setup) return setup.response;
-      const { model, review } = setup;
+      const { agent, model, review } = setup;
       const request = {
         ...answersOf(body),
         reviewedOn: body.today,
@@ -728,40 +789,41 @@ plannerPeriodReviewApi.post(
       const happened = (body.happened ?? []).filter(
         (entry) => plannerVerifyQuote(entry.quote, review.raw).verified,
       );
-      if (agent) {
-        return ndjson(async function* () {
+      const messages = plannerPeriodChatMemoMessages(review, request, happened);
+      return ndjson(async function* (signal) {
+        if (agent) {
           try {
-            const files = plannerPeriodAgentMemoFiles(
-              review,
-              request,
-              happened,
-            );
-            const sent = await agentStep(
-              c,
-              setup,
-              body.session,
-              () => plannerPeriodAgentMemoKickoff(review),
-              files,
+            const sent = await agentStep(setup, body.session, "memo", () =>
+              plannerAgentPeriodMemoMessage(review, request, happened),
             );
             if (sent) {
               yield { agent: sent };
               return;
             }
             // No session to go on with: a session for the memo alone.
-            const session = await plannerStartMemoAgent(agent, {
-              ...agentOwner(setup),
-              files: { ...plannerPeriodAgentFiles(review), ...files },
-              kickoff: plannerPeriodAgentMemoKickoff(review),
-            });
-            yield { agent: session };
+            yield {
+              agent: await startPeriodAgent(c, agent, setup, {
+                step: "memo",
+                message: plannerAgentPeriodMemoKickoff(
+                  review,
+                  request,
+                  happened,
+                ),
+              }),
+            };
+            return;
           } catch (error) {
             plannerLogAgentError("start", error);
-            yield { error: "failed" as const };
+            if (!model) {
+              yield { error: "failed" as const };
+              return;
+            }
           }
-        }, c.req.raw);
-      }
-      const messages = plannerPeriodChatMemoMessages(review, request, happened);
-      return ndjson(async function* (signal) {
+        }
+        if (!model) {
+          yield { error: "failed" as const };
+          return;
+        }
         const filter = plannerMemoStreamFilter();
         try {
           for await (const piece of model.stream(messages, {
@@ -788,12 +850,13 @@ plannerPeriodReviewApi.post(
   },
 );
 
-// The review agent's answer to a step, asked for every few seconds, as for a
-// week. The memo is the last step: once it is read, the session is deleted.
+// The agent's answer to a step, asked for every few seconds, as for a week.
+// The memo is the last step (the period's memories are proposed in it): once
+// it is read, the session is deleted.
 plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
   try {
     const context = await getRequestContext(c);
-    const agent = plannerMemoAgent(c.env);
+    const agent = plannerAgent(c.env);
     if (!agent) return c.json(AI_UNAVAILABLE, 503);
     const today = c.req.query("today") ?? "";
     plannerAssertToday(today, new Date());
@@ -815,12 +878,12 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
     }
     const owner = {
       userId: context.user.id,
-      weekStart: plannerPeriodAgentKey(level, periodStart),
+      ownerKey: plannerPeriodAgentKey(level, periodStart),
       sessionId: c.req.param("session"),
     };
-    let state: PlannerMemoAgentState;
+    let state: PlannerAgentState;
     try {
-      state = await plannerPollMemoAgent(agent, owner);
+      state = await plannerPollAgent(agent, context.db, owner);
     } catch (error) {
       plannerLogAgentError("poll", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
@@ -839,7 +902,7 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
         level,
         periodStart,
         today,
-        diaryChars: PLANNER_PERIOD_DIARY_CHARS_SMALL,
+        diaryChars: PLANNER_AGENT_DIARY_CHARS,
       });
       return c.json<PlannerAgentResponse>({
         status: "done",
@@ -867,12 +930,12 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
     }
     let raw: string | null;
     try {
-      raw = await plannerReadMemoAgentMemo(agent, owner.sessionId);
+      raw = await plannerReadAgentMemo(agent, owner.sessionId);
     } catch (error) {
       plannerLogAgentError("memo", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
     }
-    await plannerEndMemoAgent(agent, owner);
+    await plannerEndAgent(agent, context.db, { ...owner, failed: !raw });
     if (!raw) return c.json<PlannerAgentResponse>({ status: "failed" });
     const filter = plannerMemoStreamFilter();
     const memo = filter.push(raw) + filter.finish();

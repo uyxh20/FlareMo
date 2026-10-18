@@ -1,4 +1,6 @@
 import {
+  type PlannerAgentProposalResponse,
+  type PlannerAgentProposalsResponse,
   type PlannerAgentResponse,
   type PlannerAiCheckResponse,
   type PlannerAiCloseResponse,
@@ -12,6 +14,8 @@ import {
   type PlannerReviewResponse,
   type PlannerReviewStateResponse,
   type PlannerReviewStatusResponse,
+  plannerAddDays,
+  plannerAgentSettleSchema,
   plannerAiCheckSchema,
   plannerAiCloseSchema,
   plannerAiCoachSchema,
@@ -25,18 +29,29 @@ import {
   plannerReviewStatusQuerySchema,
   plannerSaveReviewStateSchema,
   plannerUpdateGoalSchema,
+  plannerWeekCode,
 } from "@flaremo/contracts";
 import {
+  PLANNER_AGENT_DIARY_CHARS,
   PLANNER_DIARY_CHARS,
   PLANNER_DIARY_CHARS_SMALL,
-  PLANNER_MEMO_AGENT_DIARY_CHARS,
   type PlannerChatMessage,
+  type PlannerCheckGoal,
   type PlannerCoachMode,
   type PlannerReviewAnswers,
   type PlannerReviewContext,
+  plannerAgentCheckMessage,
+  plannerAgentClearOpenProposals,
   plannerAgentCloseMessage,
   plannerAgentCoachMessage,
+  plannerAgentFindOpenRun,
+  plannerAgentListProposals,
+  plannerAgentMemoKickoff,
+  plannerAgentMemoMessage,
   plannerAgentOpeningMessage,
+  plannerAgentProposeMessage,
+  plannerAgentSettleProposal,
+  plannerAgentWeekKey,
   plannerCheckMessages,
   plannerCloseMessages,
   plannerCoachMessages,
@@ -44,9 +59,6 @@ import {
   plannerCommitPlan,
   plannerCreateGoal,
   plannerDeleteGoal,
-  plannerMemoAgentFiles,
-  plannerMemoAgentKickoff,
-  plannerMemoAgentStepFiles,
   plannerMemoMessages,
   plannerMemoStreamFilter,
   plannerOpeningMessages,
@@ -55,11 +67,9 @@ import {
   plannerParseWeekOpening,
   plannerReadFlags,
   plannerReadGoalsYear,
-  plannerReadMemoHistory,
   plannerReadReview,
   plannerReadReviewContext,
   plannerResolveReviewWeek,
-  plannerReviewAgentFiles,
   plannerReviewStatus,
   plannerSaveLookBack,
   plannerSaveReviewState,
@@ -77,16 +87,17 @@ import {
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
-  type PlannerMemoAgent,
-  type PlannerMemoAgentState,
-  plannerEndMemoAgent,
+  type PlannerAgent,
+  PlannerAgentUnavailableError,
+  type PlannerAgentState,
+  plannerAgent,
+  plannerEndAgent,
   plannerLogAgentError,
-  plannerMemoAgent,
-  plannerPollMemoAgent,
-  plannerReadMemoAgentMemo,
-  plannerSendMemoAgent,
-  plannerStartMemoAgent,
-} from "./planner-memo-agent";
+  plannerPollAgent,
+  plannerReadAgentMemo,
+  plannerSendAgent,
+  plannerStartAgent,
+} from "./planner-agent";
 import {
   type PlannerModelOptions,
   type PlannerReviewModel,
@@ -243,7 +254,7 @@ plannerGoalsApi.get(
         userId: user.id,
         today: query.today,
         week: query.week,
-        ai: plannerReviewModel(c.env) !== null,
+        ai: plannerReviewModel(c.env) !== null || plannerAgent(c.env) !== null,
       });
       return c.json(response);
     } catch (error) {
@@ -360,6 +371,20 @@ plannerGoalsApi.post(
           body,
         },
       );
+      // The plan is in: the review's agent session is done.
+      const agent = plannerAgent(c.env);
+      if (agent) {
+        const ending = endReviewAgent(
+          agent,
+          context,
+          plannerResolveReviewWeek(body.today, c.req.param("week")),
+        );
+        try {
+          c.executionCtx.waitUntil(ending);
+        } catch {
+          await ending;
+        }
+      }
       return c.json(response);
     } catch (error) {
       return jsonError(c, error);
@@ -367,26 +392,50 @@ plannerGoalsApi.post(
   },
 );
 
-// --- The review's model ---------------------------------------------------------
+/** Ends the review's open agent session, if any. Never throws. */
+async function endReviewAgent(
+  agent: PlannerAgent,
+  context: RequestContext,
+  weekStart: string,
+): Promise<void> {
+  try {
+    const open = await plannerAgentFindOpenRun(context.db, {
+      userId: context.user.id,
+      ownerKey: plannerAgentWeekKey(weekStart),
+    });
+    if (open?.sessionId) {
+      await plannerEndAgent(agent, context.db, {
+        userId: context.user.id,
+        sessionId: open.sessionId,
+      });
+    }
+  } catch (error) {
+    plannerLogAgentError("end", error);
+  }
+}
+
+// --- The review's model and the agent --------------------------------------------
 
 type AiSetup =
   | { response: Response }
   | {
-      model: PlannerReviewModel;
+      /** The review's model, or null when it is off. */
+      model: PlannerReviewModel | null;
+      /** The general agent, or null when this deployment runs without it. */
+      agent: PlannerAgent | null;
       review: PlannerReviewContext;
       context: RequestContext;
     };
 
 /**
  * What every AI route does first: authenticate, throttle, check `today` and the
- * week, find the model and read the review's context. A missing model is a 503
- * the page answers with its own drafts.
+ * week, find the agent and the model and read the review's context. With
+ * neither it is a 503 the page answers with its own drafts.
  */
 async function aiSetup(
   c: Context<HonoBindings>,
   today: string,
   limited: () => Response,
-  diaryChars?: number,
 ): Promise<AiSetup> {
   const context = await getRequestContext(c);
   const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
@@ -394,20 +443,21 @@ async function aiSetup(
   plannerAssertToday(today, new Date());
   const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
   const model = plannerReviewModel(c.env);
-  if (!model) return { response: c.json(AI_UNAVAILABLE, 503) };
+  const agent = plannerAgent(c.env);
+  if (!model && !agent) return { response: c.json(AI_UNAVAILABLE, 503) };
   const review = await plannerReadReviewContext(context.db, {
     userId: context.user.id,
     ownerName: context.user.name,
     weekStart,
     today,
-    // Workers AI's model has a small context; the others read most weeks whole.
+    // Workers AI's model has a small context; the others read most weeks
+    // whole. The agent reads the week itself, so this is the model's.
     diaryChars:
-      diaryChars ??
-      (model.provider === "workers-ai"
+      model?.provider === "workers-ai"
         ? PLANNER_DIARY_CHARS_SMALL
-        : PLANNER_DIARY_CHARS),
+        : PLANNER_DIARY_CHARS,
   });
-  return { model, review, context };
+  return { model, agent, review, context };
 }
 
 const tooMany = (c: Context<HonoBindings>) => () =>
@@ -415,6 +465,13 @@ const tooMany = (c: Context<HonoBindings>) => () =>
     { error: { message: "Too many requests. Please try again later." } },
     429,
   );
+
+/** The 503 for an agent that could not take the job, with its reason. */
+function agentUnavailable(c: Context<HonoBindings>, error: unknown) {
+  return error instanceof PlannerAgentUnavailableError
+    ? c.json({ error: { message: error.message, code: error.code } }, 503)
+    : c.json(AI_UNAVAILABLE, 503);
+}
 
 /** The review's answers as the prompts read them. */
 function answersOf(body: {
@@ -440,7 +497,7 @@ function answersOf(body: {
 /** Runs one JSON model call; a failure is a 503 the page falls back from. */
 async function completeOr503<T>(
   c: Context<HonoBindings>,
-  model: PlannerReviewModel,
+  model: PlannerReviewModel | null,
   task: string,
   messages: PlannerChatMessage[],
   options: {
@@ -450,6 +507,7 @@ async function completeOr503<T>(
   },
   parse: (raw: string) => T,
 ): Promise<Response> {
+  if (!model) return c.json(AI_UNAVAILABLE, 503);
   let raw: string;
   try {
     raw = await model.complete(messages, {
@@ -464,27 +522,31 @@ async function completeOr503<T>(
 }
 
 /**
- * Gives a step to the review's agent session when the agent runs the review
- * and the page has a session: the session id once it is sent, or null to
- * answer with the review's model instead (no agent, no session, the session is
- * gone, or sending failed).
+ * Gives a step to the review's agent session when the page has one: the
+ * session id once it is sent, or null to answer with the review's model
+ * instead (no agent, no session, the session is gone, or sending failed).
  */
 async function agentStep(
-  c: Context<HonoBindings>,
-  setup: { review: PlannerReviewContext; context: RequestContext },
+  setup: {
+    agent: PlannerAgent | null;
+    review: PlannerReviewContext;
+    context: RequestContext;
+  },
   session: string | undefined,
+  step: string,
   message: () => string,
-  files?: Record<string, string>,
+  stepInput?: unknown,
 ): Promise<string | null> {
-  const agent: PlannerMemoAgent | null = plannerMemoAgent(c.env);
+  const { agent, review, context } = setup;
   if (!agent || !session) return null;
   try {
-    const sent = await plannerSendMemoAgent(agent, {
-      userId: setup.context.user.id,
-      weekStart: setup.review.weekStart,
+    const sent = await plannerSendAgent(agent, context.db, {
+      userId: context.user.id,
+      ownerKey: plannerAgentWeekKey(review.weekStart),
       sessionId: session,
+      step,
+      stepInput,
       message: message(),
-      files,
     });
     return sent === "sent" ? session : null;
   } catch (error) {
@@ -493,66 +555,65 @@ async function agentStep(
   }
 }
 
+// The opening starts the review's agent session, or picks up the one the
+// Sunday schedule prepared (planner-agent-schedule.ts), whose answer is then
+// usually there already. Asked again with the page's session, it starts over.
 plannerGoalsApi.post(
   "/review/:week/ai/opening",
   zValidator("json", plannerAiOpeningSchema),
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const agent = plannerMemoAgent(c.env);
-      const setup = await aiSetup(
-        c,
-        body.today,
-        tooMany(c),
-        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
-      );
+      const setup = await aiSetup(c, body.today, tooMany(c));
       if ("response" in setup) return setup.response;
+      const { agent, model, review, context } = setup;
       if (agent) {
-        const { review, context } = setup;
-        const owner = { userId: context.user.id, weekStart: review.weekStart };
-        if (body.session) {
-          await plannerEndMemoAgent(agent, {
-            ...owner,
-            sessionId: body.session,
-          });
-        }
+        const owner = {
+          userId: context.user.id,
+          ownerKey: plannerAgentWeekKey(review.weekStart),
+        };
         try {
-          const history = await plannerReadMemoHistory(context.db, owner);
-          const session = await plannerStartMemoAgent(agent, {
-            ...owner,
-            files: plannerReviewAgentFiles(review, history),
-            kickoff: plannerAgentOpeningMessage(review),
+          if (body.session) {
+            await plannerEndAgent(agent, context.db, {
+              userId: owner.userId,
+              sessionId: body.session,
+            });
+          }
+          const open = await plannerAgentFindOpenRun(context.db, owner);
+          if (open?.sessionId && open.step === "opening" && !body.session) {
+            return c.json({ agent: open.sessionId });
+          }
+          if (open?.sessionId) {
+            await plannerEndAgent(agent, context.db, {
+              userId: owner.userId,
+              sessionId: open.sessionId,
+            });
+          }
+          const started = await plannerStartAgent(agent, {
+            db: context.db,
+            env: c.env,
+            user: context.user,
+            authUserId: context.authUserId,
+            job: "review",
+            ownerKey: owner.ownerKey,
+            step: "opening",
+            message: plannerAgentOpeningMessage(review),
+            title: `Weekly review ${plannerWeekCode(review.weekStart)}`,
           });
-          return c.json({ agent: session });
+          return c.json({ agent: started.sessionId });
         } catch (error) {
-          // The review's model drafts the opening instead, from its own budget.
+          // The review's model drafts the opening instead, when there is one.
           plannerLogAgentError("start", error);
-          const whole = await plannerReadReviewContext(context.db, {
-            userId: context.user.id,
-            ownerName: context.user.name,
-            weekStart: review.weekStart,
-            today: body.today,
-            diaryChars: PLANNER_DIARY_CHARS,
-          });
-          return completeOr503(
-            c,
-            setup.model,
-            "opening",
-            plannerOpeningMessages(whole),
-            { maxTokens: 2_000, temperature: 0.4 },
-            (raw): PlannerAiOpeningResponse =>
-              plannerParseWeekOpening(raw, whole),
-          );
+          if (!model) return agentUnavailable(c, error);
         }
       }
       return completeOr503(
         c,
-        setup.model,
+        model,
         "opening",
-        plannerOpeningMessages(setup.review),
+        plannerOpeningMessages(review),
         { maxTokens: 2_000, temperature: 0.4 },
-        (raw): PlannerAiOpeningResponse =>
-          plannerParseWeekOpening(raw, setup.review),
+        (raw): PlannerAiOpeningResponse => plannerParseWeekOpening(raw, review),
       );
     } catch (error) {
       return jsonError(c, error);
@@ -568,7 +629,7 @@ plannerGoalsApi.post(
       const body = c.req.valid("json");
       const setup = await aiSetup(c, body.today, tooMany(c));
       if ("response" in setup) return setup.response;
-      const sent = await agentStep(c, setup, body.session, () =>
+      const sent = await agentStep(setup, body.session, "close", () =>
         plannerAgentCloseMessage(setup.review, answersOf(body)),
       );
       if (sent) return c.json({ agent: sent });
@@ -586,36 +647,40 @@ plannerGoalsApi.post(
   },
 );
 
-// The review agent's answer to the step it was given, asked for every few
-// seconds. Not rate limited: each ask is a status read until the answer is
-// there. The memo is the last step: once it is read, the session is deleted.
+const AGENT_STEPS = [
+  "opening",
+  "coach",
+  "close",
+  "memo",
+  "propose",
+  "check",
+] as const;
+
+// The agent's answer to the step it was given, asked for every few seconds.
+// Not rate limited: each ask is a status read until the answer is there. Once
+// the memo is read the session goes on to the proposals for next week, which
+// the page reads from /review/:week/proposals; the plan's commit ends it.
 plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
   try {
     const context = await getRequestContext(c);
-    const agent = plannerMemoAgent(c.env);
+    const agent = plannerAgent(c.env);
     if (!agent) return c.json(AI_UNAVAILABLE, 503);
     const today = c.req.query("today") ?? "";
     plannerAssertToday(today, new Date());
     const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
-    const step = c.req.query("step");
+    const step = AGENT_STEPS.find((name) => name === c.req.query("step"));
     const mode = c.req.query("mode") ?? "free";
-    if (
-      (step !== "opening" &&
-        step !== "coach" &&
-        step !== "close" &&
-        step !== "memo") ||
-      (mode !== "free" && mode !== "force" && mode !== "chat")
-    ) {
+    if (!step || (mode !== "free" && mode !== "force" && mode !== "chat")) {
       return c.json({ error: { message: "Unknown step." } }, 400);
     }
     const owner = {
       userId: context.user.id,
-      weekStart,
+      ownerKey: plannerAgentWeekKey(weekStart),
       sessionId: c.req.param("session"),
     };
-    let state: PlannerMemoAgentState;
+    let state: PlannerAgentState;
     try {
-      state = await plannerPollMemoAgent(agent, owner);
+      state = await plannerPollAgent(agent, context.db, owner);
     } catch (error) {
       plannerLogAgentError("poll", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
@@ -628,19 +693,20 @@ plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
     // A JSON answer is the last reply that holds one; anything said before it
     // (the agent narrating what it reads) is not the answer.
     const json = [...texts].reverse().find((text) => text.includes("{")) ?? "";
-    if (step === "opening") {
-      // The receipts are checked against the week as the agent's file showed it.
-      const review = await plannerReadReviewContext(context.db, {
+    // The receipts are checked against the week whole, read again here.
+    const review = () =>
+      plannerReadReviewContext(context.db, {
         userId: context.user.id,
         ownerName: context.user.name,
         weekStart,
         today,
-        diaryChars: PLANNER_MEMO_AGENT_DIARY_CHARS,
+        diaryChars: PLANNER_AGENT_DIARY_CHARS,
       });
+    if (step === "opening") {
       return c.json<PlannerAgentResponse>({
         status: "done",
         step,
-        opening: plannerParseWeekOpening(json, review),
+        opening: plannerParseWeekOpening(json, await review()),
       });
     }
     if (step === "close") {
@@ -661,22 +727,123 @@ plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
         advance: advance ?? null,
       });
     }
+    if (step === "propose") {
+      return c.json<PlannerAgentResponse>({ status: "done", step });
+    }
+    if (step === "check") {
+      const input = state.run.stepInput as {
+        plan?: PlannerCheckGoal[];
+      } | null;
+      const plan = Array.isArray(input?.plan) ? input.plan : [];
+      return c.json<PlannerAgentResponse>({
+        status: "done",
+        step,
+        check: { flags: plannerParseCheck(json, await review(), plan) },
+      });
+    }
     let raw: string | null;
     try {
-      raw = await plannerReadMemoAgentMemo(agent, owner.sessionId);
+      raw = await plannerReadAgentMemo(agent, owner.sessionId);
     } catch (error) {
       plannerLogAgentError("memo", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
     }
-    await plannerEndMemoAgent(agent, owner);
-    if (!raw) return c.json<PlannerAgentResponse>({ status: "failed" });
+    if (!raw) {
+      await plannerEndAgent(agent, context.db, { ...owner, failed: true });
+      return c.json<PlannerAgentResponse>({ status: "failed" });
+    }
     const filter = plannerMemoStreamFilter();
     const memo = filter.push(raw) + filter.finish();
+    // Next week's proposals, made while the owner reads the memo. A new
+    // propose step replaces the week's proposals nobody has acted on yet.
+    const week = await review();
+    await plannerAgentClearOpenProposals(context.db, {
+      userId: owner.userId,
+      weekStart: week.planWeek,
+    });
+    const proposing = await plannerSendAgent(agent, context.db, {
+      ...owner,
+      step: "propose",
+      message: plannerAgentProposeMessage(week),
+    }).catch((error: unknown) => {
+      plannerLogAgentError("propose", error);
+      return "missing" as const;
+    });
+    if (proposing !== "sent") await plannerEndAgent(agent, context.db, owner);
     return c.json<PlannerAgentResponse>({ status: "done", step, memo });
   } catch (error) {
     return jsonError(c, error);
   }
 });
+
+// The agent's proposals for the week being planned, which Look forward shows
+// as cards. `pending` while the agent is still proposing; the page asks again
+// every few seconds until it is not.
+plannerGoalsApi.get(
+  "/review/:week/proposals",
+  zValidator("query", plannerReviewStatusQuerySchema),
+  async (c) => {
+    try {
+      const { db, user } = await getRequestContext(c);
+      const { today } = c.req.valid("query");
+      plannerAssertToday(today, new Date());
+      const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
+      const ownerKey = plannerAgentWeekKey(weekStart);
+      const agent = plannerAgent(c.env);
+      let pending = false;
+      const open = agent
+        ? await plannerAgentFindOpenRun(db, { userId: user.id, ownerKey })
+        : null;
+      if (agent && open?.sessionId && open.step === "propose") {
+        if (open.stepDoneAt) {
+          pending = false;
+        } else {
+          const state = await plannerPollAgent(agent, db, {
+            userId: user.id,
+            ownerKey,
+            sessionId: open.sessionId,
+          }).catch((error: unknown) => {
+            plannerLogAgentError("poll", error);
+            return { status: "running" } as const;
+          });
+          pending = state.status === "running";
+        }
+      }
+      const response: PlannerAgentProposalsResponse = {
+        proposals: await plannerAgentListProposals(db, {
+          userId: user.id,
+          weekStart: plannerAddDays(weekStart, 7),
+        }),
+        pending,
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+plannerGoalsApi.post(
+  "/agent/proposals/:id",
+  zValidator("json", plannerAgentSettleSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const response: PlannerAgentProposalResponse = {
+        proposal: await plannerAgentSettleProposal(context.db, {
+          userId: context.user.id,
+          id: c.req.param("id"),
+          state: c.req.valid("json").state,
+        }),
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
 
 plannerGoalsApi.post(
   "/review/:week/ai/check",
@@ -710,6 +877,16 @@ plannerGoalsApi.post(
         title: goal.title,
         tasks: goal.tasks,
       }));
+      // In the review's session the agent checks the plan with everything it
+      // read this evening; the poll parses its answer against `plan`.
+      const sent = await agentStep(
+        setup,
+        body.session,
+        "check",
+        () => plannerAgentCheckMessage(setup.review, plan, settled),
+        { plan },
+      );
+      if (sent) return c.json({ agent: sent });
       return completeOr503(
         c,
         setup.model,
@@ -779,7 +956,7 @@ plannerGoalsApi.post(
       if ("response" in setup) return setup.response;
       const { model, review } = setup;
       const mode: PlannerCoachMode = body.mode;
-      const sent = await agentStep(c, setup, body.session, () =>
+      const sent = await agentStep(setup, body.session, "coach", () =>
         plannerAgentCoachMessage(review, mode, body.messages),
       );
       if (sent) {
@@ -789,6 +966,10 @@ plannerGoalsApi.post(
       }
       const messages = plannerCoachMessages(review, mode, body.messages);
       return ndjson(async function* (signal) {
+        if (!model) {
+          yield { error: "failed" };
+          return;
+        }
         const filter = plannerCoachStreamFilter(mode);
         try {
           for await (const piece of model.stream(messages, {
@@ -821,15 +1002,9 @@ plannerGoalsApi.post(
   async (c) => {
     try {
       const body = c.req.valid("json");
-      const agent = plannerMemoAgent(c.env);
-      const setup = await aiSetup(
-        c,
-        body.today,
-        tooManyLines(),
-        agent ? PLANNER_MEMO_AGENT_DIARY_CHARS : undefined,
-      );
+      const setup = await aiSetup(c, body.today, tooManyLines());
       if ("response" in setup) return setup.response;
-      const { model, review, context } = setup;
+      const { agent, model, review, context } = setup;
       const request = {
         ...answersOf(body),
         reviewedOn: body.today,
@@ -840,42 +1015,56 @@ plannerGoalsApi.post(
         recommended: body.recommended,
         drafts: body.drafts,
       };
-      if (agent) {
-        return ndjson(async function* () {
+      const messages = plannerMemoMessages(review, request);
+      return ndjson(async function* (signal) {
+        if (agent) {
           try {
             // The review's own session, with the evening's answers added.
-            const sent = await agentStep(
-              c,
-              setup,
-              body.session,
-              () => plannerMemoAgentKickoff(review.weekStart),
-              plannerMemoAgentStepFiles(review, request),
+            const sent = await agentStep(setup, body.session, "memo", () =>
+              plannerAgentMemoMessage(review, request),
             );
             if (sent) {
               yield { agent: sent };
               return;
             }
             // No session to go on with (the opening ran without the agent, or
-            // the memo is written again): a session for the memo alone.
-            const history = await plannerReadMemoHistory(context.db, {
+            // the memo is written again): a session from the memo on.
+            const ownerKey = plannerAgentWeekKey(review.weekStart);
+            const open = await plannerAgentFindOpenRun(context.db, {
               userId: context.user.id,
-              weekStart: review.weekStart,
+              ownerKey,
             });
-            const session = await plannerStartMemoAgent(agent, {
-              userId: context.user.id,
-              weekStart: review.weekStart,
-              files: plannerMemoAgentFiles(review, request, history),
-              kickoff: plannerMemoAgentKickoff(review.weekStart),
+            if (open?.sessionId) {
+              await plannerEndAgent(agent, context.db, {
+                userId: context.user.id,
+                sessionId: open.sessionId,
+              });
+            }
+            const started = await plannerStartAgent(agent, {
+              db: context.db,
+              env: c.env,
+              user: context.user,
+              authUserId: context.authUserId,
+              job: "review",
+              ownerKey,
+              step: "memo",
+              message: plannerAgentMemoKickoff(review, request),
+              title: `Weekly review ${plannerWeekCode(review.weekStart)}`,
             });
-            yield { agent: session };
+            yield { agent: started.sessionId };
+            return;
           } catch (error) {
             plannerLogAgentError("start", error);
-            yield { error: "failed" };
+            if (!model) {
+              yield { error: "failed" };
+              return;
+            }
           }
-        }, c.req.raw);
-      }
-      const messages = plannerMemoMessages(review, request);
-      return ndjson(async function* (signal) {
+        }
+        if (!model) {
+          yield { error: "failed" };
+          return;
+        }
         const filter = plannerMemoStreamFilter();
         try {
           for await (const piece of model.stream(messages, {

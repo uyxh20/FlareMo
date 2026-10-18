@@ -170,7 +170,7 @@ export function plannerAgentMemoMessage(
 ): string {
   const name = firstName(context.ownerName);
   const parts = plannerMemoParts(context, request);
-  return `Memo step: write ${name}'s summary memo of the week starting Monday ${context.weekStart}. Follow the memo part of your weekly-review skill. If this session has not read the week yet, call review_week for ${context.weekStart} first.
+  return `Memo step: write ${name}'s summary memo of the week starting Monday ${context.weekStart}. Follow the memo part of your weekly-review skill. If this session has not read the week yet, call review_week for ${context.weekStart} first; if it has, entries may have been written since, so check list_entries for the week and open any you have not read.
 
 ${parts.template}
 
@@ -184,6 +184,20 @@ When the memo is checked:
 1. Write it to ${PLANNER_AGENT_MEMO_FILE}.
 2. Update your memory store: a few short lines for next week. Open threads, what ${name} said they would do, patterns to re-check, and anything you got wrong before. Notes, not a copy of the memo or the diary.
 3. Reply with the single word: done.`;
+}
+
+/**
+ * A review's session that starts at the memo (the opening ran without the
+ * agent, or the memo is written again): what the session is, then the step.
+ */
+export function plannerAgentMemoKickoff(
+  context: PlannerReviewContext,
+  request: PlannerMemoRequest,
+): string {
+  const name = firstName(context.ownerName);
+  return `This session is ${name}'s weekly review of the week starting Monday ${context.weekStart} (${plannerWeekCode(context.weekStart)}). Use your weekly-review skill. The opening and the chat ran without you; the session starts at the memo, then your proposals for ${plannerWeekCode(context.planWeek)} follow, and maybe a goal check. Reply to each step with only what it asks for. Read your memory store's notes first.
+
+${plannerAgentMemoMessage(context, request)}`;
 }
 
 /**
@@ -280,6 +294,19 @@ export function plannerAgentPeriodCloseMessage(
 ${periodStep(context, plannerPeriodCloseMessages(context, answers))}`;
 }
 
+/** A period's session that starts at the memo. */
+export function plannerAgentPeriodMemoKickoff(
+  context: PlannerPeriodContext,
+  request: PlannerPeriodChatMemoRequest,
+  happened: readonly PlannerHappened[],
+): string {
+  const name = firstName(context.ownerName);
+  const word = plannerPeriodWord(context.level);
+  return `This session is ${name}'s ${word} review of ${plannerPeriodLabel(context.level, context.periodStart)}. Use your period-review skill. The opening and the chat ran without you; the session starts at the memo. Reply with only what the step asks for. Read your memory store's notes first.
+
+${plannerAgentPeriodMemoMessage(context, request, happened)}`;
+}
+
 /**
  * The period's memo step. A period proposes memories here, after the memo:
  * it has no propose step of its own.
@@ -315,14 +342,28 @@ When the memo is checked:
 // Ask my diary
 // ---------------------------------------------------------------------------
 
-/** The first message of an Ask conversation. */
+/**
+ * The first message of an Ask conversation's session. `earlier` is the
+ * conversation so far when it goes on in a new session (the last one was put
+ * down and ended).
+ */
 export function plannerAgentAskKickoff(input: {
   ownerName: string;
   today: string;
   question: string;
+  earlier?: ReadonlyArray<{ role: "owner" | "agent"; text: string }>;
 }): string {
   const name = firstName(input.ownerName);
-  return `This session is ${name}'s Ask chat: ${name} asks about their own record and you answer from it. Use your ask-my-diary skill. Today is ${input.today}. You can read anything; you cannot propose or change anything in this chat. Read your memory store's notes if they may bear on the question, and don't change them.
+  const earlier = (input.earlier ?? []).slice(-6);
+  const recap = earlier.length
+    ? `\n\nThe conversation so far (from an earlier session; check anything you build on):\n\n${earlier
+        .map(
+          (message) =>
+            `${message.role === "owner" ? name : "You"}: ${message.text.length > 2_000 ? `${message.text.slice(0, 2_000)}…` : message.text}`,
+        )
+        .join("\n\n")}`
+    : "";
+  return `This session is ${name}'s Ask chat: ${name} asks about their own record and you answer from it. Use your ask-my-diary skill. Today is ${input.today}. You can read anything; you cannot propose or change anything in this chat. Read your memory store's notes if they may bear on the question, and don't change them.${recap}
 
 ${name} asks:
 

@@ -5,6 +5,7 @@ import {
   plannerAgentEndRun,
   plannerAgentListProposals,
   plannerAgentMonthSpend,
+  plannerAgentSetStep,
   plannerAgentSettleProposal,
 } from "./agent-store";
 import { PlannerAgentToolError, plannerAgentCallTool } from "./agent-tools";
@@ -47,6 +48,20 @@ async function entry(
 
 const call = (name: string, args: unknown) =>
   plannerAgentCallTool({ db: rt.db, user: rt.user, now: NOW }, name, args);
+
+/** An open weekly review at `step`, as the Worker records it. */
+async function reviewAt(step: string) {
+  const run = await plannerAgentCreateRun(rt.db, {
+    userId: rt.user.id,
+    job: "review",
+    ownerKey: `week:${WEEK}`,
+    budgetCents: 500,
+    step: "opening",
+    now: NOW,
+  });
+  await plannerAgentSetStep(rt.db, { runId: run.id, step });
+  return run;
+}
 
 describe("the general agent's tools", () => {
   beforeAll(async () => {
@@ -99,7 +114,29 @@ describe("the general agent's tools", () => {
     expect(week).not.toContain("Someone else");
   });
 
+  it("takes proposals only while a review is at a step that asks for them", async () => {
+    await entry("I always train better in the morning than at night.");
+    const memory = {
+      content: "Trains better in the morning than at night.",
+      kind: "preference",
+      quote: "I always train better in the morning",
+    };
+    await expect(call("propose_memory", memory)).rejects.toThrow(
+      "Proposals are taken only in a review's propose step.",
+    );
+    const run = await reviewAt("opening");
+    await expect(call("propose_memory", memory)).rejects.toThrow(
+      "Proposals are taken only in a review's propose step.",
+    );
+    await plannerAgentEndRun(rt.db, { runId: run.id, state: "ended" });
+    await reviewAt("propose");
+    expect(await call("propose_memory", memory)).toContain(
+      "Proposed as memory",
+    );
+  });
+
   it("proposes a memory only on the owner's own words, as a proposal", async () => {
+    await reviewAt("propose");
     await entry("I always train better in the morning than at night.");
     await entry("# Week 41\n\nYou train better in the evening.", {
       source: "weekly-review",
@@ -133,6 +170,7 @@ describe("the general agent's tools", () => {
   });
 
   it("proposes goals and tasks for the week being planned, with checked receipts", async () => {
+    const run = await reviewAt("propose");
     await entry("Need to finally call the accountant about the VAT.");
     await expect(
       call("propose_task", {
@@ -179,6 +217,11 @@ describe("the general agent's tools", () => {
       ["goal", "Close the VAT question", null],
       ["task", "Call the accountant", goalId],
     ]);
+    const [row] = await plannerTestRows<{ run_id: string }>(
+      rt.database,
+      "SELECT run_id FROM planner_agent_proposal LIMIT 1",
+    );
+    expect(row?.run_id).toBe(run.id);
     expect(proposals[1]).toMatchObject({
       quote: "finally call the accountant about the VAT",
       source_day: "2026-10-14",
@@ -211,9 +254,9 @@ describe("the agent's spend", () => {
 
   it("caps a run at the per-run stop or what is left of the month", () => {
     const base = { runCents: 500, monthCents: 3000 };
-    expect(plannerAgentBudget({ ...base, spentCents: 0, reservedCents: 0 })).toBe(
-      500,
-    );
+    expect(
+      plannerAgentBudget({ ...base, spentCents: 0, reservedCents: 0 }),
+    ).toBe(500);
     expect(
       plannerAgentBudget({ ...base, spentCents: 2600, reservedCents: 100 }),
     ).toBe(300);

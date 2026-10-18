@@ -575,7 +575,9 @@ describe("the general agent's review steps", () => {
     const system = plannerAgentSystem("Anon Example");
     expect(system).toContain("You are the agent inside Anon's diary app");
     expect(system).toContain("You change nothing.");
-    expect(system).toContain("weekly-review, period-review, ask-my-diary, goal-check");
+    expect(system).toContain(
+      "weekly-review, period-review, ask-my-diary, goal-check",
+    );
     expect(system).toContain("review memo (a model wrote it)");
   });
 

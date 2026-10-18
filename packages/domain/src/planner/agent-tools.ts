@@ -26,10 +26,7 @@ import { healthReadWeek, healthToday } from "../health/read";
 import { createMemory, isRejectedRecently, listMemories } from "../memory";
 import { computeFingerprint } from "../memory/shared";
 import { listMemos } from "../memos-read";
-import {
-  plannerAgentAddProposal,
-  plannerAgentFindQuote,
-} from "./agent-store";
+import { plannerAgentAddProposal, plannerAgentFindQuote } from "./agent-store";
 import { plannerReadBoard } from "./board";
 import { plannerReadGoalsYear } from "./goals";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
@@ -47,8 +44,8 @@ import { plannerReviewContextBlock } from "./review-prompts";
 // eval runner's bridge. Every read is the owner's own rows only. The three
 // propose tools are the agent's only writes, and each lands where the owner
 // decides on it: a memory waits on the Memory page, a goal or task on the
-// review page. A session that may not propose (the Ask chat) has them turned
-// off in its tool settings.
+// review page. They work only while a review is at a step that asks for
+// proposals; the Ask chat also has them turned off in its tool settings.
 
 /** A whole diary for the agent: it reads tool results, so nothing is cut. */
 export const PLANNER_AGENT_DIARY_CHARS = 1_000_000;
@@ -122,7 +119,10 @@ async function readEntries(
         inArray(memos.status, [...LIVE]),
         "ids" in range
           ? inArray(memos.id, [...range.ids])
-          : and(gte(memos.createdAt, range.from), lt(memos.createdAt, range.to)),
+          : and(
+              gte(memos.createdAt, range.from),
+              lt(memos.createdAt, range.to),
+            ),
       ),
     )
     .orderBy(asc(memos.createdAt))
@@ -146,8 +146,7 @@ async function readEntries(
   const summaries = new Set(tagged.map((row) => row.id));
   return rows.map((row) => ({
     ...row,
-    summary:
-      summaries.has(row.id) || row.source === plannerSummaryMemoSource,
+    summary: summaries.has(row.id) || row.source === plannerSummaryMemoSource,
   }));
 }
 
@@ -174,7 +173,10 @@ function goalLine(goal: PlannerGoalDto): string {
       ? "North star"
       : `${goal.level} ${goal.period_start}${goal.pillar ? ` · ${plannerPillarNames[goal.pillar]} (${goal.pillar})` : ""}`;
   const lines = goal.lines
-    .map((line) => `${line.struck ? "~~" : ""}${line.text}${line.struck ? "~~" : ""}${line.note ? ` (${line.note})` : ""}`)
+    .map(
+      (line) =>
+        `${line.struck ? "~~" : ""}${line.text}${line.struck ? "~~" : ""}${line.note ? ` (${line.note})` : ""}`,
+    )
     .join("; ");
   return [
     `- [${goal.id}] ${where}: ${goal.title || "(no title)"}`,
@@ -199,7 +201,10 @@ function requireSpan(from: string, to: string, maxDays: number): void {
 /** The Monday of a week a proposal may plan: last week up to two weeks on. */
 function requirePlanWeek(week: string, today: string): void {
   const current = plannerWeekStartOf(today);
-  if (week < plannerAddDays(current, -7) || week > plannerAddDays(current, 14)) {
+  if (
+    week < plannerAddDays(current, -7) ||
+    week > plannerAddDays(current, 14)
+  ) {
     throw new PlannerAgentToolError(
       "Propose only for the week being planned (next week).",
     );
@@ -227,10 +232,19 @@ async function receiptOf(
   return { quote: quote.replace(/\s+/g, " ").trim(), ...found };
 }
 
-/** The newest open review run, which a proposal is filed under. */
-async function reviewRunId(
+/** The review steps that may propose: the memo (a period's) and the propose step. */
+const PROPOSING_STEPS = ["memo", "propose"];
+
+/**
+ * The open review whose current step takes proposals, which a proposal is
+ * filed under. None means no review is asking for proposals now (an Ask chat,
+ * a review still at its opening), so the proposal is refused whatever the
+ * session's own tool settings say.
+ */
+async function proposingRun(
   context: PlannerAgentToolContext,
-): Promise<string | null> {
+  jobs: ReadonlyArray<"review" | "period">,
+): Promise<string> {
   const row = await context.db
     .select({ id: plannerAgentRun.id })
     .from(plannerAgentRun)
@@ -238,13 +252,19 @@ async function reviewRunId(
       and(
         eq(plannerAgentRun.userId, context.user.id),
         eq(plannerAgentRun.state, "open"),
-        inArray(plannerAgentRun.job, ["review", "period"]),
+        inArray(plannerAgentRun.job, [...jobs]),
+        inArray(plannerAgentRun.step, PROPOSING_STEPS),
       ),
     )
     .orderBy(desc(plannerAgentRun.updatedAt))
     .limit(1)
     .get();
-  return row?.id ?? null;
+  if (!row) {
+    throw new PlannerAgentToolError(
+      "Proposals are taken only in a review's propose step. Nothing was proposed.",
+    );
+  }
+  return row.id;
 }
 
 type Handlers = {
@@ -407,7 +427,9 @@ const handlers: Handlers = {
         );
         const start = Math.max(0, at - 100);
         const snippet = `${start > 0 ? "…" : ""}${flat.slice(start, start + 260)}${start + 260 < flat.length ? "…" : ""}`;
-        return [`${entry.id} | ${local(entry.at)} | ${author(entry, name)} | ${snippet}`];
+        return [
+          `${entry.id} | ${local(entry.at)} | ${author(entry, name)} | ${snippet}`,
+        ];
       }),
     ].join("\n");
   },
@@ -423,7 +445,9 @@ const handlers: Handlers = {
     return [
       `# Goals of ${year} (today is ${today})`,
       "",
-      goals.north_star ? goalLine(goals.north_star) : "- North star: not written",
+      goals.north_star
+        ? goalLine(goals.north_star)
+        : "- North star: not written",
       ...goals.goals.map(goalLine),
       "",
       "## Recorded weeks (Authenticity / Achievement, key question for the next review, verdict)",
@@ -472,9 +496,7 @@ const handlers: Handlers = {
 
   async read_health(context, input) {
     requireSpan(input.from, input.to, HEALTH_WEEKS_MAX * 7);
-    const out: string[] = [
-      `# Health tracker, ${input.from} to ${input.to}`,
-    ];
+    const out: string[] = [`# Health tracker, ${input.from} to ${input.to}`];
     for (
       let start = input.from;
       start <= input.to;
@@ -516,7 +538,8 @@ const handlers: Handlers = {
       ...result.memories.map(
         (memory) =>
           `- ${memory.id} | ${memory.kind} | ${
-            memory.verification === "confirmed" || memory.verification === "locked"
+            memory.verification === "confirmed" ||
+            memory.verification === "locked"
               ? "confirmed by the owner"
               : memory.needs_review
                 ? "a proposal, waiting for the owner"
@@ -528,6 +551,7 @@ const handlers: Handlers = {
 
   async propose_memory(context, input) {
     const { db, user } = context;
+    await proposingRun(context, ["review", "period"]);
     const receipt = await receiptOf(context, input.quote, input.entry_id);
     if (!receipt) {
       throw new PlannerAgentToolError("A memory needs the owner's words.");
@@ -582,10 +606,11 @@ const handlers: Handlers = {
 
   async propose_goal(context, input) {
     requirePlanWeek(input.week, healthToday(context.now));
+    const runId = await proposingRun(context, ["review"]);
     const receipt = await receiptOf(context, input.quote, input.entry_id);
     const proposal = await plannerAgentAddProposal(context.db, {
       userId: context.user.id,
-      runId: await reviewRunId(context),
+      runId,
       weekStart: input.week,
       kind: "goal",
       pillar: input.pillar,
@@ -606,6 +631,7 @@ const handlers: Handlers = {
   async propose_task(context, input) {
     const { db, user } = context;
     requirePlanWeek(input.week, healthToday(context.now));
+    const runId = await proposingRun(context, ["review"]);
     if (input.goal_ref) {
       const [goal, proposal] = await Promise.all([
         db
@@ -640,7 +666,7 @@ const handlers: Handlers = {
     const receipt = await receiptOf(context, input.quote, input.entry_id);
     const proposal = await plannerAgentAddProposal(db, {
       userId: user.id,
-      runId: await reviewRunId(context),
+      runId,
       weekStart: input.week,
       kind: "task",
       pillar: input.pillar ?? null,

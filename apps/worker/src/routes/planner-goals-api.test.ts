@@ -43,6 +43,9 @@ const ORIGIN = "http://flaremo.test";
 const API = "/api/app/planner";
 
 const RESET_TABLES = [
+  "planner_agent_proposal",
+  "planner_agent_chat",
+  "planner_agent_run",
   "planner_task_event",
   "planner_task_plan",
   "planner_task_seen",
@@ -747,13 +750,13 @@ describe("planner goals and weekly review API", () => {
     }
   });
 
-  it("runs the whole look back through one review agent session", async () => {
+  it("runs the review through one agent session, with its own key", async () => {
     const realFetch = globalThis.fetch;
     const sent: Array<{ method: string; url: string; body: unknown }> = [];
-    let uploads = 0;
-    let metadata: Record<string, string> = {};
+    let created: Record<string, unknown> | null = null;
+    const credentials: Array<Record<string, unknown>> = [];
+    let vaultToken = "";
     const events: Array<Record<string, unknown>> = [];
-    const resources: Array<Record<string, unknown>> = [];
     let clock = Date.parse("2026-01-01T00:00:00Z");
     const at = () => {
       clock += 1000;
@@ -786,7 +789,19 @@ describe("planner goals and weekly review API", () => {
                   recommended: "continue",
                 },
               })
-            : "done";
+            : message.startsWith("Goal check step")
+              ? '{"flags": []}'
+              : "done";
+    const answer = (message: string) =>
+      events.push(
+        { type: "user.message", processed_at: at(), content: text(message) },
+        {
+          type: "agent.message",
+          processed_at: at(),
+          content: text(reply(message)),
+        },
+        { type: "session.status_idle", processed_at: at() },
+      );
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
       if (!url.startsWith("https://api.anthropic.com/")) {
@@ -797,39 +812,44 @@ describe("planner goals and weekly review API", () => {
         typeof init?.body === "string" ? JSON.parse(init.body) : null;
       sent.push({ method, url, body: payload });
       const path = url.split("/v1")[1] ?? "";
-      if (method === "POST" && path === "/files") {
-        return Response.json({ id: `file_${++uploads}` });
+      if (path.startsWith("/vaults/vlt_test/credentials")) {
+        if (method === "GET") return Response.json({ data: credentials });
+        if (path.endsWith("/archive")) {
+          const id = path.split("/")[4];
+          for (const one of credentials) {
+            if (one.id === id) one.archived_at = at();
+          }
+          return Response.json({});
+        }
+        vaultToken = payload.auth.token;
+        credentials.push({
+          id: `vcrd_${credentials.length + 1}`,
+          auth: {
+            type: payload.auth.type,
+            mcp_server_url: payload.auth.mcp_server_url,
+          },
+        });
+        return Response.json(credentials.at(-1));
       }
       if (method === "POST" && path === "/sessions") {
-        metadata = payload.metadata;
+        created = payload;
+        answer(payload.initial_events[0].content[0].text);
         return Response.json({ id: "sesn_test" });
       }
       if (method === "GET" && path === "/sessions/sesn_test") {
         return Response.json({
           status: "idle",
           updated_at: "2026-01-01T00:00:00Z",
-          metadata,
+          metadata: created?.metadata,
+          usage: { list_cost: { amount: "42", currency: "USD" } },
         });
       }
       if (method === "POST" && path === "/sessions/sesn_test/events") {
-        const message = payload.events[0].content[0].text as string;
-        events.push(
-          { type: "user.message", processed_at: at(), content: text(message) },
-          {
-            type: "agent.message",
-            processed_at: at(),
-            content: text(reply(message)),
-          },
-          { type: "session.status_idle", processed_at: at() },
-        );
+        answer(payload.events[0].content[0].text as string);
         return Response.json({});
       }
       if (path.startsWith("/sessions/sesn_test/events")) {
         return Response.json({ data: events, next_page: null });
-      }
-      if (path === "/sessions/sesn_test/resources") {
-        if (method === "POST") resources.push(payload);
-        return Response.json({ data: method === "GET" ? resources : {} });
       }
       if (path.startsWith("/files?scope_id=sesn_test")) {
         return Response.json({
@@ -843,9 +863,10 @@ describe("planner goals and weekly review API", () => {
     });
     const agentEnv = withEnv({
       ANTHROPIC_API_KEY: "test-anthropic-key",
-      FLAREMO_REVIEW_MEMO_AGENT: "agent_test",
-      FLAREMO_REVIEW_MEMO_ENVIRONMENT: "env_test",
-      FLAREMO_REVIEW_MEMO_STORE: "memstore_test",
+      FLAREMO_AGENT: "agent_test",
+      FLAREMO_AGENT_ENVIRONMENT: "env_test",
+      FLAREMO_AGENT_STORE: "memstore_test",
+      FLAREMO_AGENT_VAULT: "vlt_test",
     });
     const ask = <T>(step: string, extra = "") =>
       body<T>(
@@ -856,24 +877,57 @@ describe("planner goals and weekly review API", () => {
           { env: agentEnv },
         ),
       );
-
-    // The opening starts the session on the week and the 8 weeks before it.
-    expect(
-      await body(
+    const opening = () =>
+      body(
         call(
           "POST",
           `/review/${REVIEW_WEEK}/ai/opening`,
           { today: TODAY },
           { env: agentEnv },
         ),
-      ),
-    ).toEqual({ agent: "sesn_test" });
-    expect(uploads).toBe(9);
+      );
+    const sessionsStarted = () =>
+      sent.filter(
+        (entry) => entry.method === "POST" && entry.url.endsWith("/sessions"),
+      ).length;
+
+    // The opening starts the session, after putting a fresh key in the vault.
+    expect(await opening()).toEqual({ agent: "sesn_test" });
+    expect(vaultToken.startsWith("memos_pat_")).toBe(true);
+    expect(credentials).toEqual([
+      {
+        id: "vcrd_1",
+        auth: {
+          type: "static_bearer",
+          mcp_server_url: `${ORIGIN}/api/app/planner/agent/mcp`,
+        },
+      },
+    ]);
+    expect(created).toMatchObject({
+      agent: "agent_test",
+      environment_id: "env_test",
+      vault_ids: ["vlt_test"],
+      budget: {
+        type: "limit",
+        max_list_cost: { amount: "500", currency: "USD" },
+      },
+      resources: [
+        {
+          type: "memory_store",
+          memory_store_id: "memstore_test",
+          access: "read_write",
+        },
+      ],
+      metadata: { key: `week:${REVIEW_WEEK}` },
+    });
     expect(await ask<{ opening: { recap: string } }>("opening")).toMatchObject({
       status: "done",
       step: "opening",
       opening: { recap: "A week of calls." },
     });
+    // Opened again (as after the Sunday prep), the open session is picked up.
+    expect(await opening()).toEqual({ agent: "sesn_test" });
+    expect(sessionsStarted()).toBe(1);
 
     // A coach reply goes to the same session.
     expect(
@@ -915,7 +969,7 @@ describe("planner goals and weekly review API", () => {
       close: { scores: { auth: 4, ach: 3.5 } },
     });
 
-    // The memo step adds the evening's answers and the skeleton.
+    // The memo step carries the evening's answers and the skeleton.
     expect(
       await lines(
         await call(
@@ -941,23 +995,122 @@ describe("planner goals and weekly review API", () => {
         ),
       ),
     ).toEqual([{ agent: "sesn_test" }]);
-    expect(resources.map((r) => r.mount_path)).toEqual([
-      "/data/review.md",
-      "/data/template.md",
-    ]);
     expect(await ask("memo")).toEqual({
       status: "done",
       step: "memo",
       memo: "# Week 41: October\n\nThe agent's memo.",
     });
-    // Every upload and the session are deleted once the memo is read.
-    const deleted = sent
-      .filter((entry) => entry.method === "DELETE")
-      .map((entry) => entry.url.split("/v1")[1]);
-    expect(deleted).toContain("/sessions/sesn_test");
-    expect(deleted.filter((path) => path?.startsWith("/files/"))).toHaveLength(
-      12,
+    // Once the memo is read, the session goes on to next week's proposals.
+    const steps = events
+      .filter((event) => event.type === "user.message")
+      .map((event) =>
+        String((event.content as Array<{ text: string }>)[0]?.text),
+      );
+    expect(steps.at(-1)).toMatch(/^Propose step/);
+    expect(
+      sent.some(
+        (entry) =>
+          entry.method === "DELETE" &&
+          entry.url.endsWith("/sessions/sesn_test"),
+      ),
+    ).toBe(false);
+
+    // The vault's key opens the agent's MCP server, and the agent proposes.
+    const mcp = (
+      request: Record<string, unknown>,
+      headers?: Record<string, string>,
+    ) =>
+      call(
+        "POST",
+        "/agent/mcp",
+        { jsonrpc: "2.0", id: 1, ...request },
+        {
+          env: agentEnv,
+          headers: headers ?? { authorization: `Bearer ${vaultToken}` },
+        },
+      );
+    expect(
+      await body<{ result: { serverInfo: { name: string } } }>(
+        mcp({ method: "initialize", params: {} }),
+      ),
+    ).toMatchObject({ result: { serverInfo: { name: "schizo-diary" } } });
+    const tools = await body<{ result: { tools: Array<{ name: string }> } }>(
+      mcp({ method: "tools/list" }),
     );
+    expect(tools.result.tools.map((tool) => tool.name)).toContain(
+      "propose_task",
+    );
+    const proposed = await body<{
+      result: { content: Array<{ text: string }>; isError?: boolean };
+    }>(
+      mcp({
+        method: "tools/call",
+        params: {
+          name: "propose_task",
+          arguments: {
+            week: PLAN_WEEK,
+            title: "Call the accountant",
+            why: "It came up all week.",
+          },
+        },
+      }),
+    );
+    expect(proposed.result.isError).toBeUndefined();
+    // That key opens nothing else, and nothing else opens the server.
+    await body(
+      call("GET", `/review/status?today=${TODAY}`, undefined, {
+        env: agentEnv,
+        headers: { authorization: `Bearer ${vaultToken}` },
+      }),
+      403,
+    );
+    await body(mcp({ method: "tools/list" }, { cookie, origin: ORIGIN }), 401);
+
+    // The proposal waits on the review page; the owner accepts it.
+    const proposals = await body<{
+      proposals: Array<{ id: string; title: string; state: string }>;
+      pending: boolean;
+    }>(
+      call(
+        "GET",
+        `/review/${REVIEW_WEEK}/proposals?today=${TODAY}`,
+        undefined,
+        {
+          env: agentEnv,
+        },
+      ),
+    );
+    expect(proposals).toMatchObject({
+      pending: false,
+      proposals: [{ title: "Call the accountant", state: "open" }],
+    });
+    expect(
+      await body(
+        call(
+          "POST",
+          `/agent/proposals/${proposals.proposals[0]?.id}`,
+          { state: "accepted" },
+          { env: agentEnv },
+        ),
+      ),
+    ).toMatchObject({ proposal: { state: "accepted" } });
+
+    // The goal check goes to the same session and is parsed against the plan.
+    expect(
+      await body(
+        call(
+          "POST",
+          `/review/${REVIEW_WEEK}/ai/check`,
+          { today: TODAY, goals: [], settled: [], session: "sesn_test" },
+          { env: agentEnv },
+        ),
+      ),
+    ).toEqual({ agent: "sesn_test" });
+    expect(await ask("check")).toEqual({
+      status: "done",
+      step: "check",
+      check: { flags: [] },
+    });
 
     await body(
       call(
@@ -970,6 +1123,7 @@ describe("planner goals and weekly review API", () => {
     );
     for (const logged of vi.mocked(console.error).mock.calls) {
       expect(JSON.stringify(logged)).not.toContain("test-anthropic-key");
+      expect(JSON.stringify(logged)).not.toContain(vaultToken);
     }
   });
 

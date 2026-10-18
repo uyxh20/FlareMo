@@ -40,6 +40,7 @@ import {
 // Worker's agent client writes the runs; the MCP tools write the proposals;
 // the routes read them. Money is in US cents at list price throughout.
 
+export type { PlannerAgentRunRow };
 export type PlannerAgentJob = PlannerAgentRunRow["job"];
 
 /** A weekly review's runs: the Monday of the week looked back on. */

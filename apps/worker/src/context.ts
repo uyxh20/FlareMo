@@ -19,6 +19,7 @@ import {
 } from "./auth-env";
 import type { FlareMoEnv } from "./env";
 import { memoFilterScanLimit } from "./filter-scan-limit";
+import { forkRefuseAgentKey } from "./fork/agent-key";
 import { resolveOauthIntegrationCached } from "./integrations/config";
 import { authenticateMemosAccessToken } from "./memos-native-auth";
 
@@ -253,6 +254,7 @@ export async function getRequestContext(c: Context<HonoBindings>) {
     if (!verification.valid || !verification.key) {
       throw new UnauthorizedError();
     }
+    forkRefuseAgentKey(verification.key); // fork: the agent's key opens its MCP server only
 
     const user = await getFlaremoUserByAuthUserId(
       db,

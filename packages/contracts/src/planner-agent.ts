@@ -50,6 +50,20 @@ const entryIdSchema = idSchema.describe(
 );
 
 // ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+
+/** The agent's MCP server's name on the agent, and its path on the Worker. */
+export const PLANNER_AGENT_MCP_SERVER = "diary";
+export const PLANNER_AGENT_MCP_PATH = "/api/app/planner/agent/mcp";
+
+/**
+ * The name of the agent's personal access token. A key with this name opens
+ * the agent's MCP server and nothing else (apps/worker/src/fork/agent-key.ts).
+ */
+export const PLANNER_AGENT_KEY_NAME = "Schizo Diary agent (read-only)";
+
+// ---------------------------------------------------------------------------
 // MCP tools
 // ---------------------------------------------------------------------------
 

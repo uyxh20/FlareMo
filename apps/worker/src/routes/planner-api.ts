@@ -35,6 +35,8 @@ import { Hono } from "hono";
 import { getRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
+import { plannerAgentApi } from "./planner-agent-api";
+import { plannerAgentMcpApi } from "./planner-agent-mcp";
 import { plannerGoalsApi } from "./planner-goals-api";
 import { plannerPeriodReviewApi } from "./planner-period-review-api";
 import {
@@ -364,3 +366,7 @@ plannerApi.get(
 plannerApi.route("/", plannerGoalsApi);
 // The month, quarter and year reviews, the same way (planner-period-review-api.ts).
 plannerApi.route("/", plannerPeriodReviewApi);
+// The general agent: its MCP server and the Ask chat (planner-agent-mcp.ts,
+// planner-agent-api.ts).
+plannerApi.route("/", plannerAgentMcpApi);
+plannerApi.route("/", plannerAgentApi);
