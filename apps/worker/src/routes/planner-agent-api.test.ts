@@ -37,9 +37,9 @@ function fakeAnthropic(answer: (message: string) => string[]) {
   const sessions = new Map<string, FakeSession>();
   const sent: Array<{ method: string; path: string }> = [];
   const credentials: Array<Record<string, unknown>> = [];
-  let clock = Date.parse("2026-01-01T00:00:00Z");
+  let clock = Date.now();
   const at = () => {
-    clock += 1000;
+    clock = Math.max(clock + 1000, Date.now());
     return new Date(clock).toISOString();
   };
   const reply = (session: FakeSession, message: string) => {

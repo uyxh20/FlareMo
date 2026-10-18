@@ -51,6 +51,8 @@ const DEFAULT_RUN_USD = 5;
 const DEFAULT_MONTH_USD = 30;
 /** Events and output files show up a few seconds after the session goes idle. */
 const OUTPUT_LAG_MS = 20_000;
+/** How far Anthropic's clock may trail the Worker's when dating a step. */
+const STEP_SKEW_MS = 3_000;
 const MEMO_FILE = "memo.md";
 /** The agent's key lives this long and is replaced in its last two weeks. */
 const KEY_DAYS = 90;
@@ -565,6 +567,12 @@ export async function plannerPollAgent(
   });
   // The step is queued, not picked up yet.
   if (last < 0 || !events[last]?.processed_at) return { status: "running" };
+  // The newest step's message may not be listed yet; the last one listed is
+  // then the previous step's, which would read as this step done.
+  const sentAt = run.stepAt ? Date.parse(run.stepAt) : Number.NaN;
+  if (Date.parse(events[last].processed_at ?? "") < sentAt - STEP_SKEW_MS) {
+    return { status: "running" };
+  }
   const after = events.slice(last + 1);
   const texts = after
     .filter((event) => event.type === "agent.message")

@@ -757,9 +757,9 @@ describe("planner goals and weekly review API", () => {
     const credentials: Array<Record<string, unknown>> = [];
     let vaultToken = "";
     const events: Array<Record<string, unknown>> = [];
-    let clock = Date.parse("2026-01-01T00:00:00Z");
+    let clock = Date.now();
     const at = () => {
-      clock += 1000;
+      clock = Math.max(clock + 1000, Date.now());
       return new Date(clock).toISOString();
     };
     const text = (value: string) => [{ type: "text", text: value }];
