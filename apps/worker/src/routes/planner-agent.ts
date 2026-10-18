@@ -591,7 +591,7 @@ export async function plannerReadAgentMemo(
 ): Promise<string | null> {
   const files = await call<{
     data: Array<{ id: string; filename: string; created_at?: string }>;
-  }>(agent, "outputs", `/files?scope_id=${sessionId}`, { beta: false });
+  }>(agent, "outputs", `/files?scope_id=${sessionId}`);
   const output = files.data
     .filter((file) => file.filename.endsWith(MEMO_FILE))
     .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))[0];
