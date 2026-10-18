@@ -124,6 +124,21 @@ FLAREMO_EVAL_TOKEN=<an access token made on dev> \
   pnpm exec tsx scripts/fork/agent-eval.ts [--jobs ask,back,forward,check,period]
 ```
 
+**In a Claude cloud session** both credentials are network secrets in the
+project's environment, never environment variables (those are visible to
+anyone using the environment): the Anthropic key for `api.anthropic.com` in the
+header `x-api-key` with no prefix, and the dev access token for
+`flaremo-dev.ulysse-ha-19.workers.dev` in `Authorization` with the prefix
+`Bearer` (which also lets the session reach dev). The scripts then send a
+placeholder the proxy replaces. Node's fetch uses the proxy only when asked,
+and `api.anthropic.com` skips it by default, so run them as:
+
+```sh
+NODE_USE_ENV_PROXY=1 NO_PROXY=localhost,127.0.0.1 no_proxy=localhost,127.0.0.1 \
+  pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target dev
+NODE_USE_ENV_PROXY=1 pnpm exec tsx scripts/fork/agent-eval.ts
+```
+
 It runs the jobs through the dev Worker as the app does and checks each
 answer's shape: an opening whose claims are all found in the diary, short coach
 replies, scores in range, a memo with its sections, proposals within their

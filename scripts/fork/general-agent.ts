@@ -10,8 +10,11 @@
 //   pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target dev
 //   pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target prod
 //
-// Needs ANTHROPIC_API_KEY (or Anthropic_API), or a network proxy that adds the
-// key for api.anthropic.com. Prints ids only, never the key.
+// Needs ANTHROPIC_API_KEY (or Anthropic_API), or a network secret that adds the
+// key (header x-api-key) for api.anthropic.com. In a Claude cloud session that
+// host skips the proxy, so run it through the proxy for the secret to apply:
+//   NODE_USE_ENV_PROXY=1 NO_PROXY=localhost,127.0.0.1 pnpm exec tsx …
+// Prints ids only, never the key.
 // The vault starts empty: the Worker puts the agent's own read-only key into
 // it before its first session.
 

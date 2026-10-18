@@ -8,6 +8,10 @@
 //   FLAREMO_EVAL_TOKEN=<a memos_pat_ token made on dev> \
 //     pnpm exec tsx scripts/fork/agent-eval.ts [--jobs ask,back,forward,check,period]
 //
+// In a Claude cloud session the token can be a network secret instead (the
+// Authorization header for dev's host); run with NODE_USE_ENV_PROXY=1 so
+// Node's fetch goes through the proxy that adds it.
+//
 // Dev only: it refuses any other deployment. It leaves what the app would
 // leave after an unsaved review: the agent's proposals for next week (open,
 // on the Review page), its notes in dev's memory store, and the review's
@@ -38,11 +42,11 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-const token = process.env.FLAREMO_EVAL_TOKEN?.trim();
-if (!token?.startsWith("memos_pat_")) {
-  fail(
-    "FLAREMO_EVAL_TOKEN is not set: make an access token on dev (Settings, Access tokens) and put it in that variable.",
-  );
+// Without the variable, a network proxy may supply the token (a network
+// secret for dev's host); the placeholder is replaced on the way out.
+const token = process.env.FLAREMO_EVAL_TOKEN?.trim() || "proxy-injected";
+if (token !== "proxy-injected" && !token.startsWith("memos_pat_")) {
+  fail("FLAREMO_EVAL_TOKEN is not an access token (memos_pat_…).");
 }
 const jobs = (args.jobs ?? JOBS.join(","))
   .split(",")
@@ -331,7 +335,7 @@ const enabled = await request<{ enabled: boolean }>(
 );
 if (enabled.status === 401 || enabled.status === 403) {
   fail(
-    `Dev refused the token (HTTP ${enabled.status}): make a new one on dev.`,
+    `Dev refused the token (HTTP ${enabled.status}): make an access token on dev (Settings, Access tokens) and set FLAREMO_EVAL_TOKEN or a network secret for dev's host.`,
   );
 }
 if (!enabled.json?.enabled) {
