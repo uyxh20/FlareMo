@@ -603,7 +603,7 @@ export type PlannerReviewTask = {
 const TASK_DETAIL_MAX = 60;
 /**
  * Characters of notes and comments per task: small for the chat models' prompt,
- * whole for the review agent, which reads the week as files.
+ * whole for the general agent, which reads the week through its tools.
  */
 const TASK_DETAIL_CHARS = 600;
 const TASK_DETAIL_CHARS_WHOLE = 20_000;

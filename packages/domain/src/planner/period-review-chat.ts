@@ -322,7 +322,7 @@ function verdictLine(
 
 /**
  * The memo's parts, as the weekly memo has them: the skeleton, the rules and
- * the evening's material. The review agent gets them as files.
+ * the evening's material. The general agent gets them in its memo step.
  */
 export function plannerPeriodChatMemoParts(
   context: PlannerPeriodContext,

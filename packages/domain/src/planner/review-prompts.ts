@@ -755,7 +755,7 @@ export type PlannerMemoRequest = PlannerReviewAnswers & {
 /**
  * The memo prompt's parts: the skeleton to fill (with what to write in each
  * part), the writing rules, and the evening's material (answers, scores and
- * drafts). The memo agent gets them as files; plannerMemoMessages joins them
+ * drafts). The general agent gets them in its memo step; plannerMemoMessages joins them
  * with the week's context into one prompt.
  */
 export function plannerMemoParts(

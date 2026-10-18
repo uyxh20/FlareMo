@@ -3,7 +3,6 @@ import {
   plannerPeriodLabel,
   plannerWeekCode,
 } from "@flaremo/contracts";
-import type { PlannerPeriodContext } from "./period-review-context";
 import {
   type PlannerPeriodChatMemoRequest,
   plannerPeriodChatContextBlock,
@@ -14,6 +13,7 @@ import {
   plannerPeriodOpeningMessages,
   plannerPeriodWord,
 } from "./period-review-chat";
+import type { PlannerPeriodContext } from "./period-review-context";
 import type { PlannerReviewContext } from "./review-context";
 import {
   type PlannerChatMessage,

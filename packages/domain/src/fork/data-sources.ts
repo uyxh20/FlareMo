@@ -149,7 +149,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       memory: yes("extraction from entries and the nightly dreaming sweep"),
       mcp: yes("list, get, create, update, search"),
-      agent: yes("every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search"),
+      agent: yes(
+        "every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search",
+      ),
       userExport: yes("every entry, including archived and trashed"),
       backup: IN_BACKUP,
     },
@@ -169,7 +171,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: yes("same index as every entry"),
       memory: yes("same as every entry"),
       mcp: yes("same as every entry"),
-      agent: yes("opened on demand: week_diary, list_entries, read_entries, search_entries"),
+      agent: yes(
+        "opened on demand: week_diary, list_entries, read_entries, search_entries",
+      ),
       userExport: yes("same as every entry"),
       backup: IN_BACKUP,
     },
@@ -190,7 +194,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: yes("same index as every entry"),
       memory: yes("same as every entry"),
       mcp: yes("same as every entry"),
-      agent: yes("last week's summary in review_week, any week's in week_diary; marked as written by a model"),
+      agent: yes(
+        "last week's summary in review_week, any week's in week_diary; marked as written by a model",
+      ),
       userExport: yes("same as every entry"),
       backup: IN_BACKUP,
     },
@@ -210,7 +216,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: no("tags are searched as part of the entry text"),
       memory: no("tags are read as part of the entry text"),
       mcp: yes("returned with each memo"),
-      agent: no("tags reach the agent as #words inside the entry text; the table only marks review memos"),
+      agent: no(
+        "tags reach the agent as #words inside the entry text; the table only marks review memos",
+      ),
       userExport: no("rebuilt from the entry text on import"),
       backup: IN_BACKUP,
     },
@@ -268,7 +276,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: no("files are not indexed"),
       memory: no("files are not read by the memory layer"),
       mcp: yes("list, get and delete attachments"),
-      agent: gap("the agent is not told an entry had a photo or file, nor its name"),
+      agent: gap(
+        "the agent is not told an entry had a photo or file, nor its name",
+      ),
       userExport: yes("metadata only; the files stay in R2"),
       backup: yes("metadata restored; the files themselves live in R2"),
     },
@@ -334,7 +344,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       memory: yes("the memory layer's own store"),
       mcp: yes("recall, remember, compile, forget"),
-      agent: yes("read_memories (active memories) and the week's memories in review_week; propose_memory adds proposals"),
+      agent: yes(
+        "read_memories (active memories) and the week's memories in review_week; propose_memory adds proposals",
+      ),
       userExport: yes("every memory"),
       backup: IN_BACKUP,
     },
@@ -376,7 +388,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       "Memories the owner rejected, so dreaming does not propose them again",
     uses: {
       ...plumbing("rejected proposals"),
-      agent: yes("propose_memory refuses what the owner rejected in the last 30 days"),
+      agent: yes(
+        "propose_memory refuses what the owner rejected in the last 30 days",
+      ),
       memory: yes("dreaming skips what was rejected"),
     },
   },
@@ -449,7 +463,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: gap("agents cannot read or change tasks over MCP"),
-      agent: yes("the task board (read_tasks) and the week's task details (review_week)"),
+      agent: yes(
+        "the task board (read_tasks) and the week's task details (review_week)",
+      ),
       userExport: yes("every task"),
       backup: IN_BACKUP,
     },
@@ -535,7 +551,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: no("history is not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: no("not exposed to agents"),
-      agent: yes("the week's events of each task in review_week's task details"),
+      agent: yes(
+        "the week's events of each task in review_week's task details",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -555,7 +573,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: gap("task comments are not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
       mcp: no("not exposed to agents"),
-      agent: yes("the live comments of the tasks in review_week's task details"),
+      agent: yes(
+        "the live comments of the tasks in review_week's task details",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -576,7 +596,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: NOT_CONTENT,
       memory: NOT_CONTENT,
       mcp: no("not exposed to agents"),
-      agent: yes("each task's planned week or month and goal link on read_tasks"),
+      agent: yes(
+        "each task's planned week or month and goal link on read_tasks",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -630,7 +652,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: gap("goals are not searchable"),
       memory: no("the memory layer reads entries, not goals"),
       mcp: gap("agents cannot read goals over MCP"),
-      agent: yes("every goal of a year (read_goals) and the cascade in review_week and review_period"),
+      agent: yes(
+        "every goal of a year (read_goals) and the cascade in review_week and review_period",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -648,7 +672,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: NOT_CONTENT,
       memory: no("the memory layer reads entries, not weeks"),
       mcp: gap("agents cannot read week scores over MCP"),
-      agent: yes("every recorded week of a year (read_goals) and eight weeks of scores in review_week"),
+      agent: yes(
+        "every recorded week of a year (read_goals) and eight weeks of scores in review_week",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -668,7 +694,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: REVIEW_SKIPS,
       memory: REVIEW_SKIPS,
       mcp: no("not exposed to agents"),
-      agent: no("each step's message carries the evening's answers; the saved copy is for resuming"),
+      agent: no(
+        "each step's message carries the evening's answers; the saved copy is for resuming",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -710,7 +738,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: REVIEW_SKIPS,
       memory: REVIEW_SKIPS,
       mcp: no("not exposed to agents"),
-      agent: no("review_period reads the period's weeks; a period memo is a diary entry the agent reads as one"),
+      agent: no(
+        "review_period reads the period's weeks; a period memo is a diary entry the agent reads as one",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -745,14 +775,20 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds:
       "Goals and tasks the agent proposed for the week being planned, each with why and the owner's words it rests on",
     uses: {
-      lookBack: no("proposals show on the review page; the prompts don't read them"),
+      lookBack: no(
+        "proposals show on the review page; the prompts don't read them",
+      ),
       lookForward: no(
         "the goal check reads the plan the owner drafted, with the proposals they added",
       ),
-      search: no("proposals wait for the owner; the ones added become goals and tasks"),
+      search: no(
+        "proposals wait for the owner; the ones added become goals and tasks",
+      ),
       memory: no("the memory layer reads entries, not proposals"),
       mcp: no("not exposed to agents"),
-      agent: no("the agent writes them and gets their ids back; no tool reads them"),
+      agent: no(
+        "the agent writes them and gets their ids back; no tool reads them",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -770,7 +806,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       search: no("a chat about the record; the record itself is searchable"),
       memory: no("the memory layer reads entries, not the chat"),
       mcp: no("not exposed to agents"),
-      agent: no("each conversation lives in its own session; no tool reads old chats"),
+      agent: no(
+        "each conversation lives in its own session; no tool reads old chats",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },
@@ -807,7 +845,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
         "the memory layer reads the diary entries the rows are read from",
       ),
       mcp: gap("agents cannot read health entries over MCP"),
-      agent: yes("read_health (any span up to 26 weeks) and the week's rows in review_week"),
+      agent: yes(
+        "read_health (any span up to 26 weeks) and the week's rows in review_week",
+      ),
       userExport: FORK_EXPORT_GAP,
       backup: IN_BACKUP,
     },

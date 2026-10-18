@@ -49,13 +49,13 @@ import {
 } from "../provision-cloudflare.mjs";
 import { inspectWorkerSecret } from "../sync-worker-secrets.mjs";
 import {
+  AGENT_VARS,
   buildDevConfig,
   buildMigrationLevelConfig,
   DEV,
   describeConfig,
   PLACEHOLDER_D1_ID,
   parseConfigText,
-  AGENT_VARS,
 } from "./dev-env-config.mjs";
 import {
   buildCountsQuery,

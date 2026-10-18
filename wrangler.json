@@ -86,7 +86,7 @@
     }
   ],
   "triggers": {
-    "crons": ["17 3 * * *", "0 10,11 * * SUN"]
+    "crons": ["17 3 * * *"]
   },
   "vars": {
     "FLAREMO_DEPLOY_REPOSITORY": "",

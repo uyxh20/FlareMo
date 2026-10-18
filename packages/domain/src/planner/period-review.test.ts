@@ -17,7 +17,6 @@ import {
 import {
   plannerCleanPeriodMemo,
   plannerMergePeriodThemes,
-  plannerParsePeriodChecks,
   plannerPeriodChecksMessages,
   plannerPeriodCoachMessages,
   plannerPeriodMemoMessages,

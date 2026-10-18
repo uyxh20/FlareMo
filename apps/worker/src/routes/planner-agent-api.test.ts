@@ -10,8 +10,8 @@ import {
   it,
   vi,
 } from "vitest";
-import type { FlareMoEnv } from "../env";
 import { getFlareMoDb } from "../context";
+import type { FlareMoEnv } from "../env";
 import { createTestRuntime, fetchWorker } from "../test-support/runtime";
 import { bootstrapAndSignIn } from "../test-support/sign-in";
 import { plannerAgent, plannerSweepAgentRuns } from "./planner-agent";
@@ -38,7 +38,10 @@ function fakeAnthropic(answer: (message: string) => string[]) {
   const sent: Array<{ method: string; path: string }> = [];
   const credentials: Array<Record<string, unknown>> = [];
   let clock = Date.parse("2026-01-01T00:00:00Z");
-  const at = () => new Date((clock += 1000)).toISOString();
+  const at = () => {
+    clock += 1000;
+    return new Date(clock).toISOString();
+  };
   const reply = (session: FakeSession, message: string) => {
     session.events.push({
       type: "user.message",
@@ -223,9 +226,9 @@ describe("the general agent's Ask chat and schedule", () => {
       resources: [{ type: "memory_store", access: "read_only" }],
       agent: { type: "agent_with_overrides", id: "agent_test" },
     });
-    const tools = (
-      first?.body.agent as { tools: Array<Record<string, unknown>> }
-    ).tools;
+    const tools =
+      (first?.body.agent as { tools?: Array<Record<string, unknown>> })
+        ?.tools ?? [];
     expect(tools.find((tool) => tool.type === "mcp_toolset")).toMatchObject({
       configs: [
         { name: "propose_memory", enabled: false },
@@ -282,8 +285,10 @@ describe("the general agent's Ask chat and schedule", () => {
     );
     const [second] = [...api.sessions.values()];
     const kickoff = (
-      second?.body.initial_events as Array<{ content: Array<{ text: string }> }>
-    )[0]?.content[0]?.text;
+      second?.body.initial_events as
+        | Array<{ content: Array<{ text: string }> }>
+        | undefined
+    )?.[0]?.content[0]?.text;
     expect(kickoff).toContain("The conversation so far");
     expect(kickoff).toContain("And before that?");
     // Without a conversation, the latest one is shown.
