@@ -1007,6 +1007,32 @@ describe("planner goals and weekly review API", () => {
         String((event.content as Array<{ text: string }>)[0]?.text),
       );
     expect(steps.at(-1)).toMatch(/^Propose step/);
+    // Asked for again, the memo comes back as it was, and the proposals are
+    // not asked for twice; a step the run is past answers 409.
+    expect(await ask("memo")).toEqual({
+      status: "done",
+      step: "memo",
+      memo: "# Week 41: October\n\nThe agent's memo.",
+    });
+    expect(
+      events.filter(
+        (event) =>
+          event.type === "user.message" &&
+          String(
+            (event.content as Array<{ text: string }>)[0]?.text,
+          ).startsWith("Propose step"),
+      ),
+    ).toHaveLength(1);
+    expect(
+      (
+        await call(
+          "GET",
+          `/review/${REVIEW_WEEK}/ai/agent/sesn_test?today=${TODAY}&step=close`,
+          undefined,
+          { env: agentEnv },
+        )
+      ).status,
+    ).toBe(409);
     expect(
       sent.some(
         (entry) =>

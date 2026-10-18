@@ -18,10 +18,10 @@ import {
   plannerPeriodAiMemoSchema,
   plannerPeriodAiThemesSchema,
   plannerPeriodHappenedSchema,
+  plannerPeriodLabel,
   plannerPeriodReviewQuerySchema,
   plannerPeriodStatusQuerySchema,
   plannerSavePeriodSchema,
-  plannerPeriodLabel,
   plannerSavePeriodStateSchema,
 } from "@flaremo/contracts";
 import {
@@ -74,8 +74,8 @@ import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
   type PlannerAgent,
-  PlannerAgentUnavailableError,
   type PlannerAgentState,
+  PlannerAgentUnavailableError,
   plannerAgent,
   plannerEndAgent,
   plannerLogAgentError,
@@ -883,13 +883,16 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
     };
     let state: PlannerAgentState;
     try {
-      state = await plannerPollAgent(agent, context.db, owner);
+      state = await plannerPollAgent(agent, context.db, { ...owner, step });
     } catch (error) {
       plannerLogAgentError("poll", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
     }
     if (state.status === "missing") {
       return c.json({ error: { message: "Not found." } }, 404);
+    }
+    if (state.status === "moved") {
+      return c.json({ error: { message: "That step is over." } }, 409);
     }
     if (state.status !== "done") return c.json<PlannerAgentResponse>(state);
     const texts = state.texts;

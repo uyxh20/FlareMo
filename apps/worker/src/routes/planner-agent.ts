@@ -484,7 +484,9 @@ export type PlannerAgentState =
   /** The agent's messages since the last step was sent, oldest first. */
   | { status: "done"; texts: string[]; run: PlannerAgentRunRow }
   | { status: "failed" }
-  | { status: "missing" };
+  | { status: "missing" }
+  /** The run is past the step asked about. */
+  | { status: "moved"; run: PlannerAgentRunRow };
 
 /** Every event of the session in the order it happened. */
 async function readEvents(
@@ -533,12 +535,21 @@ const textOf = (event: SessionEvent) =>
 export async function plannerPollAgent(
   agent: PlannerAgent,
   db: FlareMoDb,
-  input: { userId: string; ownerKey: string; sessionId: string },
+  input: {
+    userId: string;
+    ownerKey: string;
+    sessionId: string;
+    /** The step asked about; another request may have moved the run on. */
+    step?: string;
+  },
   now = Date.now(),
 ): Promise<PlannerAgentState> {
   const owned = await ownedSession(agent, db, input);
   if (!owned) return { status: "missing" };
   const { run, session } = owned;
+  if (input.step !== undefined && run.step !== input.step) {
+    return { status: "moved", run };
+  }
   const cost = costOf(session);
   if (cost !== null && cost !== run.costCents) {
     await plannerAgentRecordCost(db, { runId: run.id, costCents: cost });

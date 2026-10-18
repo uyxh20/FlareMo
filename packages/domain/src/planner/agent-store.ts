@@ -225,6 +225,34 @@ export async function plannerAgentSetStep(
     .run();
 }
 
+/**
+ * Moves a run from one step to the next unless another request already did:
+ * true for the one request that may act on the move (two polls of the same
+ * finished memo must not both send the propose step).
+ */
+export async function plannerAgentClaimStep(
+  db: FlareMoDb,
+  input: { runId: string; from: string; to: string },
+): Promise<boolean> {
+  const at = new Date().toISOString();
+  const result = await db
+    .update(plannerAgentRun)
+    .set({
+      step: input.to,
+      stepInput: null,
+      stepAt: at,
+      stepDoneAt: null,
+      updatedAt: at,
+    })
+    .where(
+      and(
+        eq(plannerAgentRun.id, input.runId),
+        eq(plannerAgentRun.step, input.from),
+      ),
+    );
+  return result.meta?.changes === 1;
+}
+
 /** The last step's answer was read; `costCents` is the session's cost now. */
 export async function plannerAgentStepDone(
   db: FlareMoDb,

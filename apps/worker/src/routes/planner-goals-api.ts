@@ -41,6 +41,7 @@ import {
   type PlannerReviewAnswers,
   type PlannerReviewContext,
   plannerAgentCheckMessage,
+  plannerAgentClaimStep,
   plannerAgentClearOpenProposals,
   plannerAgentCloseMessage,
   plannerAgentCoachMessage,
@@ -88,8 +89,8 @@ import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
   type PlannerAgent,
-  PlannerAgentUnavailableError,
   type PlannerAgentState,
+  PlannerAgentUnavailableError,
   plannerAgent,
   plannerEndAgent,
   plannerLogAgentError,
@@ -655,6 +656,8 @@ const AGENT_STEPS = [
   "propose",
   "check",
 ] as const;
+/** The steps a run can be at once its memo was read. */
+const MEMO_DONE_STEPS: readonly string[] = ["propose", "check"];
 
 // The agent's answer to the step it was given, asked for every few seconds.
 // Not rate limited: each ask is a status read until the answer is there. Once
@@ -680,13 +683,27 @@ plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
     };
     let state: PlannerAgentState;
     try {
-      state = await plannerPollAgent(agent, context.db, owner);
+      state = await plannerPollAgent(agent, context.db, { ...owner, step });
     } catch (error) {
       plannerLogAgentError("poll", error);
       return c.json<PlannerAgentResponse>({ status: "running" });
     }
     if (state.status === "missing") {
       return c.json({ error: { message: "Not found." } }, 404);
+    }
+    if (state.status === "moved") {
+      // Another request read this step and sent the next. A memo asked for
+      // again comes back as it was, and the proposals are not asked twice.
+      if (step !== "memo" || !MEMO_DONE_STEPS.includes(state.run.step ?? "")) {
+        return c.json({ error: { message: "That step is over." } }, 409);
+      }
+      const again = await plannerReadAgentMemo(agent, owner.sessionId).catch(
+        () => null,
+      );
+      if (!again) return c.json<PlannerAgentResponse>({ status: "running" });
+      const filter = plannerMemoStreamFilter();
+      const memo = filter.push(again) + filter.finish();
+      return c.json<PlannerAgentResponse>({ status: "done", step, memo });
     }
     if (state.status !== "done") return c.json<PlannerAgentResponse>(state);
     const texts = state.texts;
@@ -756,20 +773,28 @@ plannerGoalsApi.get("/review/:week/ai/agent/:session", async (c) => {
     const memo = filter.push(raw) + filter.finish();
     // Next week's proposals, made while the owner reads the memo. A new
     // propose step replaces the week's proposals nobody has acted on yet.
-    const week = await review();
-    await plannerAgentClearOpenProposals(context.db, {
-      userId: owner.userId,
-      weekStart: week.planWeek,
+    // Only the request that moves the run on asks for them.
+    const claimed = await plannerAgentClaimStep(context.db, {
+      runId: state.run.id,
+      from: "memo",
+      to: "propose",
     });
-    const proposing = await plannerSendAgent(agent, context.db, {
-      ...owner,
-      step: "propose",
-      message: plannerAgentProposeMessage(week),
-    }).catch((error: unknown) => {
-      plannerLogAgentError("propose", error);
-      return "missing" as const;
-    });
-    if (proposing !== "sent") await plannerEndAgent(agent, context.db, owner);
+    if (claimed) {
+      const week = await review();
+      await plannerAgentClearOpenProposals(context.db, {
+        userId: owner.userId,
+        weekStart: week.planWeek,
+      });
+      const proposing = await plannerSendAgent(agent, context.db, {
+        ...owner,
+        step: "propose",
+        message: plannerAgentProposeMessage(week),
+      }).catch((error: unknown) => {
+        plannerLogAgentError("propose", error);
+        return "missing" as const;
+      });
+      if (proposing !== "sent") await plannerEndAgent(agent, context.db, owner);
+    }
     return c.json<PlannerAgentResponse>({ status: "done", step, memo });
   } catch (error) {
     return jsonError(c, error);
