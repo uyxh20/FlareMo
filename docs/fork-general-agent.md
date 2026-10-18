@@ -91,7 +91,7 @@ review works with its drafts. Ask needs the agent and is hidden without it.
 ## Setting it up
 
 ```sh
-# ANTHROPIC_API_KEY (or Anthropic_API) set; prints ids only
+# ANTHROPIC_API_KEY set, or a network secret for api.anthropic.com; prints ids only
 pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target dev
 ```
 

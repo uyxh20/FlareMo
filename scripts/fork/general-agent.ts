@@ -10,7 +10,8 @@
 //   pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target dev
 //   pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target prod
 //
-// Needs ANTHROPIC_API_KEY (or Anthropic_API). Prints ids only, never the key.
+// Needs ANTHROPIC_API_KEY (or Anthropic_API), or a network proxy that adds the
+// key for api.anthropic.com. Prints ids only, never the key.
 // The vault starts empty: the Worker puts the agent's own read-only key into
 // it before its first session.
 
@@ -52,10 +53,12 @@ const target = args.target;
 if (target !== "dev" && target !== "prod") {
   fail("--target is required: dev or prod.");
 }
+// Without the variable, a network proxy may supply the key (a network
+// secret for api.anthropic.com); the placeholder is replaced on the way out.
 const key = (
   process.env.ANTHROPIC_API_KEY ??
   process.env.Anthropic_API ??
-  fail("ANTHROPIC_API_KEY is not set.")
+  "proxy-injected"
 ).trim();
 
 type Named = { id: string; name: string };
@@ -79,6 +82,11 @@ async function api<T>(
     body: options.form ?? JSON.stringify(options.body),
   });
   const json = (await response.json()) as T & { error?: { message: string } };
+  if (response.status === 401) {
+    fail(
+      "Anthropic refused the key: set ANTHROPIC_API_KEY, or a network secret for api.anthropic.com.",
+    );
+  }
   if (!response.ok)
     fail(`${path}: ${response.status} ${json.error?.message ?? ""}`);
   return json;
