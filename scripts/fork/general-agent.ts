@@ -24,8 +24,8 @@ import {
   plannerAgentTools,
 } from "../../packages/domain/src/planner/agent-definition";
 import { plannerAgentSystem } from "../../packages/domain/src/planner/agent-prompts";
-import { PROD } from "./dev-env-guard.mjs";
 import { DEV } from "./dev-env-config.mjs";
+import { PROD } from "./dev-env-guard.mjs";
 
 const API = "https://api.anthropic.com/v1";
 const AGENTS = "managed-agents-2026-04-01";
@@ -67,9 +67,7 @@ async function api<T>(
 ): Promise<T> {
   const response = await fetch(`${API}${path}`, {
     method:
-      options.body === undefined && options.form === undefined
-        ? "GET"
-        : "POST",
+      options.body === undefined && options.form === undefined ? "GET" : "POST",
     headers: {
       "x-api-key": key,
       "anthropic-version": "2023-06-01",
@@ -119,8 +117,7 @@ const metadata = { ...(agent?.metadata ?? {}) };
 const skillList = await api<{
   data: Array<{ id: string; display_name: string }>;
 }>("/skills?source=custom&limit=100");
-const skills: Array<{ type: "custom"; skill_id: string; version: string }> =
-  [];
+const skills: Array<{ type: "custom"; skill_id: string; version: string }> = [];
 for (const folder of PLANNER_AGENT_SKILLS) {
   const files = await folderFiles(folder);
   const digest = hash(
@@ -144,15 +141,22 @@ for (const folder of PLANNER_AGENT_SKILLS) {
   for (const file of files) {
     form.append("files[]", new Blob([file.content]), file.name);
   }
-  const uploaded = existing
-    ? await api<{ id: string }>(`/skills/${existing.id}/versions`, { form })
+  // A new skill answers with its first version's id; a new version, with its own.
+  const { skillId, version } = existing
+    ? {
+        skillId: existing.id,
+        version: (
+          await api<{ id: string }>(`/skills/${existing.id}/versions`, {
+            form,
+          })
+        ).id,
+      }
     : await api<{ id: string; latest_version_id: string }>("/skills", {
         form,
-      });
-  const skillId = existing ? existing.id : uploaded.id;
-  const version = existing
-    ? uploaded.id
-    : (uploaded as { latest_version_id: string }).latest_version_id;
+      }).then((made) => ({
+        skillId: made.id,
+        version: made.latest_version_id,
+      }));
   console.log(`Uploaded the ${folder} skill (${version}).`);
   metadata[`skill:${folder}`] = `${digest}@${version}`;
   skills.push({ type: "custom", skill_id: skillId, version });
@@ -203,9 +207,7 @@ if (!agent) {
     },
   });
   console.log(`Created the agent (version ${agent?.version}).`);
-} else if (
-  JSON.stringify(agent.metadata ?? {}) !== JSON.stringify(metadata)
-) {
+} else if (JSON.stringify(agent.metadata ?? {}) !== JSON.stringify(metadata)) {
   agent = await api(`/agents/${agent.id}`, {
     beta: AGENTS,
     body: { version: agent.version, ...config, metadata },
