@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
-import { parseConfigText } from "./dev-env-config.mjs";
+import { AGENT_VARS, parseConfigText } from "./dev-env-config.mjs";
 import { PROD } from "./dev-env-guard.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -79,6 +79,32 @@ export function buildProdConfig(exampleText, liveVars) {
   db.database_id = PROD.d1Id;
   config.vars = { ...(config.vars ?? {}), ...liveVars };
   return config;
+}
+
+/**
+ * The general agent's vars for this deploy, from FLAREMO_PROD_AGENT,
+ * FLAREMO_PROD_AGENT_ENVIRONMENT, _STORE and _VAULT (the ids
+ * scripts/fork/general-agent.ts prints). All four or none. Once live has them,
+ * later deploys keep them through live's own vars.
+ */
+export function agentVarsFromEnv(env) {
+  const names = Object.keys(AGENT_VARS);
+  const given = names.filter((name) => env[`FLAREMO_PROD_${name.slice(8)}`]);
+  if (given.length === 0) return {};
+  if (given.length !== names.length) {
+    throw new Error(
+      `The general agent needs all of ${names.map((n) => `FLAREMO_PROD_${n.slice(8)}`).join(", ")}.`,
+    );
+  }
+  const vars = {};
+  for (const name of names) {
+    const value = env[`FLAREMO_PROD_${name.slice(8)}`];
+    if (!AGENT_VARS[name].test(value)) {
+      throw new Error(`${name} does not look like an Anthropic id.`);
+    }
+    vars[name] = value;
+  }
+  return vars;
 }
 
 /** Refuse to write anything unless the config targets exactly production. */
@@ -369,7 +395,10 @@ async function writeConfig(io) {
   for (const binding of bindings) {
     if (binding.type === "plain_text") vars[binding.name] = binding.text;
   }
-  const config = buildProdConfig(io.readExample(), vars);
+  const config = buildProdConfig(io.readExample(), {
+    ...vars,
+    ...agentVarsFromEnv(io.env ?? process.env),
+  });
   assertProdConfig(config);
   io.writeRootConfig(`${JSON.stringify(config, null, 2)}\n`);
   return {

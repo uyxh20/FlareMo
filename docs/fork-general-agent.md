@@ -18,13 +18,13 @@ handed a capped file.
 
 ## The jobs
 
-| Job | Where the owner sees it | How it runs |
-| --- | --- | --- |
-| Look back (weekly review) | Review page, Sunday's conversation | One session per review (`week:<monday>`). The opening, each coach reply, the scores and the memo are steps sent to that session; the page asks every few seconds for the answer. |
-| Look forward | Review page, Choose the week and Plan tasks | After the memo the same session gets the propose step: at most one goal per objective and six tasks for next week, plus at most three memories. Goal and task proposals show as cards with Add and Dismiss; Add puts one into the plan, which is saved as before. |
-| Period chapters | Review page, month, quarter and year | Same as Look back, one session per period (`month:2026-10-01`). |
-| Goal check | Review page, before saving the week | The check step in the review's session flags clashes in the drafted plan. |
-| Ask my diary | Sidebar button, a small chat window | One session per conversation. It reads anything and proposes nothing (the propose tools are off and its notes are read-only). A conversation picks up where it left off; a new chat ends the session. |
+| Job                       | Where the owner sees it                     | How it runs                                                                                                                                                                                                                                                       |
+| ------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Look back (weekly review) | Review page, Sunday's conversation          | One session per review (`week:<monday>`). The opening, each coach reply, the scores and the memo are steps sent to that session; the page asks every few seconds for the answer.                                                                                  |
+| Look forward              | Review page, Choose the week and Plan tasks | After the memo the same session gets the propose step: at most one goal per objective and six tasks for next week, plus at most three memories. Goal and task proposals show as cards with Add and Dismiss; Add puts one into the plan, which is saved as before. |
+| Period chapters           | Review page, month, quarter and year        | Same as Look back, one session per period (`month:2026-10-01`).                                                                                                                                                                                                   |
+| Goal check                | Review page, before saving the week         | The check step in the review's session flags clashes in the drafted plan.                                                                                                                                                                                         |
+| Ask my diary              | Sidebar button, a small chat window         | One session per conversation. It reads anything and proposes nothing (the propose tools are off and its notes are read-only). A conversation picks up where it left off; a new chat ends the session.                                                             |
 
 Memory proposals go to the Memory page, as dreaming's did. Nightly dreaming is
 skipped whenever the agent is set up (`forkAgentReplacesDreaming`); the nightly
@@ -76,17 +76,17 @@ review works with its drafts. Ask needs the agent and is hidden without it.
 
 ## Code
 
-| What | Where |
-| --- | --- |
-| Tables (runs, proposals, Ask messages) | `migrations/9014_planner_agent.sql`, `packages/db/src/schema/planner.ts` |
-| Store, tools, prompts, definition | `packages/domain/src/planner/agent-store.ts`, `agent-tools.ts`, `agent-prompts.ts`, `agent-definition.ts` |
-| Skills | `skills/weekly-review`, `period-review`, `ask-my-diary`, `goal-check` |
-| Managed Agents client, key, sweep | `apps/worker/src/routes/planner-agent.ts` |
-| Review and period routes | `apps/worker/src/routes/planner-goals-api.ts`, `planner-period-review-api.ts` |
-| MCP server, Ask routes, Sunday prep | `apps/worker/src/routes/planner-agent-mcp.ts`, `planner-agent-api.ts`, `planner-agent-schedule.ts` |
-| Hooks into the Worker | `apps/worker/src/fork/agent-key.ts`, `agent-schedule.ts` |
-| Proposals and Ask in the app | `apps/web/src/planner/review-proposals.tsx`, `ask-api.ts`, `ask-store.ts`, `ask-nav.tsx`, `ask-window.tsx` |
-| Tests (stub agent) | `apps/worker/src/routes/planner-goals-api.test.ts`, `planner-agent-api.test.ts`, `packages/domain/src/planner/agent-tools.test.ts`, `apps/web/src/planner/review-proposals.test.ts` |
+| What                                   | Where                                                                                                                                                                               |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tables (runs, proposals, Ask messages) | `migrations/9014_planner_agent.sql`, `packages/db/src/schema/planner.ts`                                                                                                            |
+| Store, tools, prompts, definition      | `packages/domain/src/planner/agent-store.ts`, `agent-tools.ts`, `agent-prompts.ts`, `agent-definition.ts`                                                                           |
+| Skills                                 | `skills/weekly-review`, `period-review`, `ask-my-diary`, `goal-check`                                                                                                               |
+| Managed Agents client, key, sweep      | `apps/worker/src/routes/planner-agent.ts`                                                                                                                                           |
+| Review and period routes               | `apps/worker/src/routes/planner-goals-api.ts`, `planner-period-review-api.ts`                                                                                                       |
+| MCP server, Ask routes, Sunday prep    | `apps/worker/src/routes/planner-agent-mcp.ts`, `planner-agent-api.ts`, `planner-agent-schedule.ts`                                                                                  |
+| Hooks into the Worker                  | `apps/worker/src/fork/agent-key.ts`, `agent-schedule.ts`                                                                                                                            |
+| Proposals and Ask in the app           | `apps/web/src/planner/review-proposals.tsx`, `ask-api.ts`, `ask-store.ts`, `ask-nav.tsx`, `ask-window.tsx`                                                                          |
+| Tests (stub agent)                     | `apps/worker/src/routes/planner-goals-api.test.ts`, `planner-agent-api.test.ts`, `packages/domain/src/planner/agent-tools.test.ts`, `apps/web/src/planner/review-proposals.test.ts` |
 
 ## Setting it up
 
@@ -111,8 +111,10 @@ Then give the Worker the secret `ANTHROPIC_API_KEY` and the vars it prints:
   `FLAREMO_DEV_AGENT_STORE` and `FLAREMO_DEV_AGENT_VAULT` before
   `node scripts/fork/dev-env.mjs deploy`. Dev's vars come from the generated
   config, so a deploy without them turns the agent off on dev.
-- **Live:** set the vars on the Worker; the prod deploy keeps them
-  (`--keep-vars`). The old `FLAREMO_REVIEW_MEMO_*` vars do nothing now and can
+- **Live:** run `scripts/fork/prod-deploy.mjs deploy` once with
+  `FLAREMO_PROD_AGENT`, `FLAREMO_PROD_AGENT_ENVIRONMENT`, `FLAREMO_PROD_AGENT_STORE`
+  and `FLAREMO_PROD_AGENT_VAULT` set to the printed ids; it puts them on the
+  Worker, and later deploys keep them (`--keep-vars`). The old `FLAREMO_REVIEW_MEMO_*` vars do nothing now and can
   be removed.
 
 ## The eval

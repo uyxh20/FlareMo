@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test, { describe } from "node:test";
 import { PROD } from "./dev-env-guard.mjs";
 import {
+  agentVarsFromEnv,
   assertProdConfig,
   bindingDrift,
   buildProdConfig,
@@ -359,5 +360,20 @@ describe("prod-deploy flow", () => {
     await assert.rejects(rollback(io, { version: "v1" }), /already live/);
     await rollback(io, { version: "v3" });
     assert.equal(live(), "v3");
+  });
+
+  test("takes the general agent's ids from the environment, all or none", () => {
+    assert.deepEqual(agentVarsFromEnv({}), {});
+    const env = {
+      FLAREMO_PROD_AGENT: "agent_01a",
+      FLAREMO_PROD_AGENT_ENVIRONMENT: "env_01a",
+      FLAREMO_PROD_AGENT_STORE: "memstore_01a",
+      FLAREMO_PROD_AGENT_VAULT: "vlt_01a",
+    };
+    assert.equal(agentVarsFromEnv(env).FLAREMO_AGENT_VAULT, "vlt_01a");
+    assert.throws(() => agentVarsFromEnv({ FLAREMO_PROD_AGENT: "agent_01a" }));
+    assert.throws(() =>
+      agentVarsFromEnv({ ...env, FLAREMO_PROD_AGENT: "nope" }),
+    );
   });
 });
