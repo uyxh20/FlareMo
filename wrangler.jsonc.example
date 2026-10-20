@@ -18,6 +18,13 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  // Fork: run the Worker near D1 (eastern North America) instead of near the
+  // visitor. Anthropic refuses calls from some Cloudflare locations (e.g. Hong
+  // Kong), and every request makes several D1 round trips. See
+  // docs/fork-customizations.md.
+  "placement": {
+    "region": "aws:us-east-1"
+  },
   "assets": {
     "directory": "./apps/web/dist",
     "binding": "ASSETS",

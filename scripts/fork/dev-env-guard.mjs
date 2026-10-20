@@ -50,6 +50,7 @@ export const ALLOWED_CONFIG_KEYS = Object.freeze([
   "compatibility_date",
   "compatibility_flags",
   "observability",
+  "placement",
   "assets",
   "d1_databases",
   "r2_buckets",
