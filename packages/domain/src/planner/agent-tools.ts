@@ -6,6 +6,7 @@ import {
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
   type PlannerGoalDto,
+  type PlannerPillar,
   plannerAddDays,
   plannerAgentToolInputs,
   plannerPeriodStartOf,
@@ -233,6 +234,36 @@ async function receiptOf(
 }
 
 /** The review steps that may propose: the memo (a period's) and the propose step. */
+/**
+ * The month goal of the objective for the month the week starts in, else
+ * the quarter's: what a proposed goal serves when the agent names none.
+ */
+async function cascadeGoalOf(
+  context: PlannerAgentToolContext,
+  pillar: PlannerPillar,
+  week: string,
+): Promise<string | null> {
+  for (const level of ["month", "quarter"] as const) {
+    const periodStart = plannerPeriodStartOf(level, week);
+    const goal = await context.db
+      .select({ id: plannerGoal.id })
+      .from(plannerGoal)
+      .where(
+        and(
+          eq(plannerGoal.userId, context.user.id),
+          eq(plannerGoal.level, level),
+          eq(plannerGoal.periodStart, periodStart),
+          eq(plannerGoal.pillar, pillar),
+          isNull(plannerGoal.deletedAt),
+        ),
+      )
+      .orderBy(asc(plannerGoal.createdAt))
+      .get();
+    if (goal) return goal.id;
+  }
+  return null;
+}
+
 const PROPOSING_STEPS = ["memo", "propose"];
 
 /**
@@ -634,7 +665,9 @@ const handlers: Handlers = {
       pillar: input.pillar,
       title: input.title,
       lines: input.lines ?? [],
-      goalRef: input.serves ?? null,
+      goalRef:
+        input.serves ??
+        (await cascadeGoalOf(context, input.pillar, input.week)),
       why: input.why,
       receipt,
     }).catch((error: unknown) => {

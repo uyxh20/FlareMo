@@ -206,14 +206,24 @@ describe("the general agent's tools", () => {
       serves: month.id,
       why: "The month goal is open.",
     });
-    const [proposal] = await plannerAgentListProposals(rt.db, {
+    // Named by the agent, or else the objective's month goal.
+    await call("propose_goal", {
+      week: NEXT_WEEK,
+      pillar: "work",
+      title: "Chase the signature",
+      why: "The month goal is open.",
+    });
+    const proposals = await plannerAgentListProposals(rt.db, {
       userId: rt.user.id,
       weekStart: NEXT_WEEK,
     });
-    expect(proposal).toMatchObject({
-      goal_ref: month.id,
-      serves: { level: "month", title: "Sign the client" },
-    });
+    for (const proposal of proposals) {
+      expect(proposal).toMatchObject({
+        goal_ref: month.id,
+        serves: { level: "month", title: "Sign the client" },
+      });
+    }
+    expect(proposals).toHaveLength(2);
   });
 
   it("proposes goals and tasks for the week being planned, with checked receipts", async () => {
