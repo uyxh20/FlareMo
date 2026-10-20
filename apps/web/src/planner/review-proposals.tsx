@@ -19,8 +19,10 @@ import {
 
 // The general agent's proposals in Look forward (fork-owned add-on,
 // docs/fork-general-agent.md). After the memo the agent proposes goals and
-// tasks for the week being planned; they show here as cards under Choose the
-// week and Plan tasks. Add puts one into the plan, which the owner still edits
+// tasks for the week being planned; they show here as cards on top of Choose
+// the week and under Plan tasks. When nothing was proposed, Look forward asks
+// the agent once by itself, from the latest look back and the goals, and
+// Suggest asks again. Add puts one into the plan, which the owner still edits
 // and saves as before; Dismiss puts it away. Nothing reaches the board or the
 // goals until the week is saved.
 
@@ -28,6 +30,9 @@ export type PlannerProposalActions = {
   addGoal: (proposal: PlannerAgentProposalDto) => void;
   addTask: (proposal: PlannerAgentProposalDto, goalId: string) => void;
   dismiss: (proposal: PlannerAgentProposalDto) => void;
+  /** Asks the agent for proposals again, from the latest look back. */
+  suggest?: () => void;
+  suggesting?: boolean;
 };
 
 const normal = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -125,18 +130,23 @@ function Section({
   pending,
   strings,
   testId,
+  action,
+  top = false,
   children,
 }: {
   pending: boolean;
+  /** First on its step, under the title: no space above. */
+  top?: boolean;
   strings: PlannerGoalsStrings;
   testId: string;
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const text = strings.review.forward.proposals;
   return (
     <section
       aria-live="polite"
-      className="mt-5 flex flex-col gap-2.5"
+      className={cn("flex flex-col gap-2.5", !top && "mt-5")}
       data-testid={testId}
     >
       <div className="flex items-center gap-2.5">
@@ -149,6 +159,7 @@ function Section({
             {text.drafting}
           </span>
         )}
+        {action && <span className="ml-auto">{action}</span>}
       </div>
       {children}
     </section>
@@ -219,14 +230,34 @@ export function PlannerGoalProposals({
 }) {
   const open = openOf(proposals, "goal");
   const pending = proposals?.pending ?? false;
-  if (open.length === 0 && !pending) return null;
+  const canSuggest = Boolean(proposals?.agent && actions.suggest);
+  if (open.length === 0 && !pending && !canSuggest) return null;
   const text = strings.review.forward.proposals;
+  const asked = (proposals?.proposals.length ?? 0) > 0;
   return (
     <Section
-      pending={pending}
+      action={
+        canSuggest &&
+        !pending && (
+          <Button
+            data-testid="planner-suggest-goals"
+            disabled={actions.suggesting}
+            size="sm"
+            variant="outline"
+            onClick={actions.suggest}
+          >
+            {asked ? text.suggestAgain : text.suggest}
+          </Button>
+        )
+      }
+      pending={pending || Boolean(actions.suggesting)}
       strings={strings}
       testId="planner-goal-proposals"
+      top
     >
+      {open.length === 0 && !pending && !actions.suggesting && (
+        <p className="text-[13px] text-muted-foreground">{text.suggestHint}</p>
+      )}
       {open.map((proposal) => {
         const room =
           forward.goals.length < 12 ||

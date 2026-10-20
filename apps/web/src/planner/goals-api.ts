@@ -257,6 +257,14 @@ export function plannerFetchProposals(week: string, today: string) {
   );
 }
 
+/** Asks the agent for next week's goal and task proposals (Look forward). */
+export function plannerSuggestProposalsRequest(week: string, today: string) {
+  return apiRequest<PlannerAgentProposalsResponse>(
+    reviewPath(week, "proposals"),
+    { method: "POST", body: JSON.stringify({ today }) },
+  );
+}
+
 /** Accepts or dismisses one of the agent's proposals. */
 export function plannerSettleProposalRequest(
   id: string,

@@ -359,7 +359,13 @@ function ChooseWeek(props: Props) {
   return (
     <>
       <StepTitle>{text.steps[1]}</StepTitle>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <PlannerGoalProposals
+        actions={proposalActions}
+        forward={forward}
+        proposals={proposals}
+        strings={strings}
+      />
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {forward.goals.map((goal) => (
           <GoalSlot goal={goal} key={goal.id} props={props} />
         ))}
@@ -373,12 +379,6 @@ function ChooseWeek(props: Props) {
           {text.addGoal}
         </Button>
       </div>
-      <PlannerGoalProposals
-        actions={proposalActions}
-        forward={forward}
-        proposals={proposals}
-        strings={strings}
-      />
     </>
   );
 }

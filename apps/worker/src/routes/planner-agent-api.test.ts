@@ -322,6 +322,28 @@ describe("the general agent's Ask chat and schedule", () => {
     expect(results[0]?.n).toBe(0);
   });
 
+  it("says so when Anthropic refuses the agent's key", async () => {
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://api.anthropic.com/")) {
+        return realFetch(input, init);
+      }
+      return Response.json(
+        { type: "error", error: { type: "permission_error" } },
+        { status: 403 },
+      );
+    });
+    const refused = await body<{ error: { code: string; message: string } }>(
+      call("POST", "/ask", { today: TODAY, text: "Anything?" }, withEnv({})),
+      503,
+    );
+    expect(refused.error).toEqual({
+      code: "agent_key_refused",
+      message: "The agent is not available: Anthropic refused its API key.",
+    });
+  });
+
   it("prepares the Sunday review at noon in Copenhagen, once, and sweeps it", async () => {
     const api = fakeAnthropic(() => ['{"recap": "Ready."}']);
     const agentEnv = withEnv() as unknown as FlareMoEnv;

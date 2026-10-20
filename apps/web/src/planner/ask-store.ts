@@ -1,10 +1,9 @@
 import { useEffect, useId, useSyncExternalStore } from "react";
 
 // The Ask window's own state (fork-owned add-on, docs/fork-general-agent.md),
-// outside React: the sidebar mounts again on every page and the mobile drawer
-// mounts a second one, while the window and what is typed in it stay put.
-// Exactly one mounted sidebar button hosts the window: the first one, which on
-// a wide screen is the sidebar that is always there.
+// outside React: every page mounts its own layout and so its own bubble, while
+// the window and what is typed in it stay put. Exactly one mounted bubble
+// draws: the first one.
 
 export type PlannerAskState = {
   open: boolean;

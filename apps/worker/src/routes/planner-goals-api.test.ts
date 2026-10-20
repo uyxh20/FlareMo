@@ -1138,6 +1138,35 @@ describe("planner goals and weekly review API", () => {
       check: { flags: [] },
     });
 
+    // Look forward asks for proposals again: the review's session takes the
+    // propose step, and the accepted proposal stays.
+    const proposalsPath = `/review/${REVIEW_WEEK}/proposals`;
+    expect(
+      await body(
+        call("POST", proposalsPath, { today: TODAY }, { env: agentEnv }),
+      ),
+    ).toMatchObject({
+      pending: true,
+      agent: true,
+      proposals: [{ title: "Call the accountant", state: "accepted" }],
+    });
+    expect(sessionsStarted()).toBe(1);
+    expect(
+      String(
+        (
+          events.filter((event) => event.type === "user.message").at(-1)
+            ?.content as Array<{ text: string }>
+        )[0]?.text,
+      ),
+    ).toMatch(/^Propose step/);
+    expect(
+      await body(
+        call("GET", `${proposalsPath}?today=${TODAY}`, undefined, {
+          env: agentEnv,
+        }),
+      ),
+    ).toMatchObject({ pending: false, agent: true });
+
     await body(
       call(
         "GET",

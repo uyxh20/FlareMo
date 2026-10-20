@@ -4,7 +4,6 @@ import { CalendarCheck2Icon, GaugeIcon, TargetIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { HealthNavLink } from "@/health/nav-link"; // fork: health tracker
 import { useI18n } from "@/i18n";
-import { PlannerAskNavButton } from "./ask-nav";
 import { plannerFetchReviewStatus } from "./goals-api";
 import {
   plannerGoalsNavLabelFor,
@@ -19,7 +18,7 @@ import { usePlannerToday } from "./use-planner-clock";
 // The planner's links in the explorer sidebar (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 5, and
 // docs/planning-cockpit-goals-review.md): Cockpit, Goals and Review, then
-// Health and Ask my diary (docs/fork-general-agent.md). They
+// Health (Ask my diary is a bubble now, ask-bubble.tsx). They
 // live here so the explorer's edit stays an import plus one element, and they are
 // styled exactly like the explorer's other page links. The cockpit's icon is a
 // gauge, distinct from the folder board of /projects and /team-projects beside
@@ -126,7 +125,6 @@ export function PlannerNavLink({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </PlannerLink>
       <HealthNavLink onNavigate={onNavigate} /> {/* fork: health tracker */}
-      <PlannerAskNavButton onNavigate={onNavigate} />
     </>
   );
 }

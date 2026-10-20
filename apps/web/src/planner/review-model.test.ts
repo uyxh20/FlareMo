@@ -1503,6 +1503,40 @@ describe("Look forward: the plan's goals", () => {
     expect(plannerPlanFromMemo(saved, MEMO, true, REVIEW_WEEK)).toBe(saved);
   });
 
+  it("refreshes an edited plan's untouched goals from an older summary", () => {
+    const stale = planGoal({
+      pillar: "work",
+      title: "Last week's step",
+      fromSummary: LAST_WEEK,
+    });
+    const typed = planGoal({ pillar: "of", title: "Mine" });
+    const plan = forward({ goals: [stale, typed], edited: true });
+    const next = plannerPlanFromMemo(plan, MEMO, false, REVIEW_WEEK);
+    // The typed goal stays, and no goal is added back for the AI objective.
+    expect(next.goals).toEqual([
+      { ...stale, title: "Close two customers.", fromSummary: REVIEW_WEEK },
+      typed,
+    ]);
+  });
+
+  it("restores a plan drafted before this week's summary with its Next Steps", () => {
+    const stale = planGoal({
+      pillar: "work",
+      title: "Last week's step",
+      fromSummary: LAST_WEEK,
+    });
+    const r = review({ summary: { id: "memo-1", content: MEMO } });
+    const saved = plannerNewReviewState(r);
+    saved.forward = { ...saved.forward, goals: [stale], edited: true };
+    const restored = plannerRestoreReviewState(
+      JSON.parse(JSON.stringify(saved)),
+      r,
+    );
+    expect(restored.forward.goals).toEqual([
+      { ...stale, title: "Close two customers.", fromSummary: REVIEW_WEEK },
+    ]);
+  });
+
   it("leaves the plan alone when the memo's steps are already its goals, or it has none", () => {
     const filled = forward({
       goals: [

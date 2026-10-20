@@ -7,6 +7,7 @@
 // it never imports planner.ts back.
 //
 //   GET    /review/:week/proposals?today        PlannerAgentProposalsResponse
+//   POST   /review/:week/proposals              PlannerAgentProposalsResponse
 //   POST   /agent/proposals/:id                 PlannerAgentProposalResponse
 //   GET    /ask?today[&conversation]            PlannerAskResponse
 //   POST   /ask                                 PlannerAskResponse
@@ -279,6 +280,8 @@ export type PlannerAgentProposalsResponse = {
   proposals: PlannerAgentProposalDto[];
   /** The agent is still at work in the review's session: more may come. */
   pending: boolean;
+  /** The general agent is set up here, so the page can ask it to propose. */
+  agent: boolean;
 };
 
 export type PlannerAgentProposalResponse = {

@@ -17,7 +17,8 @@ import { usePlannerToday } from "./use-planner-clock";
 import "./goals.css";
 
 // Ask my diary's window (fork-owned add-on, docs/fork-general-agent.md): a
-// small chat that opens from the sidebar over whatever page is showing. The
+// small chat that opens from the bubble in the bottom-right corner, over
+// whatever page is showing. The
 // general agent answers from the owner's whole record and changes nothing; an
 // answer takes from a few seconds to a minute, and the window asks every few
 // seconds until it is in. Loaded only when the window first opens.
@@ -139,7 +140,7 @@ export function PlannerAskWindow() {
   return (
     <div
       aria-label={text.title}
-      className="fixed right-4 bottom-4 z-50 flex h-[min(560px,calc(100dvh-2rem))] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
+      className="fixed right-4 bottom-20 z-50 flex h-[min(560px,calc(100dvh-6rem))] w-[min(400px,calc(100vw-2rem))] sm:right-6 sm:bottom-22 sm:h-[min(560px,calc(100dvh-7rem))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
       data-testid="planner-ask-window"
       role="dialog"
     >

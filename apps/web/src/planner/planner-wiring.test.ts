@@ -40,6 +40,22 @@ const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
     ],
   },
   {
+    file: "apps/web/src/components/workspace/workspace-layout.tsx",
+    path: "../components/workspace/workspace-layout.tsx",
+    mustContain: [
+      /import \{ PlannerAskBubble \} from "@\/planner\/ask-bubble"/,
+      /<PlannerAskBubble \/>/,
+    ],
+  },
+  {
+    file: "apps/web/src/App.tsx",
+    path: "../App.tsx",
+    mustContain: [
+      /import \{ PlannerAskBubble \} from "@\/planner\/ask-bubble"/,
+      /<PlannerAskBubble \/>/,
+    ],
+  },
+  {
     file: "apps/web/public/sw.js",
     path: "../../public/sw.js",
     mustContain: PAGES.map((page) => new RegExp(`\\$\\{scopePath\\}${page}\``)),

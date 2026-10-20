@@ -133,6 +133,33 @@ class PlannerAgentApiError extends Error {
   }
 }
 
+/**
+ * The answer when the agent cannot start: Anthropic refusing the key (a 401 or
+ * 403 on every call) says so, since only a new key fixes it; anything else is
+ * "not available".
+ */
+export function plannerAgentFailure(error: unknown): {
+  error: { message: string; code: string };
+} {
+  if (error instanceof PlannerAgentUnavailableError) {
+    return { error: { message: error.message, code: error.code } };
+  }
+  if (
+    error instanceof PlannerAgentApiError &&
+    (error.status === 401 || error.status === 403)
+  ) {
+    return {
+      error: {
+        message: "The agent is not available: Anthropic refused its API key.",
+        code: "agent_key_refused",
+      },
+    };
+  }
+  return {
+    error: { message: "The agent is not available.", code: "ai_unavailable" },
+  };
+}
+
 function headers(agent: PlannerAgent, beta = true): HeadersInit {
   return {
     "x-api-key": agent.apiKey,
@@ -570,7 +597,7 @@ export async function plannerPollAgent(
   // The newest step's message may not be listed yet; the last one listed is
   // then the previous step's, which would read as this step done.
   const sentAt = run.stepAt ? Date.parse(run.stepAt) : Number.NaN;
-  if (Date.parse(events[last].processed_at ?? "") < sentAt - STEP_SKEW_MS) {
+  if (Date.parse(events[last]?.processed_at ?? "") < sentAt - STEP_SKEW_MS) {
     return { status: "running" };
   }
   const after = events.slice(last + 1);

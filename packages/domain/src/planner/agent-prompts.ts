@@ -216,6 +216,25 @@ export function plannerAgentProposeMessage(
 Propose less rather than more: ${name} will read each one. When everything is proposed, reply with the single word: done.`;
 }
 
+/**
+ * Look forward's own session, when the review's session is gone or never ran
+ * (the look back was written without the agent, or the owner asks again):
+ * what the session is, then the propose step, read from the saved summary.
+ */
+export function plannerAgentProposeKickoff(
+  context: PlannerReviewContext,
+): string {
+  const name = firstName(context.ownerName);
+  return `This session is ${name}'s Look forward: planning the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}). Use your weekly-review skill. The look back of ${plannerWeekCode(context.weekStart)} is done and its summary memo is saved: it is the latest look back, and its Next Steps are where the plan starts. ${name} is choosing next week's goals in the app and waits on your proposals.
+
+Before you propose: read your memory store's notes, call review_week for ${context.weekStart} (the week just reviewed, with its summary), and read_goals for the goal cascade and ${plannerWeekCode(context.planWeek)}'s goals so far. Don't change your memory store in this session.
+
+${plannerAgentProposeMessage(context).replace(
+  `the memo is written and ${name} is reading it`,
+  `the memo is written and ${name} is planning from it`,
+)}`;
+}
+
 /** The goal check of next week's plan, in the review's session. */
 export function plannerAgentCheckMessage(
   context: PlannerReviewContext,

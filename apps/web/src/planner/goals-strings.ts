@@ -294,6 +294,10 @@ export type PlannerGoalsStrings = {
         needsGoal: string;
         full: string;
         settleFailed: string;
+        suggest: string;
+        suggestAgain: string;
+        suggestHint: string;
+        suggestFailed: string;
       };
       saveWeek: string;
       saving: string;
@@ -599,6 +603,11 @@ const en: PlannerGoalsStrings = {
         needsGoal: "Name a goal first",
         full: "To Do is full",
         settleFailed: "Couldn't save that. Try again.",
+        suggest: "Suggest goals",
+        suggestAgain: "Suggest again",
+        suggestHint:
+          "The agent reads your latest look back and your goals, then suggests next week's goals and tasks.",
+        suggestFailed: "Couldn't ask the agent. Try again.",
       },
       saveWeek: "Save week",
       saving: "Saving",
@@ -893,6 +902,10 @@ const zhCN: PlannerGoalsStrings = {
         needsGoal: "请先写下一个目标",
         full: "待办已满",
         settleFailed: "没能保存，请重试。",
+        suggest: "建议目标",
+        suggestAgain: "重新建议",
+        suggestHint: "代理会读你最新的回顾和目标，然后建议下周的目标和任务。",
+        suggestFailed: "没能请求代理，请重试。",
       },
       saveWeek: "保存本周",
       saving: "保存中",

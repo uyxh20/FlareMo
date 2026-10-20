@@ -176,6 +176,8 @@ export type PlannerForwardState = {
    * review was open survives.
    */
   knownGoalIds: string[];
+  /** Look forward asked the agent for proposals by itself once already. */
+  suggestAsked?: boolean;
 };
 
 export type PlannerReviewState = {
@@ -807,7 +809,9 @@ export function plannerNewForwardState(
 
 /**
  * The summary memo was written: its Next Steps fill the plan's goals, unless
- * the owner already changed the plan or it was saved before. A goal that
+ * the plan was saved before. Once the owner changed the plan, only the goals
+ * still holding an older summary's Next Steps, untouched, are refreshed (a
+ * typed goal loses its `fromSummary`), and no goal is added back. A goal that
  * changes loses the tasks drafted for it.
  */
 export function plannerPlanFromMemo(
@@ -817,7 +821,7 @@ export function plannerPlanFromMemo(
   /** The Monday of the week the memo sums up. */
   week: string,
 ): PlannerForwardState {
-  if (forward.edited || locked) return forward;
+  if (locked) return forward;
   const steps = plannerMemoNextSteps(memo);
   let goals = forward.goals;
   let tasks = forward.tasks;
@@ -826,6 +830,9 @@ export function plannerPlanFromMemo(
     if (!step) continue;
     const goal = goals.find((item) => item.pillar === pillar);
     if (goal && goal.title === step) continue;
+    if (forward.edited && !(goal?.fromSummary && goal.fromSummary !== week)) {
+      continue;
+    }
     if (goal) {
       goals = goals.map((item) =>
         item.id === goal.id
@@ -1249,7 +1256,7 @@ export function plannerRestoreReviewState(
     (task): task is PlannerPlanTask =>
       isPlanTask(task) && goalIds.has(task.goal_id),
   );
-  return {
+  const state: PlannerReviewState = {
     v: 1,
     back: {
       ...fresh.back,
@@ -1288,4 +1295,17 @@ export function plannerRestoreReviewState(
           : 1,
     },
   };
+  // A plan drafted before this week's summary was saved (or from a summary
+  // written again) still shows the older Next Steps: the saved summary's win.
+  return review.summary && review.plan_goals.length === 0
+    ? {
+        ...state,
+        forward: plannerPlanFromMemo(
+          state.forward,
+          review.summary.content,
+          false,
+          review.review_week,
+        ),
+      }
+    : state;
 }

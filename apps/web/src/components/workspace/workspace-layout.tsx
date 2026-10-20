@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ACTIVITY_WINDOW_DAYS } from "@/lib/time-horizon";
 import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
+import { PlannerAskBubble } from "@/planner/ask-bubble"; // fork: Ask my diary
 
 const AccountSettingsDialog = lazy(() =>
   import("@/pages/account-page").then((module) => ({
@@ -211,6 +212,7 @@ export function WorkspaceLayout({
           />
         )}
       </Suspense>
+      <PlannerAskBubble /> {/* fork: Ask my diary */}
     </div>
   );
 }

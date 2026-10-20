@@ -50,6 +50,7 @@ import {
   plannerAgentMemoKickoff,
   plannerAgentMemoMessage,
   plannerAgentOpeningMessage,
+  plannerAgentProposeKickoff,
   plannerAgentProposeMessage,
   plannerAgentSettleProposal,
   plannerAgentWeekKey,
@@ -90,8 +91,8 @@ import { rateLimitGuard } from "../rate-limit";
 import {
   type PlannerAgent,
   type PlannerAgentState,
-  PlannerAgentUnavailableError,
   plannerAgent,
+  plannerAgentFailure,
   plannerEndAgent,
   plannerLogAgentError,
   plannerPollAgent,
@@ -469,9 +470,7 @@ const tooMany = (c: Context<HonoBindings>) => () =>
 
 /** The 503 for an agent that could not take the job, with its reason. */
 function agentUnavailable(c: Context<HonoBindings>, error: unknown) {
-  return error instanceof PlannerAgentUnavailableError
-    ? c.json({ error: { message: error.message, code: error.code } }, 503)
-    : c.json(AI_UNAVAILABLE, 503);
+  return c.json(plannerAgentFailure(error), 503);
 }
 
 /** The review's answers as the prompts read them. */
@@ -840,8 +839,98 @@ plannerGoalsApi.get(
           weekStart: plannerAddDays(weekStart, 7),
         }),
         pending,
+        agent: agent !== null,
       };
       return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// Look forward asks the agent for next week's goals and tasks: once by itself
+// when the plan opens with nothing proposed, and again when the owner asks.
+// The review's session takes the propose step when it is still there; else a
+// session of its own starts from the saved look back. Proposals nobody acted on
+// are replaced; the page then reads them as above.
+plannerGoalsApi.post(
+  "/review/:week/proposals",
+  zValidator("json", plannerReviewStatusQuerySchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
+      if (throttled) return throttled;
+      const { today } = c.req.valid("json");
+      plannerAssertToday(today, new Date());
+      const agent = plannerAgent(c.env);
+      if (!agent) return c.json(AI_UNAVAILABLE, 503);
+      const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
+      const owner = {
+        userId: context.user.id,
+        ownerKey: plannerAgentWeekKey(weekStart),
+      };
+      const week = await plannerReadReviewContext(context.db, {
+        userId: context.user.id,
+        ownerName: context.user.name,
+        weekStart,
+        today,
+        diaryChars: PLANNER_AGENT_DIARY_CHARS,
+      });
+      const open = await plannerAgentFindOpenRun(context.db, owner);
+      const listed = async (): Promise<PlannerAgentProposalsResponse> => ({
+        proposals: await plannerAgentListProposals(context.db, {
+          userId: owner.userId,
+          weekStart: week.planWeek,
+        }),
+        pending: true,
+        agent: true,
+      });
+      if (open?.sessionId && !open.stepDoneAt) {
+        // The agent is at a step already: proposing, or mid-review.
+        if (open.step === "propose") return c.json(await listed());
+        return c.json(
+          { error: { message: "Wait for the agent's current step." } },
+          409,
+        );
+      }
+      await plannerAgentClearOpenProposals(context.db, {
+        userId: owner.userId,
+        weekStart: week.planWeek,
+      });
+      try {
+        const sent = open?.sessionId
+          ? await plannerSendAgent(agent, context.db, {
+              ...owner,
+              sessionId: open.sessionId,
+              step: "propose",
+              message: plannerAgentProposeMessage(week),
+            })
+          : "missing";
+        if (sent === "missing") {
+          if (open?.sessionId) {
+            await plannerEndAgent(agent, context.db, {
+              userId: owner.userId,
+              sessionId: open.sessionId,
+            });
+          }
+          await plannerStartAgent(agent, {
+            db: context.db,
+            env: c.env,
+            user: context.user,
+            authUserId: context.authUserId,
+            job: "review",
+            ownerKey: owner.ownerKey,
+            step: "propose",
+            message: plannerAgentProposeKickoff(week),
+            title: `Look forward ${plannerWeekCode(week.planWeek)}`,
+          });
+        }
+      } catch (error) {
+        plannerLogAgentError("propose", error);
+        return agentUnavailable(c, error);
+      }
+      return c.json(await listed());
     } catch (error) {
       return jsonError(c, error);
     }

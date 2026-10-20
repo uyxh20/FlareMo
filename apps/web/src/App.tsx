@@ -30,6 +30,7 @@ import { useWorkspaceQueries } from "@/hooks/use-workspace-queries";
 import { useWorkspaceShortcuts } from "@/hooks/use-workspace-shortcuts";
 import { useI18n } from "@/i18n";
 import { focusComposerInput } from "@/lib/composer-focus";
+import { PlannerAskBubble } from "@/planner/ask-bubble"; // fork: Ask my diary
 import { AppRoutes } from "@/router-tree";
 import { indexRoute, registerWorkspaceComponent } from "@/routes/index-route";
 
@@ -443,7 +444,7 @@ export function FlareMoApp() {
               {showScrollToTop && (
                 <Button
                   aria-label={t("common.scrollToTop")}
-                  className="fixed bottom-6 right-6 z-30 size-9 rounded-full border border-border/60 bg-background/85 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:bg-muted hover:text-foreground active:scale-95 motion-safe:animate-scale-in motion-safe:transition-all sm:right-8"
+                  className="fixed bottom-20 right-6 z-30 size-9 rounded-full border border-border/60 bg-background/85 p-0 text-muted-foreground shadow-sm backdrop-blur-md hover:bg-muted hover:text-foreground active:scale-95 motion-safe:animate-scale-in motion-safe:transition-all sm:right-8"
                   size="icon"
                   title={t("common.scrollToTop")}
                   type="button"
@@ -465,6 +466,8 @@ export function FlareMoApp() {
           />
         )}
       </Suspense>
+      <PlannerAskBubble />{" "}
+      {/* fork: Ask my diary; scroll-to-top sits above it */}
       <SpotlightSearch
         open={spotlightOpen}
         onOpenChange={setSpotlightOpen}

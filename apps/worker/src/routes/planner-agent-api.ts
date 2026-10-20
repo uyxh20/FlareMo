@@ -21,8 +21,8 @@ import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
   type PlannerAgent,
-  PlannerAgentUnavailableError,
   plannerAgent,
+  plannerAgentFailure,
   plannerEndAgent,
   plannerLogAgentError,
   plannerPollAgent,
@@ -211,9 +211,7 @@ plannerAgentApi.post(
         });
       } catch (error) {
         plannerLogAgentError("ask", error);
-        return error instanceof PlannerAgentUnavailableError
-          ? c.json({ error: { message: error.message, code: error.code } }, 503)
-          : c.json(AGENT_UNAVAILABLE, 503);
+        return c.json(plannerAgentFailure(error), 503);
       }
       const response: PlannerAskResponse = {
         enabled: true,

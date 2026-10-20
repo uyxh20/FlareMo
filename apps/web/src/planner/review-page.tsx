@@ -63,6 +63,7 @@ import {
   plannerStartReviewOverRequest,
   plannerStreamCoach,
   plannerStreamMemo,
+  plannerSuggestProposalsRequest,
 } from "./goals-api";
 import { plannerWeekNumber, plannerWeekRange } from "./goals-model";
 import type { PlannerReviewPart } from "./goals-search";
@@ -1276,6 +1277,45 @@ function ReviewSession({
     });
   };
 
+  // Asking the agent for proposals: once by itself when the plan opens with
+  // nothing proposed after the look back, and from the Suggest button.
+  const [suggesting, setSuggesting] = useState(false);
+  const suggest = async () => {
+    if (suggesting) return;
+    setSuggesting(true);
+    setForward((current) =>
+      current.suggestAsked ? current : { ...current, suggestAsked: true },
+    );
+    try {
+      const response = await plannerSuggestProposalsRequest(week, today);
+      queryClient.setQueryData(plannerQueryKeys.proposals(week), response);
+    } catch (failure) {
+      if (!alive.current) return;
+      toast.error(
+        plannerErrorMessage(
+          failure,
+          strings.review.forward.proposals.suggestFailed,
+          cockpit.toast.rateLimited,
+        ),
+      );
+    } finally {
+      if (alive.current) setSuggesting(false);
+    }
+  };
+  const proposalsData = proposalsQuery.data;
+  const autoSuggest =
+    part === "forward" &&
+    proposalsData?.agent === true &&
+    !proposalsData.pending &&
+    proposalsData.proposals.length === 0 &&
+    !state.forward.suggestAsked &&
+    Boolean(review.summary) &&
+    !review.look_forward_done_at;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asks once when the plan opens
+  useEffect(() => {
+    if (autoSuggest) void suggest();
+  }, [autoSuggest]);
+
   const [savingWeek, setSavingWeek] = useState(false);
 
   const saveWeek = async () => {
@@ -1452,6 +1492,8 @@ function ReviewSession({
       settleProposal(proposal.id, "accepted");
     },
     dismiss: (proposal) => settleProposal(proposal.id, "dismissed"),
+    suggest: () => void suggest(),
+    suggesting,
   };
 
   const periodOpen = chapters.find(
