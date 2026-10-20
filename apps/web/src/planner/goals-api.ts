@@ -26,6 +26,7 @@ import type {
   PlannerReviewResponse,
   PlannerReviewStateResponse,
   PlannerReviewStatusResponse,
+  PlannerSuggestProposalsInput,
   PlannerUpdateGoalInput,
 } from "@flaremo/contracts";
 import {
@@ -257,11 +258,17 @@ export function plannerFetchProposals(week: string, today: string) {
   );
 }
 
-/** Asks the agent for next week's goal and task proposals (Look forward). */
-export function plannerSuggestProposalsRequest(week: string, today: string) {
+/**
+ * Asks the agent for next week's goals, or for tasks for the goals chosen
+ * (Look forward).
+ */
+export function plannerSuggestProposalsRequest(
+  week: string,
+  input: PlannerSuggestProposalsInput,
+) {
   return apiRequest<PlannerAgentProposalsResponse>(
     reviewPath(week, "proposals"),
-    { method: "POST", body: JSON.stringify({ today }) },
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 

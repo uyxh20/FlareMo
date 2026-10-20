@@ -8,6 +8,7 @@ import {
   plannerAgentMemoMessage,
   plannerAgentOpeningMessage,
   plannerAgentProposeMessage,
+  plannerAgentProposeTasksMessage,
   plannerAgentSystem,
 } from "./agent-prompts";
 import type { PlannerReviewContext } from "./review-context";
@@ -624,7 +625,21 @@ describe("the general agent's review steps", () => {
   it("proposes for the week being planned, then checks the plan", () => {
     const propose = plannerAgentProposeMessage(CONTEXT);
     expect(propose).toContain(`propose_goal, week ${CONTEXT.planWeek}`);
-    expect(propose).toContain("at most six tasks");
+    expect(propose).toContain("Call read_goals first.");
+    expect(propose).toContain("as serves");
+    expect(propose).not.toContain("propose_task");
+    const again = plannerAgentProposeMessage(CONTEXT, {
+      memories: false,
+      again: true,
+    });
+    expect(again).toContain("asked again");
+    expect(again).not.toContain("propose_memory");
+    const tasks = plannerAgentProposeTasksMessage(CONTEXT, [
+      { pillar: "work", title: "Sign with Acme" },
+    ]);
+    expect(tasks).toContain("- [work] Sign with Acme");
+    expect(tasks).toContain(`propose_task, week ${CONTEXT.planWeek}`);
+    expect(tasks).toContain("month or quarter goal it moves");
     const check = plannerAgentCheckMessage(
       CONTEXT,
       [{ id: "g1", pillar: "work", title: "Sign with Acme", tasks: [] }],

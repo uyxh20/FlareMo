@@ -200,18 +200,34 @@ export function plannerAgentMemoKickoff(
 ${plannerAgentMemoMessage(context, request)}`;
 }
 
+/** How the week's plan ties to the goal cascade, for both propose steps. */
+function cascadeRule(context: PlannerReviewContext, name: string): string {
+  return `Tie the week to ${name}'s month and quarter goals, not to the week alone. Call read_goals first. For each objective, start from its goal for the month that week ${context.planWeek} falls in (the quarter's goal when the month has none): its struck points are what is done, its open points what is left. The week's work is the next step on what is left, sized to one week.`;
+}
+
 /**
- * The propose step, sent by the Worker once the memo is read: memories, then
- * goals and tasks for the week being planned. The proposals are the answer.
+ * The propose step: next week's goals, each the next step on a month or
+ * quarter goal. Sent by the Worker once the memo is read (with memories), and
+ * when the owner asks again on Look forward (again: the proposals they did
+ * not take were withdrawn). Tasks come at Plan tasks, for the goals chosen.
  */
 export function plannerAgentProposeMessage(
   context: PlannerReviewContext,
+  options: { memories?: boolean; again?: boolean } = {},
 ): string {
   const name = firstName(context.ownerName);
-  return `Propose step: the memo is written and ${name} is reading it. Now make your proposals, following the propose part of your weekly-review skill. The propose tools are on for this step.
+  const memories = options.memories ?? true;
+  const goals = `Next week's goals, for the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}): at most one weekly goal per objective (propose_goal, week ${context.planWeek}). ${cascadeRule(context, name)} Name that month or quarter goal as serves, and say in why where it stands and why this is the next step; draw on the memo's Next Steps and the open threads. Don't propose tasks in this step: they come once ${name} has chosen the goals.`;
+  const opening = options.again
+    ? `Propose step, asked again: ${name} wants new suggestions for next week's goals. The goal proposals ${name} did not take are withdrawn and gone from the page; the ones ${name} took stay. Propose again from the start: don't reply done on the strength of your earlier proposals. The propose tools are on for this step.`
+    : `Propose step: the memo is written and ${name} is reading it. Now make your proposals, following the propose part of your weekly-review skill. The propose tools are on for this step.`;
+  const body = memories
+    ? `1. Memories: at most three things this week showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory). Call read_memories first and skip what the ledger already holds.
+2. ${goals}`
+    : goals;
+  return `${opening}
 
-1. Memories: at most three things this week showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory). Call read_memories first and skip what the ledger already holds.
-2. Next week's plan, for the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}): at most one weekly goal per objective (propose_goal, week ${context.planWeek}), drawn from the memo's Next Steps, the open threads and the goal cascade, and at most six tasks that move those goals (propose_task, naming the goal they serve). Read read_tasks first: don't propose a task that is already on the board; a backlog task that should be done next week is proposed under its own title.
+${body}
 
 Propose less rather than more: ${name} will read each one. When everything is proposed, reply with the single word: done.`;
 }
@@ -219,20 +235,61 @@ Propose less rather than more: ${name} will read each one. When everything is pr
 /**
  * Look forward's own session, when the review's session is gone or never ran
  * (the look back was written without the agent, or the owner asks again):
- * what the session is, then the propose step, read from the saved summary.
+ * what the session is, then the step, read from the saved summary.
  */
-export function plannerAgentProposeKickoff(
-  context: PlannerReviewContext,
-): string {
+function proposeKickoff(context: PlannerReviewContext, step: string): string {
   const name = firstName(context.ownerName);
-  return `This session is ${name}'s Look forward: planning the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}). Use your weekly-review skill. The look back of ${plannerWeekCode(context.weekStart)} is done and its summary memo is saved: it is the latest look back, and its Next Steps are where the plan starts. ${name} is choosing next week's goals in the app and waits on your proposals.
+  return `This session is ${name}'s Look forward: planning the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}). Use your weekly-review skill. The look back of ${plannerWeekCode(context.weekStart)} is done and its summary memo is saved: it is the latest look back, and its Next Steps are where the plan starts. ${name} is planning next week in the app and waits on your proposals.
 
 Before you propose: read your memory store's notes, call review_week for ${context.weekStart} (the week just reviewed, with its summary), and read_goals for the goal cascade and ${plannerWeekCode(context.planWeek)}'s goals so far. Don't change your memory store in this session.
 
-${plannerAgentProposeMessage(context).replace(
-  `the memo is written and ${name} is reading it`,
-  `the memo is written and ${name} is planning from it`,
-)}`;
+${step}`;
+}
+
+export function plannerAgentProposeKickoff(
+  context: PlannerReviewContext,
+): string {
+  return proposeKickoff(
+    context,
+    plannerAgentProposeMessage(context, { memories: false }),
+  );
+}
+
+/** The plan's goals as the owner chose them, for the task step. */
+export type PlannerAgentChosenGoal = { pillar: string | null; title: string };
+
+/**
+ * Plan tasks: tasks for the goals the owner chose for next week, each moving
+ * that goal and the month or quarter goal above it.
+ */
+export function plannerAgentProposeTasksMessage(
+  context: PlannerReviewContext,
+  goals: readonly PlannerAgentChosenGoal[],
+): string {
+  const name = firstName(context.ownerName);
+  const listed = goals.length
+    ? goals
+        .map((goal) => `- [${goal.pillar ?? "own goal"}] ${goal.title}`)
+        .join("\n")
+    : "- (none named yet: propose from the month and quarter goals)";
+  return `Task step: ${name} has chosen next week's goals and is planning the tasks. The propose tools are on for this step. Earlier task proposals ${name} did not take are withdrawn and gone from the page; propose afresh.
+
+Next week's goals, for the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}), as ${name} chose them (not saved yet, so they are not in read_goals):
+${listed}
+
+Propose at most six tasks that move these goals (propose_task, week ${context.planWeek}). ${cascadeRule(context, name)} For each task set pillar to the objective of the week's goal it belongs under (leave it out for an own goal), and goal_ref to the month or quarter goal it moves when there is one; say in why which goal it moves and why now. Read read_tasks first: don't propose a task that is already in To Do or Doing; a backlog task that should be done next week is proposed under its own title. Small, concrete tasks a week can finish.
+
+Propose less rather than more: ${name} will read each one. When everything is proposed, reply with the single word: done.`;
+}
+
+export function plannerAgentProposeTasksKickoff(
+  context: PlannerReviewContext,
+  goals: readonly PlannerAgentChosenGoal[],
+): string {
+  return proposeKickoff(
+    context,
+    plannerAgentProposeTasksMessage(context, goals),
+  );
 }
 
 /** The goal check of next week's plan, in the review's session. */

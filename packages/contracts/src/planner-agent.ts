@@ -153,12 +153,19 @@ export const plannerAgentToolInputs = {
     pillar: plannerPillarSchema,
     title: z.string().trim().min(1).max(300),
     lines: z.array(z.string().trim().min(1).max(300)).max(6).optional(),
+    serves: idSchema
+      .optional()
+      .describe(
+        "The month or quarter goal this week's goal is the next step on: its id from read_goals. Leave it out only when the objective has no month or quarter goal, and say so in why.",
+      ),
     why: z
       .string()
       .trim()
       .min(1)
       .max(500)
-      .describe("One or two sentences: what in the record this answers."),
+      .describe(
+        "One or two sentences: where the month or quarter goal it serves stands (its struck and open points) and why this is the next step, with what in the record shows it.",
+      ),
     quote: quoteSchema.optional(),
     entry_id: entryIdSchema.optional(),
   }),
@@ -171,9 +178,16 @@ export const plannerAgentToolInputs = {
     goal_ref: idSchema
       .optional()
       .describe(
-        "The goal it serves: an existing goal's id, or the id propose_goal returned.",
+        "The goal it serves: an existing goal's id from read_goals (best the month or quarter goal it moves), or the id propose_goal returned. Set pillar to the objective of the week's goal it belongs under.",
       ),
-    why: z.string().trim().min(1).max(500),
+    why: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .describe(
+        "One or two sentences: which week goal and which month or quarter goal it moves, and why now.",
+      ),
     quote: quoteSchema.optional(),
     entry_id: entryIdSchema.optional(),
   }),
@@ -264,8 +278,19 @@ export const plannerAgentProposalDtoSchema = z.object({
   pillar: plannerPillarSchema.nullable(),
   title: z.string(),
   lines: z.array(plannerGoalLineSchema),
-  /** A task's goal: an existing goal's id or a goal proposal's id. */
+  /**
+   * A task's goal: an existing goal's id or a goal proposal's id. A goal's:
+   * the month or quarter goal it is the next step on.
+   */
   goal_ref: z.string().nullable(),
+  /** For a goal: the month or quarter goal it serves, as the page shows it. */
+  serves: z
+    .object({
+      level: z.enum(["month", "quarter"]),
+      period_start: z.string(),
+      title: z.string(),
+    })
+    .nullable(),
   why: z.string(),
   /** The owner's words it rests on, found word for word, or null. */
   quote: z.string().nullable(),
@@ -282,7 +307,31 @@ export type PlannerAgentProposalsResponse = {
   pending: boolean;
   /** The general agent is set up here, so the page can ask it to propose. */
   agent: boolean;
+  /** While pending: whether the agent drafts goals or tasks. */
+  drafting: "goals" | "tasks" | null;
 };
+
+/**
+ * Ask the agent to propose for the week being planned: goals (Choose the
+ * week), or tasks for the goals the owner chose (Plan tasks).
+ */
+export const plannerSuggestProposalsSchema = z.object({
+  today: daySchema,
+  kind: z.enum(["goals", "tasks"]).default("goals"),
+  /** For tasks: the week's goals as the plan stands, not yet saved. */
+  goals: z
+    .array(
+      z.object({
+        pillar: plannerPillarSchema.nullable(),
+        title: z.string().trim().min(1).max(1000),
+      }),
+    )
+    .max(12)
+    .default([]),
+});
+export type PlannerSuggestProposalsInput = z.input<
+  typeof plannerSuggestProposalsSchema
+>;
 
 export type PlannerAgentProposalResponse = {
   proposal: PlannerAgentProposalDto;

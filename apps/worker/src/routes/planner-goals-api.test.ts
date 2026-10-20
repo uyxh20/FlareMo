@@ -1158,14 +1158,39 @@ describe("planner goals and weekly review API", () => {
             ?.content as Array<{ text: string }>
         )[0]?.text,
       ),
-    ).toMatch(/^Propose step/);
+    ).toMatch(/^Propose step, asked again/);
     expect(
       await body(
         call("GET", `${proposalsPath}?today=${TODAY}`, undefined, {
           env: agentEnv,
         }),
       ),
-    ).toMatchObject({ pending: false, agent: true });
+    ).toMatchObject({ pending: false, agent: true, drafting: null });
+
+    // Plan tasks asks for tasks for the goals the owner chose.
+    expect(
+      await body(
+        call(
+          "POST",
+          proposalsPath,
+          {
+            today: TODAY,
+            kind: "tasks",
+            goals: [{ pillar: "work", title: "Sign with Acme" }],
+          },
+          { env: agentEnv },
+        ),
+      ),
+    ).toMatchObject({ pending: true, agent: true, drafting: "tasks" });
+    const taskStep = String(
+      (
+        events.filter((event) => event.type === "user.message").at(-1)
+          ?.content as Array<{ text: string }>
+      )[0]?.text,
+    );
+    expect(taskStep).toMatch(/^Task step/);
+    expect(taskStep).toContain("- [work] Sign with Acme");
+    expect(sessionsStarted()).toBe(1);
 
     await body(
       call(

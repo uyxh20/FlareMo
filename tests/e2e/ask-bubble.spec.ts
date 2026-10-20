@@ -75,21 +75,31 @@ test("Look forward asks the agent for goals once and shows them first", async ({
     quote: null,
     source_day: null,
     goal_ref: null,
+    serves: {
+      level: "month",
+      period_start: "2026-10-01",
+      title: "Sign the client",
+    },
     state: "open",
   };
   await page.route("**/review/*/proposals*", async (route) => {
     if (route.request().method() === "POST") {
       asked += 1;
       await route.fulfill({
-        json: { proposals: [], pending: true, agent: true },
+        json: { proposals: [], pending: true, agent: true, drafting: "goals" },
       });
       return;
     }
     await route.fulfill({
       json:
         asked === 0
-          ? { proposals: [], pending: false, agent: true }
-          : { proposals: [proposal], pending: false, agent: true },
+          ? { proposals: [], pending: false, agent: true, drafting: null }
+          : {
+              proposals: [proposal],
+              pending: false,
+              agent: true,
+              drafting: null,
+            },
     });
   });
 
@@ -100,6 +110,10 @@ test("Look forward asks the agent for goals once and shows them first", async ({
     timeout: 15_000,
   });
   expect(asked).toBe(1);
+  // Each suggested goal names the month or quarter goal it moves.
+  await expect(section.getByTestId("planner-proposal-serves")).toContainText(
+    "Sign the client",
+  );
   // The suggestions come before the goal slots.
   const slots = page.getByTestId("planner-forward-step").locator("textarea");
   const sectionBox = await section.boundingBox();

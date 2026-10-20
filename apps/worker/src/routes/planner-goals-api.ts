@@ -28,6 +28,7 @@ import {
   plannerReviewQuerySchema,
   plannerReviewStatusQuerySchema,
   plannerSaveReviewStateSchema,
+  plannerSuggestProposalsSchema,
   plannerUpdateGoalSchema,
   plannerWeekCode,
 } from "@flaremo/contracts";
@@ -52,6 +53,8 @@ import {
   plannerAgentOpeningMessage,
   plannerAgentProposeKickoff,
   plannerAgentProposeMessage,
+  plannerAgentProposeTasksKickoff,
+  plannerAgentProposeTasksMessage,
   plannerAgentSettleProposal,
   plannerAgentWeekKey,
   plannerCheckMessages,
@@ -815,6 +818,7 @@ plannerGoalsApi.get(
       const ownerKey = plannerAgentWeekKey(weekStart);
       const agent = plannerAgent(c.env);
       let pending = false;
+      let drafting: PlannerAgentProposalsResponse["drafting"] = null;
       const open = agent
         ? await plannerAgentFindOpenRun(db, { userId: user.id, ownerKey })
         : null;
@@ -832,6 +836,7 @@ plannerGoalsApi.get(
           });
           pending = state.status === "running";
         }
+        if (pending) drafting = plannerProposeDrafting(open.stepInput);
       }
       const response: PlannerAgentProposalsResponse = {
         proposals: await plannerAgentListProposals(db, {
@@ -840,6 +845,7 @@ plannerGoalsApi.get(
         }),
         pending,
         agent: agent !== null,
+        drafting,
       };
       return c.json(response);
     } catch (error) {
@@ -848,20 +854,28 @@ plannerGoalsApi.get(
   },
 );
 
-// Look forward asks the agent for next week's goals and tasks: once by itself
-// when the plan opens with nothing proposed, and again when the owner asks.
-// The review's session takes the propose step when it is still there; else a
-// session of its own starts from the saved look back. Proposals nobody acted on
-// are replaced; the page then reads them as above.
+/** What a propose step drafts: tasks when the page asked for them. */
+function plannerProposeDrafting(stepInput: unknown): "goals" | "tasks" {
+  return (stepInput as { kind?: unknown } | null)?.kind === "tasks"
+    ? "tasks"
+    : "goals";
+}
+
+// Look forward asks the agent for next week's goals (Choose the week) or for
+// tasks for the goals the owner chose (Plan tasks): once by itself when the
+// step opens with nothing proposed, and again when the owner asks. The
+// review's session takes the step when it is still there; else a session of
+// its own starts from the saved look back. Proposals of that kind nobody
+// acted on are replaced; the page then reads them as above.
 plannerGoalsApi.post(
   "/review/:week/proposals",
-  zValidator("json", plannerReviewStatusQuerySchema),
+  zValidator("json", plannerSuggestProposalsSchema),
   async (c) => {
     try {
       const context = await getRequestContext(c);
       const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
       if (throttled) return throttled;
-      const { today } = c.req.valid("json");
+      const { today, kind, goals } = c.req.valid("json");
       plannerAssertToday(today, new Date());
       const agent = plannerAgent(c.env);
       if (!agent) return c.json(AI_UNAVAILABLE, 503);
@@ -878,17 +892,22 @@ plannerGoalsApi.post(
         diaryChars: PLANNER_AGENT_DIARY_CHARS,
       });
       const open = await plannerAgentFindOpenRun(context.db, owner);
-      const listed = async (): Promise<PlannerAgentProposalsResponse> => ({
+      const listed = async (
+        drafting: PlannerAgentProposalsResponse["drafting"],
+      ): Promise<PlannerAgentProposalsResponse> => ({
         proposals: await plannerAgentListProposals(context.db, {
           userId: owner.userId,
           weekStart: week.planWeek,
         }),
         pending: true,
         agent: true,
+        drafting,
       });
       if (open?.sessionId && !open.stepDoneAt) {
         // The agent is at a step already: proposing, or mid-review.
-        if (open.step === "propose") return c.json(await listed());
+        if (open.step === "propose") {
+          return c.json(await listed(plannerProposeDrafting(open.stepInput)));
+        }
         return c.json(
           { error: { message: "Wait for the agent's current step." } },
           409,
@@ -897,14 +916,26 @@ plannerGoalsApi.post(
       await plannerAgentClearOpenProposals(context.db, {
         userId: owner.userId,
         weekStart: week.planWeek,
+        kind: kind === "tasks" ? "task" : "goal",
       });
+      const stepInput = { kind };
       try {
+        // A session that proposed before is told its earlier proposals are
+        // gone; else it answers "done" on the strength of them.
+        const again = open?.step === "propose" || open?.step === "check";
         const sent = open?.sessionId
           ? await plannerSendAgent(agent, context.db, {
               ...owner,
               sessionId: open.sessionId,
               step: "propose",
-              message: plannerAgentProposeMessage(week),
+              stepInput,
+              message:
+                kind === "tasks"
+                  ? plannerAgentProposeTasksMessage(week, goals)
+                  : plannerAgentProposeMessage(week, {
+                      memories: false,
+                      again,
+                    }),
             })
           : "missing";
         if (sent === "missing") {
@@ -922,7 +953,11 @@ plannerGoalsApi.post(
             job: "review",
             ownerKey: owner.ownerKey,
             step: "propose",
-            message: plannerAgentProposeKickoff(week),
+            stepInput,
+            message:
+              kind === "tasks"
+                ? plannerAgentProposeTasksKickoff(week, goals)
+                : plannerAgentProposeKickoff(week),
             title: `Look forward ${plannerWeekCode(week.planWeek)}`,
           });
         }
@@ -930,7 +965,7 @@ plannerGoalsApi.post(
         plannerLogAgentError("propose", error);
         return agentUnavailable(c, error);
       }
-      return c.json(await listed());
+      return c.json(await listed(kind));
     } catch (error) {
       return jsonError(c, error);
     }

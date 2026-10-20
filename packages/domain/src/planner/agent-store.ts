@@ -14,6 +14,7 @@ import {
   plannerAgentChat,
   plannerAgentProposal,
   plannerAgentRun,
+  plannerGoal,
 } from "@flaremo/db/src/schema/planner";
 import {
   and,
@@ -396,6 +397,7 @@ export async function plannerAgentFindQuote(
 
 export function plannerAgentProposalToDto(
   row: PlannerAgentProposalRow,
+  serves: PlannerAgentProposalDto["serves"] = null,
 ): PlannerAgentProposalDto {
   return {
     id: row.id,
@@ -409,6 +411,7 @@ export function plannerAgentProposalToDto(
     quote: row.verified === 1 ? row.quote : null,
     source_day: row.verified === 1 ? row.sourceDay : null,
     state: row.state,
+    serves: row.kind === "goal" ? serves : null,
   };
 }
 
@@ -418,7 +421,7 @@ export function plannerAgentProposalToDto(
  */
 export async function plannerAgentClearOpenProposals(
   db: FlareMoDb,
-  input: { userId: string; weekStart: string },
+  input: { userId: string; weekStart: string; kind?: "goal" | "task" },
 ): Promise<void> {
   await db
     .delete(plannerAgentProposal)
@@ -427,6 +430,7 @@ export async function plannerAgentClearOpenProposals(
         eq(plannerAgentProposal.userId, input.userId),
         eq(plannerAgentProposal.weekStart, input.weekStart),
         eq(plannerAgentProposal.state, "open"),
+        input.kind ? eq(plannerAgentProposal.kind, input.kind) : undefined,
       ),
     )
     .run();
@@ -513,7 +517,48 @@ export async function plannerAgentListProposals(
     )
     .orderBy(asc(plannerAgentProposal.createdAt))
     .all();
-  return rows.map(plannerAgentProposalToDto);
+  // A goal proposal names the month or quarter goal it serves.
+  const ids = [
+    ...new Set(
+      rows.flatMap((row) =>
+        row.kind === "goal" && row.goalRef ? [row.goalRef] : [],
+      ),
+    ),
+  ];
+  const parents = ids.length
+    ? await db
+        .select({
+          id: plannerGoal.id,
+          level: plannerGoal.level,
+          periodStart: plannerGoal.periodStart,
+          title: plannerGoal.title,
+        })
+        .from(plannerGoal)
+        .where(
+          and(
+            eq(plannerGoal.userId, input.userId),
+            inArray(plannerGoal.id, ids),
+            isNull(plannerGoal.deletedAt),
+          ),
+        )
+        .all()
+    : [];
+  const byId = new Map(parents.map((goal) => [goal.id, goal]));
+  return rows.map((row) => {
+    const parent = row.goalRef ? byId.get(row.goalRef) : undefined;
+    return plannerAgentProposalToDto(
+      row,
+      parent &&
+        (parent.level === "month" || parent.level === "quarter") &&
+        parent.periodStart
+        ? {
+            level: parent.level,
+            period_start: parent.periodStart,
+            title: parent.title,
+          }
+        : null,
+    );
+  });
 }
 
 /** Accepts or dismisses a proposal; `open` takes the decision back. */

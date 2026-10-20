@@ -9,6 +9,7 @@ import {
   plannerAgentSettleProposal,
 } from "./agent-store";
 import { PlannerAgentToolError, plannerAgentCallTool } from "./agent-tools";
+import { plannerCreateGoal } from "./goals";
 import {
   type PlannerTestRuntime,
   plannerTestRows,
@@ -166,6 +167,52 @@ describe("the general agent's tools", () => {
       needs_review: 1,
       source_agent: "agent",
       verification: "inferred",
+    });
+  });
+
+  it("ties a proposed goal to the month or quarter goal it serves", async () => {
+    await reviewAt("propose");
+    const month = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        level: "month",
+        periodStart: `${NEXT_WEEK.slice(0, 7)}-01`,
+        pillar: "work",
+        title: "Sign the client",
+      },
+    });
+    const week = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        level: "week",
+        periodStart: NEXT_WEEK,
+        pillar: "work",
+        title: "A week goal",
+      },
+    });
+    await expect(
+      call("propose_goal", {
+        week: NEXT_WEEK,
+        pillar: "work",
+        title: "Send the contract",
+        serves: week.id,
+        why: "The month goal is open.",
+      }),
+    ).rejects.toThrow(/serves names no month or quarter goal/);
+    await call("propose_goal", {
+      week: NEXT_WEEK,
+      pillar: "work",
+      title: "Send the contract",
+      serves: month.id,
+      why: "The month goal is open.",
+    });
+    const [proposal] = await plannerAgentListProposals(rt.db, {
+      userId: rt.user.id,
+      weekStart: NEXT_WEEK,
+    });
+    expect(proposal).toMatchObject({
+      goal_ref: month.id,
+      serves: { level: "month", title: "Sign the client" },
     });
   });
 

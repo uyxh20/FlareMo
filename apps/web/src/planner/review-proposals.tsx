@@ -30,9 +30,12 @@ export type PlannerProposalActions = {
   addGoal: (proposal: PlannerAgentProposalDto) => void;
   addTask: (proposal: PlannerAgentProposalDto, goalId: string) => void;
   dismiss: (proposal: PlannerAgentProposalDto) => void;
-  /** Asks the agent for proposals again, from the latest look back. */
-  suggest?: () => void;
-  suggesting?: boolean;
+  /**
+   * Asks the agent for goals (from the latest look back and the month and
+   * quarter goals) or for tasks (for the goals chosen).
+   */
+  suggest?: (kind: "goals" | "tasks") => void;
+  suggesting?: "goals" | "tasks" | null;
 };
 
 const normal = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
@@ -117,6 +120,22 @@ export function plannerProposalGoalId(
   return (byPillar ?? named[0])?.id ?? null;
 }
 
+/** Whether the agent is drafting this kind right now. */
+function draftingOf(
+  proposals: PlannerAgentProposalsResponse | undefined,
+  kind: "goals" | "tasks",
+): boolean {
+  if (!proposals?.pending) return false;
+  return (proposals.drafting ?? "goals") === kind;
+}
+
+/** "2026-10" for a month, "Q4 2026" for a quarter. */
+function periodLabel(level: "month" | "quarter", start: string): string {
+  if (level === "month") return start.slice(0, 7);
+  const quarter = Math.floor((Number(start.slice(5, 7)) - 1) / 3) + 1;
+  return `Q${quarter} ${start.slice(0, 4)}`;
+}
+
 function openOf(
   proposals: PlannerAgentProposalsResponse | undefined,
   kind: "goal" | "task",
@@ -196,6 +215,21 @@ function Card({
           {proposal.title}
         </span>
       </div>
+      {proposal.serves && (
+        <p
+          className="text-[13px] leading-snug [overflow-wrap:anywhere]"
+          data-testid="planner-proposal-serves"
+        >
+          <span className="text-muted-foreground">
+            {strings.review.forward.proposals.serves(
+              proposal.serves.level,
+              periodLabel(proposal.serves.level, proposal.serves.period_start),
+            )}
+            {" · "}
+          </span>
+          {proposal.serves.title}
+        </p>
+      )}
       <p className="text-[13px] leading-snug text-muted-foreground">
         {proposal.why}
       </p>
@@ -229,11 +263,14 @@ export function PlannerGoalProposals({
   actions: PlannerProposalActions;
 }) {
   const open = openOf(proposals, "goal");
-  const pending = proposals?.pending ?? false;
+  const pending =
+    draftingOf(proposals, "goals") || actions.suggesting === "goals";
   const canSuggest = Boolean(proposals?.agent && actions.suggest);
   if (open.length === 0 && !pending && !canSuggest) return null;
   const text = strings.review.forward.proposals;
-  const asked = (proposals?.proposals.length ?? 0) > 0;
+  const asked = (proposals?.proposals ?? []).some(
+    (proposal) => proposal.kind === "goal",
+  );
   return (
     <Section
       action={
@@ -241,21 +278,21 @@ export function PlannerGoalProposals({
         !pending && (
           <Button
             data-testid="planner-suggest-goals"
-            disabled={actions.suggesting}
+            disabled={Boolean(proposals?.pending)}
             size="sm"
             variant="outline"
-            onClick={actions.suggest}
+            onClick={() => actions.suggest?.("goals")}
           >
             {asked ? text.suggestAgain : text.suggest}
           </Button>
         )
       }
-      pending={pending || Boolean(actions.suggesting)}
+      pending={pending}
       strings={strings}
       testId="planner-goal-proposals"
       top
     >
-      {open.length === 0 && !pending && !actions.suggesting && (
+      {open.length === 0 && !pending && (
         <p className="text-[13px] text-muted-foreground">{text.suggestHint}</p>
       )}
       {open.map((proposal) => {
@@ -377,14 +414,43 @@ export function PlannerTaskProposals({
   actions: PlannerProposalActions;
 }) {
   const open = openOf(proposals, "task");
-  const pending = proposals?.pending ?? false;
-  if (open.length === 0 && !pending) return null;
+  const pending =
+    draftingOf(proposals, "tasks") || actions.suggesting === "tasks";
+  const canSuggest = Boolean(
+    proposals?.agent &&
+      actions.suggest &&
+      plannerNamedGoals(forward).length > 0,
+  );
+  if (open.length === 0 && !pending && !canSuggest) return null;
+  const text = strings.review.forward.proposals;
+  const asked = (proposals?.proposals ?? []).some(
+    (proposal) => proposal.kind === "task",
+  );
   return (
     <Section
+      action={
+        canSuggest &&
+        !pending && (
+          <Button
+            data-testid="planner-suggest-tasks"
+            disabled={Boolean(proposals?.pending)}
+            size="sm"
+            variant="outline"
+            onClick={() => actions.suggest?.("tasks")}
+          >
+            {asked ? text.suggestAgain : text.suggestTasks}
+          </Button>
+        )
+      }
       pending={pending}
       strings={strings}
       testId="planner-task-proposals"
     >
+      {open.length === 0 && !pending && (
+        <p className="text-[13px] text-muted-foreground">
+          {text.suggestTasksHint}
+        </p>
+      )}
       {open.map((proposal) => (
         <TaskProposal
           actions={actions}

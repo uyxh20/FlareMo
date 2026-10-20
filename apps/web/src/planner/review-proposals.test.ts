@@ -22,6 +22,7 @@ function proposal(
     title: "Ship the agent",
     lines: [],
     goal_ref: null,
+    serves: null,
     why: "It came up three times.",
     quote: null,
     source_day: null,

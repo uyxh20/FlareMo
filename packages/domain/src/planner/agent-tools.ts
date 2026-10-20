@@ -607,6 +607,24 @@ const handlers: Handlers = {
   async propose_goal(context, input) {
     requirePlanWeek(input.week, healthToday(context.now));
     const runId = await proposingRun(context, ["review"]);
+    if (input.serves) {
+      const parent = await context.db
+        .select({ level: plannerGoal.level })
+        .from(plannerGoal)
+        .where(
+          and(
+            eq(plannerGoal.userId, context.user.id),
+            eq(plannerGoal.id, input.serves),
+            isNull(plannerGoal.deletedAt),
+          ),
+        )
+        .get();
+      if (parent?.level !== "month" && parent?.level !== "quarter") {
+        throw new PlannerAgentToolError(
+          "serves names no month or quarter goal: use a month or quarter goal's id from read_goals.",
+        );
+      }
+    }
     const receipt = await receiptOf(context, input.quote, input.entry_id);
     const proposal = await plannerAgentAddProposal(context.db, {
       userId: context.user.id,
@@ -616,7 +634,7 @@ const handlers: Handlers = {
       pillar: input.pillar,
       title: input.title,
       lines: input.lines ?? [],
-      goalRef: null,
+      goalRef: input.serves ?? null,
       why: input.why,
       receipt,
     }).catch((error: unknown) => {

@@ -1277,17 +1277,27 @@ function ReviewSession({
     });
   };
 
-  // Asking the agent for proposals: once by itself when the plan opens with
-  // nothing proposed after the look back, and from the Suggest button.
-  const [suggesting, setSuggesting] = useState(false);
-  const suggest = async () => {
+  // Asking the agent for proposals: goals once by itself when the plan opens
+  // with none proposed after the look back, tasks once when Plan tasks opens
+  // with goals chosen and none proposed, and from the Suggest buttons.
+  const [suggesting, setSuggesting] = useState<"goals" | "tasks" | null>(null);
+  const suggest = async (kind: "goals" | "tasks") => {
     if (suggesting) return;
-    setSuggesting(true);
+    setSuggesting(kind);
+    const flag = kind === "goals" ? "suggestAsked" : "suggestTasksAsked";
     setForward((current) =>
-      current.suggestAsked ? current : { ...current, suggestAsked: true },
+      current[flag] ? current : { ...current, [flag]: true },
     );
     try {
-      const response = await plannerSuggestProposalsRequest(week, today);
+      const goals = plannerNamedGoals(stateRef.current.forward).map((goal) => ({
+        pillar: goal.pillar,
+        title: goal.title.trim(),
+      }));
+      const response = await plannerSuggestProposalsRequest(week, {
+        today,
+        kind,
+        goals: kind === "tasks" ? goals : [],
+      });
       queryClient.setQueryData(plannerQueryKeys.proposals(week), response);
     } catch (failure) {
       if (!alive.current) return;
@@ -1299,21 +1309,30 @@ function ReviewSession({
         ),
       );
     } finally {
-      if (alive.current) setSuggesting(false);
+      if (alive.current) setSuggesting(null);
     }
   };
   const proposalsData = proposalsQuery.data;
-  const autoSuggest =
+  const canAsk =
     part === "forward" &&
     proposalsData?.agent === true &&
     !proposalsData.pending &&
-    proposalsData.proposals.length === 0 &&
-    !state.forward.suggestAsked &&
-    Boolean(review.summary) &&
     !review.look_forward_done_at;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: asks once when the plan opens
+  const none = (kind: "goal" | "task") =>
+    !proposalsData?.proposals.some((proposal) => proposal.kind === kind);
+  const autoSuggest: "goals" | "tasks" | null =
+    canAsk && none("goal") && !state.forward.suggestAsked && review.summary
+      ? "goals"
+      : canAsk &&
+          state.forward.step === 3 &&
+          none("task") &&
+          !state.forward.suggestTasksAsked &&
+          plannerNamedGoals(state.forward).length > 0
+        ? "tasks"
+        : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: asks once per step
   useEffect(() => {
-    if (autoSuggest) void suggest();
+    if (autoSuggest) void suggest(autoSuggest);
   }, [autoSuggest]);
 
   const [savingWeek, setSavingWeek] = useState(false);
@@ -1492,7 +1511,7 @@ function ReviewSession({
       settleProposal(proposal.id, "accepted");
     },
     dismiss: (proposal) => settleProposal(proposal.id, "dismissed"),
-    suggest: () => void suggest(),
+    suggest: (kind) => void suggest(kind),
     suggesting,
   };
 

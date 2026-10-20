@@ -178,6 +178,8 @@ export type PlannerForwardState = {
   knownGoalIds: string[];
   /** Look forward asked the agent for proposals by itself once already. */
   suggestAsked?: boolean;
+  /** Plan tasks asked the agent for tasks by itself once already. */
+  suggestTasksAsked?: boolean;
 };
 
 export type PlannerReviewState = {

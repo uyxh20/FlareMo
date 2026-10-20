@@ -298,6 +298,10 @@ export type PlannerGoalsStrings = {
         suggestAgain: string;
         suggestHint: string;
         suggestFailed: string;
+        suggestTasks: string;
+        suggestTasksHint: string;
+        /** "Serves" and the month or quarter goal a proposed goal moves. */
+        serves: (level: "month" | "quarter", period: string) => string;
       };
       saveWeek: string;
       saving: string;
@@ -606,8 +610,13 @@ const en: PlannerGoalsStrings = {
         suggest: "Suggest goals",
         suggestAgain: "Suggest again",
         suggestHint:
-          "The agent reads your latest look back and your goals, then suggests next week's goals and tasks.",
+          "The agent reads your latest look back and your month and quarter goals, then suggests next week's goals as the next step on each.",
         suggestFailed: "Couldn't ask the agent. Try again.",
+        suggestTasks: "Suggest tasks",
+        suggestTasksHint:
+          "The agent suggests tasks for the goals you chose, each moving a month or quarter goal.",
+        serves: (level, period) =>
+          `Serves ${level === "month" ? "month" : "quarter"} ${period}`,
       },
       saveWeek: "Save week",
       saving: "Saving",
@@ -904,8 +913,14 @@ const zhCN: PlannerGoalsStrings = {
         settleFailed: "没能保存，请重试。",
         suggest: "建议目标",
         suggestAgain: "重新建议",
-        suggestHint: "代理会读你最新的回顾和目标，然后建议下周的目标和任务。",
+        suggestHint:
+          "代理会读你最新的回顾和月度、季度目标，然后为每个目标建议下周的下一步。",
         suggestFailed: "没能请求代理，请重试。",
+        suggestTasks: "建议任务",
+        suggestTasksHint:
+          "代理会为你选定的目标建议任务，每个都推进一个月度或季度目标。",
+        serves: (level, period) =>
+          `服务${level === "month" ? "月度" : "季度"}目标 ${period}`,
       },
       saveWeek: "保存本周",
       saving: "保存中",
