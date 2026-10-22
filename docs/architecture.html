@@ -271,7 +271,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-10-20 · describes main, live version 33 (the general agent on top of the period reviews, upstream v0.22.1 and the single Review page); dev runs the Ask bubble and Look forward suggestions</p>
+      <p class="meta">Last updated 2026-10-22 · describes main, live version 35 (cockpit task tools on MCP, on top of the Ask bubble, Look forward suggestions, the general agent, the period reviews, upstream v0.22.1 and the single Review page)</p>
     </header>
 
     <!-- ============================================================ -->
@@ -1071,7 +1071,7 @@
             <line x1="370" y1="214" x2="412" y2="214" class="a" marker-end="url(#ah)" />
           </svg>
         </div>
-        <figcaption>Login is Better Auth. Personal tokens can be revoked and last a year at most. Public sign-up is off. Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.<br /><b>Live since 2026-10-14 (version 27, sprint 1):</b> Better Auth's own <code>/api/auth/request-password-reset</code> is off again, as upstream ships it. "Forgot password" on the login page still works through upstream's route.<br /><b>Cockpit tasks over MCP</b> <span class="chip">fork</span> <span class="chip">on dev 2026-10-22, not live</span>: a token always reached the cockpit through <code>/api/app/planner</code>, but <code>/mcp</code> had no task tools. It now has six: read the board, read a task, read its history, add a task, change or move or drop a task, add a comment. Same rules, rate limit and history archive as the cockpit page; nothing deletes. Code: <code>apps/worker/src/fork/task-mcp-tools.ts</code>.</figcaption>
+        <figcaption>Login is Better Auth. Personal tokens can be revoked and last a year at most. Public sign-up is off. Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.<br /><b>Live since 2026-10-14 (version 27, sprint 1):</b> Better Auth's own <code>/api/auth/request-password-reset</code> is off again, as upstream ships it. "Forgot password" on the login page still works through upstream's route.<br /><b>Cockpit tasks over MCP</b> <span class="chip">fork</span> <span class="chip">live since 2026-10-22 (version #35)</span>: a token always reached the cockpit through <code>/api/app/planner</code>, but <code>/mcp</code> had no task tools. It now has six: read the board, read a task, read its history, add a task, change or move or drop a task, add a comment. Same rules, rate limit and history archive as the cockpit page; nothing deletes. Code: <code>apps/worker/src/fork/task-mcp-tools.ts</code>.</figcaption>
       </figure>
     </section>
 
