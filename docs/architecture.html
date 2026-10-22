@@ -1035,7 +1035,7 @@
       <p>Who gets in, with what key, through which door.</p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 250" role="img" aria-label="The browser uses a cookie through /api/app. Memos apps use a personal token through /api/v1. AI agents use a token through /mcp with 22 tools and /memory/mcp with 7 tools. Anyone with a link can read one shared entry.">
+          <svg viewBox="0 0 900 250" role="img" aria-label="The browser uses a cookie through /api/app. Memos apps use a personal token through /api/v1. AI agents use a token through /mcp with 22 entry tools plus 6 cockpit task tools and /memory/mcp with 7 tools. Anyone with a link can read one shared entry.">
             <text x="20" y="20" class="t-s t-m">WHO</text>
             <text x="220" y="20" class="t-s t-m">KEY</text>
             <text x="420" y="20" class="t-s t-m">DOOR</text>
@@ -1054,7 +1054,7 @@
             <rect x="20" y="140" width="160" height="40" rx="8" class="n" /><text x="34" y="165" class="t-b">AI agents</text>
             <rect x="220" y="146" width="150" height="28" rx="14" class="n n-fork" /><text x="295" y="165" text-anchor="middle" class="t-m">memos_pat_…</text>
             <text x="420" y="157" class="t-m">/mcp</text><text x="420" y="175" class="t-m">/memory/mcp</text>
-            <text x="640" y="157">22 entry tools</text><text x="640" y="175">7 memory tools</text>
+            <text x="640" y="157">22 entry + 6 task tools</text><text x="640" y="175">7 memory tools</text>
 
             <rect x="20" y="194" width="160" height="40" rx="8" class="n dash" /><text x="34" y="219" class="t-b">Anyone with link</text>
             <rect x="220" y="200" width="150" height="28" rx="14" class="n dash" /><text x="295" y="219" text-anchor="middle" class="t-s">none</text>
@@ -1071,7 +1071,7 @@
             <line x1="370" y1="214" x2="412" y2="214" class="a" marker-end="url(#ah)" />
           </svg>
         </div>
-        <figcaption>Login is Better Auth. Personal tokens can be revoked and last a year at most. Public sign-up is off. Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.<br /><b>Live since 2026-10-14 (version 27, sprint 1):</b> Better Auth's own <code>/api/auth/request-password-reset</code> is off again, as upstream ships it. "Forgot password" on the login page still works through upstream's route.</figcaption>
+        <figcaption>Login is Better Auth. Personal tokens can be revoked and last a year at most. Public sign-up is off. Code: <code>apps/worker/src/auth.ts</code>, <code>context.ts</code>.<br /><b>Live since 2026-10-14 (version 27, sprint 1):</b> Better Auth's own <code>/api/auth/request-password-reset</code> is off again, as upstream ships it. "Forgot password" on the login page still works through upstream's route.<br /><b>Cockpit tasks over MCP</b> <span class="chip">fork</span> <span class="chip">on dev 2026-10-22, not live</span>: a token always reached the cockpit through <code>/api/app/planner</code>, but <code>/mcp</code> had no task tools. It now has six: read the board, read a task, read its history, add a task, change or move or drop a task, add a comment. Same rules, rate limit and history archive as the cockpit page; nothing deletes. Code: <code>apps/worker/src/fork/task-mcp-tools.ts</code>.</figcaption>
       </figure>
     </section>
 
