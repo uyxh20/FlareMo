@@ -120,6 +120,15 @@ The owner can backdate a note (retrofit entries) from the memo's ⋯ menu: **Edi
 - Not covered: the nightly memory "dreaming" sweep only looks at entries newer than its last run, so a note backdated before that run is not swept; the manual memory button still works. The MCP update tool does not take `created_at`.
 - Files: `apps/web/src/fork/memo-date-dialog.tsx`, `apps/web/src/fork/memo-date.ts`, `packages/domain/src/fork/memo-backdate.ts`, `packages/domain/src/memo-backdate.test.ts`. Undo: remove the menu item and dialog lines in `memo-card-menu.tsx`, the `created_at` field in `updateMemoSchema`, and the `forkApplyBackdate` lines in `updateMemo`.
 
+### 6. Cockpit tasks over MCP
+
+A personal access token (`memos_pat_…`) could always read and change cockpit tasks through the web API (`/api/app/planner`), but the app's MCP server (`/mcp`) only had upstream's memo, shortcut and attachment tools, so an agent connected over MCP could not see the board. Six fork tools now sit on the same server: `task_read_board`, `task_get_task`, `task_get_history`, `task_create_task`, `task_update_task` and `task_add_comment`.
+
+- They call the same domain functions as `planner-api.ts`, with the same request schemas, the same `today` bound (optional here: it defaults to the UTC date), the same `planner` rate limit on writes, and the same `pat:` actor label, so every change lands in the permanent history archive like a REST call.
+- Nothing deletes: `dropped: true` drops a task (soft, reversible); comments can be added but not edited or removed. Goals, scores and reviews are still not on MCP.
+- The general agent's key is still refused on `/mcp` (`context.ts`), so it gains nothing.
+- Files: `apps/worker/src/fork/task-mcp-tools.ts`, `apps/worker/src/fork/task-mcp-tools.test.ts`. Undo: delete them and the two hook-ins in `apps/worker/src/routes/mcp/index.ts`, and the six names in `mcp-streamable.test.ts`.
+
 ## Upstream files with a hook-in
 
 These are all the upstream files this fork changes, compared with the upstream commit `main` last merged (named on the first line of `packages/domain/src/fork/upstream-manifest.txt`). `packages/domain/src/fork/upstream-hookins.test.ts` fails when a changed upstream file has no row here, or a row names a file that is back to upstream, so the list cannot drift. Line counts: `git diff --numstat <that commit> -- <file>`.
@@ -149,6 +158,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/web/src/components/memo-card/memo-card-body.tsx` | An expanded memo had a hidden 1,600px height cap, so a long memo, such as a weekly summary, was cut off even after "Expand". Expanded is now `max-h-none`. CSS cannot animate to `none`, so expanding and collapsing snap instead of sliding. Undo: put `max-h-[1600px]` back. |
 | `apps/worker/src/spa-routes.ts` | `"/cockpit"`, `"/goals"`, `"/review"`, `"/weekly-review"`, `"/period-review"` and `"/health"` in the SPA routes (the last two are the review's old addresses, which go to `/review`). |
 | `apps/worker/src/index.ts` | `mountLazyRoute` for `/api/app/planner` and `/api/app/health-tracker`. General agent: one import and, at the top of `scheduled`, `if (await forkAgentScheduled(controller, env)) return;` with a comment line, so the Sunday cron runs the agent's prep and nothing else (`apps/worker/src/fork/agent-schedule.ts`). |
+| `apps/worker/src/routes/mcp/index.ts` | Cockpit tasks over MCP: one import; `tools/list` returns `[...streamableTools, ...forkTaskMcpTools]`; `tools/call` sends a name `forkIsTaskMcpTool` claims to `forkCallTaskMcpTool(c, …)` before upstream's switch (`apps/worker/src/fork/task-mcp-tools.ts`; wiring test `task-mcp-tools.test.ts`). |
 | `apps/worker/src/context.ts` | General agent: one import and `forkRefuseAgentKey(verification.key);` after a `memos_pat_` token is verified, so the agent's own key opens its MCP server and nothing else (`apps/worker/src/fork/agent-key.ts`). |
 | `apps/worker/src/scheduled-tasks.ts` | Product name: imports `resolveProductName`; the two push titles use the live name. Planner: imports `plannerSyncAllUsers` and calls it right before `hardDeleteExpiredProjects` and right after `hardDeleteExpiredTasks`; when the first call reports `paused`, both purge calls are skipped that night, so nothing is purged before it is archived (the loop and error handling live in `packages/domain/src/planner/history-sync-nightly.ts`). Health: imports `healthNightlySweep` and awaits it once in the nightly block. General agent: imports `forkAgentReplacesDreaming` and `forkAgentNightly`; memory dreaming is skipped while the agent is set up (it proposes memories itself; the conflict patrol still runs), and `forkAgentNightly` ends idle agent sessions after the health sweep. |
 | `apps/worker/src/env.ts` | Types and a comment for the weekly review's model settings (`FLAREMO_REVIEW_*`, `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`) and the general agent's (`FLAREMO_AGENT`, `_ENVIRONMENT`, `_STORE`, `_VAULT`, `_RUN_USD`, `_MONTH_USD`). |
@@ -166,6 +176,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 
 | File | Change |
 | --- | --- |
+| `apps/worker/src/mcp-streamable.test.ts` | The six fork task tools added to the expected `tools/list`. |
 | `apps/worker/src/api/branding.test.ts`, `apps/worker/src/scheduled.test.ts` | Expectations for the default name, plus one case that clearing the custom name restores it. |
 | `tests/e2e/branding.spec.ts`, `tests/e2e/capture-flow.spec.ts`, `tests/e2e/capture-webkit.spec.ts` | Expectations for the new name: the login text and the "Save to …" button label. Not run. |
 | `playwright.config.ts` | `cockpit`, `fork-ui` and `goals-review` added to the `memo-ui` project's `testMatch` alternation. |
@@ -203,6 +214,7 @@ All new, none in conflict with anything upstream ships.
 | `packages/contracts/src/fork-brand.ts`                                               | `FORK_PRODUCT_NAME` (the name) and `UPSTREAM_PRODUCT_NAME` (the word the hook replaces).                                                                                                                                                       |
 | `apps/worker/src/fork/product-name.ts`                                               | `resolveProductName` (the live name, falling back to the default), `brandText` and `brandCopy` (for the email copy).                                                                                                                           |
 | `apps/worker/src/fork/product-name.test.ts`                                          | Unit tests for the three helpers.                                                                                                                                                                                                              |
+| `apps/worker/src/fork/task-mcp-tools.ts`, `task-mcp-tools.test.ts` | The cockpit's task tools on `/mcp` (section 6) and their end-to-end test with a real token. |
 | `apps/worker/src/fork/email-reset.test.ts` | Password reset checks: a reset through upstream's forgot-password route revokes browser sessions but not `memos_pat_` tokens, reset mail goes out through Resend, and Better Auth's own `/api/auth/request-password-reset` stays off. |
 | `apps/web/src/fork/memo-date-dialog.tsx`, `memo-date.ts`, `memo-date-wiring.test.ts` | The backdating menu item and dialog, the date helpers, and the test that fails when a merge drops a backdating hook-in. |
 | `apps/web/src/planner/routes.tsx`, `planner-wiring.test.ts` | The cockpit, goals and review routes (`/review`, plus `/weekly-review` and `/period-review`, which go to it), and the test that fails when a merge drops a planner hook-in. |

@@ -93,6 +93,13 @@ describe("stateless Streamable HTTP MCP", () => {
       "attachment_get_attachment",
       "attachment_delete_attachment",
       "auth_get_current_user",
+      // Fork: the cockpit's task tools (fork/task-mcp-tools.ts).
+      "task_read_board",
+      "task_get_task",
+      "task_get_history",
+      "task_create_task",
+      "task_update_task",
+      "task_add_comment",
     ]);
     expect(body.result.tools.every((tool) => tool.inputSchema)).toBe(true);
   });

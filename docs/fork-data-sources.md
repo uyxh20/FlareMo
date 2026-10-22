@@ -60,14 +60,14 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `embedding_tasks` | search | derived | – | – | – | – | – | – | – | – |
 | `memos_fts` | search | derived | – | – | – | – | – | – | – | – |
 | `memory_fts` | search | derived | – | – | – | – | – | – | – | – |
-| `tasks` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
-| `tasks:backlog` | cockpit | content | – | – | **gap** | – | **gap** | yes | yes | yes |
-| `tasks.notes` | cockpit | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
+| `tasks` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
+| `tasks:backlog` | cockpit | content | – | – | **gap** | – | yes | yes | yes | yes |
+| `tasks.notes` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
 | `projects` | cockpit | structure | – | – | – | – | – | yes | yes | yes |
 | `task_activity` | cockpit | history | – | – | – | – | – | – | yes | yes |
-| `planner_task_event` | cockpit | history | yes | yes | – | – | – | yes | **gap** | yes |
-| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | – | yes | **gap** | yes |
-| `planner_task_plan` | cockpit | structure | yes | – | – | – | – | yes | **gap** | yes |
+| `planner_task_event` | cockpit | history | yes | yes | – | – | yes | yes | **gap** | yes |
+| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | yes | yes | **gap** | yes |
+| `planner_task_plan` | cockpit | structure | yes | – | – | – | yes | yes | **gap** | yes |
 | `planner_project_node` | cockpit | structure | – | – | – | – | – | – | **gap** | yes |
 | `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
 | `planner_sync_state` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
@@ -96,11 +96,8 @@ Gaps (left out, and probably should not be):
 - `attachments` → agent: the agent is not told an entry had a photo or file, nor its name.
 - `memory_items` → lookForward: the goal check does not read memories (preferences, constraints).
 - `tasks` → search: tasks are not in keyword or semantic search.
-- `tasks` → mcp: agents cannot read or change tasks over MCP.
 - `tasks:backlog` → search: tasks are not in keyword or semantic search.
-- `tasks:backlog` → mcp: agents cannot read or change tasks over MCP.
 - `tasks.notes` → search: tasks are not in keyword or semantic search.
-- `tasks.notes` → mcp: agents cannot read or change tasks over MCP.
 - `planner_task_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_task_comment` → search: task comments are not searchable.
 - `planner_task_comment` → userExport: fork tables are not in the personal export yet (only in the D1 backup).

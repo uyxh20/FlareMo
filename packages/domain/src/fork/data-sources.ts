@@ -462,7 +462,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
-      mcp: gap("agents cannot read or change tasks over MCP"),
+      mcp: yes(
+        "task_read_board, task_get_task, task_create_task, task_update_task",
+      ),
       agent: yes(
         "the task board (read_tasks) and the week's task details (review_week)",
       ),
@@ -484,7 +486,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: no("the page sends next week's goals and their tasks"),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
-      mcp: gap("agents cannot read or change tasks over MCP"),
+      mcp: yes("the Backlog column of task_read_board"),
       agent: yes("the Backlog column of read_tasks"),
       userExport: yes("every task"),
       backup: IN_BACKUP,
@@ -504,7 +506,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: yes("with the task details the goal check reads"),
       search: gap("tasks are not in keyword or semantic search"),
       memory: no("the memory layer reads entries, not tasks"),
-      mcp: gap("agents cannot read or change tasks over MCP"),
+      mcp: yes(
+        "whole, in task_get_task; set with task_create_task and task_update_task",
+      ),
       agent: yes("whole, for the week's task details in review_week"),
       userExport: yes("exported with the task"),
       backup: IN_BACKUP,
@@ -550,7 +554,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: yes("with the task details the goal check reads"),
       search: no("history is not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
-      mcp: no("not exposed to agents"),
+      mcp: yes(
+        "task_get_history; MCP writes are archived with the token's pat: label",
+      ),
       agent: yes(
         "the week's events of each task in review_week's task details",
       ),
@@ -572,7 +578,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: yes("with the task details the goal check reads"),
       search: gap("task comments are not searchable"),
       memory: no("the memory layer reads entries, not tasks"),
-      mcp: no("not exposed to agents"),
+      mcp: yes("read in task_get_task, added with task_add_comment"),
       agent: yes(
         "the live comments of the tasks in review_week's task details",
       ),
@@ -595,7 +601,9 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: no("the page sends each goal's tasks itself"),
       search: NOT_CONTENT,
       memory: NOT_CONTENT,
-      mcp: no("not exposed to agents"),
+      mcp: yes(
+        "column, plan, effort, start date and goal through task_read_board and task_update_task",
+      ),
       agent: yes(
         "each task's planned week or month and goal link on read_tasks",
       ),

@@ -5,6 +5,11 @@ import {
   type ReturnTypeOfRequestContext,
 } from "../../context";
 import type { FlareMoEnv } from "../../env";
+import {
+  forkCallTaskMcpTool,
+  forkIsTaskMcpTool,
+  forkTaskMcpTools,
+} from "../../fork/task-mcp-tools";
 import { jsonError } from "../../http";
 import {
   formatZodError,
@@ -122,7 +127,8 @@ mcpStreamableApi.post("/", async (c) => {
       jsonrpc: "2.0",
       id,
       result: {
-        tools: streamableTools.map((tool) => ({
+        // Fork hook-in: the cockpit's task tools (fork/task-mcp-tools.ts).
+        tools: [...streamableTools, ...forkTaskMcpTools].map((tool) => ({
           ...tool,
           outputSchema: {
             type: "object",
@@ -140,12 +146,21 @@ mcpStreamableApi.post("/", async (c) => {
     }
 
     try {
-      const value = await callStreamableTool(
-        context,
-        c.env,
-        parsedCall.data.name,
-        parsedCall.data.arguments ?? {},
-      );
+      // Fork hook-in: task tools need the request for the actor label and
+      // the rate limit, so they are claimed before upstream's switch.
+      const value = forkIsTaskMcpTool(parsedCall.data.name)
+        ? await forkCallTaskMcpTool(
+            c,
+            context,
+            parsedCall.data.name,
+            parsedCall.data.arguments ?? {},
+          )
+        : await callStreamableTool(
+            context,
+            c.env,
+            parsedCall.data.name,
+            parsedCall.data.arguments ?? {},
+          );
       return streamableToolSuccess(c, id, value);
     } catch (error) {
       return streamableToolError(c, id, readableError(error));
