@@ -386,6 +386,62 @@ export const plannerEventDtoSchema = z.object({
   created_at: z.string(),
 });
 
+/**
+ * Whether an archived event can be reverted from the History timeline
+ * (`POST /tasks/:id/history/:eventId/revert`). The revert applies the inverse
+ * change as a new event; nothing in the archive is rewritten. An event is
+ * revertible when the archive holds what to put back: planner events carry
+ * `from`, a status change's previous status is read from the events before it,
+ * and an upstream edit's previous value from the earlier event that set that
+ * field (else the field is cleared). Creating, deleting, restoring and purging
+ * a task, comment edits and deletes (the text is not archived), carry-overs
+ * and reverts themselves are not.
+ */
+export function plannerEventRevertible(
+  event: Pick<PlannerEventDto, "type" | "data">,
+): boolean {
+  switch (event.type) {
+    case "updated":
+      return plannerRevertibleEditKeys.some((key) => key in event.data);
+    case "status_changed":
+    case "planned":
+    case "replanned":
+    case "unplanned":
+    case "dropped":
+    case "undropped":
+    case "effort_changed":
+    case "start_date_changed":
+    case "goal_changed":
+    case "commented":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** The keys of an upstream `updated` event a revert knows how to put back. */
+export const plannerRevertibleEditKeys = [
+  "title",
+  "notes",
+  "priority",
+  "due_at",
+  "project_id",
+] as const;
+
+export const plannerRevertEventSchema = z.strictObject({
+  today: plannerDaySchema,
+});
+
+export const plannerRevertEventResponseSchema = z.object({
+  task: taskDtoSchema,
+  plan: plannerPlanDtoSchema.nullable(),
+  /** The event that was reverted. */
+  reverted: plannerEventDtoSchema,
+});
+export type PlannerRevertEventResponse = z.infer<
+  typeof plannerRevertEventResponseSchema
+>;
+
 export const plannerTaskHistoryResponseSchema = z.object({
   // Newest first.
   events: z.array(plannerEventDtoSchema),

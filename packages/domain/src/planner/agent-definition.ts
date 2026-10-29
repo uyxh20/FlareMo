@@ -1,6 +1,7 @@
 import {
   PLANNER_AGENT_MCP_PATH,
   PLANNER_AGENT_MCP_SERVER,
+  plannerAgentActionTools,
   plannerAgentProposeTools,
 } from "@flaremo/contracts";
 
@@ -34,7 +35,9 @@ export function plannerAgentMcpServers(publicOrigin: string) {
  * it writes, its memory store, a tool result too long to inline); the web is
  * off. The diary server's tools run without asking: it is the app's own
  * server and its only writes are proposals the owner decides on. With
- * `propose: false` the three propose tools are off, as in the Ask chat.
+ * `propose: true` (a review's session, and the agent's stored definition) the
+ * three review propose tools are on and the action tools off; with
+ * `propose: false` (an Ask chat) it is the other way round.
  */
 export function plannerAgentTools(options: { propose: boolean }) {
   return [
@@ -56,9 +59,10 @@ export function plannerAgentTools(options: { propose: boolean }) {
         enabled: true,
         permission_policy: { type: "always_allow" as const },
       },
-      configs: options.propose
-        ? []
-        : plannerAgentProposeTools.map((name) => ({ name, enabled: false })),
+      configs: (options.propose
+        ? plannerAgentActionTools
+        : plannerAgentProposeTools
+      ).map((name) => ({ name, enabled: false })),
     },
   ];
 }

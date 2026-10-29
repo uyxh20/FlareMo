@@ -9,13 +9,15 @@
 //   GET    /review/:week/proposals?today        PlannerAgentProposalsResponse
 //   POST   /review/:week/proposals              PlannerAgentProposalsResponse
 //   POST   /agent/proposals/:id                 PlannerAgentProposalResponse
-//   GET    /ask?today[&conversation]            PlannerAskResponse
+//   GET    /ask?today[&conversation][&task]     PlannerAskResponse
 //   POST   /ask                                 PlannerAskResponse
 //   POST   /ask/:conversation/end               PlannerOkResponse
+//   POST   /agent/actions/:id                   PlannerAgentActionResponse
 //
 // Every export is prefixed planner/Planner.
 
 import { z } from "zod";
+import { plannerColumns } from "./planner-board";
 import {
   plannerGoalLineSchema,
   plannerIsDay,
@@ -23,6 +25,11 @@ import {
   plannerPillarSchema,
 } from "./planner-goals";
 import { plannerPeriodLevelSchema } from "./planner-period-review";
+import { taskPrioritySchema } from "./projects";
+
+// planner.ts re-exports this file and defines plannerColumnSchema, so the enum
+// is built here from the same list instead of importing it back.
+const columnSchema = z.enum(plannerColumns);
 
 const daySchema = z
   .string()
@@ -121,6 +128,9 @@ export const plannerAgentToolInputs = {
       .optional()
       .describe("How many days of done tasks to include; 14 when left out."),
   }),
+  read_task: z.strictObject({
+    task_id: idSchema.describe("The task's id, as read_tasks lists it."),
+  }),
   read_health: z.strictObject({
     from: daySchema.describe("The first day, YYYY-MM-DD."),
     to: daySchema.describe("The last day, YYYY-MM-DD, at most 26 weeks on."),
@@ -191,7 +201,89 @@ export const plannerAgentToolInputs = {
     quote: quoteSchema.optional(),
     entry_id: entryIdSchema.optional(),
   }),
+  propose_task_change: z
+    .strictObject({
+      task_id: idSchema.describe("The task to change, by id."),
+      title: z.string().trim().min(1).max(2000).optional(),
+      notes: z
+        .string()
+        .trim()
+        .min(1)
+        .max(20_000)
+        .optional()
+        .describe(
+          "The whole notes text as it should read afterwards (it replaces the notes; keep what the owner wrote unless the owner asked to change it).",
+        ),
+      priority: taskPrioritySchema.optional(),
+      due_at: daySchema.optional().describe("The due day, YYYY-MM-DD."),
+      effort: z.number().min(0).max(999).optional(),
+      start_date: daySchema.optional().describe("The start day, YYYY-MM-DD."),
+      column: columnSchema
+        .optional()
+        .describe("backlog, todo, doing or done: moves the task there."),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe(
+          "One or two sentences: why, with what in the record shows it.",
+        ),
+    })
+    .refine(
+      (value) =>
+        plannerAgentActionFields.filter((field) => value[field] !== undefined)
+          .length === 1,
+      {
+        message:
+          "Propose exactly one field per call: title, notes, priority, due_at, effort, start_date or column.",
+        path: ["task_id"],
+      },
+    ),
+  propose_add_task: z.strictObject({
+    title: z.string().trim().min(1).max(2000),
+    notes: z.string().trim().min(1).max(20_000).optional(),
+    priority: taskPrioritySchema.optional(),
+    due_at: daySchema.optional().describe("The due day, YYYY-MM-DD."),
+    column: columnSchema
+      .optional()
+      .describe("backlog (the default), todo, doing or done."),
+    why: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .describe("One or two sentences: why this task, and why now."),
+  }),
+  propose_entry: z.strictObject({
+    content: z
+      .string()
+      .trim()
+      .min(1)
+      .max(20_000)
+      .describe(
+        "The diary entry as it should be saved, in the owner's voice, with #tags where the owner would use them.",
+      ),
+    why: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .describe("One sentence: what the owner asked for."),
+  }),
 } as const;
+
+/** The task fields one propose_task_change call may set, one at a time. */
+export const plannerAgentActionFields = [
+  "title",
+  "notes",
+  "priority",
+  "due_at",
+  "effort",
+  "start_date",
+  "column",
+] as const;
+export type PlannerAgentActionField = (typeof plannerAgentActionFields)[number];
 
 export type PlannerAgentToolName = keyof typeof plannerAgentToolInputs;
 export type PlannerAgentToolInput<N extends PlannerAgentToolName> = z.infer<
@@ -218,6 +310,8 @@ export const plannerAgentToolDescriptions: Record<
     "Every goal of a year, with ids: the north star, the year, quarter, month and week goals by objective, their lines, status, results and notes, and every recorded week of the year with its two scores, key question and verdict.",
   read_tasks:
     "The task board: Doing, To Do, recently done and Backlog tasks with their ids, the week or month each is planned for, due day, done time, goal, project and how often it was carried over.",
+  read_task:
+    "One task in full: its title, notes, column, plan, due day, priority, effort, start day, goal, comments and history. Read it before proposing a change to it.",
   read_health:
     "The health tracker between two days: each training session, breathwork and night out by day, and each week's totals against the owner's targets.",
   read_memories:
@@ -228,13 +322,26 @@ export const plannerAgentToolDescriptions: Record<
     "Propose a weekly goal for the week being planned. It shows on the review page next to the plan; the owner adds it or dismisses it. Only in a weekly review's propose step. Returns the proposal's id, which propose_task can name as its goal.",
   propose_task:
     "Propose a task for the week being planned. It shows on the review page; the owner adds it or dismisses it. Only in a weekly review's propose step.",
+  propose_task_change:
+    "Propose one change to one task: new notes, a title, a priority, a due day, an effort, a start day or a column move. It shows as a card in the owner's chat; the owner accepts it (which writes it) or dismisses it. One field per call. Only in an Ask chat, at most 30 proposals a day.",
+  propose_add_task:
+    "Propose a new task for the board. It shows as a card the owner accepts or dismisses; nothing is added before that. Only in an Ask chat, at most 30 proposals a day.",
+  propose_entry:
+    "Propose a new diary entry in the owner's words, when the owner asks you to write one. It shows as a card; the owner accepts it (which saves it as an entry) or dismisses it. Never for editing an existing entry. Only in an Ask chat, at most 30 proposals a day.",
 };
 
-/** The tools that write a proposal: off in every session but a review's. */
+/** The tools that write a review proposal: off in every session but a review's. */
 export const plannerAgentProposeTools = [
   "propose_memory",
   "propose_goal",
   "propose_task",
+] as const satisfies readonly PlannerAgentToolName[];
+
+/** The tools that propose an action: taken only in an Ask chat. */
+export const plannerAgentActionTools = [
+  "propose_task_change",
+  "propose_add_task",
+  "propose_entry",
 ] as const satisfies readonly PlannerAgentToolName[];
 
 /** Every tool, in listing order, with its JSON Schema input. */
@@ -342,17 +449,73 @@ export const plannerAgentSettleSchema = z.strictObject({
   state: z.enum(["accepted", "dismissed", "open"]),
 });
 
+const taskIdSchema = z.string().trim().min(1).max(256);
+
 export const plannerAskQuerySchema = z.object({
   today: daySchema,
   conversation: z.uuid().optional(),
+  /** A task's own chat: the latest conversation held from that task. */
+  task: taskIdSchema.optional(),
 });
 
 export const plannerAskSchema = z.strictObject({
   today: daySchema,
   /** The conversation to go on with; a new one starts without it. */
   conversation: z.uuid().optional(),
+  /** The task a new conversation is about (a task's own chat). */
+  task: taskIdSchema.optional(),
   text: z.string().trim().min(1).max(4000),
 });
+
+// ---------------------------------------------------------------------------
+// Proposed actions (migration 9015)
+// ---------------------------------------------------------------------------
+
+export const plannerAgentActionKinds = [
+  "task_change",
+  "task_new",
+  "entry_new",
+] as const;
+export const plannerAgentActionStates = [
+  "open",
+  "accepted",
+  "dismissed",
+  "expired",
+  "reverted",
+] as const;
+
+/** An action the agent proposed, as the chat shows it on a card. */
+export const plannerAgentActionDtoSchema = z.object({
+  id: z.string(),
+  kind: z.enum(plannerAgentActionKinds),
+  /** For a task change: the task; for a new task once accepted: the task made. */
+  task_id: z.string().nullable(),
+  /** For a task change: which field. */
+  field: z.enum(plannerAgentActionFields).nullable(),
+  /** The proposed value(s): `{ notes }`, `{ title, due_at, … }` or `{ content }`. */
+  change: z.record(z.string(), z.unknown()),
+  why: z.string(),
+  state: z.enum(plannerAgentActionStates),
+  /** The task or entry the accept wrote, once accepted. */
+  landed_id: z.string().nullable(),
+  created_at: z.string(),
+});
+export type PlannerAgentActionDto = z.infer<typeof plannerAgentActionDtoSchema>;
+
+/** Accept an action (which writes it) or dismiss it. */
+export const plannerAgentSettleActionSchema = z.strictObject({
+  state: z.enum(["accepted", "dismissed"]),
+  today: daySchema,
+});
+
+export type PlannerAgentActionResponse = {
+  action: PlannerAgentActionDto;
+};
+
+/** At most this many proposed actions a day; the agent is told when it is used up. */
+export const PLANNER_AGENT_ACTIONS_PER_DAY = 30;
+/** An open action older than this is expired by the nightly sweep. */
+export const PLANNER_AGENT_ACTION_DAYS = 7;
 
 export type PlannerAskMessage = {
   id: string;
@@ -365,7 +528,11 @@ export type PlannerAskResponse = {
   /** False when the agent is not set up on this deployment. */
   enabled: boolean;
   conversation: string | null;
+  /** The task the conversation is held from, or null for the global chat. */
+  task: string | null;
   messages: PlannerAskMessage[];
+  /** The actions the agent proposed in this conversation, oldest first. */
+  actions: PlannerAgentActionDto[];
   /**
    * `running` while the agent works on the last question; `failed` when it
    * stopped without an answer (the page offers to ask again).

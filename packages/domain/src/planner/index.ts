@@ -9,6 +9,7 @@
 // Task rows change only through upstream's domain services (M1); this layer
 // writes planner tables only, and reads `tasks`, `task_activity` and `projects`.
 
+export * from "./agent-apply";
 export * from "./agent-definition";
 export * from "./agent-prompts";
 export * from "./agent-store";
@@ -19,6 +20,7 @@ export * from "./columns";
 export * from "./comments";
 export * from "./goals";
 export * from "./history-read";
+export * from "./history-revert";
 export * from "./history-sync";
 export * from "./history-sync-nightly";
 export * from "./period-review";

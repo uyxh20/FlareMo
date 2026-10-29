@@ -21,6 +21,8 @@ let state: PlannerAskState = {
   draft: "",
 };
 let hosts: string[] = [];
+// How many task agent drawers are open: the bubble steps aside for them.
+let held = 0;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -44,6 +46,31 @@ export function usePlannerAsk(): PlannerAskState {
     subscribe,
     () => state,
     () => state,
+  );
+}
+
+/**
+ * Keeps the bubble out of the way while the caller is mounted: a task's own
+ * agent drawer (task-agent.tsx) has its own question box where the bubble
+ * would sit.
+ */
+export function usePlannerAskHold(): void {
+  useEffect(() => {
+    held += 1;
+    emit();
+    return () => {
+      held -= 1;
+      emit();
+    };
+  }, []);
+}
+
+/** True while something asked the bubble to step aside. */
+export function usePlannerAskHeld(): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => held > 0,
+    () => false,
   );
 }
 

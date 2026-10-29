@@ -5,6 +5,7 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerDeleteCommentResponse,
   type PlannerHistoryRangeResponse,
+  type PlannerRevertEventResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
@@ -12,10 +13,11 @@ import {
   plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
+  plannerRevertEventSchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
 } from "@flaremo/contracts";
-import { parseResourceName } from "@flaremo/domain";
+import { parseResourceName, ValidationError } from "@flaremo/domain";
 import {
   plannerAddComment,
   plannerAddTask,
@@ -27,6 +29,7 @@ import {
   plannerReadHistoryRange,
   plannerReadTaskDetail,
   plannerReadTaskHistory,
+  plannerRevertEvent,
   plannerSyncHistory,
   plannerUpdateComment,
 } from "@flaremo/domain/src/planner";
@@ -252,6 +255,55 @@ plannerApi.get("/tasks/:id/history", async (c) => {
     return jsonError(c, error);
   }
 });
+
+// Reverting one History line (docs/fork-general-agent.md, "Revert"): the inverse
+// change is applied through the same setters as an edit and archived like one,
+// followed by a `reverted` event naming the line. The archive is never rewritten.
+plannerApi.post(
+  "/tasks/:id/history/:eventId/revert",
+  zValidator("json", plannerRevertEventSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const body = c.req.valid("json");
+      plannerAssertToday(body.today, new Date());
+      const eventId = Number(c.req.param("eventId"));
+      if (!Number.isInteger(eventId) || eventId <= 0) {
+        throw new ValidationError("eventId must be a whole number.");
+      }
+      // The archive is synced first, so the previous values a revert needs
+      // (upstream edits log only new values) are all there.
+      await plannerSyncHistory(context.db, {
+        userId: context.user.id,
+        now: new Date(),
+      });
+      const result = await plannerRevertEvent(context.db, {
+        user: context.user,
+        actor: await plannerResolveActor(c, context.credential),
+        taskId: parseTaskId(c.req.param("id")),
+        eventId,
+        today: body.today,
+      });
+      // A revert of a status or an edit writes through upstream: the archive
+      // takes that line now, past the debounce, so the timeline shows it.
+      await plannerSyncHistory(context.db, {
+        userId: context.user.id,
+        now: new Date(),
+        force: true,
+      });
+      const response: PlannerRevertEventResponse = {
+        task: result.task,
+        plan: result.plan,
+        reverted: result.reverted,
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
 
 // --- Comments ---------------------------------------------------------------
 //

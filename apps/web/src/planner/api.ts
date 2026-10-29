@@ -4,6 +4,7 @@ import type {
   PlannerCreateTaskInput,
   PlannerCreateTaskResponse,
   PlannerDeleteCommentResponse,
+  PlannerRevertEventResponse,
   PlannerTaskDetailResponse,
   PlannerTaskHistoryResponse,
   PlannerTaskPlanResponse,
@@ -109,6 +110,21 @@ export function plannerFetchTaskDetail(taskId: string) {
 export function plannerFetchTaskHistory(taskId: string) {
   return apiRequest<PlannerTaskHistoryResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/history`,
+  );
+}
+
+/**
+ * Reverts one History line: the inverse change is made as a new change, and
+ * the archive gets a `reverted` line. A 400 says why a line cannot be put back.
+ */
+export function plannerRevertEventRequest(
+  taskId: string,
+  eventId: number,
+  today: string,
+) {
+  return apiRequest<PlannerRevertEventResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}/history/${eventId}/revert`,
+    { method: "POST", body: JSON.stringify({ today }) },
   );
 }
 

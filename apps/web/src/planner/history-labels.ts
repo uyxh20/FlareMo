@@ -82,11 +82,32 @@ function actorLabel(
   if (event.type === "carried_over") return strings.history.automatic;
   if (event.actor_type === "user") return strings.history.you;
   if (event.actor_type === "agent") {
+    // An accepted proposal writes as "proposal:<id>" (agent-apply.ts): the
+    // agent drafted it, the owner accepted it.
+    if (event.actor_name?.startsWith(PROPOSAL_ACTOR_PREFIX)) {
+      return strings.history.agentAccepted;
+    }
     return event.actor_name
       ? strings.history.agentNamed(event.actor_name)
       : strings.history.agent;
   }
   return null;
+}
+
+/** The actor name an accepted agent proposal writes under. */
+export const PROPOSAL_ACTOR_PREFIX = "proposal:";
+
+/** The ids of the events a task's `reverted` lines name: those are put back already. */
+export function plannerRevertedEventIds(
+  events: readonly PlannerEventDto[],
+): Set<number> {
+  const ids = new Set<number>();
+  for (const event of events) {
+    if (event.type !== "reverted") continue;
+    const id = asNumber(event.data.event_id);
+    if (id !== null) ids.add(id);
+  }
+  return ids;
 }
 
 /**
@@ -322,6 +343,9 @@ export function plannerDescribeHistory(
 
       case "undropped":
         label = strings.history.undropped;
+        break;
+      case "reverted":
+        label = strings.history.reverted;
         break;
       case "deleted":
         label = strings.history.deleted;

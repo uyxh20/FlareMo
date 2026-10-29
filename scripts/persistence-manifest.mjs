@@ -74,6 +74,9 @@ export const RESTORE_TABLES = [
   "planner_agent_run",
   "planner_agent_proposal",
   "planner_agent_chat",
+  // The actions the agent proposed into tasks and the diary
+  // (migrations/9015_planner_agent_action.sql).
+  "planner_agent_action",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo
   // ids by value, no foreign keys, so any order restores. The events table is
   // the append-only history and is restored like the rest.

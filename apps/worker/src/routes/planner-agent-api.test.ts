@@ -135,9 +135,16 @@ describe("the general agent's Ask chat and schedule", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
     await d1.batch(
-      ["planner_agent_chat", "planner_agent_proposal", "planner_agent_run"].map(
-        (table) => d1.prepare(`DELETE FROM ${table}`),
-      ),
+      [
+        "planner_agent_chat",
+        "planner_agent_proposal",
+        "planner_agent_action",
+        "planner_agent_run",
+        "planner_task_event",
+        "planner_task_plan",
+        "task_activity",
+        "tasks",
+      ].map((table) => d1.prepare(`DELETE FROM ${table}`)),
     );
     TODAY = utcDay();
   });
@@ -192,7 +199,9 @@ describe("the general agent's Ask chat and schedule", () => {
     expect(await body<Ask>(call("GET", `/ask?today=${TODAY}`))).toEqual({
       enabled: false,
       conversation: null,
+      task: null,
       messages: [],
+      actions: [],
       status: "idle",
     });
     await body(
@@ -301,6 +310,147 @@ describe("the general agent's Ask chat and schedule", () => {
       expect(JSON.stringify(logged)).not.toContain("test-anthropic-key");
       expect(JSON.stringify(logged)).not.toContain("When did I last run");
     }
+  });
+
+  it("holds a task's own chat, writes an accepted proposal, and puts it back on revert", async () => {
+    const api = fakeAnthropic(() => [
+      "I proposed notes; accept them if they fit.",
+    ]);
+    const agentEnv = withEnv();
+    const created = await body<{ task: { id: string } }>(
+      call("POST", "/tasks", { title: "Write the guide", today: TODAY }),
+      201,
+    );
+    const taskId = created.task.id;
+    const bare = taskId.replace(/^tasks\//, "");
+
+    // A chat started from the task names it, and its session knows the task.
+    const asked = await body<Ask & { task: string | null }>(
+      call(
+        "POST",
+        "/ask",
+        { today: TODAY, task: taskId, text: "Draft notes for this." },
+        agentEnv,
+      ),
+    );
+    expect(asked.task).toBe(taskId);
+    const conversation = asked.conversation ?? "";
+    const [session] = [...api.sessions.values()];
+    expect(session?.body.title).toBe("Task chat");
+    const kickoff = (
+      session?.body.initial_events as
+        | Array<{ content: Array<{ text: string }> }>
+        | undefined
+    )?.[0]?.content[0]?.text;
+    expect(kickoff).toContain("This chat is about one task");
+    expect(kickoff).toContain("Write the guide");
+    // The task's side lists the task chat; the global Ask window does not.
+    const read = (query = "") =>
+      body<
+        Ask & { task: string | null; actions: Array<Record<string, unknown>> }
+      >(call("GET", `/ask?today=${TODAY}${query}`, undefined, agentEnv));
+    expect((await read(`&task=${taskId}`)).conversation).toBe(conversation);
+    expect((await read()).conversation).toBeNull();
+
+    // The agent's proposal, as its propose_task_change tool files it.
+    const actionId = crypto.randomUUID();
+    await d1
+      .prepare(
+        `INSERT INTO planner_agent_action
+           (id, user_id, run_id, conversation_id, kind, task_id, field, change, why, state, created_at)
+         VALUES (?, ?, NULL, ?, 'task_change', ?, 'notes', ?, 'Asked for notes.', 'open', ?)`,
+      )
+      .bind(
+        actionId,
+        (
+          await d1
+            .prepare("SELECT user_id FROM planner_agent_chat LIMIT 1")
+            .first<{ user_id: string }>()
+        )?.user_id ?? "",
+        conversation,
+        taskId,
+        JSON.stringify({ notes: "Four parts, one page each." }),
+        new Date().toISOString(),
+      )
+      .run();
+    expect((await read(`&conversation=${conversation}`)).actions).toMatchObject(
+      [{ id: actionId, kind: "task_change", field: "notes", state: "open" }],
+    );
+
+    // The accept is the write; a second accept finds it settled.
+    const { action: accepted } = await body<{
+      action: { state: string; landed_id: string | null };
+    }>(
+      call(
+        "POST",
+        `/agent/actions/${actionId}`,
+        { state: "accepted", today: TODAY },
+        agentEnv,
+      ),
+    );
+    expect(accepted).toMatchObject({ state: "accepted", landed_id: taskId });
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${actionId}`,
+        { state: "accepted", today: TODAY },
+        agentEnv,
+      ),
+      400,
+    );
+    const detail = await body<{ task: { notes: string | null } }>(
+      call("GET", `/tasks/${bare}`),
+    );
+    expect(detail.task.notes).toBe("Four parts, one page each.");
+
+    // History names the proposal; its revert puts the notes back and marks
+    // the proposal reverted.
+    const history = await body<{
+      events: Array<{ id: number; type: string; actor_name: string | null }>;
+    }>(call("GET", `/tasks/${bare}/history`));
+    const edit = history.events.find((event) => event.type === "updated");
+    expect(edit?.actor_name).toBe(`proposal:${actionId}`);
+    const back = await body<{
+      task: { notes: string | null };
+      reverted: { id: number };
+    }>(
+      call("POST", `/tasks/${bare}/history/${edit?.id}/revert`, {
+        today: TODAY,
+      }),
+    );
+    expect(back.task.notes).toBeNull();
+    expect(back.reverted.id).toBe(edit?.id);
+    expect((await read(`&conversation=${conversation}`)).actions).toMatchObject(
+      [{ id: actionId, state: "reverted" }],
+    );
+    await body(
+      call("POST", `/tasks/${bare}/history/${edit?.id}/revert`, {
+        today: TODAY,
+      }),
+    );
+    expect(
+      (
+        await body<{ events: Array<{ type: string }> }>(
+          call("GET", `/tasks/${bare}/history`),
+        )
+      ).events.filter((event) => event.type === "reverted"),
+    ).toHaveLength(2);
+    await body(
+      call("POST", `/tasks/${bare}/history/999999/revert`, { today: TODAY }),
+      404,
+    );
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${crypto.randomUUID()}`,
+        {
+          state: "dismissed",
+          today: TODAY,
+        },
+        agentEnv,
+      ),
+      404,
+    );
   });
 
   it("stops at the month's cap", async () => {

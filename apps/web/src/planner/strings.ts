@@ -219,6 +219,10 @@ export type PlannerStrings = {
       created: (when: string) => string;
       updated: (when: string) => string;
     };
+    /** The task's own agent drawer (docs/fork-general-agent.md). */
+    agent: {
+      open: string;
+    };
   };
 
   history: {
@@ -228,8 +232,15 @@ export type PlannerStrings = {
     you: string;
     agent: string;
     agentNamed: (name: string) => string;
+    /** A change the agent proposed and the owner accepted. */
+    agentAccepted: string;
     /** Who a carry-over is credited to: nobody chose it, the rollover did. */
     automatic: string;
+    /** The Revert button on a line, and the line a revert leaves. */
+    revert: string;
+    reverted: string;
+    revertDone: string;
+    revertFailed: string;
     created: string;
     planned: (target: string) => string;
     replanned: (target: string) => string;
@@ -459,6 +470,9 @@ const en: PlannerStrings = {
       created: (when) => `Created ${when}`,
       updated: (when) => `Updated ${when}`,
     },
+    agent: {
+      open: "Ask agent",
+    },
   },
 
   history: {
@@ -468,7 +482,12 @@ const en: PlannerStrings = {
     you: "You",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
+    agentAccepted: "Agent, accepted by you",
     automatic: "Automatic",
+    revert: "Revert",
+    reverted: "Reverted an earlier change",
+    revertDone: "Change reverted",
+    revertFailed: "Couldn't revert",
     created: "Created",
     planned: (target) => `Planned for ${target}`,
     replanned: (target) => `Re-planned to ${target}`,
@@ -691,6 +710,9 @@ const zhCN: PlannerStrings = {
       created: (when) => `创建于 ${when}`,
       updated: (when) => `更新于 ${when}`,
     },
+    agent: {
+      open: "问代理",
+    },
   },
 
   history: {
@@ -700,7 +722,12 @@ const zhCN: PlannerStrings = {
     you: "你",
     agent: "Agent",
     agentNamed: (name) => `Agent · ${name}`,
+    agentAccepted: "代理提议，你已接受",
     automatic: "自动",
+    revert: "撤销",
+    reverted: "撤销了一次更改",
+    revertDone: "已撤销",
+    revertFailed: "没能撤销",
     created: "创建",
     planned: (target) => `安排到${target}`,
     replanned: (target) => `改期到${target}`,

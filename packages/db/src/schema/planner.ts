@@ -482,11 +482,60 @@ export const plannerAgentChat = sqliteTable(
     text: text("text").notNull(),
     runId: text("run_id"),
     createdAt: text("created_at").notNull(),
+    // The task a conversation is held from (migration 9015), NULL for the
+    // global Ask chat.
+    taskId: text("task_id"),
   },
   (table) => [
     index("planner_agent_chat_user_conversation_idx").on(
       table.userId,
       table.conversationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+// An action the agent proposed into the record (migration 9015): one field of
+// one task, a new task, or a new diary entry. The owner accepts or dismisses
+// it; the accept writes it, and the History event names the proposal.
+export const plannerAgentAction = sqliteTable(
+  "planner_agent_action",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    runId: text("run_id"),
+    conversationId: text("conversation_id"),
+    kind: text("kind", {
+      enum: ["task_change", "task_new", "entry_new"],
+    }).notNull(),
+    // Upstream tasks.id by value, with no foreign key.
+    taskId: text("task_id"),
+    field: text("field"),
+    change: text("change", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    why: text("why").notNull().default(""),
+    state: text("state", {
+      enum: ["open", "accepted", "dismissed", "expired", "reverted"],
+    })
+      .notNull()
+      .default("open"),
+    landedId: text("landed_id"),
+    // What the changed field held before the accept, for a revert.
+    before: text("before", { mode: "json" }).$type<Record<string, unknown>>(),
+    createdAt: text("created_at").notNull(),
+    shownAt: text("shown_at"),
+    settledAt: text("settled_at"),
+  },
+  (table) => [
+    index("planner_agent_action_user_conversation_idx").on(
+      table.userId,
+      table.conversationId,
+      table.state,
+    ),
+    index("planner_agent_action_user_created_idx").on(
+      table.userId,
       table.createdAt,
     ),
   ],
@@ -507,3 +556,4 @@ export type PlannerTaskCommentRow = typeof plannerTaskComment.$inferSelect;
 export type PlannerAgentRunRow = typeof plannerAgentRun.$inferSelect;
 export type PlannerAgentProposalRow = typeof plannerAgentProposal.$inferSelect;
 export type PlannerAgentChatRow = typeof plannerAgentChat.$inferSelect;
+export type PlannerAgentActionRow = typeof plannerAgentAction.$inferSelect;

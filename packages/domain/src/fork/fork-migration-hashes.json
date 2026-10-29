@@ -8,5 +8,6 @@
   "9011_planner_health_trackers.sql": "a937228f09887ce7a981f448db97f3c5bc699357719ccf689dcc4dd3f0fb7723",
   "9012_planner_health_bookmark.sql": "a195e68d04858a2a0824e49b7cbc3e42763fe8220f331135431f7f3cddc9dc34",
   "9013_planner_period_review.sql": "70d8000f72167dd0fcd22722162a43b6d81ff4d470021ef26cf41b5510caac6f",
-  "9014_planner_agent.sql": "3140d04e52410c1ac8dc160adaf4f58ba0250793a8003eaccf82baad058ea949"
+  "9014_planner_agent.sql": "3140d04e52410c1ac8dc160adaf4f58ba0250793a8003eaccf82baad058ea949",
+  "9015_planner_agent_action.sql": "effafe7489d0f5ffaf872cbbd6e9e2ba0ba12a59f2372af170702366ea522132"
 }

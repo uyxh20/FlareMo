@@ -1,7 +1,15 @@
 import type { PlannerBoardCard, PlannerGoalDto } from "@flaremo/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { BanIcon, ChevronRightIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { BanIcon, ChevronRightIcon, SparklesIcon } from "lucide-react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ApiError } from "@/api/client";
 import { QueryErrorState } from "@/components/query-error-state";
 import { Button } from "@/components/ui/button";
@@ -16,6 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { plannerFetchTaskDetail } from "./api";
+import { plannerFetchAsk } from "./ask-api";
 import { plannerCardColumn } from "./board-model";
 import { plannerRelativeTime } from "./dates";
 import { PlannerHistoryTimeline } from "./history-timeline";
@@ -26,6 +35,7 @@ import { PlannerTaskComments } from "./task-panel-comments";
 import { PlannerTaskNotes, usePlannerAutoGrow } from "./task-panel-notes";
 import { PlannerTaskProperties } from "./task-panel-properties";
 import type { PlannerActions } from "./use-planner-actions";
+import { usePlannerToday } from "./use-planner-clock";
 
 // The task panel (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 13): a card opened into a
@@ -42,6 +52,30 @@ import type { PlannerActions } from "./use-planner-actions";
 // The page owns whether it is open (the `?task=` address, see use-task-param.ts),
 // so a link opens it and the back button closes it. While it closes, its content
 // stays until the sheet has slid away.
+//
+// "Ask agent", by the Notes heading, opens the task's own agent drawer
+// (task-agent.tsx, docs/fork-general-agent.md) beside the task on a wide
+// screen and under it on a phone; the sheet widens to hold both. The button
+// shows only where the general agent is set up, which the Ask bubble's own
+// query already says. The drawer's code loads when it first opens.
+
+const TaskAgent = lazy(() =>
+  import("./task-agent").then((module) => ({
+    default: module.PlannerTaskAgent,
+  })),
+);
+
+/** Whether the general agent is set up here: the same read the Ask bubble makes. */
+function useAgentEnabled(): boolean {
+  const today = usePlannerToday();
+  const status = useQuery({
+    queryKey: plannerQueryKeys.ask(null),
+    queryFn: () => plannerFetchAsk(today, null),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  return status.data?.enabled === true;
+}
 
 // --- The title ----------------------------------------------------------------
 
@@ -175,13 +209,19 @@ function PanelBody({
   today,
   actions,
   weekGoals,
+  agentOpen,
+  onAgentOpen,
 }: {
   taskId: string;
   today: string;
   actions: PlannerActions;
   weekGoals: readonly PlannerGoalDto[];
+  /** The task's agent drawer is showing. */
+  agentOpen: boolean;
+  onAgentOpen: (open: boolean) => void;
 }) {
   const strings = usePlannerStrings();
+  const agentEnabled = useAgentEnabled();
   const query = useQuery({
     queryKey: plannerQueryKeys.detail(taskId),
     queryFn: () => plannerFetchTaskDetail(taskId),
@@ -243,84 +283,104 @@ function PanelBody({
   const updatedExact = formatDateTime(touchedAt, strings.intlLocale);
 
   return (
-    <>
-      <SheetTitle className="sr-only">{card.title}</SheetTitle>
-      {/* Room on the right for the sheet's close button. */}
-      <div
-        className={cn(
-          "border-b border-transparent px-3 pt-4 pr-12 pb-2 motion-safe:transition-colors motion-safe:duration-150",
-          scrolled && "border-border/60",
-        )}
-      >
-        <PanelTitle actions={actions} card={card} />
-      </div>
-      <div
-        className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-5 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]"
-        data-testid="planner-panel-body"
-        onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
-      >
-        {dropped && (
-          <div
-            className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-muted/60 px-3 py-2 text-sm"
-            role="status"
-          >
-            <BanIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1 text-muted-foreground">
-              {card.dropped_at &&
-                strings.card.dropped(
-                  plannerRelativeTime(
-                    card.dropped_at,
-                    nowMs,
-                    strings.intlLocale,
-                  ),
-                )}
-            </span>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() => actions.undrop(card)}
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <SheetTitle className="sr-only">{card.title}</SheetTitle>
+        {/* Room on the right for the sheet's close button. */}
+        <div
+          className={cn(
+            "border-b border-transparent px-3 pt-4 pr-12 pb-2 motion-safe:transition-colors motion-safe:duration-150",
+            scrolled && "border-border/60",
+          )}
+        >
+          <PanelTitle actions={actions} card={card} />
+        </div>
+        <div
+          className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overscroll-contain px-5 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]"
+          data-testid="planner-panel-body"
+          onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}
+        >
+          {dropped && (
+            <div
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-muted/60 px-3 py-2 text-sm"
+              role="status"
             >
-              {strings.menu.undrop}
-            </Button>
-          </div>
-        )}
+              <BanIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 text-muted-foreground">
+                {card.dropped_at &&
+                  strings.card.dropped(
+                    plannerRelativeTime(
+                      card.dropped_at,
+                      nowMs,
+                      strings.intlLocale,
+                    ),
+                  )}
+              </span>
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => actions.undrop(card)}
+              >
+                {strings.menu.undrop}
+              </Button>
+            </div>
+          )}
 
-        <PlannerTaskProperties
-          actions={actions}
-          detail={detail}
-          weekGoals={weekGoals}
-        />
-
-        <div className="border-t border-border/60 pt-5">
-          <PlannerTaskNotes
-            notes={detail.task.notes}
-            taskId={taskId}
-            today={today}
+          <PlannerTaskProperties
+            actions={actions}
+            detail={detail}
+            weekGoals={weekGoals}
           />
-        </div>
 
-        <div className="border-t border-border/60 pt-5">
-          <PlannerTaskComments comments={detail.comments} taskId={taskId} />
-        </div>
+          <div className="border-t border-border/60 pt-5">
+            <PlannerTaskNotes
+              aside={
+                agentEnabled && !agentOpen ? (
+                  <Button
+                    size="xs"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => onAgentOpen(true)}
+                  >
+                    <SparklesIcon data-icon="inline-start" />
+                    {strings.panel.agent.open}
+                  </Button>
+                ) : null
+              }
+              notes={detail.task.notes}
+              taskId={taskId}
+              today={today}
+            />
+          </div>
 
-        <div className="border-t border-border/60 pt-5">
-          <PanelHistory taskId={taskId} />
-        </div>
+          <div className="border-t border-border/60 pt-5">
+            <PlannerTaskComments comments={detail.comments} taskId={taskId} />
+          </div>
 
-        <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
-          <time dateTime={detail.task.created_at} title={createdExact}>
-            {strings.panel.footer.created(createdExact)}
-          </time>
-          <span aria-hidden="true">·</span>
-          <time dateTime={touchedAt} title={updatedExact}>
-            {strings.panel.footer.updated(
-              plannerRelativeTime(touchedAt, nowMs, strings.intlLocale),
-            )}
-          </time>
-        </p>
+          <div className="border-t border-border/60 pt-5">
+            <PanelHistory taskId={taskId} />
+          </div>
+
+          <p className="flex flex-wrap gap-x-1.5 text-xs text-muted-foreground">
+            <time dateTime={detail.task.created_at} title={createdExact}>
+              {strings.panel.footer.created(createdExact)}
+            </time>
+            <span aria-hidden="true">·</span>
+            <time dateTime={touchedAt} title={updatedExact}>
+              {strings.panel.footer.updated(
+                plannerRelativeTime(touchedAt, nowMs, strings.intlLocale),
+              )}
+            </time>
+          </p>
+        </div>
       </div>
-    </>
+      {agentOpen && (
+        <Suspense fallback={null}>
+          <TaskAgent taskId={taskId} onClose={() => onAgentOpen(false)} />
+        </Suspense>
+      )}
+    </div>
   );
 }
 
@@ -349,14 +409,21 @@ export function PlannerTaskPanel({
   const lastTask = useRef<string | null>(null);
   if (taskId !== null) lastTask.current = taskId;
   const shown = taskId ?? lastTask.current;
+  // The task whose agent drawer is open: another task opens without one.
+  const [agentTask, setAgentTask] = useState<string | null>(null);
+  const agentOpen = shown !== null && agentTask === shown;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         // Wider than the sheet's default and, under the `sm` breakpoint, the whole
         // screen. The `data-[side=right]:` prefixes are what override the sheet's
-        // own width classes, which carry them.
-        className="w-full gap-0 p-0 outline-none data-[side=right]:w-full data-[side=right]:sm:max-w-[34rem] max-sm:border-l-0"
+        // own width classes, which carry them. With the agent drawer open the
+        // sheet holds two columns from the `md` breakpoint up.
+        className={cn(
+          "w-full gap-0 p-0 outline-none data-[side=right]:w-full data-[side=right]:sm:max-w-[34rem] max-sm:border-l-0",
+          agentOpen && "data-[side=right]:md:max-w-[58rem]",
+        )}
         // Focus the panel itself, not its first field: opening a task must not put
         // a caret in the title (or raise a keyboard on a phone).
         initialFocus={popupRef}
@@ -369,10 +436,12 @@ export function PlannerTaskPanel({
         {shown && (
           <PanelBody
             actions={actions}
+            agentOpen={agentOpen}
             key={shown}
             taskId={shown}
             today={today}
             weekGoals={weekGoals}
+            onAgentOpen={(next) => setAgentTask(next ? shown : null)}
           />
         )}
       </SheetContent>

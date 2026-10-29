@@ -1,6 +1,9 @@
 import type { PlannerEventDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
-import { plannerDescribeHistory } from "./history-labels";
+import {
+  plannerDescribeHistory,
+  plannerRevertedEventIds,
+} from "./history-labels";
 import { plannerStringsFor } from "./strings";
 
 const en = plannerStringsFor("en-US");
@@ -384,6 +387,49 @@ describe("plannerDescribeHistory", () => {
       "Agent · pat:abcd1234",
     );
     expect(actor({ actor: null })).toBeNull();
+  });
+
+  it("credits an accepted proposal to the agent and the owner together, and words a revert", () => {
+    const entries = plannerDescribeHistory(
+      [
+        event(
+          "updated",
+          { notes: "Four parts." },
+          { id: 1, actor: "agent", name: "proposal:0a1b2c3d" },
+        ),
+        event(
+          "reverted",
+          { event_id: 1, type: "updated" },
+          { id: 2, source: "planner" },
+        ),
+      ],
+      en,
+    );
+    expect(entries).toMatchObject([
+      { label: "Reverted an earlier change", actor: "You", type: "reverted" },
+      {
+        label: "Edited",
+        detail: "Notes edited",
+        actor: "Agent, accepted by you",
+      },
+    ]);
+    expect(
+      plannerRevertedEventIds(
+        entries.length
+          ? [
+              event("reverted", { event_id: 1, type: "updated" }, { id: 2 }),
+              event("reverted", { event_id: "nope" }, { id: 3 }),
+              event("updated", { notes: "x" }, { id: 4 }),
+            ]
+          : [],
+      ),
+    ).toEqual(new Set([1]));
+    expect(
+      plannerDescribeHistory(
+        [event("reverted", { event_id: 1, type: "updated" }, { id: 5 })],
+        zh,
+      )[0]?.label,
+    ).toBe("撤销了一次更改");
   });
 
   it("credits a carry-over to Automatic, whatever actor is stored", () => {

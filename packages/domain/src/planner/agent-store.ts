@@ -1,5 +1,9 @@
 import {
   healthLocalMoment,
+  PLANNER_AGENT_ACTION_DAYS,
+  PLANNER_AGENT_ACTIONS_PER_DAY,
+  type PlannerAgentActionDto,
+  type PlannerAgentActionField,
   type PlannerAgentProposalDto,
   type PlannerAskMessage,
   type PlannerPillar,
@@ -9,8 +13,10 @@ import {
 import type { FlareMoDb } from "@flaremo/db";
 import { memos, memoTags } from "@flaremo/db";
 import {
+  type PlannerAgentActionRow,
   type PlannerAgentProposalRow,
   type PlannerAgentRunRow,
+  plannerAgentAction,
   plannerAgentChat,
   plannerAgentProposal,
   plannerAgentRun,
@@ -37,9 +43,11 @@ import {
 
 // The general agent's own records (fork-owned add-on,
 // docs/fork-general-agent.md): one row per session it ran with what it cost,
-// the goals and tasks it proposed for a week's plan, and the Ask chat. The
-// Worker's agent client writes the runs; the MCP tools write the proposals;
-// the routes read them. Money is in US cents at list price throughout.
+// the goals and tasks it proposed for a week's plan, the Ask chat, and the
+// actions it proposed into tasks and the diary (migration 9015). The Worker's
+// agent client writes the runs; the MCP tools write the proposals and the
+// actions; the routes read them and settle them. Money is in US cents at list
+// price throughout.
 
 export type { PlannerAgentRunRow };
 export type PlannerAgentJob = PlannerAgentRunRow["job"];
@@ -602,6 +610,8 @@ export async function plannerAgentAddChat(
     role: "owner" | "agent";
     text: string;
     runId: string | null;
+    /** The task the conversation is held from; null for the global chat. */
+    taskId?: string | null;
   },
 ): Promise<PlannerAskMessage> {
   const row = {
@@ -611,6 +621,7 @@ export async function plannerAgentAddChat(
     role: input.role,
     text: input.text,
     runId: input.runId,
+    taskId: input.taskId ?? null,
     createdAt: new Date().toISOString(),
   };
   await db.insert(plannerAgentChat).values(row).run();
@@ -647,17 +658,344 @@ export async function plannerAgentReadChat(
   }));
 }
 
-/** The conversation the owner wrote in last, or null. */
+/**
+ * The conversation the owner wrote in last, or null: of a task's own chat
+ * when `taskId` is given, else of the global Ask chat (task chats stay out
+ * of it).
+ */
 export async function plannerAgentLatestConversation(
   db: FlareMoDb,
   userId: string,
+  taskId: string | null = null,
 ): Promise<string | null> {
   const row = await db
     .select({ conversationId: plannerAgentChat.conversationId })
     .from(plannerAgentChat)
-    .where(eq(plannerAgentChat.userId, userId))
+    .where(
+      and(
+        eq(plannerAgentChat.userId, userId),
+        taskId === null
+          ? isNull(plannerAgentChat.taskId)
+          : eq(plannerAgentChat.taskId, taskId),
+      ),
+    )
     .orderBy(desc(plannerAgentChat.createdAt))
     .limit(1)
     .get();
   return row?.conversationId ?? null;
+}
+
+/** The task a conversation is held from, or null (also for an unknown one). */
+export async function plannerAgentConversationTask(
+  db: FlareMoDb,
+  input: { userId: string; conversationId: string },
+): Promise<string | null> {
+  const row = await db
+    .select({ taskId: plannerAgentChat.taskId })
+    .from(plannerAgentChat)
+    .where(
+      and(
+        eq(plannerAgentChat.userId, input.userId),
+        eq(plannerAgentChat.conversationId, input.conversationId),
+      ),
+    )
+    .limit(1)
+    .get();
+  return row?.taskId ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Proposed actions (migration 9015)
+// ---------------------------------------------------------------------------
+
+export function plannerAgentActionToDto(
+  row: PlannerAgentActionRow,
+): PlannerAgentActionDto {
+  return {
+    id: row.id,
+    kind: row.kind,
+    task_id: row.taskId,
+    field: (row.field as PlannerAgentActionField | null) ?? null,
+    change: row.change,
+    why: row.why,
+    state: row.state,
+    landed_id: row.landedId,
+    created_at: row.createdAt,
+  };
+}
+
+/** The first instant of the owner's local day `now` falls in. */
+function localDayStart(now: Date): string {
+  const day = healthLocalMoment(now.toISOString()).day;
+  // The local day starts at most 14 hours before its UTC date and ends 12 hours
+  // after; counting from the UTC day's start keeps the cap within a day either way.
+  return `${day}T00:00:00.000Z`;
+}
+
+/** How many actions the agent proposed today (the owner's day). */
+export async function plannerAgentActionsToday(
+  db: FlareMoDb,
+  input: { userId: string; now?: Date },
+): Promise<number> {
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(plannerAgentAction)
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        gte(
+          plannerAgentAction.createdAt,
+          localDayStart(input.now ?? new Date()),
+        ),
+      ),
+    )
+    .get();
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * Files an action the agent proposed. Throws RangeError at the daily cap, so
+ * the tool can tell the agent. A proposal identical to an open one of the same
+ * conversation (same kind, task, field and change) is returned instead of
+ * filed again.
+ */
+export async function plannerAgentAddAction(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    runId: string | null;
+    conversationId: string | null;
+    kind: PlannerAgentActionDto["kind"];
+    taskId: string | null;
+    field: PlannerAgentActionField | null;
+    change: Record<string, unknown>;
+    why: string;
+    now?: Date;
+  },
+): Promise<PlannerAgentActionDto> {
+  const now = input.now ?? new Date();
+  const why = input.why.replace(/\s+/g, " ").trim();
+  if (input.conversationId) {
+    const open = await db
+      .select()
+      .from(plannerAgentAction)
+      .where(
+        and(
+          eq(plannerAgentAction.userId, input.userId),
+          eq(plannerAgentAction.conversationId, input.conversationId),
+          eq(plannerAgentAction.state, "open"),
+        ),
+      )
+      .all();
+    const same = open.find(
+      (row) =>
+        row.kind === input.kind &&
+        row.taskId === input.taskId &&
+        row.field === input.field &&
+        JSON.stringify(row.change) === JSON.stringify(input.change),
+    );
+    if (same) return plannerAgentActionToDto(same);
+  }
+  const today = await plannerAgentActionsToday(db, {
+    userId: input.userId,
+    now,
+  });
+  if (today >= PLANNER_AGENT_ACTIONS_PER_DAY) {
+    throw new RangeError(
+      `Today's ${PLANNER_AGENT_ACTIONS_PER_DAY} proposals are used up. Propose again tomorrow; for now, answer in words.`,
+    );
+  }
+  const row: PlannerAgentActionRow = {
+    id: crypto.randomUUID(),
+    userId: input.userId,
+    runId: input.runId,
+    conversationId: input.conversationId,
+    kind: input.kind,
+    taskId: input.taskId,
+    field: input.field,
+    change: input.change,
+    why,
+    state: "open",
+    landedId: null,
+    before: null,
+    createdAt: now.toISOString(),
+    shownAt: null,
+    settledAt: null,
+  };
+  await db.insert(plannerAgentAction).values(row).run();
+  return plannerAgentActionToDto(row);
+}
+
+/**
+ * A conversation's actions, oldest first: the open ones still within their
+ * seven days, and the settled ones. Marks the open ones as shown the first
+ * time the owner's page lists them.
+ */
+export async function plannerAgentListActions(
+  db: FlareMoDb,
+  input: { userId: string; conversationId: string; now?: Date },
+): Promise<PlannerAgentActionDto[]> {
+  const now = input.now ?? new Date();
+  const rows = await db
+    .select()
+    .from(plannerAgentAction)
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        eq(plannerAgentAction.conversationId, input.conversationId),
+      ),
+    )
+    .orderBy(asc(plannerAgentAction.createdAt))
+    .limit(200)
+    .all();
+  const expiry = new Date(
+    now.getTime() - PLANNER_AGENT_ACTION_DAYS * 86_400_000,
+  ).toISOString();
+  const unseen = rows.filter((row) => row.state === "open" && !row.shownAt);
+  if (unseen.length) {
+    const shownAt = now.toISOString();
+    await db
+      .update(plannerAgentAction)
+      .set({ shownAt })
+      .where(
+        inArray(
+          plannerAgentAction.id,
+          unseen.map((row) => row.id),
+        ),
+      )
+      .run();
+    for (const row of unseen) row.shownAt = shownAt;
+  }
+  return rows
+    .filter((row) => row.state !== "open" || row.createdAt >= expiry)
+    .map(plannerAgentActionToDto);
+}
+
+/** One of the owner's actions, or null. */
+export async function plannerAgentFindAction(
+  db: FlareMoDb,
+  input: { userId: string; id: string },
+): Promise<PlannerAgentActionRow | null> {
+  const row = await db
+    .select()
+    .from(plannerAgentAction)
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        eq(plannerAgentAction.id, input.id),
+      ),
+    )
+    .get();
+  return row ?? null;
+}
+
+/**
+ * Settles an action. `accepted` records what the accept wrote (`landedId`);
+ * `reverted` is set when the owner reverts the History event the accept
+ * wrote. Only an open action can be accepted or dismissed, and only an
+ * accepted one reverted: anything else returns null and changes nothing.
+ */
+export async function plannerAgentSettleAction(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    id: string;
+    state: "accepted" | "dismissed" | "reverted";
+    landedId?: string | null;
+    now?: Date;
+  },
+): Promise<PlannerAgentActionDto | null> {
+  const from = input.state === "reverted" ? "accepted" : "open";
+  const settledAt = (input.now ?? new Date()).toISOString();
+  const result = await db
+    .update(plannerAgentAction)
+    .set({
+      state: input.state,
+      settledAt,
+      ...(input.landedId !== undefined ? { landedId: input.landedId } : {}),
+    })
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        eq(plannerAgentAction.id, input.id),
+        eq(plannerAgentAction.state, from),
+      ),
+    );
+  if (result.meta?.changes !== 1) return null;
+  const row = await plannerAgentFindAction(db, input);
+  return row ? plannerAgentActionToDto(row) : null;
+}
+
+/** Records what an accepted action wrote (the task or entry id). */
+export async function plannerAgentLandAction(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    id: string;
+    landedId: string;
+    /** The changed field's value before the write, for a revert. */
+    before?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await db
+    .update(plannerAgentAction)
+    .set({ landedId: input.landedId, before: input.before ?? null })
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        eq(plannerAgentAction.id, input.id),
+        eq(plannerAgentAction.state, "accepted"),
+      ),
+    )
+    .run();
+}
+
+/** Puts an accepted action whose write failed back to open. */
+export async function plannerAgentReopenAction(
+  db: FlareMoDb,
+  input: { userId: string; id: string },
+): Promise<void> {
+  await db
+    .update(plannerAgentAction)
+    .set({ state: "open", settledAt: null, landedId: null })
+    .where(
+      and(
+        eq(plannerAgentAction.userId, input.userId),
+        eq(plannerAgentAction.id, input.id),
+        eq(plannerAgentAction.state, "accepted"),
+      ),
+    )
+    .run();
+}
+
+/** The actor an accepted action writes as: the archive names the proposal. */
+export const PLANNER_AGENT_ACTION_ACTOR_PREFIX = "proposal:";
+
+/** The action id an archived event's actor name carries, or null. */
+export function plannerAgentActionOfActor(
+  actorName: string | null | undefined,
+): string | null {
+  return actorName?.startsWith(PLANNER_AGENT_ACTION_ACTOR_PREFIX)
+    ? actorName.slice(PLANNER_AGENT_ACTION_ACTOR_PREFIX.length)
+    : null;
+}
+
+/** The nightly sweep's: expires open actions older than seven days. */
+export async function plannerAgentExpireActions(
+  db: FlareMoDb,
+  now: Date,
+): Promise<number> {
+  const expiry = new Date(
+    now.getTime() - PLANNER_AGENT_ACTION_DAYS * 86_400_000,
+  ).toISOString();
+  const result = await db
+    .update(plannerAgentAction)
+    .set({ state: "expired", settledAt: now.toISOString() })
+    .where(
+      and(
+        eq(plannerAgentAction.state, "open"),
+        lt(plannerAgentAction.createdAt, expiry),
+      ),
+    );
+  return result.meta?.changes ?? 0;
 }

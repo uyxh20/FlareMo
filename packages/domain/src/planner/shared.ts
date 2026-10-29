@@ -106,7 +106,9 @@ export function plannerShiftDay(dayKey: string, days: number): string {
 /**
  * The planner-sourced event types: the plan events, then the task panel's
  * (migrations 9001 and 9002), then the weekly goal a task serves (9005, `{from,
- * to}` goal ids). Comment events carry only `{comment_id}`, never the text.
+ * to}` goal ids), then `reverted` (`{event_id, type}`: the History event the
+ * owner reverted; the inverse change is its own event just before it). Comment
+ * events carry only `{comment_id}`, never the text.
  */
 export type PlannerEventType =
   | "planned"
@@ -119,7 +121,8 @@ export type PlannerEventType =
   | "commented"
   | "comment_edited"
   | "comment_deleted"
-  | "goal_changed";
+  | "goal_changed"
+  | "reverted";
 
 /**
  * One planner-sourced event row, for a statement that runs in the same batch as

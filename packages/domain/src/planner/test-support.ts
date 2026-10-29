@@ -48,6 +48,7 @@ const RESET_TABLES = [
   "planner_agent_run",
   "planner_agent_proposal",
   "planner_agent_chat",
+  "planner_agent_action",
   "task_activity",
   "tasks",
   "projects",

@@ -40,7 +40,15 @@ export const plannerQueryKeys = {
   periodStatus: (today: string) => ["planner", "period-status", today] as const,
   /** The general agent's proposals for the week a review plans (docs/fork-general-agent.md). */
   proposals: (week: string) => ["planner", "proposals", week] as const,
-  /** An Ask my diary conversation; "latest" before one is chosen. */
-  ask: (conversation: string | null) =>
-    ["planner", "ask", conversation ?? "latest"] as const,
+  /** Every cached agent chat, global or a task's, for refreshing their cards. */
+  asks: ["planner", "ask"] as const,
+  /**
+   * An Ask my diary conversation; "latest" before one is chosen. A task's own
+   * chat (the panel's agent drawer) is keyed under the task, so the global
+   * window and a task's drawer never show each other's conversations.
+   */
+  ask: (conversation: string | null, task: string | null = null) =>
+    task
+      ? (["planner", "ask", "task", task, conversation ?? "latest"] as const)
+      : (["planner", "ask", conversation ?? "latest"] as const),
 } as const;

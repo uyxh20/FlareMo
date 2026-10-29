@@ -1,6 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckIcon, Loader2Icon } from "lucide-react";
-import { type RefObject, useId, useLayoutEffect, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useId,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,11 +49,14 @@ export function PlannerTaskNotes({
   taskId,
   today,
   notes,
+  aside,
 }: {
   taskId: string;
   today: string;
   /** The notes the server has: the box follows them while nothing here is unsaved. */
   notes: string | null;
+  /** Something for the heading row, before the save status: the panel's "Ask agent". */
+  aside?: ReactNode;
 }) {
   const strings = usePlannerStrings();
   const queryClient = useQueryClient();
@@ -116,6 +125,7 @@ export function PlannerTaskNotes({
         >
           {strings.panel.notes.title}
         </h3>
+        {aside && <div className="ml-auto">{aside}</div>}
         <p
           aria-live="polite"
           className="flex min-h-5 items-center gap-1 text-xs text-muted-foreground"

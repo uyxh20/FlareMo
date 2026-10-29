@@ -57,7 +57,7 @@ export function plannerAgentSystem(ownerName: string): string {
 
 ## What you can do
 
-You read ${name}'s whole record through your tools, live. You change nothing. The only writes you have are the propose tools, and each proposal waits for ${name}: a memory on the Memory page, a goal or a task on the review page. Never say you saved, changed, added or deleted anything; say you proposed it. The propose tools are on only in a review's steps that ask for proposals.
+You read ${name}'s whole record through your tools, live. You change nothing yourself. The only writes you have are the propose tools, and each proposal waits for ${name}: a memory on the Memory page, a goal or a task on the review page, and in an Ask chat a card for one change to a task, a new task or a new diary entry, which ${name} accepts (that is what writes it) or dismisses. Never say you saved, changed, added or deleted anything; say you proposed it. The review propose tools are on only in a review's steps that ask for proposals; the action tools (propose_task_change, propose_add_task, propose_entry) work only in an Ask chat, at most 30 a day.
 
 The tools:
 - review_week and review_period: a review's focus, everything it is about, in one read.
@@ -65,8 +65,9 @@ The tools:
 - list_entries: the index, one line per entry with its id, when it was written, who wrote it and its first words.
 - read_entries: entries in full, by id.
 - search_entries: full-text search over every entry ever written.
-- read_goals, read_tasks, read_health, read_memories: goals and recorded weeks, the task board, the health tracker, and what the memory ledger holds.
-- propose_memory, propose_goal, propose_task: proposals, only when a step asks for them.
+- read_goals, read_tasks, read_task, read_health, read_memories: goals and recorded weeks, the task board, one task in full, the health tracker, and what the memory ledger holds.
+- propose_memory, propose_goal, propose_task: review proposals, only when a step asks for them.
+- propose_task_change, propose_add_task, propose_entry: actions, only in an Ask chat when ${name} asks for one.
 
 Each job has a skill that says how to run it (weekly-review, period-review, ask-my-diary, goal-check). Read it when the job starts.
 
@@ -428,6 +429,8 @@ export function plannerAgentAskKickoff(input: {
   today: string;
   question: string;
   earlier?: ReadonlyArray<{ role: "owner" | "agent"; text: string }>;
+  /** A task's own chat: the task it is about. */
+  task?: { id: string; title: string } | null;
 }): string {
   const name = firstName(input.ownerName);
   const earlier = (input.earlier ?? []).slice(-6);
@@ -439,7 +442,10 @@ export function plannerAgentAskKickoff(input: {
         )
         .join("\n\n")}`
     : "";
-  return `This session is ${name}'s Ask chat: ${name} asks about their own record and you answer from it. Use your ask-my-diary skill. Today is ${input.today}. You can read anything; you cannot propose or change anything in this chat. Read your memory store's notes if they may bear on the question, and don't change them.${recap}
+  const task = input.task
+    ? `\n\nThis chat is about one task: "${input.task.title}" (id ${input.task.id}). Call read_task for it before your first answer. A change to it is proposed with propose_task_change, one field per call, for this task's id.`
+    : "";
+  return `This session is ${name}'s Ask chat: ${name} asks about their own record and you answer from it. Use your ask-my-diary skill. Today is ${input.today}. You can read anything. You change nothing yourself: when ${name} asks you to write, draft, set, move or add something, propose it with propose_task_change, propose_add_task or propose_entry, and it shows as a card ${name} accepts or dismisses. When ${name} only asks a question, answer it and propose nothing. Read your memory store's notes if they may bear on the question, and don't change them.${task}${recap}
 
 ${name} asks:
 

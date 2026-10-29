@@ -822,6 +822,29 @@ export const forkDataSources: readonly ForkDataSource[] = [
     },
   },
   {
+    id: "planner_agent_action",
+    table: "planner_agent_action",
+    module: "agent",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "Actions the agent proposed from a chat: one task field, a new task or a new diary entry, with why, and whether the owner accepted, dismissed or reverted it",
+    uses: {
+      lookBack: no("an accepted action is in the task or entry it wrote"),
+      lookForward: no("an accepted action is in the task or entry it wrote"),
+      search: no(
+        "an accepted entry is a memo, which is searchable; the card itself is not",
+      ),
+      memory: no("the memory layer reads entries, not proposals"),
+      mcp: no("not exposed to agents"),
+      agent: no(
+        "the agent writes them and gets their ids back; no tool reads them",
+      ),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
     id: "planner_agent_run",
     table: "planner_agent_run",
     module: "agent",

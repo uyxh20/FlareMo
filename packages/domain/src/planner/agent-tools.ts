@@ -1,3 +1,4 @@
+import type { PlannerAgentActionField } from "@flaremo/contracts";
 import {
   healthAddDays,
   healthLocalDayStart,
@@ -8,6 +9,7 @@ import {
   type PlannerGoalDto,
   type PlannerPillar,
   plannerAddDays,
+  plannerAgentActionFields,
   plannerAgentToolInputs,
   plannerPeriodStartOf,
   plannerPillarNames,
@@ -27,9 +29,16 @@ import { healthReadWeek, healthToday } from "../health/read";
 import { createMemory, isRejectedRecently, listMemories } from "../memory";
 import { computeFingerprint } from "../memory/shared";
 import { listMemos } from "../memos-read";
-import { plannerAgentAddProposal, plannerAgentFindQuote } from "./agent-store";
+import {
+  plannerAgentAddAction,
+  plannerAgentAddProposal,
+  plannerAgentAskKey,
+  plannerAgentFindQuote,
+} from "./agent-store";
 import { plannerReadBoard } from "./board";
 import { plannerReadGoalsYear } from "./goals";
+import { plannerReadTaskHistory } from "./history-read";
+import { plannerSyncHistory } from "./history-sync";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
 import { plannerReadPeriodContext } from "./period-review-context";
 import {
@@ -38,15 +47,19 @@ import {
   plannerWeekInstants,
 } from "./review-context";
 import { plannerReviewContextBlock } from "./review-prompts";
+import { plannerNormalizeTaskId, plannerNow } from "./shared";
+import { plannerReadTaskDetail } from "./task-detail";
 
 // The general agent's MCP tools (fork-owned add-on, docs/fork-general-agent.md):
 // what each one reads, as text the agent reads. The Worker's MCP endpoint
 // (routes/planner-agent-mcp.ts) answers `tools/call` with these, and so does the
-// eval runner's bridge. Every read is the owner's own rows only. The three
-// propose tools are the agent's only writes, and each lands where the owner
-// decides on it: a memory waits on the Memory page, a goal or task on the
-// review page. They work only while a review is at a step that asks for
-// proposals; the Ask chat also has them turned off in its tool settings.
+// eval runner's bridge. Every read is the owner's own rows only. The propose
+// tools are the agent's only writes, and each lands where the owner decides on
+// it: a memory waits on the Memory page, a goal or task on the review page, and
+// an action (one task field, a new task, a new diary entry; migration 9015) as
+// a card in the chat it was proposed in. The review proposals work only while a
+// review is at a step that asks for them (the Ask chat has them turned off in
+// its tool settings); the actions only while an Ask chat is answering.
 
 /** A whole diary for the agent: it reads tool results, so nothing is cut. */
 export const PLANNER_AGENT_DIARY_CHARS = 1_000_000;
@@ -298,6 +311,70 @@ async function proposingRun(
   return row.id;
 }
 
+/**
+ * The Ask chat answering right now, which an action is filed under: the open
+ * ask run whose last question has no answer yet, the latest first. The MCP
+ * server cannot tell sessions apart (one key), so two chats answering at the
+ * same moment could file under the wrong one; the owner's own record either
+ * way, and the card shows in the chat it was filed under.
+ */
+async function askingRun(
+  context: PlannerAgentToolContext,
+): Promise<{ runId: string; conversationId: string | null }> {
+  const row = await context.db
+    .select({ id: plannerAgentRun.id, ownerKey: plannerAgentRun.ownerKey })
+    .from(plannerAgentRun)
+    .where(
+      and(
+        eq(plannerAgentRun.userId, context.user.id),
+        eq(plannerAgentRun.state, "open"),
+        eq(plannerAgentRun.job, "ask"),
+        isNull(plannerAgentRun.stepDoneAt),
+      ),
+    )
+    .orderBy(desc(plannerAgentRun.stepAt))
+    .limit(1)
+    .get();
+  if (!row) {
+    throw new PlannerAgentToolError(
+      "Actions are proposed only in an Ask chat. Nothing was proposed.",
+    );
+  }
+  const prefix = plannerAgentAskKey("");
+  return {
+    runId: row.id,
+    conversationId: row.ownerKey.startsWith(prefix)
+      ? row.ownerKey.slice(prefix.length)
+      : null,
+  };
+}
+
+/** Files an action, turning the store's cap into a message for the agent. */
+async function fileAction(
+  context: PlannerAgentToolContext,
+  input: {
+    kind: "task_change" | "task_new" | "entry_new";
+    taskId: string | null;
+    field: PlannerAgentActionField | null;
+    change: Record<string, unknown>;
+    why: string;
+  },
+) {
+  const asking = await askingRun(context);
+  return plannerAgentAddAction(context.db, {
+    userId: context.user.id,
+    runId: asking.runId,
+    conversationId: asking.conversationId,
+    ...input,
+    now: context.now,
+  }).catch((error: unknown) => {
+    if (error instanceof RangeError) {
+      throw new PlannerAgentToolError(error.message);
+    }
+    throw error;
+  });
+}
+
 type Handlers = {
   [N in PlannerAgentToolName]: (
     context: PlannerAgentToolContext,
@@ -525,6 +602,70 @@ const handlers: Handlers = {
     ].join("\n");
   },
 
+  async read_task(context, input) {
+    const { db, user } = context;
+    const today = healthToday(context.now);
+    let detail: Awaited<ReturnType<typeof plannerReadTaskDetail>>;
+    try {
+      detail = await plannerReadTaskDetail(db, {
+        userId: user.id,
+        taskId: input.task_id,
+      });
+    } catch {
+      throw new PlannerAgentToolError(
+        "No task has that id. Use an id from read_tasks.",
+      );
+    }
+    const { task, plan } = detail;
+    const column = plan?.dropped_at
+      ? "dropped"
+      : task.status === "done"
+        ? "Done"
+        : task.status === "in_progress"
+          ? "Doing"
+          : plan?.horizon
+            ? "To Do"
+            : "Backlog";
+    // The archive is synced first, as the panel's own History read does, so
+    // the latest edits are in what the agent reads.
+    await plannerSyncHistory(db, {
+      userId: user.id,
+      now: plannerNow(context.now),
+    });
+    const history = await plannerReadTaskHistory(db, {
+      userId: user.id,
+      taskId: task.id,
+      limit: 30,
+    });
+    return [
+      `# Task ${task.id} (today is ${today})`,
+      `Title: ${task.title}`,
+      `Column: ${column}${plan?.horizon ? ` · planned for the ${plan.horizon} of ${plan.period_start}` : ""}`,
+      `Due: ${task.due_at ?? "not set"} · Priority: ${task.priority} · Effort: ${plan?.effort ?? "not set"} · Start: ${plan?.start_date ?? "not set"}`,
+      `Goal: ${plan?.goal_id ?? "none"}${detail.project ? ` · Project: ${detail.project.name}` : ""}`,
+      `Created ${local(task.created_at)}; last changed ${local(task.updated_at)}.`,
+      "",
+      "## Notes",
+      "",
+      task.notes?.trim() || "(no notes)",
+      "",
+      `## Comments (${detail.comments.length}, oldest first)`,
+      ...(detail.comments.length
+        ? detail.comments.map(
+            (comment) => `- ${local(comment.created_at)}: ${comment.body}`,
+          )
+        : ["(none)"]),
+      "",
+      `## History (newest first, ${history.length} of the latest events)`,
+      ...(history.length
+        ? history.map(
+            (event) =>
+              `- ${local(event.occurred_at)} ${event.type}${event.actor_type === "agent" ? " (agent)" : ""}${Object.keys(event.data).length ? ` ${oneLine(JSON.stringify(event.data), 160)}` : ""}`,
+          )
+        : ["(none)"]),
+    ].join("\n");
+  },
+
   async read_health(context, input) {
     requireSpan(input.from, input.to, HEALTH_WEEKS_MAX * 7);
     const out: string[] = [`# Health tracker, ${input.from} to ${input.to}`];
@@ -733,6 +874,57 @@ const handlers: Handlers = {
       throw error;
     });
     return `Proposed task ${proposal.id} for the week of ${input.week}.`;
+  },
+
+  async propose_task_change(context, input) {
+    const taskId = plannerNormalizeTaskId(input.task_id);
+    try {
+      await plannerReadTaskDetail(context.db, {
+        userId: context.user.id,
+        taskId,
+      });
+    } catch {
+      throw new PlannerAgentToolError(
+        "No task has that id. Use an id from read_tasks.",
+      );
+    }
+    const field = plannerAgentActionFields.find(
+      (name) => input[name] !== undefined,
+    );
+    if (!field) {
+      throw new PlannerAgentToolError("Propose exactly one field per call.");
+    }
+    const action = await fileAction(context, {
+      kind: "task_change",
+      taskId,
+      field,
+      change: { [field]: input[field] },
+      why: input.why,
+    });
+    return `Proposed ${field} change ${action.id} for task ${taskId}. It shows as a card; the owner accepts or dismisses it. Say in your answer that you proposed it, not that you changed it.`;
+  },
+
+  async propose_add_task(context, input) {
+    const { why, ...change } = input;
+    const action = await fileAction(context, {
+      kind: "task_new",
+      taskId: null,
+      field: null,
+      change,
+      why,
+    });
+    return `Proposed new task ${action.id}. It shows as a card; the owner accepts or dismisses it.`;
+  },
+
+  async propose_entry(context, input) {
+    const action = await fileAction(context, {
+      kind: "entry_new",
+      taskId: null,
+      field: null,
+      change: { content: input.content },
+      why: input.why,
+    });
+    return `Proposed diary entry ${action.id}. It shows as a card; the owner accepts it to save it, or dismisses it.`;
   },
 };
 

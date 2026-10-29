@@ -1,6 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { plannerEventRevertible } from "@flaremo/contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Undo2Icon } from "lucide-react";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { QueryErrorState } from "@/components/query-error-state";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -8,12 +12,22 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/date-format";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import { plannerFetchTaskHistory } from "./api";
+import {
+  plannerErrorMessage,
+  plannerFetchTaskHistory,
+  plannerRevertEventRequest,
+} from "./api";
 import { plannerRelativeTime } from "./dates";
-import { plannerDescribeHistory } from "./history-labels";
+import {
+  plannerDescribeHistory,
+  plannerRevertedEventIds,
+} from "./history-labels";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { plannerToastId } from "./use-planner-actions";
+import { usePlannerToday } from "./use-planner-clock";
 
 // One task's timeline (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, sections 5 and 13): everything the
@@ -25,6 +39,12 @@ import { usePlannerStrings } from "./strings";
 // task panel's collapsible History section, so the two can never read differently.
 // It fetches only while `enabled`, which is how the panel's section stays unread
 // until it is opened.
+//
+// A line that can be put back carries Revert (docs/fork-general-agent.md,
+// "Revert"): the inverse change is made as a new change and the timeline gets
+// a "Reverted an earlier change" line; the archive is never rewritten. A line
+// a later revert already names has no button. What the server cannot put back
+// (an earlier value the archive never held) it says in the toast.
 
 export function PlannerHistoryTimeline({
   taskId,
@@ -36,6 +56,8 @@ export function PlannerHistoryTimeline({
   className?: string;
 }) {
   const strings = usePlannerStrings();
+  const today = usePlannerToday();
+  const queryClient = useQueryClient();
 
   const query = useQuery({
     queryKey: plannerQueryKeys.history(taskId),
@@ -46,11 +68,54 @@ export function PlannerHistoryTimeline({
     refetchOnMount: "always",
   });
 
+  const events = query.data?.events;
   const entries = useMemo(
-    () => plannerDescribeHistory(query.data?.events ?? [], strings),
-    [query.data, strings],
+    () => plannerDescribeHistory(events ?? [], strings),
+    [events, strings],
   );
+  // Which lines offer Revert: the archive's own rule, minus the lines already
+  // put back and the ones that are reverts themselves.
+  const revertible = useMemo(() => {
+    const done = plannerRevertedEventIds(events ?? []);
+    return new Set(
+      (events ?? [])
+        .filter((event) => plannerEventRevertible(event) && !done.has(event.id))
+        .map((event) => event.id),
+    );
+  }, [events]);
   const nowMs = Date.now();
+
+  const revert = useMutation({
+    mutationFn: (eventId: number) =>
+      plannerRevertEventRequest(taskId, eventId, today),
+    onSuccess: () => {
+      toast.success(strings.history.revertDone, { id: plannerToastId });
+      // The task changed: the timeline, the panel, the board and upstream's
+      // lists read it again.
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.history(taskId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.detail(taskId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.boards,
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+      // An agent-drafted change put back: its card reads "Reverted".
+      void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.asks });
+    },
+    onError: (error) => {
+      toast.error(
+        plannerErrorMessage(
+          error,
+          strings.history.revertFailed,
+          strings.toast.rateLimited,
+        ),
+        { id: plannerToastId },
+      );
+    },
+  });
 
   if (query.isPending) {
     return (
@@ -115,7 +180,25 @@ export function PlannerHistoryTimeline({
               )}
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm leading-snug break-words">{entry.label}</p>
+              <div className="flex items-start gap-2">
+                <p className="min-w-0 flex-1 text-sm leading-snug break-words">
+                  {entry.label}
+                </p>
+                {revertible.has(entry.id) && (
+                  <Button
+                    aria-label={`${strings.history.revert}: ${entry.label}`}
+                    className="-my-1 shrink-0 text-muted-foreground"
+                    disabled={revert.isPending}
+                    size="xs"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => revert.mutate(entry.id)}
+                  >
+                    <Undo2Icon data-icon="inline-start" />
+                    {strings.history.revert}
+                  </Button>
+                )}
+              </div>
               {entry.detail && (
                 <p className="mt-0.5 text-xs leading-snug text-muted-foreground break-words">
                   {entry.detail}

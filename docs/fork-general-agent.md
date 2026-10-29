@@ -48,6 +48,63 @@ The agent's MCP server is `POST /api/app/planner/agent/mcp`
   refused unless a review session is at its memo or propose step, and a quote
   it gives must be found word for word in the owner's entry.
 
+## Proposing into tasks and the diary
+
+From the task panel's **Ask agent** button (by the Notes heading) the agent
+holds a chat about that one task, beside the task on a wide screen and under
+it on a phone. From Ask my diary's window it holds the global chat. In either,
+when the owner asks it to write, draft, set, move or add something, the agent
+proposes it as a card, and nothing is written until the owner accepts the
+card. "Propose first, then act on confirmation":
+
+- `read_task` reads one task whole (fields, notes, comments, the last 30
+  History lines) so the agent drafts from what is there;
+- `propose_task_change` proposes one field of one task per call: title,
+  notes, priority, due date, effort, start date or column;
+- `propose_add_task` proposes a new task (title, notes, due day, priority,
+  column);
+- `propose_entry` proposes a new diary entry. The agent never edits an
+  existing entry; the diary only grows by new entries the owner accepted.
+
+A card shows the proposed text or value and the agent's reason, with
+**Accept** and **Dismiss**. The accept is the write: the Worker makes the
+change through the same code the panel's own edits use (`plannerChangeTask`,
+`plannerAddTask`, upstream's `createMemo` with source `agent-draft`), as the
+actor `proposal:<id>`. The field then reads as the owner's own; nothing in
+the app marks it as agent-written. The record keeps the mark: every History
+line the accept wrote names the proposal, and the proposal row
+(`planner_agent_action`, migration 9015) keeps the run, the conversation, the
+field, the reason, when it was first shown, how it was settled and what the
+field held before, so agent-drafted changes can be studied and improved
+later. History shows such a line as "Agent, accepted by you".
+
+The tools file a proposal only while an Ask chat is answering (the open Ask
+run whose question has no answer yet); in a review session they are refused.
+A proposal that repeats an open one in the same conversation is not filed
+twice. **At most 30 proposals a day** (`PLANNER_AGENT_ACTIONS_PER_DAY`); the
+agent is told when they are used up. A proposal left open for seven days is
+expired by the nightly sweep. A task chat and the global chat each list only
+their own conversations (`planner_agent_chat.task_id`).
+
+Routes: `GET/POST /ask` take `task` for a task's chat and return `actions`;
+`POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today }`.
+
+## Revert
+
+Every History line that can be put back carries **Revert**, agent-drafted or
+not: a plan, a drop, an effort, a start date, a goal link, a status change, a
+comment, and an upstream edit of the title, notes, priority, due date or
+project. A revert is a new change through the same setters, followed by a
+`reverted` line naming the line put back; the archive is never rewritten. The
+previous value comes from the archive (planner events carry `from`; an
+upstream edit's previous value is the latest earlier event that set the
+field) or, for an accepted proposal, from what the proposal recorded before
+its write. A value the archive never held (notes or a due date set at
+creation, which upstream does not log) cannot be put back, and the toast says
+so. Reverting an accepted proposal also marks the proposal `reverted`. Route:
+`POST /tasks/:id/history/:eventId/revert`; code
+`packages/domain/src/planner/history-revert.ts`.
+
 **Its key.** The server takes one key only: a `memos_pat_` token named
 "Schizo Diary agent (read-only)", which the Worker makes for the owner, keeps
 in the agent's vault on Anthropic's side, and renews before it expires. The
@@ -79,14 +136,15 @@ review works with its drafts. Ask needs the agent and is hidden without it.
 | What                                   | Where                                                                                                                                                                               |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Tables (runs, proposals, Ask messages) | `migrations/9014_planner_agent.sql`, `packages/db/src/schema/planner.ts`                                                                                                            |
+| Proposed actions, task chats           | `migrations/9015_planner_agent_action.sql`, `packages/domain/src/planner/agent-apply.ts` (the accept), `history-revert.ts` (Revert)                                                  |
 | Store, tools, prompts, definition      | `packages/domain/src/planner/agent-store.ts`, `agent-tools.ts`, `agent-prompts.ts`, `agent-definition.ts`                                                                           |
 | Skills                                 | `skills/weekly-review`, `period-review`, `ask-my-diary`, `goal-check`                                                                                                               |
 | Managed Agents client, key, sweep      | `apps/worker/src/routes/planner-agent.ts`                                                                                                                                           |
 | Review and period routes               | `apps/worker/src/routes/planner-goals-api.ts`, `planner-period-review-api.ts`                                                                                                       |
 | MCP server, Ask routes, Sunday prep    | `apps/worker/src/routes/planner-agent-mcp.ts`, `planner-agent-api.ts`, `planner-agent-schedule.ts`                                                                                  |
 | Hooks into the Worker                  | `apps/worker/src/fork/agent-key.ts`, `agent-schedule.ts`                                                                                                                            |
-| Proposals and Ask in the app           | `apps/web/src/planner/review-proposals.tsx`, `ask-api.ts`, `ask-store.ts`, `ask-bubble.tsx`, `ask-window.tsx`                                                                          |
-| Tests (stub agent)                     | `apps/worker/src/routes/planner-goals-api.test.ts`, `planner-agent-api.test.ts`, `packages/domain/src/planner/agent-tools.test.ts`, `apps/web/src/planner/review-proposals.test.ts` |
+| Proposals and Ask in the app           | `apps/web/src/planner/review-proposals.tsx`, `ask-api.ts`, `ask-store.ts`, `ask-bubble.tsx`, `ask-window.tsx`, `ask-chat.tsx` (the chat and its cards), `task-agent.tsx` (the task's drawer), `history-timeline.tsx` (Revert) |
+| Tests (stub agent)                     | `apps/worker/src/routes/planner-goals-api.test.ts`, `planner-agent-api.test.ts`, `packages/domain/src/planner/agent-tools.test.ts`, `agent-actions.test.ts`, `apps/web/src/planner/review-proposals.test.ts`, `task-panel.test.tsx` |
 
 ## Setting it up
 

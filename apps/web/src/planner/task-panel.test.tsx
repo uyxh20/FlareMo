@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import type {
+  PlannerAgentActionDto,
+  PlannerAskResponse,
   PlannerGoalDto,
   PlannerTaskDetailResponse,
   TaskDto,
@@ -10,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/client";
 import { formatDateTime } from "@/lib/date-format";
 import { plannerFetchTaskDetail, plannerFetchTaskHistory } from "./api";
+import { plannerFetchAsk, plannerSettleActionRequest } from "./ask-api";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerTaskPanel } from "./task-panel";
 import {
@@ -38,9 +41,17 @@ vi.mock("./api", async (importOriginal) => ({
   plannerFetchTaskDetail: vi.fn(),
   plannerFetchTaskHistory: vi.fn(),
 }));
+vi.mock("./ask-api", () => ({
+  plannerFetchAsk: vi.fn(),
+  plannerAskRequest: vi.fn(),
+  plannerEndAskRequest: vi.fn(),
+  plannerSettleActionRequest: vi.fn(),
+}));
 
 const fetchDetail = vi.mocked(plannerFetchTaskDetail);
 const fetchHistory = vi.mocked(plannerFetchTaskHistory);
+const fetchAsk = vi.mocked(plannerFetchAsk);
+const settleAction = vi.mocked(plannerSettleActionRequest);
 
 // Wednesday 7 October 2026: its week starts Monday the 5th, and it is in Q4.
 const TODAY = "2026-10-07";
@@ -99,6 +110,29 @@ const BARE: PlannerTaskDetailResponse = {
   plan: null,
   project: null,
   comments: [],
+};
+
+/** What the agent routes answer where the agent is not set up. */
+const NO_AGENT: PlannerAskResponse = {
+  enabled: false,
+  conversation: null,
+  task: null,
+  messages: [],
+  actions: [],
+  status: "idle",
+};
+
+/** A task chat with one open proposal for the notes. */
+const PROPOSAL: PlannerAgentActionDto = {
+  id: "act-1",
+  kind: "task_change",
+  task_id: TASK_ID,
+  field: "notes",
+  change: { notes: "Four parts, one page each." },
+  why: "You asked for an outline.",
+  state: "open",
+  landed_id: null,
+  created_at: "2026-10-07T08:00:00.000Z",
 };
 
 // The cockpit week's goals, the ones the Goal menu offers.
@@ -167,6 +201,7 @@ beforeEach(() => {
   });
   fetchDetail.mockResolvedValue(DETAIL);
   fetchHistory.mockResolvedValue({ events: [] });
+  fetchAsk.mockResolvedValue(NO_AGENT);
 });
 
 afterEach(() => {
@@ -227,6 +262,85 @@ const effortField = () => byLabel<HTMLInputElement>("Effort");
 const text = () => panel()?.textContent ?? "";
 
 // ---------------------------------------------------------------------------
+
+describe("the task's agent drawer", () => {
+  it("offers Ask agent only where the agent is set up", async () => {
+    await open();
+    expect(text()).not.toContain("Ask agent");
+    mounted?.unmount();
+    queryClient.clear();
+    fetchAsk.mockResolvedValue({ ...NO_AGENT, enabled: true });
+    await open();
+    await until(() => text().includes("Ask agent"));
+    expect(
+      document.body.querySelector('[data-testid="planner-task-agent"]'),
+    ).toBeNull();
+  });
+
+  it("opens the task's own chat beside the task, and accepts a proposal from it", async () => {
+    fetchAsk.mockImplementation(async (_today, _conversation, task) =>
+      task
+        ? {
+            ...NO_AGENT,
+            enabled: true,
+            conversation: "conv-1",
+            task,
+            messages: [
+              {
+                id: "m1",
+                role: "owner",
+                text: "Outline this.",
+                created_at: "2026-10-07T08:00:00.000Z",
+              },
+            ],
+            actions: [PROPOSAL],
+          }
+        : { ...NO_AGENT, enabled: true },
+    );
+    settleAction.mockResolvedValue({
+      action: { ...PROPOSAL, state: "accepted", landed_id: TASK_ID },
+    });
+    await open();
+    await until(() => text().includes("Ask agent"));
+    const button = Array.from(panel()?.querySelectorAll("button") ?? []).find(
+      (each) => each.textContent?.includes("Ask agent"),
+    );
+    plannerTestClick(button);
+    // The drawer loads, reads the task's chat, and shows the proposal card.
+    await until(() =>
+      document.body.querySelector('[data-testid="planner-proposal"]'),
+    );
+    // The chat dates its requests from the clock, as Ask my diary does.
+    expect(fetchAsk).toHaveBeenCalledWith(expect.any(String), null, TASK_ID);
+    const drawer = document.body.querySelector<HTMLElement>(
+      '[data-testid="planner-task-agent"]',
+    );
+    expect(drawer?.textContent).toContain("Outline this.");
+    expect(drawer?.textContent).toContain("Proposed notes");
+    expect(drawer?.textContent).toContain("Four parts, one page each.");
+    expect(drawer?.textContent).toContain("You asked for an outline.");
+    // The button is gone while the drawer is open.
+    expect(text()).not.toContain("Ask agent");
+
+    const accept = Array.from(drawer?.querySelectorAll("button") ?? []).find(
+      (each) => each.textContent?.trim() === "Accept",
+    );
+    const detailReads = fetchDetail.mock.calls.length;
+    plannerTestClick(accept);
+    await until(() => drawer?.textContent?.includes("Accepted"));
+    expect(settleAction).toHaveBeenCalledWith("act-1", {
+      state: "accepted",
+      today: expect.any(String),
+    });
+    // The accept wrote the task: the panel reads it again.
+    await until(() => fetchDetail.mock.calls.length > detailReads);
+    expect(
+      Array.from(drawer?.querySelectorAll("button") ?? []).some(
+        (each) => each.textContent?.trim() === "Accept",
+      ),
+    ).toBe(false);
+  });
+});
 
 describe("reading the task", () => {
   it("shows a skeleton while there is nothing to show yet", async () => {

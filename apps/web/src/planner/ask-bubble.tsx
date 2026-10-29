@@ -4,7 +4,12 @@ import { lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "@/i18n";
 import { plannerFetchAsk } from "./ask-api";
-import { plannerSetAsk, usePlannerAsk, usePlannerAskHost } from "./ask-store";
+import {
+  plannerSetAsk,
+  usePlannerAsk,
+  usePlannerAskHeld,
+  usePlannerAskHost,
+} from "./ask-store";
 import { plannerAskNavLabelFor } from "./nav-label";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
@@ -26,13 +31,20 @@ export function PlannerAskBubble() {
   const today = usePlannerToday();
   const ask = usePlannerAsk();
   const host = usePlannerAskHost();
+  // A task's agent drawer is open: it has its own chat where the bubble sits.
+  const held = usePlannerAskHeld();
   const status = useQuery({
     queryKey: plannerQueryKeys.ask(null),
     queryFn: () => plannerFetchAsk(today, null),
     staleTime: 5 * 60_000,
     retry: false,
   });
-  if (!host || !status.data?.enabled || typeof document === "undefined") {
+  if (
+    !host ||
+    held ||
+    !status.data?.enabled ||
+    typeof document === "undefined"
+  ) {
     return null;
   }
   const label = plannerAskNavLabelFor(locale);

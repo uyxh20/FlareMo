@@ -44,7 +44,8 @@ export async function forkAgentScheduled(
 
 /**
  * The nightly maintenance's call: ends agent sessions no step has touched for
- * twelve hours. Never throws.
+ * twelve hours, and expires proposed actions nobody acted on in seven days.
+ * Never throws.
  */
 export async function forkAgentNightly(
   env: FlareMoEnv,
@@ -55,9 +56,15 @@ export async function forkAgentNightly(
     const { plannerAgent, plannerSweepAgentRuns } = await import(
       "../routes/planner-agent"
     );
+    const { plannerAgentExpireActions } = await import(
+      "@flaremo/domain/src/planner"
+    );
     const ended = await plannerSweepAgentRuns(plannerAgent(env), db, now);
-    if (ended > 0) {
-      console.log(JSON.stringify({ message: "General agent sweep", ended }));
+    const expired = await plannerAgentExpireActions(db, now);
+    if (ended > 0 || expired > 0) {
+      console.log(
+        JSON.stringify({ message: "General agent sweep", ended, expired }),
+      );
     }
   } catch (error) {
     console.error(

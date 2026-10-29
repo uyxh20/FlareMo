@@ -333,6 +333,18 @@ export const PROBES: Record<string, Probe> = {
       );
     }
   },
+  planner_agent_action: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_agent_action (id, user_id, conversation_id, kind, change, why, created_at)
+       VALUES (?, ?, 'conversation', 'entry_new', ?, ?, ?)`,
+      nextId("action"),
+      p.user.id,
+      JSON.stringify({ content: `Draft entry about ${p.marker}.` }),
+      `The owner asked for a note on ${p.marker}.`,
+      IN_WEEK,
+    );
+  },
   articles: async (p) => {
     await plannerTestRun(
       p.rt.database,
