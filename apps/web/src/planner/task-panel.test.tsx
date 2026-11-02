@@ -136,6 +136,7 @@ const PROPOSAL: PlannerAgentActionDto = {
   why: "You asked for an outline.",
   state: "open",
   landed_id: null,
+  entry_id: null,
   created_at: "2026-10-07T08:00:00.000Z",
 };
 

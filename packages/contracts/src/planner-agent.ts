@@ -13,6 +13,7 @@
 //   POST   /ask                                 PlannerAskResponse
 //   POST   /ask/:conversation/end               PlannerOkResponse
 //   POST   /agent/actions/:id                   PlannerAgentActionResponse
+//   POST   /agent/actions/:id/revert            PlannerAgentActionResponse
 //
 // Every export is prefixed planner/Planner.
 
@@ -221,6 +222,18 @@ export const plannerAgentToolInputs = {
       column: columnSchema
         .optional()
         .describe("backlog, todo, doing or done: moves the task there."),
+      goal_id: idSchema
+        .nullable()
+        .optional()
+        .describe(
+          "A weekly goal's id from read_goals to link the task to, or null to unlink it.",
+        ),
+      dropped: z
+        .boolean()
+        .optional()
+        .describe(
+          "true drops the task off the board (its history is kept and it can be put back); false brings a dropped task back.",
+        ),
       why: z
         .string()
         .trim()
@@ -236,7 +249,7 @@ export const plannerAgentToolInputs = {
           .length === 1,
       {
         message:
-          "Propose exactly one field per call: title, notes, priority, due_at, effort, start_date or column.",
+          "Propose exactly one field per call: title, notes, priority, due_at, effort, start_date, column, goal_id or dropped.",
         path: ["task_id"],
       },
     ),
@@ -255,6 +268,56 @@ export const plannerAgentToolInputs = {
       .max(500)
       .describe("One or two sentences: why this task, and why now."),
   }),
+  propose_task_comment: z.strictObject({
+    task_id: idSchema.describe("The task to comment on, by id."),
+    body: z.string().trim().min(1).max(4000).describe("The comment's text."),
+    why: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .describe("One sentence: what the owner asked for."),
+  }),
+  propose_entry_edit: z.strictObject({
+    entry_id: idSchema.describe("The entry to edit, by id from read_entries."),
+    content: z
+      .string()
+      .trim()
+      .min(1)
+      .max(20_000)
+      .describe(
+        "The whole entry as it should read afterwards. Change only what the owner asked for (a typo, a line, a #tag) and keep every other word as it is.",
+      ),
+    why: z
+      .string()
+      .trim()
+      .min(1)
+      .max(500)
+      .describe("One sentence: what the owner asked for."),
+  }),
+  propose_entry_state: z
+    .strictObject({
+      entry_id: idSchema.describe("The entry, by id from read_entries."),
+      archived: z
+        .boolean()
+        .optional()
+        .describe("true archives the entry; false brings it back."),
+      pinned: z.boolean().optional().describe("true pins it; false unpins."),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe("One sentence: what the owner asked for."),
+    })
+    .refine(
+      (value) =>
+        (value.archived === undefined) !== (value.pinned === undefined),
+      {
+        message: "Propose archived or pinned, one per call.",
+        path: ["entry_id"],
+      },
+    ),
   propose_entry: z.strictObject({
     content: z
       .string()
@@ -282,6 +345,8 @@ export const plannerAgentActionFields = [
   "effort",
   "start_date",
   "column",
+  "goal_id",
+  "dropped",
 ] as const;
 export type PlannerAgentActionField = (typeof plannerAgentActionFields)[number];
 
@@ -323,11 +388,17 @@ export const plannerAgentToolDescriptions: Record<
   propose_task:
     "Propose a task for the week being planned. It shows on the review page; the owner adds it or dismisses it. Only in a weekly review's propose step.",
   propose_task_change:
-    "Propose one change to one task: new notes, a title, a priority, a due day, an effort, a start day or a column move. It shows as a card in the owner's chat; the owner accepts it (which writes it) or dismisses it. One field per call. Only in an Ask chat, at most 30 proposals a day.",
+    "Propose one change to one task: new notes, a title, a priority, a due day, an effort, a start day, a column move, a weekly goal link, or dropping it off the board. One field per call; call it once per task and field when the owner asks for many. Every proposal of one answer shows in one card in the owner's chat, each with a tick box; the owner accepts the ticked ones (which writes them) or dismisses them. Only in an Ask chat.",
   propose_add_task:
-    "Propose a new task for the board. It shows as a card the owner accepts or dismisses; nothing is added before that. Only in an Ask chat, at most 30 proposals a day.",
+    "Propose a new task for the board. It shows in the answer's card; nothing is added before the owner accepts it. Only in an Ask chat.",
+  propose_task_comment:
+    "Propose a comment on a task. It shows in the answer's card; nothing is added before the owner accepts it. Only in an Ask chat.",
   propose_entry:
-    "Propose a new diary entry in the owner's words, when the owner asks you to write one. It shows as a card; the owner accepts it (which saves it as an entry) or dismisses it. Never for editing an existing entry. Only in an Ask chat, at most 30 proposals a day.",
+    "Propose a new diary entry in the owner's words, when the owner asks you to write one. It shows in the answer's card; the owner accepts it (which saves it as an entry) or dismisses it. Only in an Ask chat.",
+  propose_entry_edit:
+    "Propose an edit to an existing diary entry, only when the owner asks for that edit: fix a typo, change a line, add or remove a #tag. Give the whole entry as it should read; the card shows the owner what changes, and the old version can be put back. Only in an Ask chat.",
+  propose_entry_state:
+    "Propose archiving an entry (or bringing it back), or pinning it (or unpinning). Never deletes. Only in an Ask chat.",
 };
 
 /** The tools that write a review proposal: off in every session but a review's. */
@@ -341,7 +412,10 @@ export const plannerAgentProposeTools = [
 export const plannerAgentActionTools = [
   "propose_task_change",
   "propose_add_task",
+  "propose_task_comment",
   "propose_entry",
+  "propose_entry_edit",
+  "propose_entry_state",
 ] as const satisfies readonly PlannerAgentToolName[];
 
 /** Every tool, in listing order, with its JSON Schema input. */
@@ -475,8 +549,13 @@ export const plannerAgentActionKinds = [
   "task_change",
   "task_new",
   "entry_new",
-  // A comment on a task, read from a file put on it (docs/fork-task-attachments.md).
+  // A comment on a task, read from a file put on it (docs/fork-task-attachments.md),
+  // or asked for in a chat.
   "comment_new",
+  // An existing diary entry's new text (`{ content, was }`), or its archived
+  // or pinned state (`{ archived }` or `{ pinned }`, with `was`).
+  "entry_edit",
+  "entry_state",
 ] as const;
 export const plannerAgentActionStates = [
   "open",
@@ -494,12 +573,19 @@ export const plannerAgentActionDtoSchema = z.object({
   task_id: z.string().nullable(),
   /** For a task change: which field. */
   field: z.enum(plannerAgentActionFields).nullable(),
-  /** The proposed value(s): `{ notes }`, `{ title, due_at, … }`, `{ content }` or `{ body, attachment_id }`. */
+  /**
+   * The proposed value(s): `{ notes }`, `{ title, due_at, … }`, `{ content }`
+   * or `{ body, attachment_id }`. A change to something that exists also
+   * carries `was`, what it held when the agent proposed it: the card shows it,
+   * and the accept is refused when the record changed since.
+   */
   change: z.record(z.string(), z.unknown()),
   why: z.string(),
   state: z.enum(plannerAgentActionStates),
   /** The task or entry the accept wrote, once accepted. */
   landed_id: z.string().nullable(),
+  /** For an entry edit or state: the entry. */
+  entry_id: z.string().nullable(),
   created_at: z.string(),
 });
 export type PlannerAgentActionDto = z.infer<typeof plannerAgentActionDtoSchema>;
@@ -510,12 +596,19 @@ export const plannerAgentSettleActionSchema = z.strictObject({
   today: daySchema,
 });
 
+/** Put back what an accepted action wrote. */
+export const plannerAgentRevertActionSchema = z.strictObject({
+  today: daySchema,
+});
+
 export type PlannerAgentActionResponse = {
   action: PlannerAgentActionDto;
 };
 
 /** At most this many proposed actions a day; the agent is told when it is used up. */
-export const PLANNER_AGENT_ACTIONS_PER_DAY = 30;
+export const PLANNER_AGENT_ACTIONS_PER_DAY = 100;
+/** At most this many proposed actions in one answer, which the chat shows as one card. */
+export const PLANNER_AGENT_ACTIONS_PER_ANSWER = 25;
 /** An open action older than this is expired by the nightly sweep. */
 export const PLANNER_AGENT_ACTION_DAYS = 7;
 

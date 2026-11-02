@@ -3,10 +3,14 @@ import {
   type PlannerAgentActionDto,
   plannerAgentActionFields,
   plannerColumns,
+  plannerEventRevertible,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
+import { plannerTaskEvent } from "@flaremo/db/src/schema/planner";
+import { and, desc, eq } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../errors";
-import { createMemo } from "../memos-write";
+import { getMemoById } from "../memos-read";
+import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
 import {
   PLANNER_AGENT_ACTION_ACTOR_PREFIX,
@@ -16,11 +20,14 @@ import {
   plannerAgentReopenAction,
   plannerAgentSettleAction,
 } from "./agent-store";
-import type { PlannerColumn } from "./columns";
+import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
+import { plannerEventToDto } from "./history-read";
+import { plannerRevertEvent } from "./history-revert";
+import { plannerDropTask } from "./plans";
 import type { PlannerActor } from "./shared";
 import { plannerAddTask, plannerChangeTask } from "./task-change";
-import { plannerReadTaskDetail } from "./task-detail";
+import { type PlannerTaskDetail, plannerReadTaskDetail } from "./task-detail";
 
 // Accepting an action the agent proposed (fork-owned add-on,
 // docs/fork-general-agent.md, migration 9015). The accept is the write: a task
@@ -62,6 +69,67 @@ function priority(value: unknown) {
     value === "high"
     ? value
     : undefined;
+}
+
+/** The message an accept gets when the record changed after the proposal. */
+export const PLANNER_AGENT_STALE =
+  "This changed since the agent proposed it. Dismiss it and ask the agent again.";
+
+/**
+ * What a task field holds now, in the form a proposal records it as `was`:
+ * the card shows it as the value before, and the accept compares it, so a
+ * field edited after the proposal is not overwritten unseen.
+ */
+export function plannerAgentTaskFieldNow(
+  detail: Pick<PlannerTaskDetail, "task" | "plan">,
+  field: PlannerAgentActionDto["field"],
+): unknown {
+  const { task, plan } = detail;
+  switch (field) {
+    case "title":
+      return task.title;
+    case "notes":
+      return task.notes ?? null;
+    case "priority":
+      return task.priority;
+    case "due_at":
+      return task.due_at ?? null;
+    case "effort":
+      return plan?.effort ?? null;
+    case "start_date":
+      return plan?.start_date ?? null;
+    case "goal_id":
+      return plan?.goal_id ?? null;
+    case "dropped":
+      return Boolean(plan?.dropped_at);
+    case "column":
+      return plannerColumnFor({
+        status: task.status,
+        horizon: plan?.horizon ?? null,
+        periodStart: plan?.period_start ?? null,
+        droppedAt: plan?.dropped_at ?? null,
+      });
+    default:
+      return null;
+  }
+}
+
+const same = (a: unknown, b: unknown) =>
+  JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/** The diary entry an entry action names, or a ValidationError. */
+async function entryOf(
+  db: FlareMoDb,
+  user: UserRow,
+  change: Record<string, unknown>,
+) {
+  const id = asString(change.entry_id);
+  if (!id) throw new ValidationError("This proposal names no entry.");
+  const memo = await getMemoById(db, user, id).catch(() => null);
+  if (!memo || (memo.status !== "normal" && memo.status !== "archived")) {
+    throw new ValidationError("That diary entry is gone.");
+  }
+  return memo;
 }
 
 /**
@@ -109,18 +177,15 @@ export async function plannerAgentAcceptAction(
           throw new ValidationError("This proposal names no task field.");
         }
         const value = row.change[field];
-        if (
-          field === "title" ||
-          field === "notes" ||
-          field === "priority" ||
-          field === "due_at"
-        ) {
-          const { task } = await plannerReadTaskDetail(db, {
-            userId: user.id,
-            taskId: row.taskId,
-          });
-          before = { [field]: task[field] };
+        const detail = await plannerReadTaskDetail(db, {
+          userId: user.id,
+          taskId: row.taskId,
+        });
+        const now = plannerAgentTaskFieldNow(detail, field);
+        if ("was" in row.change && !same(row.change.was, now)) {
+          throw new ValidationError(PLANNER_AGENT_STALE);
         }
+        before = { [field]: now };
         await plannerChangeTask(db, {
           user,
           actor,
@@ -137,6 +202,16 @@ export async function plannerAgentAcceptAction(
                 : undefined,
             startDate: field === "start_date" ? asString(value) : undefined,
             column: field === "column" ? column(value) : undefined,
+            goalId:
+              field === "goal_id"
+                ? value === null
+                  ? null
+                  : asString(value)
+                : undefined,
+            dropped:
+              field === "dropped" && typeof value === "boolean"
+                ? value
+                : undefined,
           },
         });
         landedId = row.taskId;
@@ -189,6 +264,41 @@ export async function plannerAgentAcceptAction(
         landedId = memo.id;
         break;
       }
+      case "entry_edit": {
+        const content = asString(row.change.content)?.trim();
+        if (!content) throw new ValidationError("This proposal has no text.");
+        const memo = await entryOf(db, user, row.change);
+        if ("was" in row.change && !same(row.change.was, memo.content)) {
+          throw new ValidationError(PLANNER_AGENT_STALE);
+        }
+        before = { content: memo.content };
+        await updateMemo(db, user, memo.id, { content });
+        landedId = memo.id;
+        break;
+      }
+      case "entry_state": {
+        const memo = await entryOf(db, user, row.change);
+        if (typeof row.change.archived === "boolean") {
+          const was = memo.status === "archived";
+          if ("was" in row.change && !same(row.change.was, was)) {
+            throw new ValidationError(PLANNER_AGENT_STALE);
+          }
+          before = { archived: was };
+          await updateMemo(db, user, memo.id, {
+            status: row.change.archived ? "archived" : "normal",
+          });
+        } else if (typeof row.change.pinned === "boolean") {
+          if ("was" in row.change && !same(row.change.was, memo.pinned)) {
+            throw new ValidationError(PLANNER_AGENT_STALE);
+          }
+          before = { pinned: memo.pinned };
+          await updateMemo(db, user, memo.id, { pinned: row.change.pinned });
+        } else {
+          throw new ValidationError("This proposal changes nothing.");
+        }
+        landedId = memo.id;
+        break;
+      }
       default:
         throw new ValidationError("Unknown proposal kind.");
     }
@@ -204,6 +314,135 @@ export async function plannerAgentAcceptAction(
     landedId,
     before,
   });
+  const after = await plannerAgentFindAction(db, {
+    userId: user.id,
+    id: row.id,
+  });
+  if (!after) throw new NotFoundError("Proposal not found.");
+  return plannerAgentActionToDto(after);
+}
+
+/**
+ * Puts back what an accepted action wrote, as new changes: the record's own
+ * history (task History, an entry's versions) keeps both the change and the
+ * revert, and the action reads `reverted`.
+ *
+ * - a task change or a comment: each History line the accept wrote is
+ *   reverted, newest first, as the History's own Revert does;
+ * - a new task: dropped off the board (never deleted);
+ * - a new entry: archived (never deleted);
+ * - an entry edit or state: the entry gets back what it held before, unless
+ *   it was changed again since, which the revert refuses.
+ *
+ * The caller syncs the task archive first, so the lines written through
+ * upstream are there to revert.
+ */
+export async function plannerAgentRevertAction(
+  db: FlareMoDb,
+  input: {
+    user: UserRow;
+    actor: PlannerActor;
+    id: string;
+    today: string;
+  },
+): Promise<PlannerAgentActionDto> {
+  const { user, actor } = input;
+  const row = await plannerAgentFindAction(db, {
+    userId: user.id,
+    id: input.id,
+  });
+  if (!row) throw new NotFoundError("Proposal not found.");
+  if (row.state !== "accepted") {
+    throw new ValidationError("Only an accepted proposal can be put back.");
+  }
+  const settle = () =>
+    plannerAgentSettleAction(db, {
+      userId: user.id,
+      id: row.id,
+      state: "reverted",
+    });
+  switch (row.kind) {
+    case "task_change":
+    case "comment_new": {
+      const taskId = row.taskId;
+      if (!taskId) throw new ValidationError("This proposal names no task.");
+      const lines = (
+        await db
+          .select()
+          .from(plannerTaskEvent)
+          .where(
+            and(
+              eq(plannerTaskEvent.userId, user.id),
+              eq(plannerTaskEvent.taskId, taskId),
+              eq(
+                plannerTaskEvent.actorName,
+                `${PLANNER_AGENT_ACTION_ACTOR_PREFIX}${row.id}`,
+              ),
+            ),
+          )
+          .orderBy(desc(plannerTaskEvent.id))
+          .all()
+      )
+        .map(plannerEventToDto)
+        .filter(plannerEventRevertible);
+      if (lines.length === 0) {
+        throw new ValidationError(
+          "There is nothing in the task's History to put back.",
+        );
+      }
+      for (const line of lines) {
+        await plannerRevertEvent(db, {
+          user,
+          actor,
+          taskId,
+          eventId: line.id,
+          today: input.today,
+        });
+      }
+      // plannerRevertEvent settles the action on its first line.
+      await settle();
+      break;
+    }
+    case "task_new": {
+      if (!row.landedId) throw new ValidationError("No task was made.");
+      await plannerDropTask(db, { user, actor, taskId: row.landedId });
+      await settle();
+      break;
+    }
+    case "entry_new": {
+      if (!row.landedId) throw new ValidationError("No entry was saved.");
+      await updateMemo(db, user, row.landedId, { status: "archived" });
+      await settle();
+      break;
+    }
+    case "entry_edit":
+    case "entry_state": {
+      const memo = await entryOf(db, user, row.change);
+      const was = row.before ?? {};
+      if (row.kind === "entry_edit") {
+        const content = asString(was.content);
+        if (!content) throw new ValidationError("The old text was not kept.");
+        if (!same(memo.content, asString(row.change.content)?.trim())) {
+          throw new ValidationError(
+            "The entry was edited again since, so this cannot be put back.",
+          );
+        }
+        await updateMemo(db, user, memo.id, { content });
+      } else if (typeof was.archived === "boolean") {
+        await updateMemo(db, user, memo.id, {
+          status: was.archived ? "archived" : "normal",
+        });
+      } else if (typeof was.pinned === "boolean") {
+        await updateMemo(db, user, memo.id, { pinned: was.pinned });
+      } else {
+        throw new ValidationError("What it held before was not kept.");
+      }
+      await settle();
+      break;
+    }
+    default:
+      throw new ValidationError("This proposal cannot be put back.");
+  }
   const after = await plannerAgentFindAction(db, {
     userId: user.id,
     id: row.id,

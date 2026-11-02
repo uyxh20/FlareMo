@@ -539,7 +539,8 @@ export const plannerAgentChat = sqliteTable(
 );
 
 // An action the agent proposed into the record (migration 9015): one field of
-// one task, a new task, or a new diary entry. The owner accepts or dismisses
+// one task, a new task, a comment, a new diary entry, or an edit or state change
+// of an existing one (the entry's id in `change.entry_id`). The owner accepts or dismisses
 // it; the accept writes it, and the History event names the proposal.
 export const plannerAgentAction = sqliteTable(
   "planner_agent_action",
@@ -549,7 +550,14 @@ export const plannerAgentAction = sqliteTable(
     runId: text("run_id"),
     conversationId: text("conversation_id"),
     kind: text("kind", {
-      enum: ["task_change", "task_new", "entry_new", "comment_new"],
+      enum: [
+        "task_change",
+        "task_new",
+        "entry_new",
+        "comment_new",
+        "entry_edit",
+        "entry_state",
+      ],
     }).notNull(),
     // Upstream tasks.id by value, with no foreign key.
     taskId: text("task_id"),

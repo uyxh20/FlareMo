@@ -1,4 +1,7 @@
-import type { PlannerAgentActionField } from "@flaremo/contracts";
+import type {
+  PlannerAgentActionDto,
+  PlannerAgentActionField,
+} from "@flaremo/contracts";
 import {
   healthAddDays,
   healthLocalDayStart,
@@ -28,7 +31,8 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { healthReadWeek, healthToday } from "../health/read";
 import { createMemory, isRejectedRecently, listMemories } from "../memory";
 import { computeFingerprint } from "../memory/shared";
-import { listMemos } from "../memos-read";
+import { getMemoById, listMemos } from "../memos-read";
+import { plannerAgentTaskFieldNow } from "./agent-apply";
 import {
   plannerAgentAddAction,
   plannerAgentAddProposal,
@@ -36,7 +40,7 @@ import {
   plannerAgentFindQuote,
 } from "./agent-store";
 import { plannerReadBoard } from "./board";
-import { plannerReadGoalsYear } from "./goals";
+import { plannerReadGoalsYear, plannerRequireWeeklyGoal } from "./goals";
 import { plannerReadTaskHistory } from "./history-read";
 import { plannerSyncHistory } from "./history-sync";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
@@ -385,11 +389,34 @@ async function askingRun(
   };
 }
 
+/** An entry's first words, so a card can say which entry it is about. */
+function entryPreview(content: string): string {
+  const flat = content.replace(/\s+/g, " ").trim();
+  return flat.length > 80 ? `${flat.slice(0, 79)}…` : flat;
+}
+
+/** One of the owner's live diary entries, for an edit or state proposal. */
+async function proposedEntry(context: PlannerAgentToolContext, id: string) {
+  const memo = await getMemoById(context.db, context.user, id).catch(
+    () => null,
+  );
+  if (
+    !memo ||
+    memo.userId !== context.user.id ||
+    (memo.status !== "normal" && memo.status !== "archived")
+  ) {
+    throw new PlannerAgentToolError(
+      "No diary entry of the owner's has that id. Use an id from list_entries or search_entries.",
+    );
+  }
+  return memo;
+}
+
 /** Files an action, turning the store's cap into a message for the agent. */
 async function fileAction(
   context: PlannerAgentToolContext,
   input: {
-    kind: "task_change" | "task_new" | "entry_new";
+    kind: PlannerAgentActionDto["kind"];
     taskId: string | null;
     field: PlannerAgentActionField | null;
     change: Record<string, unknown>;
@@ -925,30 +952,133 @@ const handlers: Handlers = {
 
   async propose_task_change(context, input) {
     const taskId = plannerNormalizeTaskId(input.task_id);
-    try {
-      await plannerReadTaskDetail(context.db, {
-        userId: context.user.id,
-        taskId,
-      });
-    } catch {
+    const detail = await plannerReadTaskDetail(context.db, {
+      userId: context.user.id,
+      taskId,
+    }).catch(() => {
       throw new PlannerAgentToolError(
         "No task has that id. Use an id from read_tasks.",
       );
-    }
+    });
     const field = plannerAgentActionFields.find(
       (name) => input[name] !== undefined,
     );
     if (!field) {
       throw new PlannerAgentToolError("Propose exactly one field per call.");
     }
+    let goalTitle: string | null = null;
+    if (field === "goal_id" && input.goal_id) {
+      const goalId = input.goal_id;
+      await plannerRequireWeeklyGoal(context.db, context.user.id, goalId).catch(
+        () => {
+          throw new PlannerAgentToolError(
+            "goal_id names no weekly goal: use a week goal's id from read_goals.",
+          );
+        },
+      );
+      const goal = await context.db
+        .select({ title: plannerGoal.title })
+        .from(plannerGoal)
+        .where(
+          and(
+            eq(plannerGoal.userId, context.user.id),
+            eq(plannerGoal.id, goalId),
+          ),
+        )
+        .get();
+      goalTitle = goal?.title ?? null;
+    }
+    const was = plannerAgentTaskFieldNow(detail, field);
+    if (JSON.stringify(was ?? null) === JSON.stringify(input[field] ?? null)) {
+      throw new PlannerAgentToolError(
+        `The task's ${field} already holds that. Nothing was proposed.`,
+      );
+    }
     const action = await fileAction(context, {
       kind: "task_change",
       taskId,
       field,
-      change: { [field]: input[field] },
+      change: {
+        [field]: input[field],
+        was,
+        task_title: detail.task.title,
+        ...(goalTitle ? { goal_title: goalTitle } : {}),
+      },
       why: input.why,
     });
-    return `Proposed ${field} change ${action.id} for task ${taskId}. It shows as a card; the owner accepts or dismisses it. Say in your answer that you proposed it, not that you changed it.`;
+    return `Proposed ${field} change ${action.id} for task ${taskId}. It shows in this answer's card; the owner accepts or dismisses it. Say in your answer that you proposed it, not that you changed it.`;
+  },
+
+  async propose_task_comment(context, input) {
+    const taskId = plannerNormalizeTaskId(input.task_id);
+    const detail = await plannerReadTaskDetail(context.db, {
+      userId: context.user.id,
+      taskId,
+    }).catch(() => {
+      throw new PlannerAgentToolError(
+        "No task has that id. Use an id from read_tasks.",
+      );
+    });
+    const action = await fileAction(context, {
+      kind: "comment_new",
+      taskId,
+      field: null,
+      change: { body: input.body, task_title: detail.task.title },
+      why: input.why,
+    });
+    return `Proposed comment ${action.id} on task ${taskId}. It shows in this answer's card; the owner accepts or dismisses it.`;
+  },
+
+  async propose_entry_edit(context, input) {
+    const memo = await proposedEntry(context, input.entry_id);
+    if (memo.content.trim() === input.content.trim()) {
+      throw new PlannerAgentToolError(
+        "The entry already reads like that. Nothing was proposed.",
+      );
+    }
+    const action = await fileAction(context, {
+      kind: "entry_edit",
+      taskId: null,
+      field: null,
+      change: {
+        entry_id: memo.id,
+        content: input.content,
+        was: memo.content,
+      },
+      why: input.why,
+    });
+    return `Proposed edit ${action.id} of entry ${memo.id}. The card shows the owner what changes; nothing is changed before they accept it.`;
+  },
+
+  async propose_entry_state(context, input) {
+    const memo = await proposedEntry(context, input.entry_id);
+    const change =
+      input.archived !== undefined
+        ? {
+            entry_id: memo.id,
+            archived: input.archived,
+            was: memo.status === "archived",
+            preview: entryPreview(memo.content),
+          }
+        : {
+            entry_id: memo.id,
+            pinned: input.pinned,
+            was: memo.pinned,
+            preview: entryPreview(memo.content),
+          };
+    if (change.was === (change.archived ?? change.pinned)) {
+      throw new PlannerAgentToolError(
+        "The entry is already like that. Nothing was proposed.",
+      );
+    }
+    const action = await fileAction(context, {
+      kind: "entry_state",
+      taskId: null,
+      field: null,
+      change,
+      why: input.why,
+    });
+    return `Proposed ${input.archived !== undefined ? (input.archived ? "archiving" : "bringing back") : input.pinned ? "pinning" : "unpinning"} entry ${memo.id} (${action.id}). It shows in this answer's card.`;
   },
 
   async propose_add_task(context, input) {

@@ -57,6 +57,17 @@ export function plannerSettleActionRequest(
   );
 }
 
+/** Undo: puts back what an accepted action wrote. */
+export function plannerRevertActionRequest(
+  id: string,
+  input: { today: string },
+) {
+  return apiRequest<PlannerAgentActionResponse>(
+    `${ACTIONS}/${encodeURIComponent(id)}/revert`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 /** Puts a conversation down: its agent session ends. */
 export function plannerEndAskRequest(conversation: string) {
   return apiRequest<PlannerOkResponse>(

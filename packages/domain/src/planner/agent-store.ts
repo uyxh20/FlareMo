@@ -1,6 +1,7 @@
 import {
   healthLocalMoment,
   PLANNER_AGENT_ACTION_DAYS,
+  PLANNER_AGENT_ACTIONS_PER_ANSWER,
   PLANNER_AGENT_ACTIONS_PER_DAY,
   type PlannerAgentActionDto,
   type PlannerAgentActionField,
@@ -720,6 +721,8 @@ export function plannerAgentActionToDto(
     why: row.why,
     state: row.state,
     landed_id: row.landedId,
+    entry_id:
+      typeof row.change.entry_id === "string" ? row.change.entry_id : null,
     created_at: row.createdAt,
   };
 }
@@ -754,8 +757,32 @@ export async function plannerAgentActionsToday(
 }
 
 /**
- * Files an action the agent proposed. Throws RangeError at the daily cap, so
- * the tool can tell the agent. A proposal identical to an open one of the same
+ * When the conversation's last question was asked: the actions filed since
+ * then belong to the answer being written, which the chat shows as one card.
+ */
+export async function plannerAgentLastQuestionAt(
+  db: FlareMoDb,
+  input: { userId: string; conversationId: string },
+): Promise<string | null> {
+  const row = await db
+    .select({ createdAt: plannerAgentChat.createdAt })
+    .from(plannerAgentChat)
+    .where(
+      and(
+        eq(plannerAgentChat.userId, input.userId),
+        eq(plannerAgentChat.conversationId, input.conversationId),
+        eq(plannerAgentChat.role, "owner"),
+      ),
+    )
+    .orderBy(desc(plannerAgentChat.createdAt))
+    .limit(1)
+    .get();
+  return row?.createdAt ?? null;
+}
+
+/**
+ * Files an action the agent proposed. Throws RangeError at the daily cap, or
+ * at the cap of one answer (one card), so the tool can tell the agent. A proposal identical to an open one of the same
  * conversation (same kind, task, field and change) is returned instead of
  * filed again.
  */
@@ -795,6 +822,28 @@ export async function plannerAgentAddAction(
         JSON.stringify(row.change) === JSON.stringify(input.change),
     );
     if (same) return plannerAgentActionToDto(same);
+    const since = await plannerAgentLastQuestionAt(db, {
+      userId: input.userId,
+      conversationId: input.conversationId,
+    });
+    if (since) {
+      const inAnswer = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(plannerAgentAction)
+        .where(
+          and(
+            eq(plannerAgentAction.userId, input.userId),
+            eq(plannerAgentAction.conversationId, input.conversationId),
+            gte(plannerAgentAction.createdAt, since),
+          ),
+        )
+        .get();
+      if (Number(inAnswer?.count ?? 0) >= PLANNER_AGENT_ACTIONS_PER_ANSWER) {
+        throw new RangeError(
+          `One answer holds at most ${PLANNER_AGENT_ACTIONS_PER_ANSWER} proposals. Tell the owner what is left, and propose the rest when they ask again.`,
+        );
+      }
+    }
   }
   const today = await plannerAgentActionsToday(db, {
     userId: input.userId,

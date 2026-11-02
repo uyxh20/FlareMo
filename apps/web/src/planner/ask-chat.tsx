@@ -3,7 +3,13 @@ import type {
   PlannerAskResponse,
 } from "@flaremo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpIcon, CheckIcon, Loader2Icon, XIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  Loader2Icon,
+  Undo2Icon,
+  XIcon,
+} from "lucide-react";
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -22,6 +28,7 @@ import { plannerFetchTaskDetail } from "./api";
 import {
   plannerAskRequest,
   plannerFetchAsk,
+  plannerRevertActionRequest,
   plannerSettleActionRequest,
 } from "./ask-api";
 import { plannerDueLabel } from "./dates";
@@ -81,7 +88,7 @@ const en = {
     accepted: "Accepted",
     dismissed: "Dismissed",
     expired: "Expired",
-    reverted: "Reverted",
+    reverted: "Undone",
     failed: "Couldn't apply. Try again.",
     field: {
       title: "title",
@@ -91,8 +98,28 @@ const en = {
       effort: "effort",
       start_date: "start date",
       column: "column",
+      goal_id: "goal",
+      dropped: "drop",
     },
     cleared: "cleared",
+    cardLabel: "Proposed changes",
+    drop: "Drop from the board",
+    undrop: "Put back on the board",
+    unlinkGoal: "Unlink from its goal",
+    aGoal: "a weekly goal",
+    edit: "Proposed edit",
+    archive: "Archive entry",
+    unarchive: "Bring entry back",
+    pin: "Pin entry",
+    unpin: "Unpin entry",
+    tick: "Include this change",
+    changes: (count: number) => `${count} changes`,
+    acceptN: (count: number) => `Accept ${count}`,
+    dismissRest: (count: number) =>
+      count === 1 ? "Dismiss the open one" : `Dismiss ${count} open`,
+    undo: "Undo",
+    undoAll: (count: number) => (count === 1 ? "Undo" : `Undo all ${count}`),
+    undoFailed: "Couldn't undo. Try again.",
   },
 };
 
@@ -135,8 +162,27 @@ const zhCN: PlannerAskCopy = {
       effort: "工作量",
       start_date: "开始日期",
       column: "列",
+      goal_id: "目标",
+      dropped: "移出",
     },
     cleared: "已清除",
+    cardLabel: "提议的改动",
+    drop: "移出看板",
+    undrop: "放回看板",
+    unlinkGoal: "取消关联目标",
+    aGoal: "一个周目标",
+    edit: "提议的修改",
+    archive: "归档日记",
+    unarchive: "取消归档",
+    pin: "置顶日记",
+    unpin: "取消置顶",
+    tick: "包含这项改动",
+    changes: (count: number) => `${count} 项改动`,
+    acceptN: (count: number) => `接受 ${count} 项`,
+    dismissRest: (count: number) => `忽略 ${count} 项`,
+    undo: "撤销",
+    undoAll: (count: number) => (count === 1 ? "撤销" : `全部撤销 ${count} 项`),
+    undoFailed: "没能撤销，请重试。",
   },
 };
 
@@ -159,77 +205,130 @@ export type PlannerAskChatState = {
 const asString = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
-/**
- * One proposed action, as a card: what it would change, why, and the verdict.
- * Also used under a task's files for the comment read from one
- * (task-panel-attachments.tsx).
- */
-export function PlannerProposalCard({
+type DiffLine = { kind: "same" | "gone" | "new"; text: string };
+
+/** The lines an entry edit removes and adds, in order (a plain line LCS). */
+export function plannerLineDiff(before: string, after: string): DiffLine[] {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  // Long entries: fall back to "all of it changed" rather than a big table.
+  if (a.length * b.length > 250_000) {
+    return [
+      ...a.map((text) => ({ kind: "gone" as const, text })),
+      ...b.map((text) => ({ kind: "new" as const, text })),
+    ];
+  }
+  const table: number[][] = Array.from({ length: a.length + 1 }, () =>
+    new Array<number>(b.length + 1).fill(0),
+  );
+  for (let i = a.length - 1; i >= 0; i--) {
+    for (let j = b.length - 1; j >= 0; j--) {
+      table[i][j] =
+        a[i] === b[j]
+          ? table[i + 1][j + 1] + 1
+          : Math.max(table[i + 1][j], table[i][j + 1]);
+    }
+  }
+  const out: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      out.push({ kind: "same", text: a[i] });
+      i++;
+      j++;
+    } else if (table[i + 1][j] >= table[i][j + 1]) {
+      out.push({ kind: "gone", text: a[i++] });
+    } else {
+      out.push({ kind: "new", text: b[j++] });
+    }
+  }
+  while (i < a.length) out.push({ kind: "gone", text: a[i++] });
+  while (j < b.length) out.push({ kind: "new", text: b[j++] });
+  return out;
+}
+
+/** An entry edit as a before/after: changed lines with one line around them. */
+function EntryDiff({ before, after }: { before: string; after: string }) {
+  const lines = plannerLineDiff(before, after);
+  const near = (index: number) =>
+    lines[index].kind !== "same" ||
+    (lines[index - 1]?.kind !== undefined &&
+      lines[index - 1].kind !== "same") ||
+    (lines[index + 1]?.kind !== undefined && lines[index + 1].kind !== "same");
+  return (
+    <div
+      className="flex max-h-72 flex-col overflow-y-auto rounded-md border border-border text-[13px] leading-relaxed"
+      data-testid="planner-entry-diff"
+    >
+      {lines.map((line, index) =>
+        near(index) ? (
+          <p
+            className={cn(
+              "px-2 whitespace-pre-wrap [overflow-wrap:anywhere]",
+              line.kind === "gone" && "text-muted-foreground line-through",
+              line.kind === "new" && "bg-muted font-medium",
+            )}
+            data-kind={line.kind}
+            // biome-ignore lint/suspicious/noArrayIndexKey: lines have no id and never reorder
+            key={index}
+          >
+            {line.text || " "}
+          </p>
+        ) : null,
+      )}
+    </div>
+  );
+}
+
+/** Reads again whatever an accepted or undone action wrote. */
+function usePlannerActionRefresh(task: string | null) {
+  const queryClient = useQueryClient();
+  return (action: PlannerAgentActionDto) => {
+    if (
+      action.kind === "entry_new" ||
+      action.kind === "entry_edit" ||
+      action.kind === "entry_state"
+    ) {
+      void queryClient.invalidateQueries({ queryKey: ["memos"] });
+      return;
+    }
+    const taskId =
+      action.task_id ?? (action.kind === "task_new" ? action.landed_id : task);
+    if (taskId) {
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.detail(taskId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.history(taskId),
+      });
+    }
+    void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.boards });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
+  };
+}
+
+const failureText = (failure: unknown, fallback: string) =>
+  failure instanceof ApiError && failure.status < 500
+    ? failure.message
+    : fallback;
+
+/** What one action proposes: its heading line and its content. */
+function PlannerProposalBody({
   action,
-  task,
   today,
   copy,
-  onSettled,
+  verdict,
 }: {
   action: PlannerAgentActionDto;
-  task: string | null;
   today: string;
   copy: PlannerAskCopy;
-  onSettled: (action: PlannerAgentActionDto) => void;
+  verdict: string | null;
 }) {
   const strings = usePlannerStrings();
-  const queryClient = useQueryClient();
-  const [error, setError] = useState<string | null>(null);
-  const settle = useMutation({
-    mutationFn: (state: "accepted" | "dismissed") =>
-      plannerSettleActionRequest(action.id, { state, today }),
-    onSuccess: (response, state) => {
-      setError(null);
-      onSettled(response.action);
-      if (state !== "accepted") return;
-      // The accept wrote something: the task (or the new one), the board, the
-      // History and upstream's lists read it again; a diary entry, the memos.
-      const taskId = response.action.task_id ?? task;
-      if (response.action.kind === "entry_new") {
-        void queryClient.invalidateQueries({ queryKey: ["memos"] });
-        return;
-      }
-      if (taskId) {
-        void queryClient.invalidateQueries({
-          queryKey: plannerQueryKeys.detail(taskId),
-        });
-        void queryClient.invalidateQueries({
-          queryKey: plannerQueryKeys.history(taskId),
-        });
-      }
-      void queryClient.invalidateQueries({
-        queryKey: plannerQueryKeys.boards,
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-    },
-    onError: (failure) => {
-      setError(
-        failure instanceof ApiError && failure.status < 500
-          ? failure.message
-          : copy.proposal.failed,
-      );
-    },
-  });
-
   const { change } = action;
-  const fieldName = action.field
-    ? copy.proposal.field[action.field]
-    : copy.proposal.field.notes;
-  const heading =
-    action.kind === "task_change"
-      ? copy.proposal.change(fieldName)
-      : action.kind === "task_new"
-        ? copy.proposal.newTask
-        : action.kind === "comment_new"
-          ? copy.proposal.comment
-          : copy.proposal.entry;
 
-  /** A field's proposed value as a short line, or as rendered notes. */
+  /** A field's value as a short line. */
   const value = (field: string, raw: unknown) => {
     if (raw === null || raw === undefined || raw === "") {
       return copy.proposal.cleared;
@@ -242,61 +341,102 @@ export function PlannerProposalCard({
       case "due_at":
       case "start_date":
         return typeof raw === "string"
-          ? plannerDueLabel(raw, today, strings)
+          ? plannerDueLabel(raw.slice(0, 10), today, strings)
           : String(raw);
       case "column": {
         const label = (strings.column as Record<string, string>)[String(raw)];
         return label ?? String(raw);
       }
+      case "goal_id":
+        return asString(change.goal_title) ?? copy.proposal.aGoal;
       default:
         return String(raw);
     }
   };
 
-  const open = action.state === "open";
-  const verdict =
-    action.state === "accepted"
-      ? copy.proposal.accepted
-      : action.state === "dismissed"
-        ? copy.proposal.dismissed
-        : action.state === "expired"
-          ? copy.proposal.expired
-          : action.state === "reverted"
-            ? copy.proposal.reverted
-            : null;
+  const taskTitle = asString(change.task_title);
+  const preview = asString(change.preview);
+  let heading: string;
+  switch (action.kind) {
+    case "task_change":
+      heading =
+        action.field === "dropped"
+          ? change.dropped
+            ? copy.proposal.drop
+            : copy.proposal.undrop
+          : action.field === "goal_id" && change.goal_id === null
+            ? copy.proposal.unlinkGoal
+            : copy.proposal.change(
+                copy.proposal.field[action.field ?? "notes"],
+              );
+      break;
+    case "task_new":
+      heading = copy.proposal.newTask;
+      break;
+    case "comment_new":
+      heading = copy.proposal.comment;
+      break;
+    case "entry_edit":
+      heading = copy.proposal.edit;
+      break;
+    case "entry_state":
+      heading =
+        typeof change.archived === "boolean"
+          ? change.archived
+            ? copy.proposal.archive
+            : copy.proposal.unarchive
+          : change.pinned
+            ? copy.proposal.pin
+            : copy.proposal.unpin;
+      break;
+    default:
+      heading = copy.proposal.entry;
+  }
+  const subject =
+    action.kind === "task_change" || action.kind === "comment_new"
+      ? taskTitle
+      : action.kind === "entry_state"
+        ? preview
+        : null;
+  const shortField =
+    action.kind === "task_change" &&
+    action.field &&
+    action.field !== "notes" &&
+    action.field !== "dropped";
 
   return (
-    <article
-      aria-label={heading}
-      className={cn(
-        "flex flex-col gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm",
-        !open && "opacity-70",
-      )}
-      data-state={action.state}
-      data-testid="planner-proposal"
-    >
-      <header className="flex items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <header className="flex min-w-0 items-center gap-2">
+        <span className="shrink-0 text-xs font-medium text-muted-foreground">
           {heading}
         </span>
+        {subject && (
+          <span className="min-w-0 truncate text-xs text-muted-foreground">
+            · {subject}
+          </span>
+        )}
         {verdict && (
-          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             {verdict}
           </span>
         )}
       </header>
-      {action.kind === "task_change" && action.field && (
-        <div className="[overflow-wrap:anywhere]">
-          {action.field === "notes" ? (
-            <PlannerMarkdown
-              diaryLabel={copy.days}
-              markdown={asString(change.notes) ?? ""}
-            />
-          ) : (
-            <p className="font-medium">
-              {value(action.field, change[action.field])}
-            </p>
+      {shortField && action.field && (
+        <p className="font-medium [overflow-wrap:anywhere]">
+          {"was" in change && (
+            <span className="font-normal text-muted-foreground">
+              {value(action.field, change.was)} →{" "}
+            </span>
           )}
+          {value(action.field, change[action.field])}
+        </p>
+      )}
+      {action.kind === "task_change" && action.field === "notes" && (
+        <div className="[overflow-wrap:anywhere]">
+          <PlannerMarkdown
+            diaryLabel={copy.days}
+            markdown={asString(change.notes) ?? ""}
+          />
         </div>
       )}
       {action.kind === "task_new" && (
@@ -329,6 +469,12 @@ export function PlannerProposalCard({
           />
         </div>
       )}
+      {action.kind === "entry_edit" && (
+        <EntryDiff
+          after={asString(change.content) ?? ""}
+          before={asString(change.was) ?? ""}
+        />
+      )}
       {action.kind === "comment_new" && (
         <p className="max-h-72 overflow-y-auto leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
           {asString(change.body) ?? ""}
@@ -339,6 +485,84 @@ export function PlannerProposalCard({
           {action.why}
         </p>
       )}
+    </div>
+  );
+}
+
+function verdictOf(action: PlannerAgentActionDto, copy: PlannerAskCopy) {
+  switch (action.state) {
+    case "accepted":
+      return copy.proposal.accepted;
+    case "dismissed":
+      return copy.proposal.dismissed;
+    case "expired":
+      return copy.proposal.expired;
+    case "reverted":
+      return copy.proposal.reverted;
+    default:
+      return null;
+  }
+}
+
+/**
+ * One proposed action, as a card: what it would change, why, and the verdict,
+ * with Accept and Dismiss while open and Undo once accepted. Also used under a
+ * task's files for the comment read from one (task-panel-attachments.tsx).
+ */
+export function PlannerProposalCard({
+  action,
+  task,
+  today,
+  copy,
+  onSettled,
+}: {
+  action: PlannerAgentActionDto;
+  task: string | null;
+  today: string;
+  copy: PlannerAskCopy;
+  onSettled: (action: PlannerAgentActionDto) => void;
+}) {
+  const refresh = usePlannerActionRefresh(task);
+  const [error, setError] = useState<string | null>(null);
+  const settle = useMutation({
+    mutationFn: (state: "accepted" | "dismissed" | "reverted") =>
+      state === "reverted"
+        ? plannerRevertActionRequest(action.id, { today })
+        : plannerSettleActionRequest(action.id, { state, today }),
+    onSuccess: (response, state) => {
+      setError(null);
+      onSettled(response.action);
+      if (state !== "dismissed") refresh(response.action);
+    },
+    onError: (failure, state) => {
+      setError(
+        failureText(
+          failure,
+          state === "reverted"
+            ? copy.proposal.undoFailed
+            : copy.proposal.failed,
+        ),
+      );
+    },
+  });
+
+  const open = action.state === "open";
+  return (
+    <article
+      aria-label={copy.proposal.cardLabel}
+      className={cn(
+        "flex flex-col gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm",
+        !open && action.state !== "accepted" && "opacity-70",
+      )}
+      data-state={action.state}
+      data-testid="planner-proposal"
+    >
+      <PlannerProposalBody
+        action={action}
+        copy={copy}
+        today={today}
+        verdict={verdictOf(action, copy)}
+      />
       {error && <p className="text-xs text-destructive">{error}</p>}
       {open && (
         <div className="flex items-center gap-1.5">
@@ -363,8 +587,240 @@ export function PlannerProposalCard({
           </Button>
         </div>
       )}
+      {action.state === "accepted" && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            disabled={settle.isPending}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => settle.mutate("reverted")}
+          >
+            <Undo2Icon data-icon="inline-start" />
+            {copy.proposal.undo}
+          </Button>
+        </div>
+      )}
     </article>
   );
+}
+
+/**
+ * Everything the agent proposed in one answer, as one card (design option B):
+ * a tick box per change, Accept for the ticked ones, Dismiss for the rest, and
+ * Undo all once accepted. Each accept is still its own write, through the same
+ * route as a single card, one after another, so a refused row (the record
+ * changed since) stops nothing else and says why on its own line.
+ */
+export function PlannerChangeSet({
+  actions,
+  task,
+  today,
+  copy,
+  onSettled,
+}: {
+  actions: PlannerAgentActionDto[];
+  task: string | null;
+  today: string;
+  copy: PlannerAskCopy;
+  onSettled: (action: PlannerAgentActionDto) => void;
+}) {
+  const refresh = usePlannerActionRefresh(task);
+  const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  if (actions.length === 1) {
+    return (
+      <PlannerProposalCard
+        action={actions[0]}
+        copy={copy}
+        task={task}
+        today={today}
+        onSettled={onSettled}
+      />
+    );
+  }
+
+  const open = actions.filter((action) => action.state === "open");
+  const ticked = open.filter((action) => !unticked.has(action.id));
+  const accepted = actions.filter((action) => action.state === "accepted");
+
+  const run = async (
+    list: PlannerAgentActionDto[],
+    step: (action: PlannerAgentActionDto) => Promise<PlannerAgentActionDto>,
+    fallback: string,
+  ) => {
+    setBusy(true);
+    const next: Record<string, string> = {};
+    for (const action of list) {
+      try {
+        const settled = await step(action);
+        onSettled(settled);
+        if (settled.state !== "dismissed") refresh(settled);
+      } catch (failure) {
+        next[action.id] = failureText(failure, fallback);
+      }
+    }
+    setErrors(next);
+    setBusy(false);
+  };
+
+  const accept = () =>
+    run(
+      ticked,
+      async (action) =>
+        (
+          await plannerSettleActionRequest(action.id, {
+            state: "accepted",
+            today,
+          })
+        ).action,
+      copy.proposal.failed,
+    );
+  const dismiss = () =>
+    run(
+      open,
+      async (action) =>
+        (
+          await plannerSettleActionRequest(action.id, {
+            state: "dismissed",
+            today,
+          })
+        ).action,
+      copy.proposal.failed,
+    );
+  // Undo goes newest first, so two changes to one task come back in order.
+  const undoAll = () =>
+    run(
+      [...accepted].reverse(),
+      async (action) =>
+        (await plannerRevertActionRequest(action.id, { today })).action,
+      copy.proposal.undoFailed,
+    );
+
+  return (
+    <article
+      aria-label={copy.proposal.cardLabel}
+      className="flex flex-col gap-2 rounded-xl border border-border bg-background px-3 py-2.5 text-sm"
+      data-testid="planner-change-set"
+    >
+      <p className="text-xs font-medium text-muted-foreground">
+        {copy.proposal.changes(actions.length)}
+      </p>
+      <ul className="flex flex-col divide-y divide-border">
+        {actions.map((action) => {
+          const isOpen = action.state === "open";
+          const id = `planner-change-${action.id}`;
+          return (
+            <li
+              className={cn(
+                "flex items-start gap-2 py-2",
+                !isOpen && action.state !== "accepted" && "opacity-70",
+              )}
+              data-state={action.state}
+              data-testid="planner-proposal"
+              key={action.id}
+            >
+              {isOpen ? (
+                <input
+                  aria-label={copy.proposal.tick}
+                  checked={!unticked.has(action.id)}
+                  className="mt-0.5 size-4 shrink-0 accent-foreground"
+                  disabled={busy}
+                  id={id}
+                  type="checkbox"
+                  onChange={(event) => {
+                    const on = event.target.checked;
+                    setUnticked((current) => {
+                      const next = new Set(current);
+                      if (on) next.delete(action.id);
+                      else next.add(action.id);
+                      return next;
+                    });
+                  }}
+                />
+              ) : (
+                <span className="size-4 shrink-0" />
+              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <PlannerProposalBody
+                  action={action}
+                  copy={copy}
+                  today={today}
+                  verdict={verdictOf(action, copy)}
+                />
+                {errors[action.id] && (
+                  <p className="text-xs text-destructive">
+                    {errors[action.id]}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      {open.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            disabled={busy || ticked.length === 0}
+            size="sm"
+            type="button"
+            onClick={() => void accept()}
+          >
+            <CheckIcon data-icon="inline-start" />
+            {copy.proposal.acceptN(ticked.length)}
+          </Button>
+          <Button
+            disabled={busy}
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={() => void dismiss()}
+          >
+            <XIcon data-icon="inline-start" />
+            {copy.proposal.dismissRest(open.length)}
+          </Button>
+        </div>
+      )}
+      {open.length === 0 && accepted.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <Button
+            disabled={busy}
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() => void undoAll()}
+          >
+            <Undo2Icon data-icon="inline-start" />
+            {copy.proposal.undoAll(accepted.length)}
+          </Button>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/**
+ * Groups a conversation's actions by the answer they were proposed in: the
+ * actions filed after one question and before the next.
+ */
+export function plannerGroupActions(
+  actions: readonly PlannerAgentActionDto[],
+  questions: readonly string[],
+): PlannerAgentActionDto[][] {
+  const groups = new Map<number, PlannerAgentActionDto[]>();
+  for (const action of actions) {
+    let turn = -1;
+    for (const [index, asked] of questions.entries()) {
+      if (asked <= action.created_at) turn = index;
+    }
+    const list = groups.get(turn) ?? [];
+    list.push(action);
+    groups.set(turn, list);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, list]) => list);
 }
 
 export function PlannerAskChat({
@@ -437,11 +893,17 @@ export function PlannerAskChat({
     },
   });
 
+  // Reads the cache, not this render's data: a card settles several rows in
+  // a row, and each must build on the one before.
   const settled = (action: PlannerAgentActionDto) => {
-    if (!data) return;
+    const current =
+      queryClient.getQueryData<PlannerAskResponse>(
+        plannerQueryKeys.ask(key, task),
+      ) ?? data;
+    if (!current) return;
     remember({
-      ...data,
-      actions: data.actions.map((each) =>
+      ...current,
+      actions: current.actions.map((each) =>
         each.id === action.id ? action : each,
       ),
     });
@@ -538,11 +1000,16 @@ export function PlannerAskChat({
             </div>
           ),
         )}
-        {actions.map((action) => (
-          <PlannerProposalCard
-            action={action}
+        {plannerGroupActions(
+          actions,
+          messages
+            .filter((message) => message.role === "owner")
+            .map((message) => message.created_at),
+        ).map((group) => (
+          <PlannerChangeSet
+            actions={group}
             copy={copy}
-            key={action.id}
+            key={group[0].id}
             task={task}
             today={today}
             onSettled={settled}

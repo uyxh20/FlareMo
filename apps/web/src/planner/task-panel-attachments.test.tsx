@@ -115,6 +115,7 @@ function proposal(
     why: "Read from insurance-quote-2025.pdf",
     state,
     landed_id: state === "accepted" ? "cmt-1" : null,
+    entry_id: null,
     created_at: "2026-11-01T09:01:00.000Z",
   };
 }

@@ -451,6 +451,65 @@ describe("the general agent's Ask chat and schedule", () => {
       ),
       404,
     );
+
+    // Undo on the card: puts back what an accept wrote, through the
+    // task's History, and marks the proposal reverted.
+    const dueId = crypto.randomUUID();
+    await d1
+      .prepare(
+        `INSERT INTO planner_agent_action
+           (id, user_id, run_id, conversation_id, kind, task_id, field, change, why, state, created_at)
+         SELECT ?, user_id, NULL, ?, 'task_change', ?, 'due_at', ?, 'Friday.', 'open', ?
+           FROM planner_agent_chat LIMIT 1`,
+      )
+      .bind(
+        dueId,
+        conversation,
+        taskId,
+        JSON.stringify({ due_at: "2026-11-07", was: null }),
+        new Date().toISOString(),
+      )
+      .run();
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${dueId}`,
+        { state: "accepted", today: TODAY },
+        agentEnv,
+      ),
+    );
+    expect(
+      (
+        await body<{ task: { due_at: string | null } }>(
+          call("GET", `/tasks/${bare}`),
+        )
+      ).task.due_at,
+    ).toBe("2026-11-07");
+    const { action: undone } = await body<{ action: { state: string } }>(
+      call(
+        "POST",
+        `/agent/actions/${dueId}/revert`,
+        { today: TODAY },
+        agentEnv,
+      ),
+    );
+    expect(undone.state).toBe("reverted");
+    expect(
+      (
+        await body<{ task: { due_at: string | null } }>(
+          call("GET", `/tasks/${bare}`),
+        )
+      ).task.due_at,
+    ).toBeNull();
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${dueId}/revert`,
+        { today: TODAY },
+        agentEnv,
+      ),
+      400,
+    );
   });
 
   it("stops at the month's cap", async () => {

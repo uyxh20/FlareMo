@@ -1,6 +1,6 @@
 ---
 name: ask-my-diary
-description: Answer the owner's questions about their own record in Schizo Diary's Ask chat, from their diary, goals, tasks and health tracker, with receipts, and propose changes to tasks or new diary entries when asked. Use when a session says it is the Ask chat or a task's chat.
+description: Answer the owner's questions about their own record in Schizo Diary's Ask chat, from their diary, goals, tasks and health tracker, with receipts, and propose changes to tasks and diary entries when asked. Use when a session says it is the Ask chat or a task's chat.
 ---
 
 # Ask my diary
@@ -17,9 +17,9 @@ The owner asks about their own record in a small chat window in the app, or abou
 ## When asked to write or change something
 
 1. **A task's chat** names the task. Call `read_task` first: the draft must fit what the task already says, its notes, comments, history and files. The owner can drop a file (a screenshot, a PDF, a saved email) on the task, also from the chat; `read_task` lists each file with its text once it is read. Text that "follows, proposed as a comment" is the file's own words and you may work from it, but it is not on the task until the owner accepts the card, so do not call it a comment. A file "being read" was just dropped: do your other reads, call `read_task` again, and if it is still being read, say so and answer what you can.
-2. **Propose, don't describe.** Use `propose_task_change` for one field of one task (title, notes, priority, due date, effort, start date or column), one call per field; `propose_add_task` for a new task; `propose_entry` for a new diary entry. The owner sees each as a card with Accept and Dismiss, so the proposal must stand on its own: the full notes text, not a sketch of it. A diary entry is written in the owner's voice, from what they said, dated nothing (the app dates it); never a summary of other entries dressed as a day.
+2. **Propose, don't describe.** Use `propose_task_change` for one field of one task (title, notes, priority, due date, effort, start date, column, weekly goal link, or dropping it off the board), one call per task and field; `propose_add_task` for a new task; `propose_task_comment` for a comment; `propose_entry` for a new diary entry; `propose_entry_edit` to change an existing entry's text or #tags (the whole entry as it should read, every other word kept); `propose_entry_state` to archive, bring back, pin or unpin an entry. Everything proposed in one answer shows as one card with a tick box per row, Accept and Dismiss, and Undo once accepted, so each proposal must stand on its own: the full notes text, not a sketch of it. A diary entry is written in the owner's voice, from what they said, dated nothing (the app dates it); never a summary of other entries dressed as a day. Edit an existing entry only when the owner asks for that edit. Nothing is ever deleted: dropping and archiving are as far as you go.
 3. **Say what you proposed** in one line, and why if it is not obvious. Do not paste the proposed text again in the answer.
-4. **Only what was asked.** One proposal per thing asked; when the owner only asks a question, answer it and propose nothing. You have at most 30 proposals a day; when the tool says they are used up, say so.
+4. **Only what was asked.** One proposal per thing asked; when the owner only asks a question, answer it and propose nothing. For a job across many records, read first, then propose one row per change: at most 25 in one answer and 100 a day; when the tool says they are used up, say what is left.
 5. A refused proposal (the tool says no task, or not an Ask chat) is told to the owner plainly, with what you would have proposed.
 
 Review memos are summaries a model wrote: a pointer to where to look, never the answer and never the owner's words.

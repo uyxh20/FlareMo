@@ -2,6 +2,7 @@ import {
   type PlannerAgentActionResponse,
   type PlannerAskResponse,
   type PlannerOkResponse,
+  plannerAgentRevertActionSchema,
   plannerAgentSettleActionSchema,
   plannerAskQuerySchema,
   plannerAskSchema,
@@ -19,6 +20,7 @@ import {
   plannerAgentLatestConversation,
   plannerAgentListActions,
   plannerAgentReadChat,
+  plannerAgentRevertAction,
   plannerAgentSettleAction,
   plannerReadTaskDetail,
   plannerSyncHistory,
@@ -38,7 +40,10 @@ import {
   plannerSendAgent,
   plannerStartAgent,
 } from "./planner-agent";
-import { plannerAssertToday } from "./planner-route-helpers";
+import {
+  plannerAssertToday,
+  plannerResolveActor,
+} from "./planner-route-helpers";
 
 // Ask my diary over HTTP (fork-owned add-on, docs/fork-general-agent.md): the
 // bubble's little chat with the general agent, and a task's own chat in the
@@ -351,7 +356,12 @@ plannerAgentApi.post(
               state: "dismissed",
             });
       if (!action) throw new NotFoundError("Proposal not found.");
-      if (body.state === "accepted" && action.kind !== "entry_new") {
+      if (
+        body.state === "accepted" &&
+        action.kind !== "entry_new" &&
+        action.kind !== "entry_edit" &&
+        action.kind !== "entry_state"
+      ) {
         // The accept wrote a task: the archive takes the new line now, past
         // the sync's debounce, so History shows it (with Revert) at once.
         await plannerSyncHistory(db, {
@@ -360,6 +370,43 @@ plannerAgentApi.post(
           force: true,
         });
       }
+      const response: PlannerAgentActionResponse = { action };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// Undo on an accepted card: puts back what the accept wrote, as new changes
+// (docs/fork-general-agent.md, "Undo"). The task archive is synced first, so
+// the lines upstream wrote for the accept are there to revert, and again
+// after, so History shows the revert at once.
+plannerAgentApi.post(
+  "/agent/actions/:id/revert",
+  zValidator("json", plannerAgentRevertActionSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const body = c.req.valid("json");
+      plannerAssertToday(body.today, new Date());
+      const { db, user } = context;
+      const sync = () =>
+        plannerSyncHistory(db, {
+          userId: user.id,
+          now: new Date(),
+          force: true,
+        });
+      await sync();
+      const action = await plannerAgentRevertAction(db, {
+        user,
+        actor: await plannerResolveActor(c, context.credential),
+        id: c.req.param("id"),
+        today: body.today,
+      });
+      if (action.task_id || action.kind === "task_new") await sync();
       const response: PlannerAgentActionResponse = { action };
       return c.json(response);
     } catch (error) {

@@ -153,17 +153,17 @@ describe("the agent's proposed actions", () => {
     ).rejects.toThrow(PlannerAgentToolError);
   });
 
-  it("stops at thirty proposals a day", async () => {
+  it("stops at a hundred proposals a day", async () => {
     await asking();
-    for (let n = 0; n < 30; n++) {
+    for (let n = 0; n < 100; n++) {
       await call("propose_add_task", { title: `Task ${n}`, why: "Asked." });
     }
     expect(
       await plannerAgentActionsToday(rt.db, { userId: rt.user.id, now: NOW }),
-    ).toBe(30);
+    ).toBe(100);
     await expect(
       call("propose_entry", { content: "One more.", why: "Asked." }),
-    ).rejects.toThrow(/30 proposals are used up/);
+    ).rejects.toThrow(/100 proposals are used up/);
   });
 
   it("writes an accepted task change as the proposal, and a dismissed one not at all", async () => {
