@@ -158,6 +158,8 @@ export type PlannerStrings = {
     commentAddFailed: string;
     commentEditFailed: string;
     commentDeleteFailed: string;
+    attachmentUploadFailed: string;
+    attachmentRemoveFailed: string;
   };
 
   priority: { none: string; low: string; medium: string; high: string };
@@ -215,6 +217,26 @@ export type PlannerStrings = {
       deleteBody: string;
       deleteConfirm: string;
     };
+    /** The task's files (docs/fork-task-attachments.md). */
+    attachments: {
+      title: string;
+      /** "2 of 10" under the heading. */
+      count: (count: number, max: number) => string;
+      empty: string;
+      /** The drop zone's line, with the "choose files" link in it. */
+      drop: string;
+      choose: string;
+      uploading: string;
+      stored: string;
+      remove: string;
+      open: string;
+      /** Refused before upload: too big, or the task is full. */
+      tooLarge: (name: string, max: string) => string;
+      tooMany: (max: number) => string;
+      removeTitle: string;
+      removeBody: string;
+      removeConfirm: string;
+    };
     footer: {
       created: (when: string) => string;
       updated: (when: string) => string;
@@ -263,6 +285,8 @@ export type PlannerStrings = {
     commented: string;
     commentEdited: string;
     commentDeleted: string;
+    attachmentAdded: (name: string) => string;
+    attachmentRemoved: (name: string) => string;
     /** A task linked to a weekly goal, moved to another, or unlinked. */
     goalLinked: string;
     goalRelinked: string;
@@ -415,6 +439,8 @@ const en: PlannerStrings = {
     commentAddFailed: "Couldn't add the comment",
     commentEditFailed: "Couldn't save the comment",
     commentDeleteFailed: "Couldn't delete the comment",
+    attachmentUploadFailed: "Couldn't upload the file",
+    attachmentRemoveFailed: "Couldn't remove the file",
   },
 
   priority: { none: "No priority", low: "Low", medium: "Medium", high: "High" },
@@ -466,6 +492,23 @@ const en: PlannerStrings = {
       deleteBody: "It is removed from this task. This can't be undone.",
       deleteConfirm: "Delete",
     },
+    attachments: {
+      title: "Attachments",
+      count: (count, max) => `${count} of ${max}`,
+      empty: "No files yet.",
+      drop: "Drop files here, paste, or",
+      choose: "choose files",
+      uploading: "uploading…",
+      stored: "stored",
+      remove: "Remove file",
+      open: "Open file",
+      tooLarge: (name, max) => `${name} is over ${max}`,
+      tooMany: (max) => `A task can hold at most ${max} files`,
+      removeTitle: "Remove this file?",
+      removeBody:
+        "It leaves this task now and is deleted for good after seven days.",
+      removeConfirm: "Remove",
+    },
     footer: {
       created: (when) => `Created ${when}`,
       updated: (when) => `Updated ${when}`,
@@ -509,6 +552,8 @@ const en: PlannerStrings = {
     commented: "Comment added",
     commentEdited: "Comment edited",
     commentDeleted: "Comment deleted",
+    attachmentAdded: (name) => `Attached ${name}`,
+    attachmentRemoved: (name) => `Removed ${name}`,
     goalLinked: "Linked to a weekly goal",
     goalRelinked: "Moved to another weekly goal",
     goalUnlinked: "Unlinked from its weekly goal",
@@ -656,6 +701,8 @@ const zhCN: PlannerStrings = {
     commentAddFailed: "添加评论失败",
     commentEditFailed: "保存评论失败",
     commentDeleteFailed: "删除评论失败",
+    attachmentUploadFailed: "上传文件失败",
+    attachmentRemoveFailed: "移除文件失败",
   },
 
   priority: { none: "无优先级", low: "低", medium: "中", high: "高" },
@@ -706,6 +753,22 @@ const zhCN: PlannerStrings = {
       deleteBody: "评论会从这项任务中移除，无法撤销。",
       deleteConfirm: "删除",
     },
+    attachments: {
+      title: "附件",
+      count: (count, max) => `${count} / ${max}`,
+      empty: "还没有文件。",
+      drop: "把文件拖到这里、粘贴，或",
+      choose: "选择文件",
+      uploading: "上传中…",
+      stored: "已保存",
+      remove: "移除文件",
+      open: "打开文件",
+      tooLarge: (name, max) => `${name} 超过 ${max}`,
+      tooMany: (max) => `一个任务最多 ${max} 个文件`,
+      removeTitle: "移除这个文件？",
+      removeBody: "它会立即离开这个任务，七天后彻底删除。",
+      removeConfirm: "移除",
+    },
     footer: {
       created: (when) => `创建于 ${when}`,
       updated: (when) => `更新于 ${when}`,
@@ -749,6 +812,8 @@ const zhCN: PlannerStrings = {
     commented: "添加了评论",
     commentEdited: "编辑了评论",
     commentDeleted: "删除了评论",
+    attachmentAdded: (name) => `添加了文件 ${name}`,
+    attachmentRemoved: (name) => `移除了文件 ${name}`,
     goalLinked: "关联到本周目标",
     goalRelinked: "改到另一个本周目标",
     goalUnlinked: "取消了本周目标关联",

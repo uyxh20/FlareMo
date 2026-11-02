@@ -211,6 +211,25 @@ export const PROBES: Record<string, Probe> = {
       IN_WEEK,
     );
   },
+  planner_task_attachment: async (p) => {
+    // Inserted directly: the domain's add would also write a History event
+    // with the name, and that reach is the archive's, not this table's.
+    const taskId = await insertTask(p, {
+      title: "Renew the insurance",
+      status: "todo",
+    });
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_task_attachment (id, user_id, task_id, filename, content_type, size, r2_key, created_at)
+       VALUES (?, ?, ?, ?, 'application/pdf', 1234, ?, ?)`,
+      nextId("attachment"),
+      p.user.id,
+      taskId,
+      `${p.marker}.pdf`,
+      `planner/${p.user.id}/${nextId("key")}/file.pdf`,
+      IN_WEEK,
+    );
+  },
   planner_task_event: async (p) => {
     // The archive keeps a purged task's title: only the event remembers it.
     await plannerTestRun(

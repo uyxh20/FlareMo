@@ -40,6 +40,7 @@ import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import { plannerAgentApi } from "./planner-agent-api";
 import { plannerAgentMcpApi } from "./planner-agent-mcp";
+import { plannerAttachmentsApi } from "./planner-attachments-api";
 import { plannerGoalsApi } from "./planner-goals-api";
 import { plannerPeriodReviewApi } from "./planner-period-review-api";
 import {
@@ -422,3 +423,5 @@ plannerApi.route("/", plannerPeriodReviewApi);
 // planner-agent-api.ts).
 plannerApi.route("/", plannerAgentMcpApi);
 plannerApi.route("/", plannerAgentApi);
+// Files on tasks (planner-attachments-api.ts, docs/fork-task-attachments.md).
+plannerApi.route("/", plannerAttachmentsApi);

@@ -1,14 +1,18 @@
-import type {
-  PlannerBoardResponse,
-  PlannerCommentResponse,
-  PlannerCreateTaskInput,
-  PlannerCreateTaskResponse,
-  PlannerDeleteCommentResponse,
-  PlannerRevertEventResponse,
-  PlannerTaskDetailResponse,
-  PlannerTaskHistoryResponse,
-  PlannerTaskPlanResponse,
-  PlannerUpdateTaskInput,
+import {
+  type PlannerAttachmentDto,
+  type PlannerAttachmentResponse,
+  type PlannerBoardResponse,
+  type PlannerCommentResponse,
+  type PlannerCreateTaskInput,
+  type PlannerCreateTaskResponse,
+  type PlannerDeleteAttachmentResponse,
+  type PlannerDeleteCommentResponse,
+  type PlannerRevertEventResponse,
+  type PlannerTaskDetailResponse,
+  type PlannerTaskHistoryResponse,
+  type PlannerTaskPlanResponse,
+  type PlannerUpdateTaskInput,
+  plannerAttachmentNameHeader,
 } from "@flaremo/contracts";
 import type { Task } from "@/api";
 import { ApiError, apiRequest } from "@/api/client";
@@ -126,6 +130,38 @@ export function plannerRevertEventRequest(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/history/${eventId}/revert`,
     { method: "POST", body: JSON.stringify({ today }) },
   );
+}
+
+/**
+ * Puts a file on a task (docs/fork-task-attachments.md): the file is the body,
+ * its name travels percent-encoded in a header. 413 when it is over 10 MB, 400
+ * when the task already holds 10 files.
+ */
+export function plannerUploadAttachmentRequest(taskId: string, file: File) {
+  return apiRequest<PlannerAttachmentResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}/attachments`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": file.type || "application/octet-stream",
+        [plannerAttachmentNameHeader]: encodeURIComponent(file.name),
+      },
+      body: file,
+    },
+  );
+}
+
+/** Takes a file off its task. It is deleted for good a week later. */
+export function plannerDeleteAttachmentRequest(attachmentId: string) {
+  return apiRequest<PlannerDeleteAttachmentResponse>(
+    `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Whether a file shows as a picture in the panel. */
+export function plannerAttachmentIsImage(attachment: PlannerAttachmentDto) {
+  return (attachment.content_type ?? "").startsWith("image/");
 }
 
 /** Adds a comment to a task. The server trims the text and keeps 1 to 5000 characters. */

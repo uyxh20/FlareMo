@@ -587,6 +587,29 @@ export const forkDataSources: readonly ForkDataSource[] = [
     },
   },
   {
+    id: "planner_task_attachment",
+    table: "planner_task_attachment",
+    module: "cockpit",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "Files on tasks: name, type, size and where the bytes are in the bucket (docs/fork-task-attachments.md)",
+    uses: {
+      lookBack: no(
+        "the file itself is never read; its name is in the task's History events, which are the archive's data",
+      ),
+      lookForward: no("the file itself is never read"),
+      search: gap("task files are not searchable"),
+      memory: no("the memory layer reads entries, not tasks"),
+      mcp: no("not exposed to agents yet (phase 3 of the plan lists them)"),
+      agent: no("not exposed to agents yet (phase 3 of the plan lists them)"),
+      userExport: FORK_EXPORT_GAP,
+      backup: yes(
+        "the index rows are restored verbatim; the bytes live in the R2 bucket, outside the D1 backup",
+      ),
+    },
+  },
+  {
     id: "planner_task_plan",
     table: "planner_task_plan",
     module: "cockpit",

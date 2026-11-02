@@ -73,6 +73,7 @@ const RESET_TABLES = [
   "planner_sync_state",
   "planner_project_node",
   "planner_task_comment",
+  "planner_task_attachment",
   "planner_goal",
   "planner_week",
   "planner_review",
@@ -1923,16 +1924,22 @@ describe("planner API", () => {
       ]);
     });
 
-    it("answers a task with nothing else with null plan and project and no comments", async () => {
+    it("answers a task with nothing else with null plan and project, no comments and no files", async () => {
       const task = await createTask("Plain");
       const detail = await detailOk(task.id);
       expect(Object.keys(detail).sort()).toEqual([
+        "attachments",
         "comments",
         "plan",
         "project",
         "task",
       ]);
-      expect(detail).toMatchObject({ plan: null, project: null, comments: [] });
+      expect(detail).toMatchObject({
+        plan: null,
+        project: null,
+        comments: [],
+        attachments: [],
+      });
       expect(detail.task.notes).toBeNull();
     });
 

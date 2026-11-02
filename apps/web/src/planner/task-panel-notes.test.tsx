@@ -66,6 +66,7 @@ const DETAIL: PlannerTaskDetailResponse = {
   plan: null,
   project: null,
   comments: [],
+  attachments: [],
 };
 
 /** The server's answer to saving `notes`. */

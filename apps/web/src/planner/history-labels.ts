@@ -328,6 +328,16 @@ export function plannerDescribeHistory(
         label = strings.history.commentDeleted;
         break;
 
+      // `{attachment_id, filename, size}` (migration 9016).
+      case "attachment_added":
+        label = strings.history.attachmentAdded(asString(data.filename) ?? "");
+        break;
+      case "attachment_removed":
+        label = strings.history.attachmentRemoved(
+          asString(data.filename) ?? "",
+        );
+        break;
+
       case "goal_changed": {
         // `{from, to}`: the weekly goal ids before and after (migration 9005).
         const from = asString(data.from);

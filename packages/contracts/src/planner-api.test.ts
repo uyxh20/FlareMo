@@ -791,13 +791,26 @@ describe("planner API response schemas", () => {
         name: "Run a marathon",
       },
       comments: [COMMENT],
+      attachments: [],
     };
     expect(plannerTaskDetailResponseSchema.parse(detail)).toEqual(detail);
 
     // A task with nothing else: every key is still there, null or empty.
-    const bare = { task: TASK, plan: null, project: null, comments: [] };
+    const bare = {
+      task: TASK,
+      plan: null,
+      project: null,
+      comments: [],
+      attachments: [],
+    };
     expect(plannerTaskDetailResponseSchema.parse(bare)).toEqual(bare);
-    for (const missing of ["task", "plan", "project", "comments"] as const) {
+    for (const missing of [
+      "task",
+      "plan",
+      "project",
+      "comments",
+      "attachments",
+    ] as const) {
       const { [missing]: _removed, ...rest } = detail;
       expect(
         plannerTaskDetailResponseSchema.safeParse(rest).success,

@@ -126,7 +126,12 @@ describe("the task panel's requests", () => {
   });
 
   it("reads one task whole by its bare, encoded id", async () => {
-    const calls = stubFetch(200, { task: {}, plan: null, comments: [] });
+    const calls = stubFetch(200, {
+      task: {},
+      plan: null,
+      comments: [],
+      attachments: [],
+    });
     await plannerFetchTaskDetail("tasks/3370e0a0-7d71");
     await plannerFetchTaskDetail("abc 1/2");
     expect(calls[0]?.url).toBe("/api/app/planner/tasks/3370e0a0-7d71");

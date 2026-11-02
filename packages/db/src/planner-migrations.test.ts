@@ -13,6 +13,7 @@ import {
   plannerMigrationFiles,
 } from "./planner-migrations";
 import {
+  plannerAgentAction,
   plannerAgentChat,
   plannerAgentProposal,
   plannerAgentRun,
@@ -23,6 +24,7 @@ import {
   plannerProjectNode,
   plannerReview,
   plannerSyncState,
+  plannerTaskAttachment,
   plannerTaskComment,
   plannerTaskEvent,
   plannerTaskPlan,
@@ -158,6 +160,34 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "conversation_id", "created_at"],
     },
   ],
+  planner_agent_action: [
+    {
+      name: "planner_agent_action_user_conversation_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "conversation_id", "state"],
+    },
+    {
+      name: "planner_agent_action_user_created_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "created_at"],
+    },
+  ],
+  planner_task_attachment: [
+    {
+      name: "planner_task_attachment_removed_idx",
+      unique: false,
+      partial: false,
+      columns: ["removed_at"],
+    },
+    {
+      name: "planner_task_attachment_task_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "task_id", "created_at"],
+    },
+  ],
 };
 
 const PLANNER_TABLES = Object.keys(EXPECTED_INDEXES).sort();
@@ -178,6 +208,8 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_agent_run: plannerAgentRun,
   planner_agent_proposal: plannerAgentProposal,
   planner_agent_chat: plannerAgentChat,
+  planner_agent_action: plannerAgentAction,
+  planner_task_attachment: plannerTaskAttachment,
 };
 
 let mf: Miniflare;
@@ -344,6 +376,7 @@ describe("planner migrations", () => {
         targets[table] = keys.map((key) => key.table);
       }
       expect(targets).toEqual({
+        planner_agent_action: [],
         planner_agent_chat: [],
         planner_agent_proposal: [],
         planner_agent_run: [],
@@ -354,6 +387,7 @@ describe("planner migrations", () => {
         planner_project_node: ["planner_project_node"],
         planner_review: [],
         planner_sync_state: [],
+        planner_task_attachment: [],
         planner_task_comment: [],
         planner_task_event: [],
         planner_task_plan: [],
@@ -861,14 +895,15 @@ describe("planner migrations", () => {
   });
 
   describe("9005 goals and the weekly review", () => {
-    it("adds a nullable TEXT goal_id column to the plan row, last", async () => {
+    it("adds a nullable TEXT goal_id column to the plan row, after board_rank", async () => {
       const columns = await rows<{
         name: string;
         type: string;
         notnull: number;
         dflt_value: string | null;
       }>("PRAGMA table_info(planner_task_plan)");
-      expect(columns.at(-1)).toMatchObject({
+      const rank = columns.findIndex((column) => column.name === "board_rank");
+      expect(columns[rank + 1]).toMatchObject({
         name: "goal_id",
         type: "TEXT",
         notnull: 0,
@@ -934,6 +969,41 @@ describe("planner migrations", () => {
         "SELECT state, settled_at FROM planner_goal_flag",
       );
       expect(flag).toEqual({ state: "open", settled_at: null });
+    });
+  });
+
+  describe("9016 files on tasks", () => {
+    it("adds the nullable files_read switch to the plan row, last", async () => {
+      const columns = await rows<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>("PRAGMA table_info(planner_task_plan)");
+      expect(columns.at(-1)).toMatchObject({
+        name: "files_read",
+        type: "INTEGER",
+        notnull: 0,
+        dflt_value: null,
+      });
+    });
+
+    it("stores a file with read_state 'stored' by default and a NULL removed_at", async () => {
+      await run(
+        `INSERT INTO planner_task_attachment (id, user_id, task_id, filename, size, r2_key, created_at)
+         VALUES ('f1', 'u1', 't1', 'quote.pdf', 1234, 'planner/u1/k/quote.pdf', ?)`,
+        NOW,
+      );
+      const [row] = await rows<Record<string, unknown>>(
+        "SELECT read_state, action_id, content_type, etag, removed_at FROM planner_task_attachment WHERE id = 'f1'",
+      );
+      expect(row).toEqual({
+        read_state: "stored",
+        action_id: null,
+        content_type: null,
+        etag: null,
+        removed_at: null,
+      });
     });
   });
 

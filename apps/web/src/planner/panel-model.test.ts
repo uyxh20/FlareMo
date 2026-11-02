@@ -48,7 +48,14 @@ const TASK: TaskDto = {
 function detail(
   overrides: Partial<PlannerTaskDetailResponse> = {},
 ): PlannerTaskDetailResponse {
-  return { task: TASK, plan: null, project: null, comments: [], ...overrides };
+  return {
+    task: TASK,
+    plan: null,
+    project: null,
+    comments: [],
+    attachments: [],
+    ...overrides,
+  };
 }
 
 const PLAN = {

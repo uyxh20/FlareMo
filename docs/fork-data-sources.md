@@ -67,6 +67,7 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `task_activity` | cockpit | history | – | – | – | – | – | – | yes | yes |
 | `planner_task_event` | cockpit | history | yes | yes | – | – | yes | yes | **gap** | yes |
 | `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | yes | yes | **gap** | yes |
+| `planner_task_attachment` | cockpit | content | – | – | **gap** | – | – | – | **gap** | yes |
 | `planner_task_plan` | cockpit | structure | yes | – | – | – | yes | yes | **gap** | yes |
 | `planner_project_node` | cockpit | structure | – | – | – | – | – | – | **gap** | yes |
 | `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
@@ -102,6 +103,8 @@ Gaps (left out, and probably should not be):
 - `planner_task_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_task_comment` → search: task comments are not searchable.
 - `planner_task_comment` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
+- `planner_task_attachment` → search: task files are not searchable.
+- `planner_task_attachment` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_task_plan` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_project_node` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_goal` → search: goals are not searchable.

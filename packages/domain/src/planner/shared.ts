@@ -108,7 +108,8 @@ export function plannerShiftDay(dayKey: string, days: number): string {
  * (migrations 9001 and 9002), then the weekly goal a task serves (9005, `{from,
  * to}` goal ids), then `reverted` (`{event_id, type}`: the History event the
  * owner reverted; the inverse change is its own event just before it). Comment
- * events carry only `{comment_id}`, never the text.
+ * events carry only `{comment_id}`, never the text. Attachment events (9016)
+ * carry `{attachment_id, filename, size}`.
  */
 export type PlannerEventType =
   | "planned"
@@ -121,6 +122,8 @@ export type PlannerEventType =
   | "commented"
   | "comment_edited"
   | "comment_deleted"
+  | "attachment_added"
+  | "attachment_removed"
   | "goal_changed"
   | "reverted";
 

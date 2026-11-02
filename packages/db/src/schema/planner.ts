@@ -65,6 +65,9 @@ export const plannerTaskPlan = sqliteTable(
     // Added by 9005: the goal this task serves (planner_goal.id by value), or NULL.
     // Held on the plan row like the effort, so a backlog task can carry one too.
     goalId: text("goal_id"),
+    // Added by 9016: the task's "Store only, don't read these files" switch.
+    // NULL or 1 reads every file dropped on the task, 0 only stores it.
+    filesRead: integer("files_read"),
   },
   (table) => [
     index("planner_task_plan_user_period_idx").on(
@@ -182,6 +185,46 @@ export const plannerProjectNode = sqliteTable(
 // tasks.id by value with no foreign key. The body never goes into a history
 // event: the events `commented`, `comment_edited` and `comment_deleted` carry
 // only the comment's id.
+// Files on a task (migration 9016, docs/fork-task-attachments.md). The bytes
+// are in the ATTACHMENTS bucket under `planner/`; this is the index. A removed
+// file keeps its row for seven days (`removed_at`), then the nightly sweep
+// deletes the object and the row. `read_state` says whether the file was read
+// into a proposed comment (`action_id`, planner_agent_action.id by value).
+export const plannerTaskAttachment = sqliteTable(
+  "planner_task_attachment",
+  {
+    // A random UUID, not namespaced.
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // Upstream's task id by value, no foreign key (G10).
+    taskId: text("task_id").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type"),
+    size: integer("size").notNull(),
+    r2Key: text("r2_key").notNull(),
+    etag: text("etag"),
+    readState: text("read_state", {
+      enum: ["stored", "pending", "read", "skipped", "failed", "capped"],
+    })
+      .notNull()
+      .default("stored"),
+    actionId: text("action_id"),
+    createdAt: text("created_at").notNull(),
+    removedAt: text("removed_at"),
+  },
+  (table) => [
+    index("planner_task_attachment_task_idx").on(
+      table.userId,
+      table.taskId,
+      table.createdAt,
+    ),
+    index("planner_task_attachment_removed_idx").on(table.removedAt),
+  ],
+);
+
+export type PlannerTaskAttachmentRow =
+  typeof plannerTaskAttachment.$inferSelect;
+
 export const plannerTaskComment = sqliteTable(
   "planner_task_comment",
   {

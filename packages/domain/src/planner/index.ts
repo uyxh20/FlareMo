@@ -14,6 +14,7 @@ export * from "./agent-definition";
 export * from "./agent-prompts";
 export * from "./agent-store";
 export * from "./agent-tools";
+export * from "./attachments";
 export * from "./board";
 export * from "./board-rank";
 export * from "./columns";

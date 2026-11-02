@@ -56,6 +56,10 @@ export * from "./planner-review-memo";
 //   POST   /tasks/:id/comments                     201 PlannerCommentResponse
 //   PATCH  /comments/:id                           PlannerCommentResponse
 //   DELETE /comments/:id                           PlannerDeleteCommentResponse
+//   GET    /tasks/:id/attachments                  PlannerAttachmentListResponse
+//   POST   /tasks/:id/attachments                  201 PlannerAttachmentResponse (raw file body)
+//   GET    /tasks/:id/attachments/:aid/:filename   the file itself
+//   DELETE /attachments/:id                        PlannerDeleteAttachmentResponse
 //   GET    /history?from&to                        PlannerHistoryRangeResponse
 //
 // `today` is the client's local date. The server accepts it only within one day
@@ -134,6 +138,32 @@ export const plannerCommentBodySchema = z
   .trim()
   .min(1)
   .max(plannerCommentBodyMax);
+
+// --- Attachments (migration 9016, docs/fork-task-attachments.md) -----------
+
+/** The largest file that can be put on a task, in bytes (10 MB). */
+export const plannerAttachmentMaxBytes = 10 * 1024 * 1024;
+/** How many files one task can hold. */
+export const plannerAttachmentsPerTask = 10;
+/** The longest file name kept, in characters; longer names are cut. */
+export const plannerAttachmentNameMax = 200;
+/** The header the upload carries the file name in, percent-encoded. */
+export const plannerAttachmentNameHeader = "x-planner-filename";
+
+/**
+ * Whether a file has been read into a proposed comment: `stored` (not read;
+ * every file in phase 1, and files on a task set to store only), `pending`
+ * (reading), `read`, `skipped` (the owner's choice), `failed` (unreadable) or
+ * `capped` (the day's 30 proposals were used up).
+ */
+export const plannerAttachmentReadStateSchema = z.enum([
+  "stored",
+  "pending",
+  "read",
+  "skipped",
+  "failed",
+  "capped",
+]);
 
 /**
  * `column` says where the new task lands, the way a column's "+" button does:
@@ -459,6 +489,25 @@ export const plannerCommentDtoSchema = z.object({
   updated_at: z.string(),
 });
 
+/** A file on a task. The bytes are at `url`, behind the same login. */
+export const plannerAttachmentDtoSchema = z.object({
+  // A random UUID, not namespaced.
+  id: z.string(),
+  // Upstream's task id, namespaced (`tasks/<id>`).
+  task_id: z.string(),
+  filename: z.string(),
+  // The browser's MIME type, or null when it gave none.
+  content_type: z.string().nullable(),
+  // Bytes.
+  size: z.number().int().nonnegative(),
+  read_state: plannerAttachmentReadStateSchema,
+  // The proposed comment this file was read into, or null.
+  action_id: z.string().nullable(),
+  created_at: z.string(),
+  // Same-origin path of the file itself.
+  url: z.string(),
+});
+
 /** The goal a task belongs to. */
 export const plannerTaskProjectSchema = z.object({
   // Upstream's project id.
@@ -479,6 +528,21 @@ export const plannerTaskDetailResponseSchema = z.object({
   project: plannerTaskProjectSchema.nullable(),
   // Oldest first, without the deleted ones.
   comments: z.array(plannerCommentDtoSchema),
+  // Oldest first, without the removed ones.
+  attachments: z.array(plannerAttachmentDtoSchema),
+});
+
+export const plannerAttachmentListResponseSchema = z.object({
+  // Oldest first.
+  attachments: z.array(plannerAttachmentDtoSchema),
+});
+
+export const plannerAttachmentResponseSchema = z.object({
+  attachment: plannerAttachmentDtoSchema,
+});
+
+export const plannerDeleteAttachmentResponseSchema = z.object({
+  ok: z.literal(true),
 });
 
 export const plannerCommentListResponseSchema = z.object({
@@ -541,6 +605,19 @@ export type PlannerTaskHistoryResponse = z.infer<
   typeof plannerTaskHistoryResponseSchema
 >;
 export type PlannerCommentDto = z.infer<typeof plannerCommentDtoSchema>;
+export type PlannerAttachmentReadState = z.infer<
+  typeof plannerAttachmentReadStateSchema
+>;
+export type PlannerAttachmentDto = z.infer<typeof plannerAttachmentDtoSchema>;
+export type PlannerAttachmentListResponse = z.infer<
+  typeof plannerAttachmentListResponseSchema
+>;
+export type PlannerAttachmentResponse = z.infer<
+  typeof plannerAttachmentResponseSchema
+>;
+export type PlannerDeleteAttachmentResponse = z.infer<
+  typeof plannerDeleteAttachmentResponseSchema
+>;
 export type PlannerTaskProject = z.infer<typeof plannerTaskProjectSchema>;
 export type PlannerTaskDetailResponse = z.infer<
   typeof plannerTaskDetailResponseSchema

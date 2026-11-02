@@ -31,6 +31,7 @@ import { PlannerHistoryTimeline } from "./history-timeline";
 import { plannerCardFromDetail, plannerLastTouched } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { PlannerTaskAttachments } from "./task-panel-attachments";
 import { PlannerTaskComments } from "./task-panel-comments";
 import { PlannerTaskNotes, usePlannerAutoGrow } from "./task-panel-notes";
 import { PlannerTaskProperties } from "./task-panel-properties";
@@ -351,6 +352,13 @@ function PanelBody({
               notes={detail.task.notes}
               taskId={taskId}
               today={today}
+            />
+          </div>
+
+          <div className="border-t border-border/60 pt-5">
+            <PlannerTaskAttachments
+              attachments={detail.attachments}
+              taskId={taskId}
             />
           </div>
 

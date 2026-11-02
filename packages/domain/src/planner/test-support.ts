@@ -39,6 +39,7 @@ const RESET_TABLES = [
   "planner_sync_state",
   "planner_project_node",
   "planner_task_comment",
+  "planner_task_attachment",
   "planner_goal",
   "planner_week",
   "planner_review",

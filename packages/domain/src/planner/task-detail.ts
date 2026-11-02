@@ -1,9 +1,10 @@
-import type { TaskDto } from "@flaremo/contracts";
+import type { PlannerAttachmentDto, TaskDto } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { projects, tasks } from "@flaremo/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { NotFoundError } from "../errors";
 import { taskToDto } from "../tasks";
+import { plannerReadAttachments } from "./attachments";
 import { type PlannerCommentDto, plannerReadComments } from "./comments";
 import { type PlannerPlanDto, plannerPlanToDto } from "./plans";
 import { plannerLoadPlan, plannerNormalizeTaskId } from "./shared";
@@ -28,6 +29,8 @@ export type PlannerTaskDetail = {
   project: PlannerTaskProject | null;
   /** Oldest first, without the deleted ones. */
   comments: PlannerCommentDto[];
+  /** The task's files, oldest first, without the removed ones (migration 9016). */
+  attachments: PlannerAttachmentDto[];
 };
 
 /**
@@ -70,17 +73,19 @@ export async function plannerReadTaskDetail(
     .get();
   if (!row) throw new NotFoundError(`Task not found: ${taskId}`);
 
-  const [plan, project, comments] = await Promise.all([
+  const [plan, project, comments, attachments] = await Promise.all([
     plannerLoadPlan(db, input.userId, taskId),
     row.projectId === null
       ? Promise.resolve(null)
       : readProject(db, input.userId, row.projectId),
     plannerReadComments(db, { userId: input.userId, taskId }),
+    plannerReadAttachments(db, { userId: input.userId, taskId }),
   ]);
   return {
     task: taskToDto(row),
     plan: plan ? plannerPlanToDto(plan) : null,
     project,
     comments,
+    attachments,
   };
 }

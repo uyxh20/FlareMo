@@ -96,6 +96,7 @@ const DETAIL: PlannerTaskDetailResponse = {
     name: "Website relaunch",
   },
   comments: [],
+  attachments: [],
 };
 
 /** A task with nothing set: no plan, due date, priority, goal or estimate. */
@@ -110,6 +111,7 @@ const BARE: PlannerTaskDetailResponse = {
   plan: null,
   project: null,
   comments: [],
+  attachments: [],
 };
 
 /** What the agent routes answer where the agent is not set up. */

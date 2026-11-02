@@ -49,6 +49,7 @@ import {
   forkAgentReplacesDreaming,
 } from "./fork/agent-schedule";
 import { resolveProductName } from "./fork/product-name";
+import { forkTaskAttachmentsNightly } from "./fork/task-attachments";
 import { hardDeleteMemoWithAttachments } from "./memo-hard-delete";
 import { runMemoryConflictPatrol, runMemoryDreaming } from "./memory-dreaming";
 
@@ -331,6 +332,7 @@ export async function runScheduledMaintenance(
   }
   await healthNightlySweep(db, new Date(scheduledTime)); // fork: health tracker safety net
   await forkAgentNightly(env, db, new Date(scheduledTime)); // fork: end idle agent sessions
+  await forkTaskAttachmentsNightly(env, db, new Date(scheduledTime)); // fork: delete removed task files after a week
   // Reconcile data-transfer tasks: expire stale queued/running tasks whose
   // lease lapsed (interrupted request), then garbage-collect completed task
   // rows older than the TTL along with their R2 export artifacts.
