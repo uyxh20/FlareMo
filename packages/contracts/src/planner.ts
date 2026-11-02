@@ -152,8 +152,16 @@ export const plannerAttachmentsPerTask = 10;
 export const plannerAttachmentNameMax = 200;
 /** How many files a month are read into proposed comments, over every task. */
 export const plannerAttachmentReadsPerMonth = 200;
-/** The longest comment one read produces; longer text is cut, never split. */
+/**
+ * The longest text a read keeps whole, in characters. A file whose text is
+ * longer is summarised instead (what it is, its main points, names, numbers,
+ * dates), never cut; the summary stays under `plannerAttachmentSummaryMax`.
+ */
 export const plannerAttachmentReadMax = 5000;
+/** The longest summary one read produces. */
+export const plannerAttachmentSummaryMax = 2000;
+/** The most text sent to the model for a summary; a longer document is cut there. */
+export const plannerAttachmentSummaryInputMax = 150_000;
 /** The header the upload carries the file name in, percent-encoded. */
 export const plannerAttachmentNameHeader = "x-planner-filename";
 

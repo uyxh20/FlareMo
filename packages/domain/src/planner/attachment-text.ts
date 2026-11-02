@@ -2,13 +2,15 @@ import { plannerAttachmentReadMax } from "@flaremo/contracts";
 
 // What a file on a task is, for reading it into a comment (fork-owned add-on,
 // docs/fork-task-attachments.md, phase 2), and the readers that need no model:
-// plain text is taken as it is, an email is reduced to its headers and body.
-// Pictures and PDFs are read by Claude in the Worker (apps/worker/src/fork/
-// attachment-read.ts); anything else is stored but not read.
+// plain text is taken as it is, an email is reduced to its headers and body, a
+// web page to what a reader sees. Pictures and PDFs are read by Claude in the
+// Worker (apps/worker/src/fork/attachment-read.ts), and so is any text longer
+// than a comment should be, as a summary; anything else is stored but not read.
 
 export type PlannerAttachmentReadKind =
   | "text"
   | "email"
+  | "html"
   | "image"
   | "pdf"
   | "other";
@@ -47,6 +49,14 @@ export function plannerAttachmentReadKind(input: {
     (input.contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
   const extension = extensionOf(input.filename);
   if (type === "message/rfc822" || extension === "eml") return "email";
+  if (
+    type === "text/html" ||
+    type === "application/xhtml+xml" ||
+    extension === "html" ||
+    extension === "htm"
+  ) {
+    return "html";
+  }
   if (IMAGE_TYPES.has(type)) return "image";
   if (type === "application/pdf" || extension === "pdf") return "pdf";
   if (type.startsWith("text/") || type === "application/json") return "text";
@@ -54,15 +64,89 @@ export function plannerAttachmentReadKind(input: {
   return "other";
 }
 
-/** The comment's text: whitespace trimmed, cut at 5,000 characters with a mark. */
-export function plannerCutComment(text: string): string {
-  const cleaned = text
+/** Whitespace trimmed and blank lines squeezed; what every reader hands on. */
+export function plannerCleanText(text: string): string {
+  return text
     .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  if (cleaned.length <= plannerAttachmentReadMax) return cleaned;
+}
+
+/** Whether a file's text is kept whole as the comment, or summarised first. */
+export function plannerAttachmentNeedsSummary(text: string): boolean {
+  return text.length > plannerAttachmentReadMax;
+}
+
+/**
+ * The comment's text, cut at `max` with a mark. A safety net: a whole text is
+ * under the cap by definition and a summary is asked to stay under its own.
+ */
+export function plannerCutComment(
+  text: string,
+  max: number = plannerAttachmentReadMax,
+): string {
+  const cleaned = plannerCleanText(text);
+  if (cleaned.length <= max) return cleaned;
   const mark = "\n\n[cut: the file goes on]";
-  return `${cleaned.slice(0, plannerAttachmentReadMax - mark.length).trimEnd()}${mark}`;
+  return `${cleaned.slice(0, max - mark.length).trimEnd()}${mark}`;
+}
+
+/** The comment's first line: where the text came from and what it is. */
+export function plannerAttachmentCommentHeading(
+  form: "text" | "summary",
+  filename: string,
+): string {
+  return `${form === "summary" ? "Summary of" : "Text of"} ${filename}`;
+}
+
+// --- HTML -------------------------------------------------------------------
+
+/** A page as a reader sees it: no tags, styles, scripts or comments; blocks on their own lines. */
+export function plannerHtmlToText(raw: string): string {
+  const body = raw
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<(script|style|noscript|svg|template)[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, (head) => {
+      const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1];
+      return title ? `${title}\n` : "";
+    });
+  // One line per block; blank lines carry nothing a comment needs.
+  return plannerCleanText(decodeEntities(stripTags(body)))
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .join("\n");
+}
+
+function stripTags(markup: string): string {
+  return markup
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(
+      /<\/(p|div|tr|li|h[1-6]|section|article|header|footer|blockquote|pre|figure|figcaption|dd|dt)>/gi,
+      "\n",
+    )
+    .replace(/<(td|th)[^>]*>/gi, " ")
+    .replace(/<\/(td|th)>/gi, " · ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ · \n/g, "\n");
+}
+
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_m, code: string) =>
+      String.fromCodePoint(Number(code)),
+    )
+    .replace(/&#x([0-9a-f]+);/gi, (_m, code: string) =>
+      String.fromCodePoint(Number.parseInt(code, 16)),
+    );
 }
 
 // --- Email ------------------------------------------------------------------
@@ -187,20 +271,7 @@ function bodyText(part: Part, depth = 0): string | null {
     }
     return html;
   }
-  if (type === "text/html") {
-    return decodeBody(part)
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
-      .replace(/<[^>]+>/g, "")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'");
-  }
+  if (type === "text/html") return plannerHtmlToText(decodeBody(part));
   if (type?.startsWith("text/")) return decodeBody(part);
   return null;
 }

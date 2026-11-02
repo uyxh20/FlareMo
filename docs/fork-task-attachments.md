@@ -19,13 +19,19 @@ files, and takes them in its chat) are what this document describes.
   `stored`, `reading…`, `comment proposed`, `comment added`, `dismissed`,
   `stored only`, `not read: cap reached`, `not read: unreadable`.
 - **Reading.** Once a file is stored it is read into a **proposed comment**: a
-  card under the file with the file's text and Accept and Dismiss, the same
-  card the agent's chat uses. Accept is what writes the comment (its History
-  line names the proposal); Dismiss puts the card away and the file stays. A
-  text file is taken as it is, an email (`.eml`) is reduced to From, To, Cc,
-  Date, Subject and its body, a picture or a PDF is transcribed by Claude; any
-  other kind is stored and marked unreadable. Long text is cut at 5,000
-  characters with a mark. **Read** / **Read again** asks for a read on a file
+  card under the file with Accept and Dismiss, the same card the agent's chat
+  uses. Accept is what writes the comment (its History line names the
+  proposal); Dismiss puts the card away and the file stays. What the comment
+  holds depends on the file's size, not its kind: a **short file** (its text
+  under 5,000 characters) is kept whole, headed "Text of <name>"; a **long
+  one** is summarised by Claude, headed "Summary of <name>": one sentence on
+  what the document is, then its main points with the names, numbers and
+  dates that matter, under 2,000 characters. A text file is taken as it is,
+  an email (`.eml`) is reduced to From, To, Cc, Date, Subject and its body, a
+  web page (`.html`) to what a reader sees (no tags, styles, scripts or
+  comments), all without a model; a picture or a PDF goes to Claude, which
+  writes it out when short and summarises when long. Any other kind is stored
+  and marked unreadable. **Read** / **Read again** asks for a read on a file
   that was not read, failed, was capped or whose card was dismissed.
 - **Store only, don't read these files**, a switch under the list, keeps the
   task's files stored without reading them (an old quote the owner does not
@@ -51,8 +57,9 @@ files, and takes them in its chat) are what this document describes.
 | Storage quota | upstream's `attachmentStorageBytes` plan limit (unlimited self-hosted) | `assertAttachmentStorageQuota` |
 | Reads a month | 200, over every task; a read counts when it starts, so retries count | `plannerAttachmentReadsPerMonth`; the file shows `not read: cap reached` |
 | Proposals a day | the agent's 30, shared with its chats; the file shows `not read: cap reached` and Read again tomorrow files it | `PLANNER_AGENT_ACTIONS_PER_DAY` |
-| Comment length | 5,000 characters, then `[cut: the file goes on]` | `plannerAttachmentReadMax`, `plannerCutComment` |
-| One transcription | 2,500 output tokens, 90 seconds | `apps/worker/src/fork/attachment-read.ts` |
+| Kept whole | text up to 5,000 characters; longer is summarised | `plannerAttachmentReadMax`, `plannerAttachmentNeedsSummary` |
+| A summary | under 2,000 characters; the model sees at most 150,000 characters of the document | `plannerAttachmentSummaryMax`, `plannerAttachmentSummaryInputMax` |
+| One model call | 2,500 output tokens, 90 seconds | `apps/worker/src/fork/attachment-read.ts` |
 
 ## Where the data is
 
@@ -98,13 +105,17 @@ After an upload, where `ANTHROPIC_API_KEY` is set, the Worker claims a read
 (`plannerClaimAttachmentRead`): the file goes `pending`, or `skipped` when the
 task is store-only, or `capped` when the month's 200 are used. The read itself
 (`forkReadAttachment`) runs after the response (`waitUntil`), and the panel
-asks for the detail every three seconds while a file is pending. Text and email
-are parsed in the Worker (`packages/domain/src/planner/attachment-text.ts`);
-a picture or a PDF goes once to Claude's Messages API as an image or document
-block, with a system prompt that asks for a faithful transcription and nothing
-else, under `claude-sonnet-5-5` (`FLAREMO_ATTACHMENT_MODEL` overrides). The
-text becomes a `comment_new` proposal and the file goes `read`; the day's
-proposal cap makes it `capped`, any error `failed`. Read again on a file that
+asks for the detail every three seconds while a file is pending. Text, email
+and HTML are turned into text in the Worker (`packages/domain/src/planner/
+attachment-text.ts`); when that text is under 5,000 characters it is the
+comment, else it goes once to Claude's Messages API for a summary. A picture
+or a PDF goes once as an image or document block, with one rule: write it out
+in full when it fits, summarise when it does not, and say which on the first
+line ("Text" or "Summary"), which the Worker turns into the comment's heading.
+Both under `claude-sonnet-5-5` (`FLAREMO_ATTACHMENT_MODEL` overrides). The
+result becomes a `comment_new` proposal with `{body, attachment_id, filename,
+form}` and the file goes `read`; the day's proposal cap makes it `capped`, any
+error `failed`. Read again on a file that
 already has a card dismisses that card first, so a file shows one card. Nothing
 of a file or its text is logged: only the kind and an error's status.
 
@@ -137,7 +148,7 @@ ago, 100 at a time. A failure is logged and never stops the rest of the night.
 | `packages/contracts/src/planner.ts` | Limits, the header name, the DTO and response schemas. |
 | `packages/contracts/src/planner-agent.ts` | The `comment_new` proposal kind. |
 | `packages/domain/src/planner/attachments.ts` | Add, list, load, remove, the sweep's two halves, the History events; the switch, the read states, the month cap and the claim. |
-| `packages/domain/src/planner/attachment-text.ts` | What kind a file is; the 5,000-character cut; an email as text. |
+| `packages/domain/src/planner/attachment-text.ts` | What kind a file is; whole or summary; the comment heading; an email and a web page as text. |
 | `packages/domain/src/planner/agent-apply.ts` | Accepting `comment_new` writes the comment. |
 | `packages/domain/src/planner/agent-tools.ts` | `read_task` lists the files, their state and the text of an open card. |
 | `packages/domain/src/planner/agent-prompts.ts`, `skills/ask-my-diary/SKILL.md` | What the agent is told about files in a task's chat. |

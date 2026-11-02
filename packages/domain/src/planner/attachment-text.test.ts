@@ -1,9 +1,12 @@
 import { plannerAttachmentReadMax } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  plannerAttachmentCommentHeading,
+  plannerAttachmentNeedsSummary,
   plannerAttachmentReadKind,
   plannerCutComment,
   plannerEmailToText,
+  plannerHtmlToText,
 } from "./attachment-text";
 
 // The readers that need no model (fork-owned add-on, docs/fork-task-
@@ -20,11 +23,60 @@ describe("plannerAttachmentReadKind", () => {
     expect(kind("quote.pdf", "application/octet-stream")).toBe("pdf");
     expect(kind("mail.eml", "application/octet-stream")).toBe("email");
     expect(kind("mail", "message/rfc822")).toBe("email");
+    expect(kind("page.html", "text/html")).toBe("html");
+    expect(kind("page.htm", "application/octet-stream")).toBe("html");
     expect(kind("notes.txt", "text/plain")).toBe("text");
     expect(kind("data.json", "application/octet-stream")).toBe("text");
     expect(kind("README.md", null)).toBe("text");
     expect(kind("archive.zip", "application/zip")).toBe("other");
     expect(kind("movie.mov", null)).toBe("other");
+  });
+});
+
+describe("plannerHtmlToText", () => {
+  it("keeps the title and the visible text, drops comments, styles, scripts and tags", () => {
+    const page = [
+      "<!doctype html>",
+      "<!-- P015 update for Esther. Local file only. -->",
+      '<html><head><meta charset="utf-8"><title>AI in the TO · 2 Nov 2026</title>',
+      "<style>:root{--bg:oklch(0.968 0.005 140)}</style></head>",
+      "<body><header><h1>Pilot snapshot</h1></header>",
+      "<script>window.x = 1;</script>",
+      "<p>Users <b>Emily</b>, Howard &amp; Toby</p>",
+      "<ul><li>Reads: 15 files</li><li>Skills: 3</li></ul>",
+      "<table><tr><th>Phase</th><th>Steps</th></tr><tr><td>1</td><td>4</td></tr></table>",
+      "<svg><path d='M0 0'/></svg><p>&#8594; next&nbsp;week</p>",
+      "</body></html>",
+    ].join("\n");
+    expect(plannerHtmlToText(page)).toBe(
+      [
+        "AI in the TO · 2 Nov 2026",
+        "Pilot snapshot",
+        "Users Emily, Howard & Toby",
+        "Reads: 15 files",
+        "Skills: 3",
+        "Phase · Steps",
+        "1 · 4",
+        "→ next week",
+      ].join("\n"),
+    );
+  });
+});
+
+describe("whole or summary", () => {
+  it("keeps text up to the cap whole and summarises beyond it, and heads the comment accordingly", () => {
+    expect(
+      plannerAttachmentNeedsSummary("x".repeat(plannerAttachmentReadMax)),
+    ).toBe(false);
+    expect(
+      plannerAttachmentNeedsSummary("x".repeat(plannerAttachmentReadMax + 1)),
+    ).toBe(true);
+    expect(plannerAttachmentCommentHeading("text", "notes.txt")).toBe(
+      "Text of notes.txt",
+    );
+    expect(plannerAttachmentCommentHeading("summary", "snapshot.html")).toBe(
+      "Summary of snapshot.html",
+    );
   });
 });
 
@@ -119,7 +171,7 @@ describe("plannerEmailToText", () => {
       "",
       "<html><style>p{}</style><body><p>One &amp; two</p><br><div>three</div></body></html>",
     ].join("\n");
-    expect(plannerEmailToText(html)).toBe("Subject: Hi\n\nOne & two\n\nthree");
+    expect(plannerEmailToText(html)).toBe("Subject: Hi\n\nOne & two\nthree");
     expect(plannerEmailToText("Subject: Empty\n\n")).toBe(
       "Subject: Empty\n\n(no text in the message)",
     );

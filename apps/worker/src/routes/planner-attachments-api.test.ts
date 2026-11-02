@@ -335,9 +335,10 @@ describe("planner attachments API", () => {
       state: "open",
       why: "Read from notes.txt",
       change: {
-        body: "Call the broker on Tuesday.",
+        body: "Text of notes.txt\n\nCall the broker on Tuesday.",
         attachment_id: text.attachment.id,
         filename: "notes.txt",
+        form: "text",
       },
     });
     expect(text.attachment.action_id).toBe(text.attachment.proposal?.id);
@@ -355,7 +356,7 @@ describe("planner attachments API", () => {
     );
     expect(email.attachment.read_state).toBe("read");
     expect(email.attachment.proposal?.change.body).toBe(
-      "From: Insurer <quotes@example.com>\nSubject: Your renewal\n\nEUR 212 a year.",
+      "Text of renewal.eml\n\nFrom: Insurer <quotes@example.com>\nSubject: Your renewal\n\nEUR 212 a year.",
     );
     expect(sent).toHaveLength(0);
 
@@ -375,7 +376,7 @@ describe("planner attachments API", () => {
     expect(accepted.action.state).toBe("accepted");
     const after = await detailOf(task.id);
     expect(after.comments.map((c) => c.body)).toEqual([
-      "Call the broker on Tuesday.",
+      "Text of notes.txt\n\nCall the broker on Tuesday.",
     ]);
     expect(accepted.action.landed_id).toBe(after.comments[0]?.id);
     expect(after.attachments[0]?.proposal?.state).toBe("accepted");
@@ -398,7 +399,9 @@ describe("planner attachments API", () => {
       201,
     );
     expect(attachment.read_state).toBe("read");
-    expect(attachment.proposal?.change.body).toBe("Renewal: EUR 212 a year.");
+    expect(attachment.proposal?.change.body).toBe(
+      "Text of quote.png\n\nRenewal: EUR 212 a year.",
+    );
     expect(sent).toHaveLength(1);
     expect(sent[0]?.headers.get("x-api-key")).toBe("test-anthropic-key");
     expect(sent[0]?.headers.get("anthropic-version")).toBe("2023-06-01");
@@ -417,12 +420,12 @@ describe("planner attachments API", () => {
                 data: btoa(String.fromCharCode(...png)),
               },
             },
-            { type: "text", text: "Transcribe this file." },
+            { type: "text", text: "Read this file." },
           ],
         },
       ],
     });
-    expect(String(sent[0]?.body.system)).toContain("transcribe");
+    expect(String(sent[0]?.body.system)).toContain("read one file");
 
     // A PDF goes as a document, under the model from the env when one is set.
     ctx.current = {
@@ -485,7 +488,9 @@ describe("planner attachments API", () => {
       sendJson("POST", `${API}/attachments/${attachment.id}/read`),
     );
     expect(again.attachment.read_state).toBe("read");
-    expect(again.attachment.proposal?.change.body).toBe("Second time.");
+    expect(again.attachment.proposal?.change.body).toBe(
+      "Text of shot.png\n\nSecond time.",
+    );
     expect(sent).toHaveLength(2);
 
     // Read again on a read file puts the earlier card away: one card a file.
@@ -595,5 +600,65 @@ describe("planner attachments API", () => {
       sendJson("POST", `${API}/attachments/${attachment.id}/read`),
     );
     expect(again.attachment.read_state).toBe("capped");
+  });
+
+  it("strips a web page to what a reader sees, and summarises a long document instead of cutting it", async () => {
+    withReads();
+    const sent = stubAnthropic(() =>
+      Response.json({
+        content: [
+          {
+            type: "text",
+            text: "Summary\nA pilot snapshot for Esther, dated 2 Nov 2026.\n- Two coaches in pilot: Portfolio Coach and PMO Coach.",
+          },
+        ],
+      }),
+    );
+    const task = await createTask("Prepare the snapshot for Esther");
+
+    // A short page: its visible text, whole, without Claude.
+    const page = [
+      "<!doctype html><!-- build notes, not for the reader -->",
+      "<html><head><title>AI in the TO</title><style>p{color:red}</style></head>",
+      "<body><h1>Pilot snapshot</h1><script>alert(1)</script>",
+      "<p>Users: Emily &amp; Howard</p><table><tr><td>Reads</td><td>5 files</td></tr></table>",
+      "</body></html>",
+    ].join("");
+    const short = await body<PlannerAttachmentResponse>(
+      upload(task.id, "short.html", page, "text/html"),
+      201,
+    );
+    expect(short.attachment.read_state).toBe("read");
+    expect(short.attachment.proposal?.change.body).toBe(
+      "Text of short.html\n\nAI in the TO\nPilot snapshot\nUsers: Emily & Howard\nReads · 5 files",
+    );
+    expect(sent).toHaveLength(0);
+
+    // A long page: Claude gets the visible text only, and a summary comes back.
+    const lines = Array.from(
+      { length: 400 },
+      (_, n) =>
+        `<p>Step ${n + 1}: a line of the process map with its owner.</p>`,
+    ).join("");
+    const long = await body<PlannerAttachmentResponse>(
+      upload(
+        task.id,
+        "snapshot.html",
+        `<html><head><style>.x{}</style></head><body>${lines}</body></html>`,
+        "text/html",
+      ),
+      201,
+    );
+    expect(long.attachment.read_state).toBe("read");
+    expect(long.attachment.proposal?.change).toMatchObject({
+      form: "summary",
+      body: "Summary of snapshot.html\n\nA pilot snapshot for Esther, dated 2 Nov 2026.\n- Two coaches in pilot: Portfolio Coach and PMO Coach.",
+    });
+    expect(sent).toHaveLength(1);
+    const prompt = JSON.stringify(sent[0]?.body);
+    expect(prompt).toContain("Step 400: a line of the process map");
+    expect(prompt).not.toContain("<p>");
+    expect(prompt).not.toContain(".x{}");
+    expect(String(sent[0]?.body.system)).toContain("summarise one document");
   });
 });
