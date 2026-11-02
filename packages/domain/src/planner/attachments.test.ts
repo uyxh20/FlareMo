@@ -1,7 +1,9 @@
 import {
   plannerAttachmentMaxBytes,
+  plannerAttachmentReadsPerMonth,
   plannerAttachmentsPerTask,
 } from "@flaremo/contracts";
+import { plannerTaskAttachment } from "@flaremo/db/src/schema/planner";
 import {
   afterAll,
   afterEach,
@@ -14,16 +16,24 @@ import {
 } from "vitest";
 import { DomainError, NotFoundError, ValidationError } from "../errors";
 import { createTask, type TaskActor } from "../tasks";
+import { plannerAgentAcceptAction } from "./agent-apply";
+import { plannerAgentAddAction } from "./agent-store";
+import { plannerAgentCallTool } from "./agent-tools";
 import {
   plannerAddAttachment,
   plannerAssertAttachmentSize,
   plannerAttachmentPath,
+  plannerAttachmentReadsThisMonth,
   plannerAttachmentsToPurge,
+  plannerClaimAttachmentRead,
   plannerFinishAttachmentPurge,
   plannerListAttachments,
   plannerLoadAttachment,
   plannerNormalizeAttachmentName,
   plannerRemoveAttachment,
+  plannerSetAttachmentReadState,
+  plannerSetTaskFilesRead,
+  plannerTaskFilesRead,
 } from "./attachments";
 import { plannerReadTaskDetail } from "./task-detail";
 import {
@@ -147,6 +157,7 @@ describe("planner task attachments", () => {
         size: 1234,
         read_state: "stored",
         action_id: null,
+        proposal: null,
         created_at: NOW.toISOString(),
         url: `/api/app/planner/tasks/${task.id.replace(/^tasks\//, "")}/attachments/${file.id}/insurance-quote.pdf`,
       });
@@ -337,6 +348,220 @@ describe("planner task attachments", () => {
           taskId: task.id,
         }),
       ).toEqual([kept]);
+    });
+  });
+
+  // ===========================================================================
+
+  describe("reading on drop (phase 2)", () => {
+    const claim = (attachmentId: string, force = false) =>
+      plannerClaimAttachmentRead(rt.db, {
+        userId: rt.user.id,
+        attachmentId,
+        force,
+        now: NOW,
+      });
+    const state = async (attachmentId: string) =>
+      (
+        await plannerLoadAttachment(rt.db, {
+          userId: rt.user.id,
+          attachmentId,
+        })
+      ).readState;
+
+    it("reads a task's files by default; the switch keeps them stored only, until it is turned back", async () => {
+      const task = await newTask();
+      expect(
+        await plannerTaskFilesRead(rt.db, {
+          userId: rt.user.id,
+          taskId: task.id,
+        }),
+      ).toBe(true);
+      const file = await add(task.id, "a.txt");
+      expect(await claim(file.id)).toMatchObject({
+        id: file.id,
+        readState: "pending",
+      });
+      expect(await state(file.id)).toBe("pending");
+      // Already being read: nothing to claim.
+      expect(await claim(file.id)).toBeNull();
+
+      await plannerSetTaskFilesRead(rt.db, {
+        userId: rt.user.id,
+        taskId: task.id,
+        filesRead: false,
+        now: NOW,
+      });
+      expect(
+        await plannerTaskFilesRead(rt.db, {
+          userId: rt.user.id,
+          taskId: task.id,
+        }),
+      ).toBe(false);
+      const detail = await plannerReadTaskDetail(rt.db, {
+        userId: rt.user.id,
+        taskId: task.id,
+      });
+      expect(detail.files_read).toBe(false);
+      // No History line for the switch.
+      expect(
+        (await plannerTestEvents(rt.database, task.id)).map((e) => e.type),
+      ).not.toContain("updated");
+
+      const second = await add(task.id, "b.txt");
+      expect(await claim(second.id)).toBeNull();
+      expect(await state(second.id)).toBe("skipped");
+      // "Read again" on a store-only task still reads: the owner asked.
+      expect(await claim(second.id, true)).toMatchObject({
+        readState: "pending",
+      });
+
+      await plannerSetTaskFilesRead(rt.db, {
+        userId: rt.user.id,
+        taskId: task.id,
+        filesRead: true,
+      });
+      expect(
+        await plannerTaskFilesRead(rt.db, {
+          userId: rt.user.id,
+          taskId: task.id,
+        }),
+      ).toBe(true);
+      // Another member's task: not found.
+      await expect(
+        plannerSetTaskFilesRead(rt.db, {
+          userId: rt.other.id,
+          taskId: task.id,
+          filesRead: false,
+        }),
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it("counts the month's reads over every task and stops at the cap, which 'Read again' respects too", async () => {
+      const task = await newTask();
+      const file = await add(task.id, "a.txt");
+      expect(
+        await plannerAttachmentReadsThisMonth(rt.db, {
+          userId: rt.user.id,
+          now: NOW,
+        }),
+      ).toBe(0);
+      // Rows on other tasks, read this month and last month, and one stored.
+      const other = await newTask("Other");
+      const rows = Array.from(
+        { length: plannerAttachmentReadsPerMonth },
+        (_, n) => ({
+          id: `read-${n}`,
+          userId: rt.user.id,
+          taskId: other.id,
+          filename: `r${n}.txt`,
+          contentType: "text/plain",
+          size: 10,
+          r2Key: `planner/${rt.user.id}/x/r${n}.txt`,
+          etag: "e",
+          readState: (n % 2 ? "read" : "failed") as "read" | "failed",
+          actionId: null,
+          createdAt: "2026-11-01T12:00:00.000Z",
+          removedAt: null,
+        }),
+      );
+      for (let i = 0; i < rows.length; i += 8) {
+        await rt.db.insert(plannerTaskAttachment).values(rows.slice(i, i + 8));
+      }
+      const base = rows[0];
+      if (!base) throw new Error("no rows");
+      await rt.db.insert(plannerTaskAttachment).values([
+        { ...base, id: "last-month", createdAt: "2026-10-31T22:00:00.000Z" },
+        { ...base, id: "stored", readState: "stored" },
+        { ...base, id: "theirs", userId: rt.other.id },
+      ]);
+      expect(
+        await plannerAttachmentReadsThisMonth(rt.db, {
+          userId: rt.user.id,
+          now: NOW,
+        }),
+      ).toBe(plannerAttachmentReadsPerMonth);
+
+      expect(await claim(file.id)).toBeNull();
+      expect(await state(file.id)).toBe("capped");
+      expect(await claim(file.id, true)).toBeNull();
+      // Next month the file reads.
+      const december = new Date("2026-12-01T12:00:00.000Z");
+      expect(
+        await plannerClaimAttachmentRead(rt.db, {
+          userId: rt.user.id,
+          attachmentId: file.id,
+          now: december,
+        }),
+      ).toMatchObject({ readState: "pending" });
+    });
+
+    it("an accepted comment proposal writes the comment; the detail and read_task show the file's state", async () => {
+      const task = await newTask("Renew the insurance");
+      const file = await add(task.id, "quote.eml");
+      const action = await plannerAgentAddAction(rt.db, {
+        userId: rt.user.id,
+        runId: null,
+        conversationId: null,
+        kind: "comment_new",
+        taskId: task.id,
+        field: null,
+        change: {
+          body: "From: Insurer\n\nEUR 212 a year.",
+          attachment_id: file.id,
+          filename: "quote.eml",
+        },
+        why: "Read from quote.eml",
+        now: NOW,
+      });
+      await plannerSetAttachmentReadState(rt.db, {
+        userId: rt.user.id,
+        attachmentId: file.id,
+        state: "read",
+        actionId: action.id,
+      });
+      const before = await plannerReadTaskDetail(rt.db, {
+        userId: rt.user.id,
+        taskId: task.id,
+      });
+      expect(before.attachments[0]).toMatchObject({
+        read_state: "read",
+        action_id: action.id,
+        proposal: { id: action.id, kind: "comment_new", state: "open" },
+      });
+      expect(before.comments).toHaveLength(0);
+      const listed = await plannerAgentCallTool(
+        { db: rt.db, user: rt.user, now: NOW },
+        "read_task",
+        { task_id: task.id },
+      );
+      expect(listed).toContain("## Files (1)");
+      expect(listed).toContain("quote.eml");
+      expect(listed).toContain("waits as a proposed comment");
+
+      const accepted = await plannerAgentAcceptAction(rt.db, {
+        user: rt.user,
+        id: action.id,
+        today: "2026-11-02",
+        now: NOW,
+      });
+      expect(accepted.state).toBe("accepted");
+      const after = await plannerReadTaskDetail(rt.db, {
+        userId: rt.user.id,
+        taskId: task.id,
+      });
+      expect(after.comments.map((c) => c.body)).toEqual([
+        "From: Insurer\n\nEUR 212 a year.",
+      ]);
+      expect(accepted.landed_id).toBe(after.comments[0]?.id);
+      expect(after.attachments[0]?.proposal?.state).toBe("accepted");
+      expect(
+        await plannerAgentCallTool(
+          { db: rt.db, user: rt.user, now: NOW },
+          "read_task",
+          { task_id: task.id },
+        ),
+      ).toContain("its text is a comment above");
     });
   });
 });

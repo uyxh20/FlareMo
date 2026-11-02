@@ -150,6 +150,7 @@ async function show(comments: PlannerCommentDto[] = []) {
     project: null,
     comments,
     attachments: [],
+    files_read: true,
   };
   queryClient.setQueryData(plannerQueryKeys.detail(TASK_ID), detail);
   mounted = plannerTestMount(<Section />, { queryClient });

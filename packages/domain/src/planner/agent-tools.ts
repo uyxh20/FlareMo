@@ -90,6 +90,31 @@ function firstName(user: UserRow): string {
   return user.name.trim().split(/\s+/)[0] || "the owner";
 }
 
+/** A file's reading, in a few words, for the agent. */
+function fileState(file: {
+  read_state: string;
+  proposal: { state: string } | null;
+}): string {
+  switch (file.read_state) {
+    case "read":
+      return file.proposal?.state === "accepted"
+        ? "read; its text is a comment above"
+        : file.proposal?.state === "open"
+          ? "read; its text waits as a proposed comment the owner has not accepted"
+          : "read; the owner dismissed its text";
+    case "pending":
+      return "being read";
+    case "failed":
+      return "could not be read";
+    case "capped":
+      return "not read: the day's proposals were used up";
+    case "skipped":
+      return "stored only, by the owner's choice";
+    default:
+      return "stored, not read";
+  }
+}
+
 function local(at: string): string {
   const moment = healthLocalMoment(at);
   return `${moment.day} ${String(moment.hour).padStart(2, "0")}:${String(moment.minute).padStart(2, "0")}`;
@@ -653,6 +678,16 @@ const handlers: Handlers = {
       ...(detail.comments.length
         ? detail.comments.map(
             (comment) => `- ${local(comment.created_at)}: ${comment.body}`,
+          )
+        : ["(none)"]),
+      "",
+      // The files on the task: their text, when read, is in the comments above
+      // (an accepted card) or waits as a card the owner has not accepted yet.
+      `## Files (${detail.attachments.length})`,
+      ...(detail.attachments.length
+        ? detail.attachments.map(
+            (file) =>
+              `- ${file.filename} (${file.content_type ?? "unknown type"}, ${file.size} bytes, added ${local(file.created_at)}): ${fileState(file)}`,
           )
         : ["(none)"]),
       "",

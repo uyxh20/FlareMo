@@ -85,6 +85,7 @@ const DETAIL: PlannerTaskDetailResponse = {
   project: { id: "projects/web", name: "Website relaunch" },
   comments: [],
   attachments: [],
+  files_read: true,
 };
 
 const EMPTY_BOARD: PlannerBoardResponse = {

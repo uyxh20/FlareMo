@@ -54,6 +54,7 @@ function detail(
     project: null,
     comments: [],
     attachments: [],
+    files_read: true,
     ...overrides,
   };
 }

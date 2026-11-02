@@ -549,7 +549,7 @@ export const plannerAgentAction = sqliteTable(
     runId: text("run_id"),
     conversationId: text("conversation_id"),
     kind: text("kind", {
-      enum: ["task_change", "task_new", "entry_new"],
+      enum: ["task_change", "task_new", "entry_new", "comment_new"],
     }).notNull(),
     // Upstream tasks.id by value, with no foreign key.
     taskId: text("task_id"),

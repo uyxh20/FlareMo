@@ -792,6 +792,7 @@ describe("planner API response schemas", () => {
       },
       comments: [COMMENT],
       attachments: [],
+      files_read: true,
     };
     expect(plannerTaskDetailResponseSchema.parse(detail)).toEqual(detail);
 
@@ -802,6 +803,7 @@ describe("planner API response schemas", () => {
       project: null,
       comments: [],
       attachments: [],
+      files_read: true,
     };
     expect(plannerTaskDetailResponseSchema.parse(bare)).toEqual(bare);
     for (const missing of [
@@ -810,6 +812,7 @@ describe("planner API response schemas", () => {
       "project",
       "comments",
       "attachments",
+      "files_read",
     ] as const) {
       const { [missing]: _removed, ...rest } = detail;
       expect(

@@ -1,19 +1,26 @@
 import {
+  healthLocalMoment,
+  type PlannerAgentActionDto,
   type PlannerAttachmentDto,
+  type PlannerAttachmentReadState,
   plannerAttachmentMaxBytes,
   plannerAttachmentNameMax,
+  plannerAttachmentReadsPerMonth,
   plannerAttachmentsPerTask,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { tasks } from "@flaremo/db";
 import {
   type PlannerTaskAttachmentRow,
+  plannerAgentAction,
   plannerTaskAttachment,
+  plannerTaskPlan,
 } from "@flaremo/db/src/schema/planner";
 import {
   and,
   asc,
   eq,
+  gte,
   inArray,
   isNull,
   lt,
@@ -21,10 +28,12 @@ import {
   sql,
 } from "drizzle-orm";
 import { DomainError, NotFoundError, ValidationError } from "../errors";
+import { plannerAgentActionToDto } from "./agent-store";
 import {
   type PlannerActor,
   plannerEventStatement,
   plannerLoadLiveTask,
+  plannerLoadPlan,
   plannerNormalizeTaskId,
   plannerNow,
   plannerRunBatch,
@@ -64,6 +73,7 @@ export function plannerAttachmentPath(row: {
 
 export function plannerAttachmentToDto(
   row: PlannerTaskAttachmentRow,
+  proposal: PlannerAgentActionDto | null = null,
 ): PlannerAttachmentDto {
   return {
     id: row.id,
@@ -73,9 +83,32 @@ export function plannerAttachmentToDto(
     size: row.size,
     read_state: row.readState,
     action_id: row.actionId,
+    proposal,
     created_at: row.createdAt,
     url: plannerAttachmentPath(row),
   };
+}
+
+/** The proposed comments the rows point at, by id, as cards. */
+async function proposalsFor(
+  db: FlareMoDb,
+  userId: string,
+  rows: readonly PlannerTaskAttachmentRow[],
+): Promise<Map<string, PlannerAgentActionDto>> {
+  const ids = rows.flatMap((row) => (row.actionId ? [row.actionId] : []));
+  if (ids.length === 0) return new Map();
+  const actions = await db
+    .select()
+    .from(plannerAgentAction)
+    .where(
+      and(
+        eq(plannerAgentAction.userId, userId),
+        inArray(plannerAgentAction.id, ids),
+      ),
+    );
+  return new Map(
+    actions.map((action) => [action.id, plannerAgentActionToDto(action)]),
+  );
 }
 
 /**
@@ -134,7 +167,168 @@ export async function plannerReadAttachments(
       ),
     )
     .orderBy(asc(plannerTaskAttachment.createdAt), asc(sql`rowid`));
-  return rows.map(plannerAttachmentToDto);
+  const proposals = await proposalsFor(db, input.userId, rows);
+  return rows.map((row) =>
+    plannerAttachmentToDto(
+      row,
+      row.actionId ? (proposals.get(row.actionId) ?? null) : null,
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reading on drop (phase 2): the task's switch, the read states, the caps
+// ---------------------------------------------------------------------------
+
+/** Whether files dropped on the task are read into proposed comments (the default). */
+export async function plannerTaskFilesRead(
+  db: FlareMoDb,
+  input: { userId: string; taskId: string },
+): Promise<boolean> {
+  const plan = await plannerLoadPlan(
+    db,
+    input.userId,
+    plannerNormalizeTaskId(input.taskId),
+  );
+  return plan?.filesRead !== 0;
+}
+
+/**
+ * The task's "Store only, don't read these files" switch, kept on its plan row
+ * (a row is made with no plan when the task has none). No History event: it is
+ * a setting about the files, not a change to the task.
+ */
+export async function plannerSetTaskFilesRead(
+  db: FlareMoDb,
+  input: { userId: string; taskId: string; filesRead: boolean; now?: Date },
+): Promise<boolean> {
+  const taskId = plannerNormalizeTaskId(input.taskId);
+  await plannerLoadLiveTask(db, input.userId, taskId);
+  const nowIso = plannerNow(input.now).toISOString();
+  const filesRead = input.filesRead ? 1 : 0;
+  await db
+    .insert(plannerTaskPlan)
+    .values({
+      taskId,
+      userId: input.userId,
+      horizon: null,
+      periodStart: null,
+      carryCount: 0,
+      droppedAt: null,
+      filesRead,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    })
+    .onConflictDoUpdate({
+      target: plannerTaskPlan.taskId,
+      set: { filesRead, updatedAt: nowIso },
+    });
+  return input.filesRead;
+}
+
+/** Moves a file's read state, and records the proposal it produced when there is one. */
+export async function plannerSetAttachmentReadState(
+  db: FlareMoDb,
+  input: {
+    userId: string;
+    attachmentId: string;
+    state: PlannerAttachmentReadState;
+    actionId?: string | null;
+  },
+): Promise<void> {
+  await db
+    .update(plannerTaskAttachment)
+    .set({
+      readState: input.state,
+      ...(input.actionId === undefined ? {} : { actionId: input.actionId }),
+    })
+    .where(
+      and(
+        eq(plannerTaskAttachment.id, input.attachmentId),
+        eq(plannerTaskAttachment.userId, input.userId),
+      ),
+    );
+}
+
+/** The first instant of the owner's local month `now` falls in. */
+function localMonthStart(now: Date): string {
+  return `${healthLocalMoment(now.toISOString()).day.slice(0, 7)}-01T00:00:00.000Z`;
+}
+
+/**
+ * How many reads were started this month, over every task: a read counts from
+ * the moment it starts (`pending`), whatever it came to, so retries count too.
+ * `stored` and `skipped` files were never sent anywhere and do not count.
+ */
+export async function plannerAttachmentReadsThisMonth(
+  db: FlareMoDb,
+  input: { userId: string; now?: Date },
+): Promise<number> {
+  const row = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(plannerTaskAttachment)
+    .where(
+      and(
+        eq(plannerTaskAttachment.userId, input.userId),
+        gte(
+          plannerTaskAttachment.createdAt,
+          localMonthStart(input.now ?? new Date()),
+        ),
+        notInArray(plannerTaskAttachment.readState, ["stored", "skipped"]),
+      ),
+    )
+    .get();
+  return Number(row?.count ?? 0);
+}
+
+/**
+ * Decides whether a file is read now, and claims the read. Returns the row to
+ * read with its state set to `pending`, or null with the reason recorded on the
+ * row: `skipped` when the task is set to store only (or `force` is not given
+ * for a file that was read before), `capped` when the month's reads are used
+ * up. A file that is not the caller's, or is removed, is a 404.
+ */
+export async function plannerClaimAttachmentRead(
+  db: FlareMoDb,
+  input: { userId: string; attachmentId: string; force?: boolean; now?: Date },
+): Promise<PlannerTaskAttachmentRow | null> {
+  const row = await plannerLoadAttachment(db, {
+    userId: input.userId,
+    attachmentId: input.attachmentId,
+  });
+  if (row.readState === "pending") return null;
+  if (!input.force) {
+    const read = await plannerTaskFilesRead(db, {
+      userId: input.userId,
+      taskId: row.taskId,
+    });
+    if (!read) {
+      await plannerSetAttachmentReadState(db, {
+        userId: input.userId,
+        attachmentId: row.id,
+        state: "skipped",
+      });
+      return null;
+    }
+  }
+  const used = await plannerAttachmentReadsThisMonth(db, {
+    userId: input.userId,
+    now: input.now,
+  });
+  if (used >= plannerAttachmentReadsPerMonth) {
+    await plannerSetAttachmentReadState(db, {
+      userId: input.userId,
+      attachmentId: row.id,
+      state: "capped",
+    });
+    return null;
+  }
+  await plannerSetAttachmentReadState(db, {
+    userId: input.userId,
+    attachmentId: row.id,
+    state: "pending",
+  });
+  return { ...row, readState: "pending" };
 }
 
 /** `plannerReadAttachments`, after checking the task is one of the caller's live tasks (404 otherwise). */

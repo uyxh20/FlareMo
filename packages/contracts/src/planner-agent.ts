@@ -475,6 +475,8 @@ export const plannerAgentActionKinds = [
   "task_change",
   "task_new",
   "entry_new",
+  // A comment on a task, read from a file put on it (docs/fork-task-attachments.md).
+  "comment_new",
 ] as const;
 export const plannerAgentActionStates = [
   "open",
@@ -492,7 +494,7 @@ export const plannerAgentActionDtoSchema = z.object({
   task_id: z.string().nullable(),
   /** For a task change: which field. */
   field: z.enum(plannerAgentActionFields).nullable(),
-  /** The proposed value(s): `{ notes }`, `{ title, due_at, … }` or `{ content }`. */
+  /** The proposed value(s): `{ notes }`, `{ title, due_at, … }`, `{ content }` or `{ body, attachment_id }`. */
   change: z.record(z.string(), z.unknown()),
   why: z.string(),
   state: z.enum(plannerAgentActionStates),

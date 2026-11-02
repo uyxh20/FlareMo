@@ -131,6 +131,7 @@ describe("the task panel's requests", () => {
       plan: null,
       comments: [],
       attachments: [],
+      files_read: true,
     });
     await plannerFetchTaskDetail("tasks/3370e0a0-7d71");
     await plannerFetchTaskDetail("abc 1/2");

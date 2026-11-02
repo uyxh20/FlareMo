@@ -54,6 +54,7 @@ const en = {
     change: (field: string) => `Proposed ${field}`,
     newTask: "Proposed task",
     entry: "Proposed diary entry",
+    comment: "Proposed comment",
     accept: "Accept",
     dismiss: "Dismiss",
     accepted: "Accepted",
@@ -95,6 +96,7 @@ const zhCN: PlannerAskCopy = {
     change: (field: string) => `提议的${field}`,
     newTask: "提议的任务",
     entry: "提议的日记",
+    comment: "提议的评论",
     accept: "接受",
     dismiss: "忽略",
     accepted: "已接受",
@@ -134,8 +136,12 @@ export type PlannerAskChatState = {
 const asString = (value: unknown): string | null =>
   typeof value === "string" ? value : null;
 
-/** One proposed action, as a card: what it would change, why, and the verdict. */
-function ProposalCard({
+/**
+ * One proposed action, as a card: what it would change, why, and the verdict.
+ * Also used under a task's files for the comment read from one
+ * (task-panel-attachments.tsx).
+ */
+export function PlannerProposalCard({
   action,
   task,
   today,
@@ -196,7 +202,9 @@ function ProposalCard({
       ? copy.proposal.change(fieldName)
       : action.kind === "task_new"
         ? copy.proposal.newTask
-        : copy.proposal.entry;
+        : action.kind === "comment_new"
+          ? copy.proposal.comment
+          : copy.proposal.entry;
 
   /** A field's proposed value as a short line, or as rendered notes. */
   const value = (field: string, raw: unknown) => {
@@ -297,6 +305,11 @@ function ProposalCard({
             markdown={asString(change.content) ?? ""}
           />
         </div>
+      )}
+      {action.kind === "comment_new" && (
+        <p className="max-h-72 overflow-y-auto leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {asString(change.body) ?? ""}
+        </p>
       )}
       {action.why && (
         <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
@@ -457,7 +470,7 @@ export function PlannerAskChat({
           ),
         )}
         {actions.map((action) => (
-          <ProposalCard
+          <PlannerProposalCard
             action={action}
             copy={copy}
             key={action.id}

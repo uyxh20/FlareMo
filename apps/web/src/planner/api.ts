@@ -1,6 +1,7 @@
 import {
   type PlannerAttachmentDto,
   type PlannerAttachmentResponse,
+  type PlannerAttachmentSettingsResponse,
   type PlannerBoardResponse,
   type PlannerCommentResponse,
   type PlannerCreateTaskInput,
@@ -156,6 +157,25 @@ export function plannerDeleteAttachmentRequest(attachmentId: string) {
   return apiRequest<PlannerDeleteAttachmentResponse>(
     `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}`,
     { method: "DELETE" },
+  );
+}
+
+/** Reads a file into a proposed comment once more; 409 while a read is under way. */
+export function plannerReadAttachmentRequest(attachmentId: string) {
+  return apiRequest<PlannerAttachmentResponse>(
+    `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}/read`,
+    { method: "POST" },
+  );
+}
+
+/** The task's "Store only, don't read these files" switch, as `files_read`. */
+export function plannerSetAttachmentSettingsRequest(
+  taskId: string,
+  filesRead: boolean,
+) {
+  return apiRequest<PlannerAttachmentSettingsResponse>(
+    `${PLANNER_API}/tasks/${taskSegment(taskId)}/attachments/settings`,
+    { method: "PATCH", body: JSON.stringify({ files_read: filesRead }) },
   );
 }
 

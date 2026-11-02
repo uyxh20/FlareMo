@@ -14,6 +14,7 @@
 // Every export is prefixed planner/Planner.
 
 import { z } from "zod";
+import { plannerAgentActionDtoSchema } from "./planner-agent";
 import { plannerColumns } from "./planner-board";
 import { plannerCockpitWeekSchema } from "./planner-goals";
 import { plannerHorizons, plannerIsValidDayKey } from "./planner-periods";
@@ -60,6 +61,8 @@ export * from "./planner-review-memo";
 //   POST   /tasks/:id/attachments                  201 PlannerAttachmentResponse (raw file body)
 //   GET    /tasks/:id/attachments/:aid/:filename   the file itself
 //   DELETE /attachments/:id                        PlannerDeleteAttachmentResponse
+//   POST   /attachments/:id/read                   PlannerAttachmentResponse (read it again)
+//   PATCH  /tasks/:id/attachments/settings         PlannerAttachmentSettingsResponse
 //   GET    /history?from&to                        PlannerHistoryRangeResponse
 //
 // `today` is the client's local date. The server accepts it only within one day
@@ -147,6 +150,10 @@ export const plannerAttachmentMaxBytes = 10 * 1024 * 1024;
 export const plannerAttachmentsPerTask = 10;
 /** The longest file name kept, in characters; longer names are cut. */
 export const plannerAttachmentNameMax = 200;
+/** How many files a month are read into proposed comments, over every task. */
+export const plannerAttachmentReadsPerMonth = 200;
+/** The longest comment one read produces; longer text is cut, never split. */
+export const plannerAttachmentReadMax = 5000;
 /** The header the upload carries the file name in, percent-encoded. */
 export const plannerAttachmentNameHeader = "x-planner-filename";
 
@@ -503,9 +510,20 @@ export const plannerAttachmentDtoSchema = z.object({
   read_state: plannerAttachmentReadStateSchema,
   // The proposed comment this file was read into, or null.
   action_id: z.string().nullable(),
+  // That proposal as the card shows it, when there is one.
+  proposal: plannerAgentActionDtoSchema.nullable(),
   created_at: z.string(),
   // Same-origin path of the file itself.
   url: z.string(),
+});
+
+/** The task's "Store only, don't read these files" switch, as `files_read: false`. */
+export const plannerAttachmentSettingsSchema = z.strictObject({
+  files_read: z.boolean(),
+});
+
+export const plannerAttachmentSettingsResponseSchema = z.object({
+  files_read: z.boolean(),
 });
 
 /** The goal a task belongs to. */
@@ -530,6 +548,8 @@ export const plannerTaskDetailResponseSchema = z.object({
   comments: z.array(plannerCommentDtoSchema),
   // Oldest first, without the removed ones.
   attachments: z.array(plannerAttachmentDtoSchema),
+  // False when the task is set to store files without reading them.
+  files_read: z.boolean(),
 });
 
 export const plannerAttachmentListResponseSchema = z.object({
@@ -617,6 +637,12 @@ export type PlannerAttachmentResponse = z.infer<
 >;
 export type PlannerDeleteAttachmentResponse = z.infer<
   typeof plannerDeleteAttachmentResponseSchema
+>;
+export type PlannerAttachmentSettingsInput = z.input<
+  typeof plannerAttachmentSettingsSchema
+>;
+export type PlannerAttachmentSettingsResponse = z.infer<
+  typeof plannerAttachmentSettingsResponseSchema
 >;
 export type PlannerTaskProject = z.infer<typeof plannerTaskProjectSchema>;
 export type PlannerTaskDetailResponse = z.infer<

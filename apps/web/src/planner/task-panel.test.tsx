@@ -97,6 +97,7 @@ const DETAIL: PlannerTaskDetailResponse = {
   },
   comments: [],
   attachments: [],
+  files_read: true,
 };
 
 /** A task with nothing set: no plan, due date, priority, goal or estimate. */
@@ -112,6 +113,7 @@ const BARE: PlannerTaskDetailResponse = {
   project: null,
   comments: [],
   attachments: [],
+  files_read: true,
 };
 
 /** What the agent routes answer where the agent is not set up. */

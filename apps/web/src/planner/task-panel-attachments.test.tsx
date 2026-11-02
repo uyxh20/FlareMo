@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type {
+  PlannerAgentActionDto,
   PlannerAttachmentDto,
   PlannerTaskDetailResponse,
   TaskDto,
@@ -11,8 +12,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/api/client";
 import {
   plannerDeleteAttachmentRequest,
+  plannerReadAttachmentRequest,
+  plannerSetAttachmentSettingsRequest,
   plannerUploadAttachmentRequest,
 } from "./api";
+import { plannerSettleActionRequest } from "./ask-api";
 import { plannerQueryKeys } from "./query-keys";
 import {
   PlannerTaskAttachments,
@@ -25,9 +29,10 @@ import {
 } from "./test-render";
 
 // The task panel's files (fork-owned add-on, docs/fork-task-attachments.md):
-// the list, choosing a file, the limits checked before upload, and removal
-// after a confirmation. The network and the toasts are replaced; the list lives
-// in the real query cache, as it does in the panel.
+// the list, choosing a file, the limits checked before upload, removal after a
+// confirmation, and (phase 2) each file's reading state, the proposed comment
+// under it, "Read again" and the task's Store-only switch. The network and the
+// toasts are replaced; the list lives in the real query cache, as in the panel.
 
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -36,10 +41,19 @@ vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
   plannerUploadAttachmentRequest: vi.fn(),
   plannerDeleteAttachmentRequest: vi.fn(),
+  plannerReadAttachmentRequest: vi.fn(),
+  plannerSetAttachmentSettingsRequest: vi.fn(),
+}));
+vi.mock("./ask-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ask-api")>()),
+  plannerSettleActionRequest: vi.fn(),
 }));
 
 const upload = vi.mocked(plannerUploadAttachmentRequest);
 const remove = vi.mocked(plannerDeleteAttachmentRequest);
+const read = vi.mocked(plannerReadAttachmentRequest);
+const settings = vi.mocked(plannerSetAttachmentSettingsRequest);
+const settleAction = vi.mocked(plannerSettleActionRequest);
 
 const TASK_ID = "tasks/t1";
 
@@ -72,6 +86,7 @@ function file(
     size: 1_258_291,
     read_state: "stored",
     action_id: null,
+    proposal: null,
     created_at: "2026-11-01T09:00:00.000Z",
     url: `/api/app/planner/tasks/t1/attachments/${id}/${encodeURIComponent(filename)}`,
     ...overrides,
@@ -83,6 +98,26 @@ const SHOT = file("a-2", "screenshot.png", {
   content_type: "image/png",
   size: 2_200_000,
 });
+
+function proposal(
+  state: PlannerAgentActionDto["state"] = "open",
+): PlannerAgentActionDto {
+  return {
+    id: "act-1",
+    kind: "comment_new",
+    task_id: TASK_ID,
+    field: null,
+    change: {
+      body: "Quote: EUR 212 a year, cover from 1 January.",
+      attachment_id: "a-1",
+      filename: "insurance-quote-2025.pdf",
+    },
+    why: "Read from insurance-quote-2025.pdf",
+    state,
+    landed_id: state === "accepted" ? "cmt-1" : null,
+    created_at: "2026-11-01T09:01:00.000Z",
+  };
+}
 
 let mounted: PlannerTestMount | undefined;
 let queryClient: QueryClient;
@@ -119,17 +154,30 @@ function Section() {
     staleTime: Number.POSITIVE_INFINITY,
   });
   return data ? (
-    <PlannerTaskAttachments attachments={data.attachments} taskId={TASK_ID} />
+    <PlannerTaskAttachments
+      attachments={data.attachments}
+      filesRead={data.files_read}
+      readsEnabled={readsEnabled}
+      taskId={TASK_ID}
+      today="2026-11-02"
+    />
   ) : null;
 }
 
-async function show(attachments: PlannerAttachmentDto[] = []) {
+let readsEnabled = true;
+
+async function show(
+  attachments: PlannerAttachmentDto[] = [],
+  options: { filesRead?: boolean; readsEnabled?: boolean } = {},
+) {
+  readsEnabled = options.readsEnabled ?? true;
   const detail: PlannerTaskDetailResponse = {
     task: TASK,
     plan: null,
     project: null,
     comments: [],
     attachments,
+    files_read: options.filesRead ?? true,
   };
   queryClient.setQueryData(plannerQueryKeys.detail(TASK_ID), detail);
   mounted = plannerTestMount(<Section />, { queryClient });
@@ -191,6 +239,7 @@ describe("PlannerTaskAttachments", () => {
     expect(rows[0]?.textContent).toContain("insurance-quote-2025.pdf");
     expect(rows[0]?.textContent).toContain("PDF · 1.2 MB · stored");
     expect(rows[0]?.querySelector("img")).toBeNull();
+    expect(rows[0]?.textContent).toContain("Read");
     expect(rows[1]?.querySelector("img")?.getAttribute("src")).toBe(SHOT.url);
     expect(container.querySelector("h3")?.textContent).toContain("2 of 10");
     expect(
@@ -292,5 +341,157 @@ describe("PlannerTaskAttachments", () => {
     );
     await settle();
     expect(toast.error).toHaveBeenCalledWith("Not found", expect.anything());
+  });
+
+  it("says each file's reading state in plain words, and shows the proposed comment under a read file", async () => {
+    const container = await show([
+      file("p", "p.pdf", { read_state: "pending" }),
+      file("r", "r.pdf", {
+        read_state: "read",
+        action_id: "act-1",
+        proposal: proposal("open"),
+      }),
+      file("a", "a.pdf", {
+        read_state: "read",
+        action_id: "act-1",
+        proposal: proposal("accepted"),
+      }),
+      file("f", "f.bin", { read_state: "failed" }),
+      file("c", "c.pdf", { read_state: "capped" }),
+      file("s", "s.pdf", { read_state: "skipped" }),
+    ]);
+    const text = items(container).map((row) => row.textContent ?? "");
+    expect(text[0]).toContain("reading…");
+    expect(text[0]).not.toContain("Read again");
+    expect(text[1]).toContain("comment proposed");
+    expect(text[1]).toContain("Proposed comment");
+    expect(text[1]).toContain("Quote: EUR 212 a year");
+    expect(text[1]).toContain("Accept");
+    expect(text[1]).not.toContain("Read again");
+    expect(text[2]).toContain("comment added");
+    expect(text[3]).toContain("not read: unreadable");
+    expect(text[3]).toContain("Read again");
+    expect(text[4]).toContain("not read: cap reached");
+    expect(text[5]).toContain("stored only");
+    expect(
+      container.querySelectorAll('[data-testid="planner-proposal"]'),
+    ).toHaveLength(2);
+    expect(
+      container.querySelector('[data-testid="planner-attachments-store-only"]'),
+    ).not.toBeNull();
+  });
+
+  it("offers neither reading nor the switch when this deployment cannot read files", async () => {
+    const container = await show([QUOTE], { readsEnabled: false });
+    expect(container.textContent).not.toContain("Read");
+    expect(
+      container.querySelector('[data-testid="planner-attachments-store-only"]'),
+    ).toBeNull();
+  });
+
+  it("asks for a read again, shows the file reading meanwhile, and takes the server's answer", async () => {
+    const failed = file("f", "f.pdf", { read_state: "failed" });
+    const container = await show([failed]);
+    let answer: (value: { attachment: PlannerAttachmentDto }) => void =
+      () => {};
+    read.mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+
+    plannerTestClick(
+      Array.from(items(container)[0]?.querySelectorAll("button") ?? []).find(
+        (button) => button.textContent === "Read again",
+      ),
+    );
+    await settle(1);
+    expect(read).toHaveBeenCalledWith("f");
+    expect(items(container)[0]?.dataset.state).toBe("pending");
+    expect(items(container)[0]?.textContent).toContain("reading…");
+
+    answer({ attachment: { ...failed, read_state: "pending" } });
+    await settle();
+    expect(cached()[0]?.read_state).toBe("pending");
+
+    // A refusal puts the file back as it was and says why.
+    read.mockRejectedValueOnce(new ApiError("This file is being read.", 409));
+    queryClient.setQueryData<PlannerTaskDetailResponse>(
+      plannerQueryKeys.detail(TASK_ID),
+      (detail) => (detail ? { ...detail, attachments: [failed] } : detail),
+    );
+    await settle(1);
+    plannerTestClick(
+      Array.from(items(container)[0]?.querySelectorAll("button") ?? []).find(
+        (button) => button.textContent === "Read again",
+      ),
+    );
+    await settle();
+    expect(cached()[0]?.read_state).toBe("failed");
+    expect(toast.error).toHaveBeenCalledWith(
+      "This file is being read.",
+      expect.anything(),
+    );
+  });
+
+  it("accepting the card under a file marks the comment as added", async () => {
+    const container = await show([
+      file("r", "r.pdf", {
+        read_state: "read",
+        action_id: "act-1",
+        proposal: proposal("open"),
+      }),
+    ]);
+    settleAction.mockResolvedValueOnce({ action: proposal("accepted") });
+
+    plannerTestClick(
+      Array.from(container.querySelectorAll("button")).find(
+        (button) => button.textContent === "Accept",
+      ),
+    );
+    await settle();
+
+    expect(settleAction).toHaveBeenCalledWith("act-1", {
+      state: "accepted",
+      today: "2026-11-02",
+    });
+    expect(cached()[0]?.proposal?.state).toBe("accepted");
+    expect(items(container)[0]?.textContent).toContain("comment added");
+  });
+
+  it("the Store-only switch keeps the task's files unread, and goes back when the server refuses", async () => {
+    const container = await show([QUOTE]);
+    settings.mockResolvedValueOnce({ files_read: false });
+    const toggle = () =>
+      plannerTestClick(
+        container.querySelector(
+          '[data-testid="planner-attachments-store-only"]',
+        ),
+      );
+
+    toggle();
+    await settle();
+    expect(settings).toHaveBeenCalledWith(TASK_ID, false);
+    expect(
+      queryClient.getQueryData<PlannerTaskDetailResponse>(
+        plannerQueryKeys.detail(TASK_ID),
+      )?.files_read,
+    ).toBe(false);
+    expect(
+      container
+        .querySelector('[data-testid="planner-attachments-store-only"]')
+        ?.getAttribute("aria-checked"),
+    ).toBe("true");
+
+    settings.mockRejectedValueOnce(new ApiError("Too many requests", 429));
+    toggle();
+    await settle();
+    expect(settings).toHaveBeenLastCalledWith(TASK_ID, true);
+    expect(
+      queryClient.getQueryData<PlannerTaskDetailResponse>(
+        plannerQueryKeys.detail(TASK_ID),
+      )?.files_read,
+    ).toBe(false);
+    expect(toast.error).toHaveBeenCalled();
   });
 });

@@ -17,6 +17,7 @@ import {
   plannerAgentSettleAction,
 } from "./agent-store";
 import type { PlannerColumn } from "./columns";
+import { plannerAddComment } from "./comments";
 import type { PlannerActor } from "./shared";
 import { plannerAddTask, plannerChangeTask } from "./task-change";
 import { plannerReadTaskDetail } from "./task-detail";
@@ -159,6 +160,21 @@ export async function plannerAgentAcceptAction(
           today: input.today,
         });
         landedId = created.task.id;
+        break;
+      }
+      case "comment_new": {
+        // A comment read from a file on the task (docs/fork-task-attachments.md).
+        const body = asString(row.change.body)?.trim();
+        if (!row.taskId || !body) {
+          throw new ValidationError("This proposal has no text.");
+        }
+        const comment = await plannerAddComment(db, {
+          user,
+          actor,
+          taskId: row.taskId,
+          body,
+        });
+        landedId = comment.id;
         break;
       }
       case "entry_new": {

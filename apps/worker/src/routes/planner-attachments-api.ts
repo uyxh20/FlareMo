@@ -1,9 +1,11 @@
 import {
   type PlannerAttachmentListResponse,
   type PlannerAttachmentResponse,
+  type PlannerAttachmentSettingsResponse,
   type PlannerDeleteAttachmentResponse,
   plannerAttachmentMaxBytes,
   plannerAttachmentNameHeader,
+  plannerAttachmentSettingsSchema,
 } from "@flaremo/contracts";
 import {
   assertAttachmentStorageQuota,
@@ -13,13 +15,22 @@ import {
 import {
   plannerAddAttachment,
   plannerAssertAttachmentAllowed,
+  plannerClaimAttachmentRead,
   plannerListAttachments,
   plannerLoadAttachment,
   plannerNormalizeAttachmentName,
+  plannerReadAttachments,
   plannerRemoveAttachment,
+  plannerSetTaskFilesRead,
 } from "@flaremo/domain/src/planner";
+import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { getRequestContext, type HonoBindings } from "../context";
+import {
+  forkAfterResponse,
+  forkAttachmentReadsEnabled,
+  forkReadAttachment,
+} from "../fork/attachment-read";
 import { forkTaskAttachmentResponse } from "../fork/task-attachments";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
@@ -37,6 +48,11 @@ import { plannerResolveActor } from "./planner-route-helpers";
 // the row fails the object is deleted again, so the bucket never holds a file
 // no task knows. The bytes are served back from the same place, behind the
 // same login, with upstream's range and ETag handling.
+//
+// Once stored, a file is read into a proposed comment (fork/attachment-read.ts)
+// unless the task is set to store only; the read runs after the response and
+// the panel asks again while the file is `pending`. "Read again" claims a new
+// read; the settings route keeps the task's switch.
 
 export const plannerAttachmentsApi = new Hono<HonoBindings>();
 
@@ -103,7 +119,7 @@ plannerAttachmentsApi.post("/tasks/:id/attachments", async (c) => {
     const object = await c.env.ATTACHMENTS.put(objectKey, bytes, {
       httpMetadata: { contentType },
     });
-    const attachment = await plannerAddAttachment(context.db, {
+    let attachment = await plannerAddAttachment(context.db, {
       user: context.user,
       actor: await plannerResolveActor(c, context.credential),
       taskId,
@@ -114,6 +130,30 @@ plannerAttachmentsApi.post("/tasks/:id/attachments", async (c) => {
       etag: object.httpEtag,
     });
     objectKey = null;
+    if (forkAttachmentReadsEnabled(c.env)) {
+      const claimed = await plannerClaimAttachmentRead(context.db, {
+        userId: context.user.id,
+        attachmentId: attachment.id,
+      });
+      if (claimed) {
+        await forkAfterResponse(
+          c,
+          forkReadAttachment(c.env, context.db, {
+            user: context.user,
+            row: claimed,
+          }),
+        );
+      }
+      // The row as it stands now: `pending` while the read runs after the
+      // response, `skipped` or `capped` when it was not started.
+      attachment =
+        (
+          await plannerReadAttachments(context.db, {
+            userId: context.user.id,
+            taskId,
+          })
+        ).find((entry) => entry.id === attachment.id) ?? attachment;
+    }
     const response: PlannerAttachmentResponse = { attachment };
     return c.json(response, 201);
   } catch (error) {
@@ -164,6 +204,74 @@ plannerAttachmentsApi.delete("/attachments/:id", async (c) => {
     return jsonError(c, error);
   }
 });
+
+// "Read again": a file that failed, was capped, was skipped or whose card was
+// dismissed is read once more. 409 while a read is already under way.
+plannerAttachmentsApi.post("/attachments/:id/read", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    if (!forkAttachmentReadsEnabled(c.env)) {
+      throw new DomainError("Reading files is not set up here.", 400);
+    }
+    const before = await plannerLoadAttachment(context.db, {
+      userId: context.user.id,
+      attachmentId: c.req.param("id"),
+    });
+    if (before.readState === "pending") {
+      throw new DomainError("This file is being read.", 409);
+    }
+    const claimed = await plannerClaimAttachmentRead(context.db, {
+      userId: context.user.id,
+      attachmentId: before.id,
+      force: true,
+    });
+    if (claimed) {
+      await forkAfterResponse(
+        c,
+        forkReadAttachment(c.env, context.db, {
+          user: context.user,
+          row: claimed,
+        }),
+      );
+    }
+    const [attachment] = (
+      await plannerReadAttachments(context.db, {
+        userId: context.user.id,
+        taskId: before.taskId,
+      })
+    ).filter((entry) => entry.id === before.id);
+    if (!attachment) throw new DomainError("File not found", 404);
+    const response: PlannerAttachmentResponse = { attachment };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// The task's "Store only, don't read these files" switch.
+plannerAttachmentsApi.patch(
+  "/tasks/:id/attachments/settings",
+  zValidator("json", plannerAttachmentSettingsSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "planner", context.user.id);
+      if (throttled) return throttled;
+      const response: PlannerAttachmentSettingsResponse = {
+        files_read: await plannerSetTaskFilesRead(context.db, {
+          userId: context.user.id,
+          taskId: parseTaskId(c.req.param("id")),
+          filesRead: c.req.valid("json").files_read,
+        }),
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
 
 /** The file name header, percent-decoded; a malformed value is kept as sent. */
 function decodeHeaderName(value: string | undefined): string {

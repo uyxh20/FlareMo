@@ -58,6 +58,7 @@ const DETAIL = {
   project: null,
   comments: [],
   attachments: [],
+  files_read: true,
 } as unknown as PlannerTaskDetailResponse;
 
 const boardKey = plannerQueryKeys.board(TODAY, false);

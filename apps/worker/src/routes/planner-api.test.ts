@@ -1930,6 +1930,7 @@ describe("planner API", () => {
       expect(Object.keys(detail).sort()).toEqual([
         "attachments",
         "comments",
+        "files_read",
         "plan",
         "project",
         "task",
@@ -1939,6 +1940,7 @@ describe("planner API", () => {
         project: null,
         comments: [],
         attachments: [],
+        files_read: true,
       });
       expect(detail.task.notes).toBeNull();
     });

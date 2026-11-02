@@ -160,6 +160,8 @@ export type PlannerStrings = {
     commentDeleteFailed: string;
     attachmentUploadFailed: string;
     attachmentRemoveFailed: string;
+    attachmentReadFailed: string;
+    attachmentSettingsFailed: string;
   };
 
   priority: { none: string; low: string; medium: string; high: string };
@@ -236,6 +238,19 @@ export type PlannerStrings = {
       removeTitle: string;
       removeBody: string;
       removeConfirm: string;
+      /** What happened to the file's reading, in a word or two. */
+      state: {
+        reading: string;
+        proposed: string;
+        added: string;
+        dismissed: string;
+        capped: string;
+        unreadable: string;
+        skipped: string;
+      };
+      read: string;
+      readAgain: string;
+      storeOnly: string;
     };
     footer: {
       created: (when: string) => string;
@@ -441,6 +456,8 @@ const en: PlannerStrings = {
     commentDeleteFailed: "Couldn't delete the comment",
     attachmentUploadFailed: "Couldn't upload the file",
     attachmentRemoveFailed: "Couldn't remove the file",
+    attachmentReadFailed: "Couldn't start reading the file",
+    attachmentSettingsFailed: "Couldn't save the setting",
   },
 
   priority: { none: "No priority", low: "Low", medium: "Medium", high: "High" },
@@ -508,6 +525,18 @@ const en: PlannerStrings = {
       removeBody:
         "It leaves this task now and is deleted for good after seven days.",
       removeConfirm: "Remove",
+      state: {
+        reading: "reading…",
+        proposed: "comment proposed",
+        added: "comment added",
+        dismissed: "dismissed",
+        capped: "not read: cap reached",
+        unreadable: "not read: unreadable",
+        skipped: "stored only",
+      },
+      read: "Read",
+      readAgain: "Read again",
+      storeOnly: "Store only, don't read these files",
     },
     footer: {
       created: (when) => `Created ${when}`,
@@ -703,6 +732,8 @@ const zhCN: PlannerStrings = {
     commentDeleteFailed: "删除评论失败",
     attachmentUploadFailed: "上传文件失败",
     attachmentRemoveFailed: "移除文件失败",
+    attachmentReadFailed: "无法开始读取文件",
+    attachmentSettingsFailed: "保存设置失败",
   },
 
   priority: { none: "无优先级", low: "低", medium: "中", high: "高" },
@@ -768,6 +799,18 @@ const zhCN: PlannerStrings = {
       removeTitle: "移除这个文件？",
       removeBody: "它会立即离开这个任务，七天后彻底删除。",
       removeConfirm: "移除",
+      state: {
+        reading: "读取中…",
+        proposed: "已提议评论",
+        added: "已添加评论",
+        dismissed: "已忽略",
+        capped: "未读取：已达上限",
+        unreadable: "未读取：无法读取",
+        skipped: "仅保存",
+      },
+      read: "读取",
+      readAgain: "再读一次",
+      storeOnly: "仅保存，不读取这些文件",
     },
     footer: {
       created: (when) => `创建于 ${when}`,

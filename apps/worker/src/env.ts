@@ -124,6 +124,9 @@ export type FlareMoEnv = Env & {
   OPENROUTER_API_KEY?: string;
   FLAREMO_REVIEW_ANTHROPIC_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
+  // Files on tasks are read into proposed comments with the same key
+  // (docs/fork-task-attachments.md); this picks the model for pictures and PDFs.
+  FLAREMO_ATTACHMENT_MODEL?: string;
   FLAREMO_AGENT?: string;
   FLAREMO_AGENT_ENVIRONMENT?: string;
   FLAREMO_AGENT_STORE?: string;

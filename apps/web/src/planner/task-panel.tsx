@@ -358,7 +358,10 @@ function PanelBody({
           <div className="border-t border-border/60 pt-5">
             <PlannerTaskAttachments
               attachments={detail.attachments}
+              filesRead={detail.files_read}
+              readsEnabled={agentEnabled}
               taskId={taskId}
+              today={today}
             />
           </div>
 

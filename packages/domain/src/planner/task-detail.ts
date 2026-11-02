@@ -31,6 +31,8 @@ export type PlannerTaskDetail = {
   comments: PlannerCommentDto[];
   /** The task's files, oldest first, without the removed ones (migration 9016). */
   attachments: PlannerAttachmentDto[];
+  /** False when the task is set to store its files without reading them. */
+  files_read: boolean;
 };
 
 /**
@@ -87,5 +89,6 @@ export async function plannerReadTaskDetail(
     project,
     comments,
     attachments,
+    files_read: plan?.filesRead !== 0,
   };
 }

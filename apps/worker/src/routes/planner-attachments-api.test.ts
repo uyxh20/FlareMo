@@ -1,6 +1,8 @@
 import {
+  type PlannerAgentActionResponse,
   type PlannerAttachmentListResponse,
   type PlannerAttachmentResponse,
+  type PlannerAttachmentSettingsResponse,
   type PlannerCreateTaskResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
@@ -26,14 +28,18 @@ import { bootstrapAndSignIn } from "../test-support/sign-in";
 
 // HTTP tests for files on cockpit tasks (fork-owned add-on,
 // docs/fork-task-attachments.md): upload as a raw body, list, the detail, the
-// file itself, removal, and the limits. Through the real Worker entry with the
-// owner's cookie session; the bucket is Miniflare's R2.
+// file itself, removal, and the limits; then (phase 2) the read into a proposed
+// comment after an upload, "Read again", the Store-only switch and the caps.
+// Through the real Worker entry with the owner's cookie session; the bucket is
+// Miniflare's R2. Claude's Messages API is replaced: the harness has no
+// execution context, so a read finishes before the upload answers.
 
 const API = "/api/app/planner";
 const RESET_TABLES = [
   "planner_task_event",
   "planner_task_plan",
   "planner_task_attachment",
+  "planner_agent_action",
   "task_activity",
   "tasks",
 ] as const;
@@ -43,6 +49,8 @@ type Context = {
   d1: D1Database;
   env: Env;
   cookie: string;
+  /** The env the next requests run under; reset before each test. */
+  current: Env;
 };
 
 describe("planner attachments API", () => {
@@ -50,9 +58,17 @@ describe("planner attachments API", () => {
   let TODAY: string;
 
   const harness = createAppTestHarness(() => ({
-    env: ctx.env,
+    env: ctx.current,
     sessionCookie: ctx.cookie,
   }));
+
+  /** Runs the following requests with the agent's key set, so files are read. */
+  const withReads = () => {
+    ctx.current = {
+      ...ctx.env,
+      ANTHROPIC_API_KEY: "test-anthropic-key",
+    } as unknown as Env;
+  };
 
   beforeAll(async () => {
     const {
@@ -64,7 +80,13 @@ describe("planner attachments API", () => {
       env: { FLAREMO_EMBEDDING_PROVIDER: "none" },
     });
     await applyPlannerMigrations(d1);
-    ctx = { runtime, d1, env, cookie: await bootstrapAndSignIn(env) };
+    ctx = {
+      runtime,
+      d1,
+      env,
+      cookie: await bootstrapAndSignIn(env),
+      current: env,
+    };
   });
 
   afterAll(async () => {
@@ -78,6 +100,7 @@ describe("planner attachments API", () => {
       RESET_TABLES.map((table) => ctx.d1.prepare(`DELETE FROM ${table}`)),
     );
     TODAY = new Date().toISOString().slice(0, 10);
+    ctx.current = ctx.env;
   });
 
   afterEach(() => {
@@ -248,5 +271,329 @@ describe("planner attachments API", () => {
       url(`${API}/tasks/nope/attachments/${attachment.id}/secret.txt`),
     );
     expect(wrongTask.status).toBe(404);
+  });
+
+  // ===========================================================================
+  // Phase 2: reading into a proposed comment
+
+  /** Replaces Claude's Messages API; returns what was sent. */
+  function stubAnthropic(
+    answer: (payload: Record<string, unknown>) => Response = () =>
+      Response.json({
+        content: [{ type: "text", text: "Renewal: EUR 212 a year." }],
+      }),
+  ) {
+    const realFetch = globalThis.fetch;
+    const sent: { headers: Headers; body: Record<string, unknown> }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.startsWith("https://api.anthropic.com/")) {
+        return realFetch(input, init);
+      }
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      sent.push({ headers: new Headers(init?.headers), body: payload });
+      return answer(payload);
+    });
+    return sent;
+  }
+
+  const detailOf = (taskId: string) =>
+    body<PlannerTaskDetailResponse>(
+      sendJson("GET", `${API}/tasks/${bare(taskId)}`),
+    );
+
+  it("without the agent's key a file is only stored, and Read again is refused", async () => {
+    const task = await createTask("Plain");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "notes.txt", "hello"),
+      201,
+    );
+    expect(attachment.read_state).toBe("stored");
+    expect(attachment.proposal).toBeNull();
+    const read = await sendJson(
+      "POST",
+      `${API}/attachments/${attachment.id}/read`,
+    );
+    expect(read.status).toBe(400);
+    expect((await detailOf(task.id)).files_read).toBe(true);
+  });
+
+  it("reads a text file and an email into a proposed comment on upload, without Claude; Accept writes the comment", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const task = await createTask("Renew the insurance");
+
+    const text = await body<PlannerAttachmentResponse>(
+      upload(task.id, "notes.txt", "Call the broker on Tuesday.\n"),
+      201,
+    );
+    expect(plannerAttachmentResponseSchema.parse(text)).toEqual(text);
+    expect(text.attachment.read_state).toBe("read");
+    expect(text.attachment.proposal).toMatchObject({
+      kind: "comment_new",
+      task_id: task.id,
+      state: "open",
+      why: "Read from notes.txt",
+      change: {
+        body: "Call the broker on Tuesday.",
+        attachment_id: text.attachment.id,
+        filename: "notes.txt",
+      },
+    });
+    expect(text.attachment.action_id).toBe(text.attachment.proposal?.id);
+
+    const mail = [
+      "From: Insurer <quotes@example.com>",
+      "Subject: Your renewal",
+      "Content-Type: text/plain",
+      "",
+      "EUR 212 a year.",
+    ].join("\r\n");
+    const email = await body<PlannerAttachmentResponse>(
+      upload(task.id, "renewal.eml", mail, "message/rfc822"),
+      201,
+    );
+    expect(email.attachment.read_state).toBe("read");
+    expect(email.attachment.proposal?.change.body).toBe(
+      "From: Insurer <quotes@example.com>\nSubject: Your renewal\n\nEUR 212 a year.",
+    );
+    expect(sent).toHaveLength(0);
+
+    // The detail carries the cards; nothing is a comment until accepted.
+    const before = await detailOf(task.id);
+    expect(before.comments).toEqual([]);
+    expect(before.attachments.map((a) => a.proposal?.state)).toEqual([
+      "open",
+      "open",
+    ]);
+    const accepted = await body<PlannerAgentActionResponse>(
+      sendJson("POST", `${API}/agent/actions/${text.attachment.action_id}`, {
+        state: "accepted",
+        today: TODAY,
+      }),
+    );
+    expect(accepted.action.state).toBe("accepted");
+    const after = await detailOf(task.id);
+    expect(after.comments.map((c) => c.body)).toEqual([
+      "Call the broker on Tuesday.",
+    ]);
+    expect(accepted.action.landed_id).toBe(after.comments[0]?.id);
+    expect(after.attachments[0]?.proposal?.state).toBe("accepted");
+    // The History shows the comment as the proposal's.
+    const history = await body<PlannerTaskHistoryResponse>(
+      sendJson("GET", `${API}/tasks/${bare(task.id)}/history`),
+    );
+    const commented = history.events.find((e) => e.type === "commented");
+    expect(commented?.actor_type).toBe("agent");
+  });
+
+  it("sends a picture to Claude once, as an image block with the agent's key, and files what comes back", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const task = await createTask("Screenshot");
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "quote.png", png, "image/png"),
+      201,
+    );
+    expect(attachment.read_state).toBe("read");
+    expect(attachment.proposal?.change.body).toBe("Renewal: EUR 212 a year.");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.headers.get("x-api-key")).toBe("test-anthropic-key");
+    expect(sent[0]?.headers.get("anthropic-version")).toBe("2023-06-01");
+    expect(sent[0]?.body).toMatchObject({
+      model: "claude-sonnet-5-5",
+      max_tokens: 2500,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/png",
+                data: btoa(String.fromCharCode(...png)),
+              },
+            },
+            { type: "text", text: "Transcribe this file." },
+          ],
+        },
+      ],
+    });
+    expect(String(sent[0]?.body.system)).toContain("transcribe");
+
+    // A PDF goes as a document, under the model from the env when one is set.
+    ctx.current = {
+      ...ctx.current,
+      FLAREMO_ATTACHMENT_MODEL: "claude-haiku-5-5",
+    } as unknown as Env;
+    const pdf = await body<PlannerAttachmentResponse>(
+      upload(task.id, "quote.pdf", "%PDF-1.4", "application/pdf"),
+      201,
+    );
+    expect(pdf.attachment.read_state).toBe("read");
+    expect(sent[1]?.body).toMatchObject({
+      model: "claude-haiku-5-5",
+      messages: [
+        {
+          content: [
+            {
+              type: "document",
+              source: { type: "base64", media_type: "application/pdf" },
+            },
+            { type: "text" },
+          ],
+        },
+      ],
+    });
+    // Nothing of the file is logged.
+    const logged = vi
+      .mocked(console.error)
+      .mock.calls.flat()
+      .map(String)
+      .join("\n");
+    expect(logged).not.toContain("Renewal");
+  });
+
+  it("marks a file Claude could not read, or of an unknown kind, as unreadable; Read again tries once more, and 409 while pending", async () => {
+    withReads();
+    let fail = true;
+    const sent = stubAnthropic(() =>
+      fail
+        ? new Response("overloaded", { status: 529 })
+        : Response.json({ content: [{ type: "text", text: "Second time." }] }),
+    );
+    const task = await createTask("Retry");
+
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "shot.png", new Uint8Array([1, 2, 3]), "image/png"),
+      201,
+    );
+    expect(attachment.read_state).toBe("failed");
+    expect(attachment.proposal).toBeNull();
+    const zip = await body<PlannerAttachmentResponse>(
+      upload(task.id, "archive.zip", "PK", "application/zip"),
+      201,
+    );
+    expect(zip.attachment.read_state).toBe("failed");
+    expect(sent).toHaveLength(1);
+
+    fail = false;
+    const again = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read`),
+    );
+    expect(again.attachment.read_state).toBe("read");
+    expect(again.attachment.proposal?.change.body).toBe("Second time.");
+    expect(sent).toHaveLength(2);
+
+    // Read again on a read file puts the earlier card away: one card a file.
+    const third = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read`),
+    );
+    expect(third.attachment.proposal?.id).not.toBe(
+      again.attachment.proposal?.id,
+    );
+    const earlier = await ctx.d1
+      .prepare("SELECT state FROM planner_agent_action WHERE id = ?")
+      .bind(again.attachment.proposal?.id)
+      .first<{ state: string }>();
+    expect(earlier?.state).toBe("dismissed");
+
+    await ctx.d1
+      .prepare(
+        "UPDATE planner_task_attachment SET read_state = 'pending' WHERE id = ?",
+      )
+      .bind(attachment.id)
+      .run();
+    const busy = await sendJson(
+      "POST",
+      `${API}/attachments/${attachment.id}/read`,
+    );
+    expect(busy.status).toBe(409);
+  });
+
+  it("keeps a task's files stored only when its switch is set, and Read again still reads one", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const task = await createTask("Store only");
+
+    const settings = await body<PlannerAttachmentSettingsResponse>(
+      sendJson("PATCH", `${API}/tasks/${bare(task.id)}/attachments/settings`, {
+        files_read: false,
+      }),
+    );
+    expect(settings).toEqual({ files_read: false });
+    expect((await detailOf(task.id)).files_read).toBe(false);
+    expect(
+      (
+        await sendJson(
+          "PATCH",
+          `${API}/tasks/${bare(task.id)}/attachments/settings`,
+          {
+            files_read: "no",
+          },
+        )
+      ).status,
+    ).toBe(400);
+
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "shot.png", new Uint8Array([1, 2, 3]), "image/png"),
+      201,
+    );
+    expect(attachment.read_state).toBe("skipped");
+    expect(sent).toHaveLength(0);
+
+    const forced = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read`),
+    );
+    expect(forced.attachment.read_state).toBe("read");
+    expect(sent).toHaveLength(1);
+
+    await body(
+      sendJson("PATCH", `${API}/tasks/${bare(task.id)}/attachments/settings`, {
+        files_read: true,
+      }),
+    );
+    expect((await detailOf(task.id)).files_read).toBe(true);
+  });
+
+  it("stops at 200 reads a month and says so on the file", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const task = await createTask("Capped");
+    const other = await createTask("Other");
+    const month = `${TODAY.slice(0, 7)}-01T12:00:00.000Z`;
+    const rows = Array.from({ length: 200 }, (_, n) =>
+      ctx.d1
+        .prepare(
+          `INSERT INTO planner_task_attachment
+             (id, user_id, task_id, filename, content_type, size, r2_key, etag, read_state, action_id, created_at, removed_at)
+           SELECT ?, user_id, ?, ?, 'text/plain', 1, ?, 'e', 'read', NULL, ?, NULL FROM tasks WHERE id = ?`,
+        )
+        .bind(
+          `read-${n}`,
+          other.id,
+          `r${n}.txt`,
+          `planner/x/r${n}.txt`,
+          month,
+          other.id,
+        ),
+    );
+    for (let i = 0; i < rows.length; i += 40) {
+      await ctx.d1.batch(rows.slice(i, i + 40));
+    }
+
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "late.png", new Uint8Array([1]), "image/png"),
+      201,
+    );
+    expect(attachment.read_state).toBe("capped");
+    expect(sent).toHaveLength(0);
+    const again = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read`),
+    );
+    expect(again.attachment.read_state).toBe("capped");
   });
 });
