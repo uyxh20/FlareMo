@@ -100,7 +100,7 @@ function fileState(file: {
       return file.proposal?.state === "accepted"
         ? "read; its text is a comment above"
         : file.proposal?.state === "open"
-          ? "read; its text waits as a proposed comment the owner has not accepted"
+          ? "read; its text follows, proposed as a comment the owner has not accepted yet"
           : "read; the owner dismissed its text";
     case "pending":
       return "being read";
@@ -113,6 +113,17 @@ function fileState(file: {
     default:
       return "stored, not read";
   }
+}
+
+/** The text of a read file whose card is still open, indented under its line. */
+function fileText(file: {
+  read_state: string;
+  proposal: { state: string; change: Record<string, unknown> } | null;
+}): string[] {
+  if (file.read_state !== "read" || file.proposal?.state !== "open") return [];
+  const body = file.proposal.change.body;
+  if (typeof body !== "string" || !body.trim()) return [];
+  return body.split("\n").map((line) => `    ${line}`);
 }
 
 function local(at: string): string {
@@ -682,13 +693,14 @@ const handlers: Handlers = {
         : ["(none)"]),
       "",
       // The files on the task: their text, when read, is in the comments above
-      // (an accepted card) or waits as a card the owner has not accepted yet.
+      // (an accepted card) or follows here while the card waits, so "here is
+      // the email, what should I do" works before the owner accepts anything.
       `## Files (${detail.attachments.length})`,
       ...(detail.attachments.length
-        ? detail.attachments.map(
-            (file) =>
-              `- ${file.filename} (${file.content_type ?? "unknown type"}, ${file.size} bytes, added ${local(file.created_at)}): ${fileState(file)}`,
-          )
+        ? detail.attachments.flatMap((file) => [
+            `- ${file.filename} (${file.content_type ?? "unknown type"}, ${file.size} bytes, added ${local(file.created_at)}): ${fileState(file)}`,
+            ...fileText(file),
+          ])
         : ["(none)"]),
       "",
       `## History (newest first, ${history.length} of the latest events)`,

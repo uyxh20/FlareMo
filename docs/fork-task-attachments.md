@@ -3,9 +3,9 @@
 A screenshot, a PDF, an email or any other file can be put on a cockpit task
 from the task panel. This is the fork's own feature (upstream has attachments
 on memos and articles, not on tasks); its design and plan are the "Task
-Attachments Plan" page in the project. Phase 1 (store and show) and phase 2
-(every file read into a proposed comment) are what this document describes;
-phase 3 (the agent takes files in its drawer) is noted where it will land.
+Attachments Plan" page in the project. Phase 1 (store and show), phase 2
+(every file read into a proposed comment) and phase 3 (the agent knows the
+files, and takes them in its chat) are what this document describes.
 
 ## What the owner sees
 
@@ -32,6 +32,10 @@ phase 3 (the agent takes files in its drawer) is noted where it will land.
   want on the task as text). Read again still reads one when asked.
 - Reading is only offered where the general agent is set up (the deployment
   has `ANTHROPIC_API_KEY`); elsewhere files are stored and shown, nothing more.
+- **In the task's agent chat** a drop on the chat, or a paste into the question
+  box, is the same upload: the file lands on the task, shows under the panel's
+  Attachments, and the chat lists it above the question box with its state. So
+  "here is the email, what should I do" is one motion.
 - **Remove** asks first. The file leaves the task at once and is deleted for
   good seven days later.
 - History gets a line per file: "Attached quote.pdf", "Removed quote.pdf".
@@ -104,6 +108,19 @@ proposal cap makes it `capped`, any error `failed`. Read again on a file that
 already has a card dismisses that card first, so a file shows one card. Nothing
 of a file or its text is logged: only the kind and an error's status.
 
+## What the agent sees
+
+`read_task` ends with a Files block: one line per file with its name, type,
+size, when it was added and its state in words. A read file whose card is still
+open has its text indented under its line, so the agent can work from the
+owner's file before the owner accepts anything; once accepted, the text is a
+comment and only the comment is shown. The agent's prompt (the Ask chat's
+task line in `agent-prompts.ts`) and the `ask-my-diary` skill say what that
+means: the text is the file's own words, not a comment until accepted, and a
+file "being read" was just dropped, so the agent reads again once before it
+answers. A prompt or skill change needs `scripts/fork/general-agent.ts` re-run
+against dev, then live.
+
 ## The sweep
 
 `forkTaskAttachmentsNightly` (apps/worker/src/fork/task-attachments.ts) runs in
@@ -122,24 +139,28 @@ ago, 100 at a time. A failure is logged and never stops the rest of the night.
 | `packages/domain/src/planner/attachments.ts` | Add, list, load, remove, the sweep's two halves, the History events; the switch, the read states, the month cap and the claim. |
 | `packages/domain/src/planner/attachment-text.ts` | What kind a file is; the 5,000-character cut; an email as text. |
 | `packages/domain/src/planner/agent-apply.ts` | Accepting `comment_new` writes the comment. |
-| `packages/domain/src/planner/agent-tools.ts` | `read_task` lists the files and their state. |
+| `packages/domain/src/planner/agent-tools.ts` | `read_task` lists the files, their state and the text of an open card. |
+| `packages/domain/src/planner/agent-prompts.ts`, `skills/ask-my-diary/SKILL.md` | What the agent is told about files in a task's chat. |
 | `apps/worker/src/routes/planner-attachments-api.ts` | The six routes. |
 | `apps/worker/src/fork/task-attachments.ts` | Serving a file; the nightly purge. |
 | `apps/worker/src/fork/attachment-read.ts` | The read after the response; the one Messages API call for pictures and PDFs. |
 | `apps/web/src/planner/task-panel-attachments.tsx` | The panel section: the list, the states, the card under a file, Read again, the switch. |
-| `apps/web/src/planner/ask-chat.tsx` | `PlannerProposalCard`, shared with the chat, renders a proposed comment. |
+| `apps/web/src/planner/use-attachment-actions.ts` | The upload queue, remove, read again, the switch and the state words, shared by the panel and the chat. |
+| `apps/web/src/planner/ask-chat.tsx` | `PlannerProposalCard`, shared with the chat, renders a proposed comment; a task's chat takes dropped and pasted files. |
 | `apps/web/src/planner/api.ts`, `strings.ts`, `history-labels.ts` | The client calls, the words (en and zh-CN), the History labels. |
 
 Tests: `packages/domain/src/planner/attachments.test.ts`,
 `packages/domain/src/planner/attachment-text.test.ts`,
 `apps/worker/src/routes/planner-attachments-api.test.ts`,
-`apps/web/src/planner/task-panel-attachments.test.tsx`.
+`apps/web/src/planner/task-panel-attachments.test.tsx`,
+`apps/web/src/planner/ask-chat.test.tsx`.
 
 ## Undoing it
 
 Remove the files in the table above and the hook-in lines (the planner route
 mount, the nightly call, the panel section, the `comment_new` case in
-`agent-apply.ts`, the Files block in `agent-tools.ts`). The table and column
+`agent-apply.ts`, the Files block in `agent-tools.ts`, the drop and paste
+handlers in `ask-chat.tsx`, the files line in the agent prompt and skill). The table and column
 stay; fork migrations are never rolled back. Objects under `planner/` in the
 bucket can be deleted by prefix. Open `comment_new` proposals expire with the
 agent's seven-day sweep.

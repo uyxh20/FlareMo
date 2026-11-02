@@ -3,14 +3,22 @@ import type {
   PlannerAskResponse,
 } from "@flaremo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowUpIcon, CheckIcon, XIcon } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { ArrowUpIcon, CheckIcon, Loader2Icon, XIcon } from "lucide-react";
+import {
+  type ClipboardEvent,
+  type DragEvent,
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+import { plannerFetchTaskDetail } from "./api";
 import {
   plannerAskRequest,
   plannerFetchAsk,
@@ -20,6 +28,10 @@ import { plannerDueLabel } from "./dates";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerMarkdown } from "./review-markdown";
 import { usePlannerStrings } from "./strings";
+import {
+  plannerAttachmentState,
+  usePlannerAttachmentActions,
+} from "./use-attachment-actions";
 import { usePlannerToday } from "./use-planner-clock";
 import "./goals.css";
 
@@ -32,6 +44,12 @@ import "./goals.css";
 // A proposal is a card with Accept and Dismiss. The accept is the write: the
 // server makes the change as the proposal, and the task, the board and the
 // History are read again. Nothing is written before the owner accepts.
+//
+// A task's chat also takes files (docs/fork-task-attachments.md, phase 3): a
+// drop on the chat or a paste into the question box is the same upload as the
+// panel's Attachments, so "here is the email, what should I do" is one motion.
+// The files dropped here are listed above the question box with their state;
+// the agent reads their text through read_task once they are read.
 
 const en = {
   title: "Ask my diary",
@@ -48,6 +66,9 @@ const en = {
   placeholder: "Ask a question",
   placeholderTask: "Ask for a draft, or a change",
   send: "Send",
+  /** The task's chat takes files too: the same upload as the panel's Attachments. */
+  dropFile: "Drop a file here to put it on the task",
+  filesOnTask: "Put on the task",
   failed: "Couldn't ask. Try again.",
   days: (from: string, to: string) => `Diary ${from} to ${to}`,
   proposal: {
@@ -90,6 +111,8 @@ const zhCN: PlannerAskCopy = {
   placeholder: "提一个问题",
   placeholderTask: "要一份草稿，或一个改动",
   send: "发送",
+  dropFile: "把文件拖到这里，放到任务上",
+  filesOnTask: "已放到任务上",
   failed: "没能发出，请重试。",
   days: (from: string, to: string) => `日记 ${from} 至 ${to}`,
   proposal: {
@@ -424,6 +447,42 @@ export function PlannerAskChat({
     });
   };
 
+  // Files dropped or pasted into a task's chat go on the task; the ones from
+  // this chat are listed by name, with their state from the cached detail.
+  const files = usePlannerAttachmentActions(task ?? "");
+  const [dropped, setDropped] = useState<string[]>([]);
+  const [over, setOver] = useState(false);
+  const detail = useQuery({
+    queryKey: plannerQueryKeys.detail(task ?? ""),
+    queryFn: () => plannerFetchTaskDetail(task ?? ""),
+    enabled: task !== null && dropped.length > 0,
+    staleTime: 0,
+  });
+  const strings = usePlannerStrings();
+  const addFiles = (list: readonly File[]) => {
+    if (!task || list.length === 0) return;
+    setDropped((names) => [
+      ...names,
+      ...list.map((file) => file.name).filter((name) => !names.includes(name)),
+    ]);
+    files.actions.add(list);
+  };
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    if (!task) return;
+    event.preventDefault();
+    setOver(false);
+    addFiles(Array.from(event.dataTransfer?.files ?? []));
+  };
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const list = Array.from(event.clipboardData?.files ?? []);
+    if (!task || list.length === 0) return;
+    event.preventDefault();
+    addFiles(list);
+  };
+  const onTask = (detail.data?.attachments ?? []).filter((entry) =>
+    dropped.includes(entry.filename),
+  );
+
   const busy = running || send.isPending;
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
@@ -441,7 +500,17 @@ export function PlannerAskChat({
   }, [count, running]);
 
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target around the chat; the question box below is the control
+    <div
+      className={cn("flex min-h-0 flex-1 flex-col", className)}
+      onDragLeave={() => setOver(false)}
+      onDragOver={(event) => {
+        if (!task) return;
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDrop={onDrop}
+    >
       <div
         aria-live="polite"
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3"
@@ -489,18 +558,55 @@ export function PlannerAskChat({
         )}
         {error && <p className="text-[13px] text-destructive">{error}</p>}
       </div>
+      {task && (onTask.length > 0 || files.uploading.length > 0) && (
+        <ul
+          className="flex flex-col gap-1 border-t border-border px-4 py-2 text-[13px] text-muted-foreground"
+          data-testid="planner-ask-files"
+        >
+          <li className="font-medium">{copy.filesOnTask}</li>
+          {onTask.map((entry) => (
+            <li className="flex items-center gap-1.5" key={entry.id}>
+              {entry.read_state === "pending" && (
+                <Loader2Icon className="size-3 shrink-0 animate-spin" />
+              )}
+              <span className="truncate">
+                {entry.filename} ·{" "}
+                {plannerAttachmentState(entry, strings.panel.attachments)}
+              </span>
+            </li>
+          ))}
+          {files.uploading.map((entry) => (
+            <li className="flex items-center gap-1.5" key={entry.key}>
+              <Loader2Icon className="size-3 shrink-0 animate-spin" />
+              <span className="truncate">
+                {entry.name} · {strings.panel.attachments.uploading}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       <form
-        className="flex items-end gap-2 border-t border-border p-3"
+        className={cn(
+          "flex items-end gap-2 border-t border-border p-3",
+          over && "bg-muted/60",
+        )}
         onSubmit={submit}
       >
         <Textarea
           aria-label={task ? copy.placeholderTask : copy.placeholder}
           className="max-h-32 min-h-10 resize-none bg-background"
           maxLength={4000}
-          placeholder={task ? copy.placeholderTask : copy.placeholder}
+          placeholder={
+            task
+              ? over
+                ? copy.dropFile
+                : copy.placeholderTask
+              : copy.placeholder
+          }
           rows={2}
           value={state.draft}
           onChange={(event) => onChange({ draft: event.target.value })}
+          onPaste={onPaste}
           onKeyDown={(event) => {
             if (
               event.key === "Enter" &&

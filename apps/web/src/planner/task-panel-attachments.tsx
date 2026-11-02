@@ -1,22 +1,17 @@
 import {
   type PlannerAgentActionDto,
   type PlannerAttachmentDto,
-  type PlannerTaskDetailResponse,
-  plannerAttachmentMaxBytes,
   plannerAttachmentsPerTask,
 } from "@flaremo/contracts";
-import { useQueryClient } from "@tanstack/react-query";
 import { Loader2Icon, XIcon } from "lucide-react";
 import {
   type DragEvent,
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
 } from "react";
-import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,18 +27,15 @@ import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n";
 import { cn, formatBytes } from "@/lib/utils";
 import { MORE_BUTTON_CLASS } from "@/pages/projects/constants";
-import {
-  plannerAttachmentIsImage,
-  plannerDeleteAttachmentRequest,
-  plannerErrorMessage,
-  plannerReadAttachmentRequest,
-  plannerSetAttachmentSettingsRequest,
-  plannerUploadAttachmentRequest,
-} from "./api";
+import { plannerAttachmentIsImage } from "./api";
 import { PlannerProposalCard, usePlannerAskCopy } from "./ask-chat";
-import { plannerQueryKeys } from "./query-keys";
-import { type PlannerStrings, usePlannerStrings } from "./strings";
-import { plannerToastId } from "./use-planner-actions";
+import { usePlannerStrings } from "./strings";
+import {
+  plannerAttachmentState,
+  usePlannerAttachmentActions,
+} from "./use-attachment-actions";
+
+export { plannerAttachmentState } from "./use-attachment-actions";
 
 // The task's files (fork-owned add-on, docs/fork-task-attachments.md): a
 // screenshot, a PDF, an email, anything up to 10 MB and 10 a task. Files
@@ -63,11 +55,6 @@ import { plannerToastId } from "./use-planner-actions";
 // adds to the cached detail and a removal takes from it; a failure puts the
 // detail back by asking the server again, and says why in a toast.
 
-type Detail = PlannerTaskDetailResponse;
-
-/** A file on its way up: shown dimmed at the end of the list. */
-type Uploading = { key: number; name: string; size: number };
-
 /** The file's type in one word: the extension when there is one, else from the MIME type. */
 export function plannerAttachmentKind(attachment: {
   filename: string;
@@ -84,31 +71,6 @@ export function plannerAttachmentKind(attachment: {
   if (type.startsWith("text/")) return "TEXT";
   if (type === "application/pdf") return "PDF";
   return "FILE";
-}
-
-/** What happened to the file's reading, in the owner's words. */
-export function plannerAttachmentState(
-  attachment: Pick<PlannerAttachmentDto, "read_state" | "proposal">,
-  copy: PlannerStrings["panel"]["attachments"],
-): string {
-  switch (attachment.read_state) {
-    case "pending":
-      return copy.state.reading;
-    case "read":
-      return attachment.proposal?.state === "accepted"
-        ? copy.state.added
-        : attachment.proposal?.state === "open"
-          ? copy.state.proposed
-          : copy.state.dismissed;
-    case "failed":
-      return copy.state.unreadable;
-    case "capped":
-      return copy.state.capped;
-    case "skipped":
-      return copy.state.skipped;
-    default:
-      return copy.stored;
-  }
 }
 
 /** Whether a Read (again) button makes sense for the file. */
@@ -134,168 +96,6 @@ function pasteIsForFiles(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return true;
   const tag = target.tagName;
   return !(tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable);
-}
-
-function usePlannerAttachmentActions(taskId: string) {
-  const queryClient = useQueryClient();
-  const strings = usePlannerStrings();
-  const stringsRef = useRef(strings);
-  stringsRef.current = strings;
-  const [uploading, setUploading] = useState<Uploading[]>([]);
-  const serial = useRef(0);
-  const queue = useRef<Promise<void>>(Promise.resolve());
-
-  const actions = useMemo(() => {
-    const detailKey = plannerQueryKeys.detail(taskId);
-    const current = () => queryClient.getQueryData<Detail>(detailKey);
-    const setDetail = (update: (detail: Detail) => Detail) =>
-      queryClient.setQueryData<Detail>(detailKey, (detail) =>
-        detail ? update(detail) : detail,
-      );
-    const replace = (attachment: PlannerAttachmentDto) =>
-      setDetail((detail) => ({
-        ...detail,
-        attachments: detail.attachments.map((entry) =>
-          entry.id === attachment.id ? attachment : entry,
-        ),
-      }));
-    const refresh = () => {
-      void queryClient.invalidateQueries({ queryKey: detailKey });
-      void queryClient.invalidateQueries({
-        queryKey: plannerQueryKeys.history(taskId),
-      });
-    };
-    const fail = (error: unknown, fallback: string) =>
-      toast.error(
-        plannerErrorMessage(
-          error,
-          fallback,
-          stringsRef.current.toast.rateLimited,
-        ),
-        { id: plannerToastId },
-      );
-
-    const uploadOne = async (file: File, key: number) => {
-      try {
-        const { attachment } = await plannerUploadAttachmentRequest(
-          taskId,
-          file,
-        );
-        setDetail((detail) => ({
-          ...detail,
-          attachments: [...detail.attachments, attachment],
-        }));
-        void queryClient.invalidateQueries({
-          queryKey: plannerQueryKeys.history(taskId),
-        });
-      } catch (error) {
-        fail(error, stringsRef.current.toast.attachmentUploadFailed);
-      } finally {
-        setUploading((list) => list.filter((entry) => entry.key !== key));
-      }
-    };
-
-    return {
-      /** Checks each file here first, then uploads them one after another. */
-      add: (files: readonly File[]) => {
-        const copy = stringsRef.current.panel.attachments;
-        const held = current()?.attachments.length ?? 0;
-        let queued = 0;
-        setUploading((list) => {
-          queued = list.length;
-          return list;
-        });
-        const accepted: { file: File; key: number }[] = [];
-        for (const file of files) {
-          if (file.size > plannerAttachmentMaxBytes) {
-            toast.error(
-              copy.tooLarge(file.name, formatBytes(plannerAttachmentMaxBytes)),
-              { id: plannerToastId },
-            );
-            continue;
-          }
-          if (held + queued + accepted.length >= plannerAttachmentsPerTask) {
-            toast.error(copy.tooMany(plannerAttachmentsPerTask), {
-              id: plannerToastId,
-            });
-            break;
-          }
-          serial.current += 1;
-          accepted.push({ file, key: serial.current });
-        }
-        if (accepted.length === 0) return;
-        setUploading((list) => [
-          ...list,
-          ...accepted.map(({ file, key }) => ({
-            key,
-            name: file.name,
-            size: file.size,
-          })),
-        ]);
-        for (const { file, key } of accepted) {
-          queue.current = queue.current.then(() => uploadOne(file, key));
-        }
-      },
-
-      remove: async (attachment: PlannerAttachmentDto) => {
-        setDetail((detail) => ({
-          ...detail,
-          attachments: detail.attachments.filter(
-            (entry) => entry.id !== attachment.id,
-          ),
-        }));
-        try {
-          await plannerDeleteAttachmentRequest(attachment.id);
-          void queryClient.invalidateQueries({
-            queryKey: plannerQueryKeys.history(taskId),
-          });
-        } catch (error) {
-          refresh();
-          fail(error, stringsRef.current.toast.attachmentRemoveFailed);
-        }
-      },
-
-      /** Asks for the file to be read (again); the state turns to "reading…" at once. */
-      read: async (attachment: PlannerAttachmentDto) => {
-        replace({ ...attachment, read_state: "pending" });
-        try {
-          const response = await plannerReadAttachmentRequest(attachment.id);
-          replace(response.attachment);
-        } catch (error) {
-          replace(attachment);
-          fail(error, stringsRef.current.toast.attachmentReadFailed);
-        }
-      },
-
-      /** A card under a file was accepted or dismissed. */
-      settled: (attachmentId: string, action: PlannerAgentActionDto) =>
-        setDetail((detail) => ({
-          ...detail,
-          attachments: detail.attachments.map((entry) =>
-            entry.id === attachmentId
-              ? { ...entry, proposal: action, action_id: action.id }
-              : entry,
-          ),
-        })),
-
-      /** The task's "Store only" switch, as `files_read`. */
-      setFilesRead: async (filesRead: boolean) => {
-        const before = current()?.files_read ?? true;
-        setDetail((detail) => ({ ...detail, files_read: filesRead }));
-        try {
-          await plannerSetAttachmentSettingsRequest(taskId, filesRead);
-        } catch (error) {
-          setDetail((detail) => ({ ...detail, files_read: before }));
-          fail(error, stringsRef.current.toast.attachmentSettingsFailed);
-        }
-      },
-
-      /** Asks the server for the detail again (while a file is being read). */
-      poll: () => void queryClient.invalidateQueries({ queryKey: detailKey }),
-    };
-  }, [queryClient, taskId]);
-
-  return { actions, uploading };
 }
 
 // --- One file -----------------------------------------------------------------

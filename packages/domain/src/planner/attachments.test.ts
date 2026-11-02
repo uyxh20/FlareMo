@@ -537,7 +537,9 @@ describe("planner task attachments", () => {
       );
       expect(listed).toContain("## Files (1)");
       expect(listed).toContain("quote.eml");
-      expect(listed).toContain("waits as a proposed comment");
+      expect(listed).toContain("follows, proposed as a comment");
+      // The file's own words are there for the agent, indented under its line.
+      expect(listed).toContain("    From: Insurer\n    \n    EUR 212 a year.");
 
       const accepted = await plannerAgentAcceptAction(rt.db, {
         user: rt.user,

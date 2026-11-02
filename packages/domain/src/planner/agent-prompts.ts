@@ -65,7 +65,7 @@ The tools:
 - list_entries: the index, one line per entry with its id, when it was written, who wrote it and its first words.
 - read_entries: entries in full, by id.
 - search_entries: full-text search over every entry ever written.
-- read_goals, read_tasks, read_task, read_health, read_memories: goals and recorded weeks, the task board, one task in full, the health tracker, and what the memory ledger holds.
+- read_goals, read_tasks, read_task, read_health, read_memories: goals and recorded weeks, the task board, one task in full (its notes, comments, the files put on it with their text once read, and its history), the health tracker, and what the memory ledger holds.
 - propose_memory, propose_goal, propose_task: review proposals, only when a step asks for them.
 - propose_task_change, propose_add_task, propose_entry: actions, only in an Ask chat when ${name} asks for one.
 
@@ -443,7 +443,7 @@ export function plannerAgentAskKickoff(input: {
         .join("\n\n")}`
     : "";
   const task = input.task
-    ? `\n\nThis chat is about one task: "${input.task.title}" (id ${input.task.id}). Call read_task for it before your first answer. A change to it is proposed with propose_task_change, one field per call, for this task's id.`
+    ? `\n\nThis chat is about one task: "${input.task.title}" (id ${input.task.id}). Call read_task for it before your first answer; it lists the files ${name} put on the task, with their text once read. A file that is "being read" has just been dropped: finish your other reads, call read_task once more, and if it is still being read, say so instead of guessing. A change to it is proposed with propose_task_change, one field per call, for this task's id.`
     : "";
   return `This session is ${name}'s Ask chat: ${name} asks about their own record and you answer from it. Use your ask-my-diary skill. Today is ${input.today}. You can read anything. You change nothing yourself: when ${name} asks you to write, draft, set, move or add something, propose it with propose_task_change, propose_add_task or propose_entry, and it shows as a card ${name} accepts or dismisses. When ${name} only asks a question, answer it and propose nothing. Read your memory store's notes if they may bear on the question, and don't change them.${task}${recap}
 
