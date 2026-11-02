@@ -63,8 +63,39 @@ card. "Propose first, then act on confirmation":
   notes, priority, due date, effort, start date or column;
 - `propose_add_task` proposes a new task (title, notes, due day, priority,
   column);
-- `propose_entry` proposes a new diary entry. The agent never edits an
-  existing entry; the diary only grows by new entries the owner accepted.
+- `propose_entry` proposes a new diary entry.
+
+Since November 2026 (the control panel, design option B) it can also propose:
+
+- in `propose_task_change`, a task's weekly goal link (`goal_id`, or null to
+  unlink) and dropping it off the board or putting it back (`dropped`);
+- `propose_task_comment`, a comment on a task;
+- `propose_entry_edit`, a new text for an existing entry, only when the owner
+  asks for that edit (a typo, a line, a #tag): the whole entry as it should
+  read, shown on the card as the lines it removes and adds;
+- `propose_entry_state`, archiving an entry or bringing it back, pinning or
+  unpinning it.
+
+Nothing it proposes deletes: dropping a task and archiving an entry are as far
+as it goes. Weekly goals themselves (adding or rewriting a goal) stay off until
+goals keep a change log of their own; only the task's link to a goal is open.
+
+Each proposal records what the field or entry held when it was proposed
+(`change.was`, plus `task_title`, `goal_title` or the entry's first words for
+the card), so the card shows the value before and after, and an **accept is
+refused when the record changed since** ("This changed since the agent
+proposed it"): the proposal stays open, to dismiss and ask again.
+
+### One card per answer
+
+Every proposal filed while one question was being answered shows in **one
+card** (the chat groups a conversation's proposals by the owner question they
+follow). Each row has a tick box; **Accept N** writes the ticked rows one after
+another, each through the same route as before, so a refused row says why on
+its own line and the others go on; **Dismiss** settles the rows still open;
+**Undo all** puts back the accepted rows, newest first. A lone proposal keeps
+its own card, with **Undo** once accepted. One answer holds at most 25
+proposals (`PLANNER_AGENT_ACTIONS_PER_ANSWER`).
 
 A card shows the proposed text or value and the agent's reason, with
 **Accept** and **Dismiss**. The accept is the write: the Worker makes the
@@ -81,13 +112,31 @@ later. History shows such a line as "Agent, accepted by you".
 The tools file a proposal only while an Ask chat is answering (the open Ask
 run whose question has no answer yet); in a review session they are refused.
 A proposal that repeats an open one in the same conversation is not filed
-twice. **At most 30 proposals a day** (`PLANNER_AGENT_ACTIONS_PER_DAY`); the
+twice. **At most 100 proposals a day** (`PLANNER_AGENT_ACTIONS_PER_DAY`; 30 until November 2026); the
 agent is told when they are used up. A proposal left open for seven days is
 expired by the nightly sweep. A task chat and the global chat each list only
 their own conversations (`planner_agent_chat.task_id`).
 
 Routes: `GET/POST /ask` take `task` for a task's chat and return `actions`;
-`POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today }`.
+`POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today }`;
+`POST /agent/actions/:id/revert` with `{ today }` (Undo).
+
+## Undo
+
+Undo on a card puts back what an accepted proposal wrote, as new changes, and
+marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
+
+- a task change or a comment: every History line the accept wrote is reverted,
+  newest first, through the History's own Revert (below), so History shows the
+  change and its revert;
+- a new task: dropped off the board, never deleted;
+- a new entry: archived, never deleted;
+- an entry edit: the old text comes back as a new version (upstream keeps each
+  version in `memo_revisions`); refused if the entry was edited again since;
+- an archive or pin: the entry gets back what it held.
+
+The route syncs the task archive before and after, so the lines upstream wrote
+for the accept are there to revert and History shows the revert at once.
 
 ## Revert
 
