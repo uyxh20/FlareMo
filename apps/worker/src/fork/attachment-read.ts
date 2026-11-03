@@ -47,6 +47,15 @@ export const FORK_ATTACHMENT_READ_MODEL = "claude-sonnet-5-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const READ_TIMEOUT_MS = 90_000;
+/** The answer itself: a whole short file or a summary fits well inside this. */
+const READ_MAX_TOKENS = 2_500;
+/**
+ * Current Claude models think before they answer, and the thinking counts
+ * against max_tokens, so the call gets this much room on top of the answer's
+ * own (as the review's calls do, planner-review-ai.ts). Without it a long
+ * document's summary could stop mid-sentence.
+ */
+const READ_THINKING_ROOM = 4_000;
 
 /** One rule for every read: whole when short, a summary when long. */
 const RULES = `Keep names, numbers, dates and amounts exactly. Plain text only: no markdown, no headings of your own, no introduction, no commentary, no advice, nothing about what you cannot do. If what the file says fits in ${plannerAttachmentReadMax} characters, write it in full, faithfully and in reading order (flatten a table to one line per row), and start your answer with the single word "Text" on its own line. If it is longer, write a summary under ${plannerAttachmentSummaryMax} characters instead: first one sentence on what the document is (its kind, subject, date, who it is for), then its main points as short lines, keeping the names, numbers and dates that matter; start your answer with the single word "Summary" on its own line.`;
@@ -121,7 +130,7 @@ async function ask(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2500,
+      max_tokens: READ_MAX_TOKENS + READ_THINKING_ROOM,
       system,
       messages: [{ role: "user", content: blocks }],
     }),
@@ -133,11 +142,18 @@ async function ask(
   }
   const body = (await response.json()) as {
     content?: Array<{ type: string; text?: string }>;
+    stop_reason?: string;
   };
-  const answer = (body.content ?? [])
+  let answer = (body.content ?? [])
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text ?? "")
     .join("\n");
+  // Stopped by the token limit all the same: the last line is unfinished, so
+  // it goes, and the comment ends on a whole line rather than mid-sentence.
+  if (body.stop_reason === "max_tokens") {
+    const lastBreak = answer.trimEnd().lastIndexOf("\n");
+    if (lastBreak > 0) answer = answer.slice(0, lastBreak);
+  }
   return parseRead(answer, fallback);
 }
 
