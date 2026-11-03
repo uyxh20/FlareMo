@@ -102,6 +102,7 @@ const en = {
       dropped: "drop",
     },
     cleared: "cleared",
+    none: "none",
     cardLabel: "Proposed changes",
     drop: "Drop from the board",
     undrop: "Put back on the board",
@@ -166,6 +167,7 @@ const zhCN: PlannerAskCopy = {
       dropped: "移出",
     },
     cleared: "已清除",
+    none: "无",
     cardLabel: "提议的改动",
     drop: "移出看板",
     undrop: "放回看板",
@@ -328,10 +330,11 @@ function PlannerProposalBody({
   const strings = usePlannerStrings();
   const { change } = action;
 
-  /** A field's value as a short line. */
-  const value = (field: string, raw: unknown) => {
+  /** A field's value as a short line; an empty one reads "none" as the
+   * value before and "cleared" as the value proposed. */
+  const value = (field: string, raw: unknown, before = false) => {
     if (raw === null || raw === undefined || raw === "") {
-      return copy.proposal.cleared;
+      return before ? copy.proposal.none : copy.proposal.cleared;
     }
     switch (field) {
       case "priority": {
@@ -425,7 +428,7 @@ function PlannerProposalBody({
         <p className="font-medium [overflow-wrap:anywhere]">
           {"was" in change && (
             <span className="font-normal text-muted-foreground">
-              {value(action.field, change.was)} →{" "}
+              {value(action.field, change.was, true)} →{" "}
             </span>
           )}
           {value(action.field, change[action.field])}

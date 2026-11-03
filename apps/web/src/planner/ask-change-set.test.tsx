@@ -148,6 +148,9 @@ describe("one card per answer", () => {
     const card = container.querySelector('[data-testid="planner-change-set"]');
     expect(card?.textContent).toContain("3 changes");
     expect(card?.textContent).toContain("Task a");
+    // An empty value before reads "none", not "cleared".
+    expect(card?.textContent).toContain("none →");
+    expect(card?.textContent).not.toContain("cleared");
     const boxes = card?.querySelectorAll<HTMLInputElement>(
       'input[type="checkbox"]',
     );
