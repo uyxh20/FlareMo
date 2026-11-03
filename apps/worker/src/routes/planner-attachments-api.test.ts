@@ -407,7 +407,8 @@ describe("planner attachments API", () => {
     expect(sent[0]?.headers.get("anthropic-version")).toBe("2023-06-01");
     expect(sent[0]?.body).toMatchObject({
       model: "claude-sonnet-5-5",
-      max_tokens: 2500,
+      // The answer's 2,500 tokens plus room to think.
+      max_tokens: 6500,
       messages: [
         {
           role: "user",
@@ -660,5 +661,28 @@ describe("planner attachments API", () => {
     expect(prompt).not.toContain("<p>");
     expect(prompt).not.toContain(".x{}");
     expect(String(sent[0]?.body.system)).toContain("summarise one document");
+  });
+
+  it("ends a summary on a whole line when the model stops at its token limit", async () => {
+    withReads();
+    stubAnthropic(() =>
+      Response.json({
+        stop_reason: "max_tokens",
+        content: [
+          {
+            type: "text",
+            text: "Summary\nA pilot snapshot, 2 Nov 2026.\n- Two coaches in pilot.\n- Later, unverified: Outlook drafts, memory, refresh,",
+          },
+        ],
+      }),
+    );
+    const task = await createTask("Cut short");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "long.pdf", "%PDF-1.4", "application/pdf"),
+      201,
+    );
+    expect(attachment.proposal?.change.body).toBe(
+      "Summary of long.pdf\n\nA pilot snapshot, 2 Nov 2026.\n- Two coaches in pilot.",
+    );
   });
 });
