@@ -63,6 +63,16 @@ describe("plannerHtmlToText", () => {
   });
 });
 
+describe("plannerHtmlToText repeats", () => {
+  it("drops a title repeated as the page's heading", () => {
+    expect(
+      plannerHtmlToText(
+        "<html><head><title>Packing list</title></head><body><h1>Packing list</h1><ul><li>Passport</li></ul></body></html>",
+      ),
+    ).toBe("Packing list\nPassport");
+  });
+});
+
 describe("whole or summary", () => {
   it("keeps text up to the cap whole and summarises beyond it, and heads the comment accordingly", () => {
     expect(

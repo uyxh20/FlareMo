@@ -111,11 +111,14 @@ export function plannerHtmlToText(raw: string): string {
       const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(head)?.[1];
       return title ? `${title}\n` : "";
     });
-  // One line per block; blank lines carry nothing a comment needs.
+  // One line per block; blank lines carry nothing a comment needs, and a
+  // line equal to the one before it (a title repeated as the heading) goes.
   return plannerCleanText(decodeEntities(stripTags(body)))
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.length > 0)
+    .filter(
+      (line, at, lines) => line.length > 0 && line !== lines[at - 1]?.trim(),
+    )
     .join("\n");
 }
 
