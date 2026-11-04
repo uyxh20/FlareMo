@@ -78,7 +78,7 @@ function type(element: HTMLTextAreaElement, text: string) {
 }
 
 const button = (container: HTMLElement, label: string) =>
-  [...container.querySelectorAll("button")].find(
+  Array.from(container.querySelectorAll("button")).find(
     (node) => node.textContent === label,
   ) as HTMLButtonElement;
 
