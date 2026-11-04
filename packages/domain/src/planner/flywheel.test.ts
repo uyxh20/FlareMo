@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ValidationError } from "../errors";
+import { plannerAgentSettleAction } from "./agent-store";
 import {
   plannerAddTuningProposal,
   plannerCurrentTuning,
@@ -56,13 +57,17 @@ async function action(input: {
   settledAt?: string | null;
   landedId?: string | null;
   taskId?: string | null;
+  /** The Ask chat it came from; null for a file read the owner started. */
+  conversationId?: string | null;
 }) {
+  const id = crypto.randomUUID();
   await plannerTestRun(
     rt.database,
-    `INSERT INTO planner_agent_action (id, user_id, kind, task_id, state, landed_id, created_at, shown_at, settled_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    crypto.randomUUID(),
+    `INSERT INTO planner_agent_action (id, user_id, conversation_id, kind, task_id, state, landed_id, created_at, shown_at, settled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id,
     rt.user.id,
+    input.conversationId === undefined ? "chat-1" : input.conversationId,
     input.kind,
     input.taskId ?? null,
     input.state,
@@ -71,6 +76,7 @@ async function action(input: {
     input.shownAt ?? null,
     input.settledAt ?? null,
   );
+  return id;
 }
 
 const value = (
@@ -469,5 +475,99 @@ describe("the flywheel", () => {
     ).toBeNull();
     expect(plannerParseTuningProposal('{"why": "x"}')).toBeNull();
     expect(plannerParseTuningProposal("no json")).toBeNull();
+  });
+  it("never pauses on file reads the owner started, and counts a settled card as seen", async () => {
+    for (let index = 0; index < 12; index += 1) {
+      await action({
+        kind: "comment_new",
+        state: "expired",
+        conversationId: null,
+        createdAt: new Date(
+          NOW.getTime() - DAY - (index + 1) * 3_600_000,
+        ).toISOString(),
+      });
+    }
+    expect(
+      await plannerFlywheelProposalsPaused(rt.db, {
+        userId: rt.user.id,
+        now: NOW,
+      }),
+    ).toBe(false);
+    const open = await action({
+      kind: "comment_new",
+      state: "open",
+      conversationId: null,
+      createdAt: "2026-11-03T09:00:00.000Z",
+    });
+    await plannerAgentSettleAction(rt.db, {
+      userId: rt.user.id,
+      id: open,
+      state: "accepted",
+      now: new Date("2026-11-03T10:00:00.000Z"),
+    });
+    await plannerAgentSettleAction(rt.db, {
+      userId: rt.user.id,
+      id: open,
+      state: "reverted",
+      now: new Date("2026-11-20T10:00:00.000Z"),
+    });
+    const [row] = await plannerTestRows<{
+      shown_at: string | null;
+      settled_at: string | null;
+      state: string;
+    }>(
+      rt.database,
+      "SELECT shown_at, settled_at, state FROM planner_agent_action WHERE id = ?",
+      open,
+    );
+    // Seen when it was settled; the revert keeps the accept's time and week.
+    expect(row).toEqual({
+      shown_at: "2026-11-03T10:00:00.000Z",
+      settled_at: "2026-11-03T10:00:00.000Z",
+      state: "reverted",
+    });
+  });
+
+  it("logs the open proposal a new one replaces as dismissed", async () => {
+    const first = await plannerAddTuningProposal(rt.db, {
+      userId: rt.user.id,
+      instructions: "One.",
+      why: "",
+      metric: null,
+      proposedBy: "agent",
+      now: NOW,
+    });
+    await plannerAddTuningProposal(rt.db, {
+      userId: rt.user.id,
+      instructions: "Two.",
+      why: "",
+      metric: null,
+      proposedBy: "owner",
+      now: NOW,
+    });
+    const rows = await events();
+    expect(rows.map((row) => [row.kind, row.subject_id])).toEqual([
+      ["tuning.proposed", first.id],
+      ["tuning.dismissed", first.id],
+      ["tuning.proposed", expect.any(String)],
+    ]);
+  });
+
+  it("logs a goal's note edit by size", async () => {
+    const goal = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: { level: "week", periodStart: WEEK, title: "Ship" },
+    });
+    await plannerUpdateGoal(rt.db, {
+      userId: rt.user.id,
+      goalId: goal.id,
+      patch: { note: "Private words" },
+    });
+    const noted = (await events()).find((row) => row.kind === "goal.noted");
+    expect(JSON.parse(noted?.data ?? "{}")).toMatchObject({
+      length_before: 0,
+      length_after: 13,
+    });
+    expect(noted?.data).not.toContain("Private");
   });
 });

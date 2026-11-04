@@ -51,18 +51,31 @@ export function plannerAddProposedGoal(
 ): PlannerForwardState {
   const title = proposal.title.trim().slice(0, 1000);
   if (!title) return forward;
+  // Added already: the goal carries the proposal's id.
+  if (forward.goals.some((goal) => goal.id === proposal.id)) return forward;
   const empty = forward.goals.find(
     (goal) => goal.pillar === proposal.pillar && !goal.title.trim(),
   );
   if (empty) {
+    // A fresh slot takes the proposal's id, so the saved goal is known as the
+    // agent's (the server matches accepted goal proposals by goal id, for the
+    // flywheel's log, docs/fork-flywheel.md). A goal already saved keeps its
+    // own id, and tasks under the slot follow it to the new id.
+    const id = forward.knownGoalIds.includes(empty.id) ? empty.id : proposal.id;
     return {
       ...forward,
       edited: true,
       goals: forward.goals.map((goal) => {
         if (goal.id !== empty.id) return goal;
         const { fromSummary: _summary, ...rest } = goal;
-        return { ...rest, title };
+        return { ...rest, id, title };
       }),
+      tasks:
+        id === empty.id
+          ? forward.tasks
+          : forward.tasks.map((task) =>
+              task.goal_id === empty.id ? { ...task, goal_id: id } : task,
+            ),
     };
   }
   if (forward.goals.length >= 12) return forward;

@@ -177,13 +177,16 @@ plannerApi.post(
 // Everything the task panel shows: the whole task (notes included, which a board
 // card leaves out), its plan with the effort estimate, its goal with the path of
 // goals above it, and its comments. A task that is missing, in the recycle bin or
-// someone else's is a 404. Reads are not throttled and write nothing.
+// someone else's is a 404. Reads are not throttled and write nothing but the
+// seen mark on a file's proposed comment.
 plannerApi.get("/tasks/:id", async (c) => {
   try {
     const { db, user } = await getRequestContext(c);
     const detail: PlannerTaskDetailResponse = await plannerReadTaskDetail(db, {
       userId: user.id,
       taskId: parseTaskId(c.req.param("id")),
+      // The panel shows the file cards: the flywheel counts them as seen.
+      shown: true,
     });
     return c.json(detail);
   } catch (error) {

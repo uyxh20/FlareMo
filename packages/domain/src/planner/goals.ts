@@ -330,7 +330,7 @@ export async function plannerUpdateGoal(
 
 /**
  * The log rows for one goal's change (docs/fork-flywheel.md): a rewrite of its
- * words (sizes only), a new status, a new result. Nothing when nothing changed.
+ * words or its note (sizes only), a new status, a new result. Nothing when nothing changed.
  */
 export function plannerGoalChangeEvents(
   userId: string,
@@ -353,6 +353,18 @@ export function plannerGoalChangeEvents(
         edit_chars: plannerEditChars(was, now),
         lines_before: before.lines.length,
         lines_after: after.lines.length,
+      },
+    });
+  }
+  if ((before.note ?? "") !== (after.note ?? "")) {
+    events.push({
+      ...base,
+      kind: "goal.noted",
+      data: {
+        level: after.level,
+        length_before: (before.note ?? "").length,
+        length_after: (after.note ?? "").length,
+        edit_chars: plannerEditChars(before.note ?? "", after.note ?? ""),
       },
     });
   }

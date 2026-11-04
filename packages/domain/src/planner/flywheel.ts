@@ -41,6 +41,7 @@ import {
   isNull,
   lt,
   ne,
+  or,
   sql,
 } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../errors";
@@ -855,7 +856,8 @@ export function plannerMetricOrigin(
 /**
  * Whether the agent's proposing is paused: over the fourteen days before the
  * last one it made at least PLANNER_FLYWHEEL_PAUSE_MIN proposals and fewer
- * than one in ten was ever shown to the owner. Proposing nobody looks at only spends money.
+ * than one in ten was ever shown to the owner. File reads the owner started
+ * (no session and no chat) are left out. Proposing nobody looks at only spends money.
  */
 export async function plannerFlywheelProposalsPaused(
   db: FlareMoDb,
@@ -877,6 +879,12 @@ export async function plannerFlywheelProposalsPaused(
         eq(plannerAgentAction.userId, input.userId),
         gte(plannerAgentAction.createdAt, since),
         lt(plannerAgentAction.createdAt, until),
+        // Proposals the agent made on its own; a file read the owner
+        // started is not the agent proposing.
+        or(
+          isNotNull(plannerAgentAction.runId),
+          isNotNull(plannerAgentAction.conversationId),
+        ),
       ),
     )
     .get();
@@ -1132,6 +1140,7 @@ export async function plannerAddTuningProposal(
     .slice(0, plannerTuningInstructionsMax);
   if (!instructions) throw new ValidationError("The instructions are empty.");
   const current = await plannerCurrentTuning(db, input.userId);
+  const replaced = await plannerOpenTuningProposal(db, input.userId);
   const baseline = input.metric
     ? await baselineOf(db, {
         userId: input.userId,
@@ -1171,6 +1180,22 @@ export async function plannerAddTuningProposal(
   await plannerRecordEvents(
     db,
     [
+      ...(replaced
+        ? [
+            {
+              userId: input.userId,
+              kind: "tuning.dismissed",
+              subject: "tuning" as const,
+              subjectId: replaced.id,
+              origin:
+                replaced.proposedBy === "agent"
+                  ? ("proposal" as const)
+                  : ("manual" as const),
+              proposalId: replaced.proposedBy === "agent" ? replaced.id : null,
+              data: { metric: replaced.metric, replaced: true },
+            },
+          ]
+        : []),
       {
         userId: input.userId,
         kind: "tuning.proposed",

@@ -89,11 +89,16 @@ export function plannerAttachmentToDto(
   };
 }
 
-/** The proposed comments the rows point at, by id, as cards. */
+/**
+ * The proposed comments the rows point at, by id, as cards. With `shown` (the
+ * owner's own page is listing them) an open card not yet seen is marked shown,
+ * as the Ask chat does, so the flywheel counts it (docs/fork-flywheel.md).
+ */
 async function proposalsFor(
   db: FlareMoDb,
   userId: string,
   rows: readonly PlannerTaskAttachmentRow[],
+  shown = false,
 ): Promise<Map<string, PlannerAgentActionDto>> {
   const ids = rows.flatMap((row) => (row.actionId ? [row.actionId] : []));
   if (ids.length === 0) return new Map();
@@ -106,6 +111,26 @@ async function proposalsFor(
         inArray(plannerAgentAction.id, ids),
       ),
     );
+  const unseen = shown
+    ? actions.filter((action) => action.state === "open" && !action.shownAt)
+    : [];
+  if (unseen.length) {
+    const shownAt = new Date().toISOString();
+    await db
+      .update(plannerAgentAction)
+      .set({ shownAt })
+      .where(
+        and(
+          eq(plannerAgentAction.userId, userId),
+          inArray(
+            plannerAgentAction.id,
+            unseen.map((action) => action.id),
+          ),
+        ),
+      )
+      .run();
+    for (const action of unseen) action.shownAt = shownAt;
+  }
   return new Map(
     actions.map((action) => [action.id, plannerAgentActionToDto(action)]),
   );
@@ -154,7 +179,12 @@ export function plannerAssertAttachmentSize(bytes: number): void {
  */
 export async function plannerReadAttachments(
   db: FlareMoDb,
-  input: { userId: string; taskId: string },
+  input: {
+    userId: string;
+    taskId: string;
+    /** The owner's page is showing these: open cards are marked seen. */
+    shown?: boolean;
+  },
 ): Promise<PlannerAttachmentDto[]> {
   const rows = await db
     .select()
@@ -167,7 +197,7 @@ export async function plannerReadAttachments(
       ),
     )
     .orderBy(asc(plannerTaskAttachment.createdAt), asc(sql`rowid`));
-  const proposals = await proposalsFor(db, input.userId, rows);
+  const proposals = await proposalsFor(db, input.userId, rows, input.shown);
   return rows.map((row) =>
     plannerAttachmentToDto(
       row,
@@ -338,7 +368,11 @@ export async function plannerListAttachments(
 ): Promise<PlannerAttachmentDto[]> {
   const taskId = plannerNormalizeTaskId(input.taskId);
   await plannerLoadLiveTask(db, input.userId, taskId);
-  return plannerReadAttachments(db, { userId: input.userId, taskId });
+  return plannerReadAttachments(db, {
+    userId: input.userId,
+    taskId,
+    shown: true,
+  });
 }
 
 /** How many live files a task holds. */

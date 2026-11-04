@@ -75,10 +75,31 @@ describe("plannerAddProposedGoal", () => {
       proposal(),
     );
     expect(next.edited).toBe(true);
+    // The fresh slot takes the proposal's id, so the save is logged as the agent's.
     expect(next.goals).toEqual([
-      { id: "g1", pillar: "work", title: "Ship the agent" },
+      { id: "p-goal", pillar: "work", title: "Ship the agent" },
       { id: "g2", pillar: "health", title: "Run twice" },
     ]);
+    // Added once only.
+    expect(plannerAddProposedGoal(next, proposal())).toBe(next);
+  });
+
+  it("moves the slot's tasks to the proposal's id, and keeps a saved goal's id", () => {
+    const start = {
+      ...forward([{ id: "g1", pillar: "work", title: "" }]),
+      tasks: [
+        { ref: "t1", goal_id: "g1", title: "Draft", source: "new" as const },
+      ],
+    };
+    const next = plannerAddProposedGoal(start, proposal());
+    expect(next.goals[0]?.id).toBe("p-goal");
+    expect(next.tasks[0]?.goal_id).toBe("p-goal");
+    const saved = plannerAddProposedGoal(
+      { ...start, knownGoalIds: ["g1"] },
+      proposal(),
+    );
+    expect(saved.goals[0]?.id).toBe("g1");
+    expect(saved.tasks[0]?.goal_id).toBe("g1");
   });
 
   it("adds a goal of its own under the proposal's id, up to twelve", () => {

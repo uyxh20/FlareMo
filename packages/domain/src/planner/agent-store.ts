@@ -863,7 +863,12 @@ export async function plannerAgentAddAction(
       `Today's ${PLANNER_AGENT_ACTIONS_PER_DAY} proposals are used up. Propose again tomorrow; for now, answer in words.`,
     );
   }
-  if (await plannerFlywheelProposalsPaused(db, { userId: input.userId, now })) {
+  // A file read the owner started (no session, no chat) is never paused.
+  const agentStarted = input.runId !== null || input.conversationId !== null;
+  if (
+    agentStarted &&
+    (await plannerFlywheelProposalsPaused(db, { userId: input.userId, now }))
+  ) {
     throw new RangeError(
       "Proposing is paused: the owner has not looked at most of your recent proposals. Answer in words; proposing resumes once they open them.",
     );
@@ -974,7 +979,15 @@ export async function plannerAgentSettleAction(
     .update(plannerAgentAction)
     .set({
       state: input.state,
-      settledAt,
+      // A revert keeps the accept's time, so the proposal stays in the week
+      // it was accepted in (the flywheel's scorecard reads it by that time).
+      // An accept or dismiss marks it seen: the owner settled it.
+      ...(input.state === "reverted"
+        ? {}
+        : {
+            settledAt,
+            shownAt: sql`coalesce(${plannerAgentAction.shownAt}, ${settledAt})`,
+          }),
       ...(input.landedId !== undefined ? { landedId: input.landedId } : {}),
     })
     .where(

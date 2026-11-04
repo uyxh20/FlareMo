@@ -37,12 +37,12 @@ failure is logged and swallowed: the log never blocks a save. Kinds so far:
 
 | Kind | When |
 | ---- | ---- |
-| `goal.created`, `goal.rewritten`, `goal.status`, `goal.judged`, `goal.deleted` | A goal is made, its words change, its status or result changes, or it goes. `origin` is `proposal` when an accepted agent proposal made it. |
+| `goal.created`, `goal.rewritten`, `goal.noted`, `goal.status`, `goal.judged`, `goal.deleted` | A goal is made, its words or its note change, its status or result changes, or it goes. `origin` is `proposal` when an accepted agent proposal made it: a goal proposal added in Look forward keeps the proposal's id, even when it fills an empty slot. |
 | `review.look_back_saved` | Look back is saved: scores, summary length, how much of the drafted summary the owner rewrote, goals judged. |
 | `review.look_forward_saved` | The plan is committed: goals, how many came from proposals, tasks, flags settled. |
 | `review.start_over`, `review.period_saved` | The review is started again; a month, quarter or year review is saved. |
 | `review.tuning_note`, `review.tuning_skipped` | The owner answers or skips "What should the agent do differently?". |
-| `tuning.proposed`, `tuning.accepted`, `tuning.dismissed`, `tuning.kept`, `tuning.rolled_back` | The tuning lifecycle. |
+| `tuning.proposed`, `tuning.accepted`, `tuning.dismissed`, `tuning.kept`, `tuning.rolled_back` | The tuning lifecycle. A proposal replaced by a newer one is logged as dismissed. |
 | `scorecard.viewed` | The card was opened (at most one row an hour). |
 
 Task changes are already in `planner_task_event`, and diary edits in
@@ -50,7 +50,8 @@ Task changes are already in `planner_task_event`, and diary edits in
 
 ## The scorecard
 
-`plannerFlywheelRollup` rebuilds one week (Monday to Sunday, UTC) for one user.
+A revert keeps the accept's time, so a reverted proposal stays in the week it
+was accepted in. `plannerFlywheelRollup` rebuilds one week (Monday to Sunday, UTC) for one user.
 The nightly sweep runs it for this week and the three before, because a
 proposal is judged on its first seven days. Opening the card also rebuilds the
 reviewed week when its numbers are over an hour old.
@@ -61,7 +62,7 @@ Each metric is stored per origin: `ai` (an accepted agent proposal started it),
 
 | Metric | What it counts |
 | ------ | -------------- |
-| `proposals_seen` | Agent actions shown to the owner, of those made. |
+| `proposals_seen` | Agent actions shown to the owner, of those made. A card counts as shown when the Ask chat or the task panel lists it, or when the owner settles it. |
 | `proposals_accepted` | Accepted, of those settled. |
 | `kept_7d` | Accepted actions with no owner edit in the seven days after. |
 | `entries_edited_7d`, `entry_edit_chars` | Diary entries edited within seven days, and the typical edit size. |
@@ -102,7 +103,8 @@ week, and done on time.
   prompt is told not to tune on it.
 - Proposing pauses when, over the fourteen days before the last one, the agent
   made at least ten proposals and fewer than one in ten was ever shown. The
-  last day is left out so one busy chat does not pause itself.
+  last day is left out so one busy chat does not pause itself, and file reads
+  the owner started are never counted or paused.
 - The instructions are capped at 1,500 characters and the weekly note at 600.
 
 ## Routes

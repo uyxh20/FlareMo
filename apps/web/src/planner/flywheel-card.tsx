@@ -42,6 +42,8 @@ export type PlannerFlywheelTile = {
   shown: boolean;
   /** "8 of 13 · +6 vs last week", or "". */
   detail: string;
+  /** The cases behind the value this week. */
+  den: number;
 };
 
 function metricIn(
@@ -90,6 +92,7 @@ export function plannerFlywheelTiles(
         value: strings.tooFew(den),
         shown: false,
         detail: "",
+        den,
       };
     }
     const parts = [strings.outOf(now.num, now.den)];
@@ -108,6 +111,7 @@ export function plannerFlywheelTiles(
       value: plannerFlywheelFormat(metric, now.value),
       shown: true,
       detail: parts.join(" · "),
+      den,
     };
   });
 }
@@ -357,7 +361,7 @@ export function PlannerFlywheelCard({
   if (!response) return null;
   const saving = mutation.isPending;
   const tiles = plannerFlywheelTiles(response, strings);
-  const anyShown = tiles.some((tile) => tile.shown);
+  const nothingCounted = tiles.every((tile) => tile.den === 0);
   const canSuggest =
     response.can_propose &&
     response.proposal_due &&
@@ -395,7 +399,7 @@ export function PlannerFlywheelCard({
           </div>
         ))}
       </dl>
-      {!anyShown && (
+      {nothingCounted && (
         <p className="text-sm text-muted-foreground">{strings.noNumbers}</p>
       )}
       {response.proposing_paused && (

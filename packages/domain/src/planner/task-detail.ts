@@ -59,7 +59,12 @@ async function readProject(
  */
 export async function plannerReadTaskDetail(
   db: FlareMoDb,
-  input: { userId: string; taskId: string },
+  input: {
+    userId: string;
+    taskId: string;
+    /** The owner's task panel is showing it: file cards are marked seen. */
+    shown?: boolean;
+  },
 ): Promise<PlannerTaskDetail> {
   const taskId = plannerNormalizeTaskId(input.taskId);
   const row = await db
@@ -81,7 +86,11 @@ export async function plannerReadTaskDetail(
       ? Promise.resolve(null)
       : readProject(db, input.userId, row.projectId),
     plannerReadComments(db, { userId: input.userId, taskId }),
-    plannerReadAttachments(db, { userId: input.userId, taskId }),
+    plannerReadAttachments(db, {
+      userId: input.userId,
+      taskId,
+      shown: input.shown,
+    }),
   ]);
   return {
     task: taskToDto(row),
