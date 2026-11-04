@@ -44,8 +44,8 @@ export async function forkAgentScheduled(
 
 /**
  * The nightly maintenance's call: ends agent sessions no step has touched for
- * twelve hours, and expires proposed actions nobody acted on in seven days.
- * Never throws.
+ * twelve hours, expires proposed actions nobody acted on in seven days, and
+ * rebuilds the flywheel's recent scorecard weeks. Never throws.
  */
 export async function forkAgentNightly(
   env: FlareMoEnv,
@@ -56,7 +56,7 @@ export async function forkAgentNightly(
     const { plannerAgent, plannerSweepAgentRuns } = await import(
       "../routes/planner-agent"
     );
-    const { plannerAgentExpireActions } = await import(
+    const { plannerAgentExpireActions, plannerFlywheelNightly } = await import(
       "@flaremo/domain/src/planner"
     );
     const ended = await plannerSweepAgentRuns(plannerAgent(env), db, now);
@@ -66,6 +66,11 @@ export async function forkAgentNightly(
         JSON.stringify({ message: "General agent sweep", ended, expired }),
       );
     }
+    // The flywheel's scorecard for this week and the three before
+    // (docs/fork-flywheel.md). It runs without the agent too: it also
+    // compares the owner's own goals and tasks.
+    const scored = await plannerFlywheelNightly(db, now);
+    console.log(JSON.stringify({ message: "Flywheel scorecard", ...scored }));
   } catch (error) {
     console.error(
       JSON.stringify({

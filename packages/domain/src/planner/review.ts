@@ -41,12 +41,18 @@ import { plannerReadBoard } from "./board";
 import { plannerRespreadColumn } from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import {
+  plannerAcceptedGoalProposals,
+  plannerEditChars,
+  plannerRecordEvents,
+} from "./flywheel";
+import {
   plannerReadWeek,
   plannerReadWeekGoals,
   plannerRequireMonday,
   plannerSetTaskGoal,
   plannerWeekUpsertStatement,
 } from "./goals";
+import { plannerRewriteRate } from "./period-review-prompts";
 import { plannerApplyColumnMove, plannerCreateTask } from "./plans";
 import {
   plannerCountWeekReads,
@@ -154,6 +160,19 @@ async function readReviewRow(
       ),
     )
     .get();
+}
+
+/**
+ * The memo the model drafted for this review, as the page saved it in the
+ * review's state, or null when the page wrote it from its own template.
+ */
+function memoDraftOf(row: PlannerReviewRow | undefined): string | null {
+  const back = row?.state?.back;
+  if (!back || typeof back !== "object") return null;
+  const { memo, memoBy } = back as { memo?: unknown; memoBy?: unknown };
+  return memoBy === "model" && typeof memo === "string" && memo.trim()
+    ? memo
+    : null;
 }
 
 type ReviewFields = {
@@ -385,6 +404,19 @@ export async function plannerStartReviewOver(
         ),
       ),
   ]);
+  await plannerRecordEvents(
+    db,
+    [
+      {
+        userId: input.userId,
+        kind: "review.start_over",
+        subject: "review",
+        subjectId: weekStart,
+        at: nowIso,
+      },
+    ],
+    input.now,
+  );
   return { updated_at: nowIso };
 }
 
@@ -518,6 +550,7 @@ export async function plannerSaveLookBack(
   const goals = await plannerReadWeekGoals(db, { userId: user.id, weekStart });
   const known = new Set(goals.map((goal) => goal.id));
   const nowIso = plannerNow(input.now).toISOString();
+  const draft = memoDraftOf(await readReviewRow(db, user.id, weekStart));
   await plannerRunBatch(db, [
     ...body.goal_results
       .filter((entry) => known.has(entry.goal_id))
@@ -553,6 +586,45 @@ export async function plannerSaveLookBack(
       nowIso,
     }),
   ]);
+  const results = new Map(
+    body.goal_results
+      .filter((entry) => known.has(entry.goal_id))
+      .map((entry) => [entry.goal_id, entry.result]),
+  );
+  await plannerRecordEvents(
+    db,
+    [
+      ...goals
+        .filter(
+          (goal) =>
+            results.has(goal.id) && results.get(goal.id) !== goal.result,
+        )
+        .map((goal) => ({
+          userId: user.id,
+          kind: "goal.judged",
+          subject: "goal" as const,
+          subjectId: goal.id,
+          data: { level: "week", result: results.get(goal.id) ?? null },
+          at: nowIso,
+        })),
+      {
+        userId: user.id,
+        kind: "review.look_back_saved",
+        subject: "review",
+        subjectId: weekStart,
+        data: {
+          auth,
+          ach,
+          memo_length: content.length,
+          // The share of the saved memo's lines that are not the model's draft.
+          rewrite_rate: draft ? plannerRewriteRate(draft, content) : null,
+          goals_judged: [...results.values()].filter(Boolean).length,
+        },
+        at: nowIso,
+      },
+    ],
+    input.now,
+  );
   const week = await plannerReadWeek(db, { userId: user.id, weekStart });
   if (!week) throw new NotFoundError("The week could not be read back.");
   return { week, memo_id: memo.id };
@@ -800,6 +872,66 @@ async function writePlanGoals(
     );
   }
   await plannerRunBatch(db, statements);
+
+  // The log: goals the plan made (the agent's, when its proposal was added),
+  // goals it renamed, goals it removed.
+  const fresh = input.goals.filter((goal) => !knownById.has(goal.id));
+  const proposed = await plannerAcceptedGoalProposals(
+    db,
+    input.userId,
+    fresh.map((goal) => goal.id),
+  );
+  const base = {
+    userId: input.userId,
+    subject: "goal" as const,
+    at: input.nowIso,
+  };
+  await plannerRecordEvents(db, [
+    ...fresh.map((goal) => ({
+      ...base,
+      kind: "goal.created",
+      subjectId: goal.id,
+      origin: proposed.has(goal.id)
+        ? ("proposal" as const)
+        : ("manual" as const),
+      proposalId: proposed.has(goal.id) ? goal.id : null,
+      data: {
+        level: "week",
+        pillar: goal.pillar,
+        lines: 0,
+        length: goal.title.trim().length,
+      },
+    })),
+    ...input.goals.flatMap((goal) => {
+      const existing = knownById.get(goal.id);
+      const title = goal.title.trim();
+      if (!existing || existing.deletedAt || existing.title === title)
+        return [];
+      return [
+        {
+          ...base,
+          kind: "goal.rewritten",
+          subjectId: goal.id,
+          data: {
+            level: "week",
+            length_before: existing.title.length,
+            length_after: title.length,
+            edit_chars: plannerEditChars(existing.title, title),
+            lines_before: existing.lines.length,
+            lines_after: existing.lines.length,
+          },
+        },
+      ];
+    }),
+    ...current
+      .filter((row) => !keep.has(row.id) && input.knownIds.has(row.id))
+      .map((row) => ({
+        ...base,
+        kind: "goal.deleted",
+        subjectId: row.id,
+        data: { level: "week" },
+      })),
+  ]);
 }
 
 /** The board column a live task is in, or null when it is gone or dropped. */
@@ -1125,5 +1257,30 @@ export async function plannerCommitPlan(
     userId,
     weekStart: planWeek,
   });
+  const fromProposals = await plannerAcceptedGoalProposals(
+    db,
+    userId,
+    goals.map((goal) => goal.id),
+  );
+  await plannerRecordEvents(
+    db,
+    [
+      {
+        userId,
+        kind: "review.look_forward_saved",
+        subject: "review",
+        subjectId: reviewWeek,
+        data: {
+          goals: goals.length,
+          goals_from_proposals: fromProposals.size,
+          tasks: planned.length,
+          tasks_created: Object.keys(created).length,
+          flags_settled: body.settled.length,
+        },
+        at: doneAt,
+      },
+    ],
+    input.now,
+  );
   return { plan_week: planWeek, goals, created };
 }

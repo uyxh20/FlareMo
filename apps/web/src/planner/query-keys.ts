@@ -40,6 +40,8 @@ export const plannerQueryKeys = {
   periodStatus: (today: string) => ["planner", "period-status", today] as const,
   /** The general agent's proposals for the week a review plans (docs/fork-general-agent.md). */
   proposals: (week: string) => ["planner", "proposals", week] as const,
+  /** The weekly review's scorecard card for a reviewed week (docs/fork-flywheel.md). */
+  flywheel: (week: string) => ["planner", "flywheel", week] as const,
   /** Every cached agent chat, global or a task's, for refreshing their cards. */
   asks: ["planner", "ask"] as const,
   /**

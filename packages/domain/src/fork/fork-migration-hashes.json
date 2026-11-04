@@ -10,5 +10,6 @@
   "9013_planner_period_review.sql": "70d8000f72167dd0fcd22722162a43b6d81ff4d470021ef26cf41b5510caac6f",
   "9014_planner_agent.sql": "3140d04e52410c1ac8dc160adaf4f58ba0250793a8003eaccf82baad058ea949",
   "9015_planner_agent_action.sql": "effafe7489d0f5ffaf872cbbd6e9e2ba0ba12a59f2372af170702366ea522132",
-  "9016_planner_task_attachment.sql": "6c047695d6d22dbc5b9bb19394c11deebf3b1d661e4e2759fa31029af6ba70ac"
+  "9016_planner_task_attachment.sql": "6c047695d6d22dbc5b9bb19394c11deebf3b1d661e4e2759fa31029af6ba70ac",
+  "9017_planner_flywheel.sql": "37d6c653909e4588fcc743ef12f9c0f8b2bb8446dad88cd39cb26ccb3614d736"
 }

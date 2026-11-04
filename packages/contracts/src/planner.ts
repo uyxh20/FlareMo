@@ -34,6 +34,7 @@ import {
 export * from "./fork-health";
 export * from "./planner-agent";
 export * from "./planner-board";
+export * from "./planner-flywheel";
 export * from "./planner-goals";
 export * from "./planner-period-review";
 export * from "./planner-periods";

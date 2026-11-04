@@ -310,6 +310,10 @@ export const plannerWeek = sqliteTable(
     reviewedAt: text("reviewed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    // The owner's answer in Look back to "What should the agent do
+    // differently?", and the tuning version active that week (migration 9017).
+    tuningNote: text("tuning_note"),
+    tuningVersion: integer("tuning_version"),
   },
   (table) => [primaryKey({ columns: [table.userId, table.weekStart] })],
 );
@@ -458,6 +462,10 @@ export const plannerAgentRun = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     endedAt: text("ended_at"),
+    // What ran it (migration 9017): the agent's version as the session
+    // reported it, and the owner's tuning version it was given.
+    agentVersion: text("agent_version"),
+    tuningVersion: integer("tuning_version"),
   },
   (table) => [
     index("planner_agent_run_user_key_idx").on(
@@ -592,6 +600,99 @@ export const plannerAgentAction = sqliteTable(
   ],
 );
 
+// The flywheel (migration 9017, docs/fork-flywheel.md). A log of changes to
+// goals, review steps and the tuning, with numbers and codes only in `data`:
+// never the words of a goal or a note. Kept forever.
+export const plannerEvent = sqliteTable(
+  "planner_event",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    kind: text("kind").notNull(),
+    subject: text("subject", {
+      enum: ["goal", "review", "tuning", "scorecard"],
+    }).notNull(),
+    subjectId: text("subject_id"),
+    origin: text("origin", { enum: ["manual", "proposal"] })
+      .notNull()
+      .default("manual"),
+    // planner_agent_proposal.id or planner_agent_action.id by value.
+    proposalId: text("proposal_id"),
+    data: text("data", { mode: "json" })
+      .$type<Record<string, number | string | boolean | null>>()
+      .notNull()
+      .default({}),
+    occurredAt: text("occurred_at").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("planner_event_user_occurred_idx").on(table.userId, table.occurredAt),
+    index("planner_event_user_kind_idx").on(
+      table.userId,
+      table.kind,
+      table.occurredAt,
+    ),
+  ],
+);
+
+// The weekly scorecard: one row per week, metric and origin, rebuilt nightly.
+export const plannerMetricWeek = sqliteTable(
+  "planner_metric_week",
+  {
+    userId: text("user_id").notNull(),
+    weekStart: text("week_start").notNull(),
+    metric: text("metric").notNull(),
+    origin: text("origin", { enum: ["ai", "manual", "all"] }).notNull(),
+    value: real("value"),
+    num: integer("num").notNull().default(0),
+    den: integer("den").notNull().default(0),
+    computedAt: text("computed_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.userId, table.weekStart, table.metric, table.origin],
+    }),
+  ],
+);
+
+// The owner's standing instructions to the agent, one row per version.
+export const plannerTuning = sqliteTable(
+  "planner_tuning",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    version: integer("version"),
+    instructions: text("instructions").notNull(),
+    why: text("why").notNull().default(""),
+    metric: text("metric"),
+    baseline: real("baseline"),
+    state: text("state", {
+      enum: [
+        "proposed",
+        "active",
+        "kept",
+        "rolled_back",
+        "dismissed",
+        "superseded",
+      ],
+    })
+      .notNull()
+      .default("proposed"),
+    proposedBy: text("proposed_by", { enum: ["agent", "owner"] })
+      .notNull()
+      .default("agent"),
+    model: text("model"),
+    parentId: text("parent_id"),
+    createdAt: text("created_at").notNull(),
+    activatedAt: text("activated_at"),
+    judgedAt: text("judged_at"),
+    settledAt: text("settled_at"),
+  },
+  (table) => [
+    index("planner_tuning_user_state_idx").on(table.userId, table.state),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
 export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
@@ -608,3 +709,6 @@ export type PlannerAgentRunRow = typeof plannerAgentRun.$inferSelect;
 export type PlannerAgentProposalRow = typeof plannerAgentProposal.$inferSelect;
 export type PlannerAgentChatRow = typeof plannerAgentChat.$inferSelect;
 export type PlannerAgentActionRow = typeof plannerAgentAction.$inferSelect;
+export type PlannerEventRow = typeof plannerEvent.$inferSelect;
+export type PlannerMetricWeekRow = typeof plannerMetricWeek.$inferSelect;
+export type PlannerTuningRow = typeof plannerTuning.$inferSelect;

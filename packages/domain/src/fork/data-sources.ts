@@ -878,6 +878,70 @@ export const forkDataSources: readonly ForkDataSource[] = [
     uses: plumbing("the agent's sessions and spend"),
   },
 
+  // --- The flywheel ----------------------------------------------------------
+  {
+    id: "planner_event",
+    table: "planner_event",
+    module: "agent",
+    kind: "history",
+    owner: "fork",
+    holds:
+      "The flywheel log: each change to a goal, each review step and each tuning decision, with who started it and sizes, never words",
+    uses: {
+      lookBack: no("a log of changes, not part of the week's story"),
+      lookForward: no("a log of changes, not part of the plan"),
+      search: no("numbers and codes, nothing to search"),
+      memory: no("the memory layer reads entries, not the log"),
+      mcp: no("not exposed to agents"),
+      agent: no(
+        "the scorecard built from it is read with read_scorecard; the rows are not",
+      ),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "planner_metric_week",
+    table: "planner_metric_week",
+    module: "agent",
+    kind: "derived",
+    owner: "fork",
+    holds:
+      "The weekly scorecard: what happened to the agent's proposals, and results of agent-started against owner-started work",
+    uses: {
+      lookBack: no(
+        "shown on the review page, not sent to the review's prompts",
+      ),
+      lookForward: no("shown on the review page, not sent to the goal check"),
+      search: no("numbers only"),
+      memory: no("numbers only"),
+      mcp: no("not exposed to agents"),
+      agent: yes("read_scorecard returns the recent weeks"),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "planner_tuning",
+    table: "planner_tuning",
+    module: "agent",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "The owner's standing instructions to the agent, one row per version, with the metric each one aims to move and its verdict",
+    uses: {
+      lookBack: no("instructions for the agent, not part of the week"),
+      lookForward: no("instructions for the agent, not part of the plan"),
+      search: no("instructions for the agent, not diary content"),
+      memory: no("the memory layer reads entries, not the tuning"),
+      mcp: no("not exposed to agents"),
+      agent: yes(
+        "the active version rides on each session's first message and read_scorecard repeats it",
+      ),
+      userExport: FORK_EXPORT_GAP,
+      backup: IN_BACKUP,
+    },
+  },
   // --- Health tracker ------------------------------------------------------
   {
     id: "health_entry",

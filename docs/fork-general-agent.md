@@ -43,10 +43,20 @@ The agent's MCP server is `POST /api/app/planner/agent/mcp`
 
 - reads: `review_week`, `review_period`, `week_diary`, `list_entries`,
   `read_entries`, `search_entries`, `read_goals`, `read_tasks`, `read_health`,
-  `read_memories`;
+  `read_memories`, `read_scorecard` (the owner's standing instructions and up
+  to 26 weeks of the flywheel's scorecard, `docs/fork-flywheel.md`);
 - proposals: `propose_memory`, `propose_goal`, `propose_task`. A proposal is
   refused unless a review session is at its memo or propose step, and a quote
   it gives must be found word for word in the owner's entry.
+
+## Standing instructions
+
+The owner's active tuning version (`docs/fork-flywheel.md`) is added to the
+first message of every agent session, and the run records which version it
+was given (`planner_agent_run.tuning_version`) and the agent's own version as
+the session reported it (`agent_version`). The agent never edits the
+instructions. Its proposing pauses when almost none of its recent proposals
+were shown to the owner.
 
 ## Proposing into tasks and the diary
 

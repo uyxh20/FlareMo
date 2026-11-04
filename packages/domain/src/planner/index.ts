@@ -20,6 +20,7 @@ export * from "./board";
 export * from "./board-rank";
 export * from "./columns";
 export * from "./comments";
+export * from "./flywheel";
 export * from "./goals";
 export * from "./history-read";
 export * from "./history-revert";

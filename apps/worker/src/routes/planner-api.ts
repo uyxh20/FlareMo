@@ -41,6 +41,7 @@ import { rateLimitGuard } from "../rate-limit";
 import { plannerAgentApi } from "./planner-agent-api";
 import { plannerAgentMcpApi } from "./planner-agent-mcp";
 import { plannerAttachmentsApi } from "./planner-attachments-api";
+import { plannerFlywheelApi } from "./planner-flywheel-api";
 import { plannerGoalsApi } from "./planner-goals-api";
 import { plannerPeriodReviewApi } from "./planner-period-review-api";
 import {
@@ -425,3 +426,6 @@ plannerApi.route("/", plannerAgentMcpApi);
 plannerApi.route("/", plannerAgentApi);
 // Files on tasks (planner-attachments-api.ts, docs/fork-task-attachments.md).
 plannerApi.route("/", plannerAttachmentsApi);
+// The flywheel: the scorecard card and the tuning (planner-flywheel-api.ts,
+// docs/fork-flywheel.md).
+plannerApi.route("/", plannerFlywheelApi);

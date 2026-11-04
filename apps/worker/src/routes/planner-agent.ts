@@ -20,6 +20,8 @@ import {
   plannerAgentSetStep,
   plannerAgentStepDone,
   plannerAgentTools,
+  plannerCurrentTuning,
+  plannerTuningBlock,
 } from "@flaremo/domain/src/planner";
 import { getPublicUrl, MEMOS_PAT_CONFIG_ID } from "../auth-env";
 import { loadAuthFactory } from "../context";
@@ -378,6 +380,10 @@ export async function plannerStartAgent(
     authUserId,
     now: now.getTime(),
   });
+  // The owner's standing instructions ride on the first message, and the run
+  // records which version it was given (docs/fork-flywheel.md).
+  const tuning = await plannerCurrentTuning(db, user.id);
+  const tuningBlock = plannerTuningBlock(tuning);
   const run = await plannerAgentCreateRun(db, {
     userId: user.id,
     job: input.job,
@@ -386,11 +392,15 @@ export async function plannerStartAgent(
     startedBy: input.startedBy,
     step: input.step,
     stepInput: input.stepInput,
+    tuningVersion: tuningBlock ? (tuning?.version ?? null) : null,
     now,
   });
   const ask = input.job === "ask";
   try {
-    const session = await call<{ id: string }>(agent, "start", "/sessions", {
+    const session = await call<{
+      id: string;
+      agent?: { version?: string | number | null } | null;
+    }>(agent, "start", "/sessions", {
       body: {
         agent: ask
           ? {
@@ -415,12 +425,19 @@ export async function plannerStartAgent(
           type: "limit",
           max_list_cost: { amount: String(budget), currency: "USD" },
         },
-        initial_events: [userMessage(input.message)],
+        initial_events: [
+          userMessage(
+            tuningBlock ? `${input.message}\n\n${tuningBlock}` : input.message,
+          ),
+        ],
       },
     });
+    const version = session.agent?.version;
     await plannerAgentAttachSession(db, {
       runId: run.id,
       sessionId: session.id,
+      agentVersion:
+        version === undefined || version === null ? null : String(version),
     });
     return { sessionId: session.id, runId: run.id };
   } catch (error) {

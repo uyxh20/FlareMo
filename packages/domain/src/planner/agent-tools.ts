@@ -7,6 +7,7 @@ import {
   healthLocalDayStart,
   healthLocalMoment,
   listMemosQuerySchema,
+  PLANNER_FLYWHEEL_MIN_SAMPLE,
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
   type PlannerGoalDto,
@@ -14,6 +15,7 @@ import {
   plannerAddDays,
   plannerAgentActionFields,
   plannerAgentToolInputs,
+  plannerFlywheelMetrics,
   plannerPeriodStartOf,
   plannerPillarNames,
   plannerSummaryMemoSource,
@@ -40,6 +42,11 @@ import {
   plannerAgentFindQuote,
 } from "./agent-store";
 import { plannerReadBoard } from "./board";
+import {
+  plannerCurrentTuning,
+  plannerFlywheelWeekOf,
+  plannerReadScorecard,
+} from "./flywheel";
 import { plannerReadGoalsYear, plannerRequireWeeklyGoal } from "./goals";
 import { plannerReadTaskHistory } from "./history-read";
 import { plannerSyncHistory } from "./history-sync";
@@ -793,6 +800,45 @@ const handlers: Handlers = {
           } | ${oneLine(memory.content, 400)}`,
       ),
     ].join("\n");
+  },
+
+  async read_scorecard(context, input) {
+    const now = plannerNow(context.now);
+    const weekStart = plannerFlywheelWeekOf(now);
+    const weeks = await plannerReadScorecard(context.db, {
+      userId: context.user.id,
+      weekStart,
+      weeks: input.weeks ?? 8,
+    });
+    const tuning = await plannerCurrentTuning(context.db, context.user.id);
+    const out = [
+      tuning?.instructions.trim()
+        ? `Your standing instructions from the owner (version ${tuning.version}):\n${tuning.instructions.trim()}`
+        : "You have no standing instructions from the owner yet.",
+      "",
+      `The scorecard, newest week first. ai = started by one of your accepted proposals, manual = by the owner. A share over fewer than ${PLANNER_FLYWHEEL_MIN_SAMPLE} cases is too few to read.`,
+    ];
+    if (weeks.length === 0) out.push("No week has been scored yet.");
+    for (const week of weeks) {
+      const parts = week.values
+        .filter((value) => value.den > 0 || value.value !== null)
+        .map((value) => {
+          const meta = plannerFlywheelMetrics[value.metric];
+          const shown =
+            meta.unit === "share"
+              ? value.den < PLANNER_FLYWHEEL_MIN_SAMPLE
+                ? `too few (${value.num} of ${value.den})`
+                : `${Math.round((value.value ?? 0) * 100)}% of ${value.den}`
+              : meta.unit === "cents"
+                ? `${value.value ?? "none"} cents`
+                : `${value.value ?? "none"}`;
+          return `${meta.label} (${value.origin}): ${shown}`;
+        });
+      out.push(
+        `- Week of ${week.week_start}: ${parts.join("; ") || "nothing to count"}`,
+      );
+    }
+    return out.join("\n");
   },
 
   async propose_memory(context, input) {

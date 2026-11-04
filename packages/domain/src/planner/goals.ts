@@ -28,6 +28,13 @@ import {
 import { and, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import {
+  type PlannerEventInput,
+  plannerAcceptedGoalProposals,
+  plannerEditChars,
+  plannerGoalText,
+  plannerRecordEvents,
+} from "./flywheel";
+import {
   type PlannerActor,
   plannerEventStatement,
   plannerLoadLiveTask,
@@ -229,6 +236,31 @@ export async function plannerCreateGoal(
     throw new ConflictError("That goal id is already in use.");
   }
   if (row.deletedAt) throw new NotFoundError(`Goal not found: ${id}`);
+  // A retried create finds the goal as it was: log only the first.
+  if (row.createdAt === nowIso) {
+    const proposed = await plannerAcceptedGoalProposals(db, input.userId, [id]);
+    await plannerRecordEvents(
+      db,
+      [
+        {
+          userId: input.userId,
+          kind: "goal.created",
+          subject: "goal",
+          subjectId: id,
+          origin: proposed.has(id) ? "proposal" : "manual",
+          proposalId: proposed.has(id) ? id : null,
+          data: {
+            level: row.level,
+            pillar: row.pillar,
+            lines: row.lines.length,
+            length: plannerGoalText(row).length,
+          },
+          at: nowIso,
+        },
+      ],
+      input.now,
+    );
+  }
   return plannerGoalToDto(row);
 }
 
@@ -287,7 +319,58 @@ export async function plannerUpdateGoal(
         ),
       ),
   ]);
-  return plannerGoalToDto(await loadGoal(db, input.userId, existing.id));
+  const updated = await loadGoal(db, input.userId, existing.id);
+  await plannerRecordEvents(
+    db,
+    plannerGoalChangeEvents(input.userId, existing, updated, nowIso),
+    input.now,
+  );
+  return plannerGoalToDto(updated);
+}
+
+/**
+ * The log rows for one goal's change (docs/fork-flywheel.md): a rewrite of its
+ * words (sizes only), a new status, a new result. Nothing when nothing changed.
+ */
+export function plannerGoalChangeEvents(
+  userId: string,
+  before: PlannerGoalRow,
+  after: PlannerGoalRow,
+  at: string,
+): PlannerEventInput[] {
+  const events: PlannerEventInput[] = [];
+  const base = { userId, subject: "goal" as const, subjectId: after.id, at };
+  const was = plannerGoalText(before);
+  const now = plannerGoalText(after);
+  if (was !== now) {
+    events.push({
+      ...base,
+      kind: "goal.rewritten",
+      data: {
+        level: after.level,
+        length_before: was.length,
+        length_after: now.length,
+        edit_chars: plannerEditChars(was, now),
+        lines_before: before.lines.length,
+        lines_after: after.lines.length,
+      },
+    });
+  }
+  if (before.status !== after.status) {
+    events.push({
+      ...base,
+      kind: "goal.status",
+      data: { level: after.level, from: before.status, to: after.status },
+    });
+  }
+  if (before.result !== after.result) {
+    events.push({
+      ...base,
+      kind: "goal.judged",
+      data: { level: after.level, result: after.result },
+    });
+  }
+  return events;
 }
 
 /** Removes a goal (soft delete). Tasks and flags that name it keep the id. */
@@ -308,6 +391,20 @@ export async function plannerDeleteGoal(
         ),
       ),
   ]);
+  await plannerRecordEvents(
+    db,
+    [
+      {
+        userId: input.userId,
+        kind: "goal.deleted",
+        subject: "goal",
+        subjectId: existing.id,
+        data: { level: existing.level, result: existing.result },
+        at: nowIso,
+      },
+    ],
+    input.now,
+  );
 }
 
 /** The newest live north star, or null. */

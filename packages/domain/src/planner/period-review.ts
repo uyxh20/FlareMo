@@ -32,6 +32,7 @@ import { getMemoByClientId } from "../memos-read";
 import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
 import type { TeamViewer } from "../team-permissions";
+import { plannerRecordEvents } from "./flywheel";
 import {
   type PlannerPeriodContext,
   plannerEvidenceToDto,
@@ -526,6 +527,26 @@ export async function plannerSavePeriodReview(
     )
     .all();
   if (!memo.id) throw new NotFoundError("The memo could not be read back.");
+  await plannerRecordEvents(
+    db,
+    [
+      {
+        userId: user.id,
+        kind: "review.period_saved",
+        subject: "review",
+        subjectId: `${level}:${periodStart}`,
+        data: {
+          level,
+          memo_length: content.length,
+          rewrite_rate: rewriteRate,
+          receipts: saved.length,
+          receipts_verified: saved.filter((row) => row.verified).length,
+        },
+        at: nowIso,
+      },
+    ],
+    input.now,
+  );
   const evidence: PlannerEvidenceDto[] = saved.map(plannerEvidenceToDto);
   return {
     memo_id: memo.id,

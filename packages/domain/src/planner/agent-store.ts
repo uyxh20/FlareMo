@@ -37,6 +37,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { NotFoundError } from "../errors";
+import { plannerFlywheelProposalsPaused } from "./flywheel";
 import {
   type PlannerRawRow,
   plannerVerifyQuote,
@@ -140,6 +141,8 @@ export async function plannerAgentCreateRun(
     startedBy?: "owner" | "schedule";
     step: string;
     stepInput?: unknown;
+    /** The owner's tuning version the session is given (docs/fork-flywheel.md). */
+    tuningVersion?: number | null;
     now?: Date;
   },
 ): Promise<PlannerAgentRunRow> {
@@ -162,6 +165,8 @@ export async function plannerAgentCreateRun(
     createdAt: at,
     updatedAt: at,
     endedAt: null,
+    agentVersion: null,
+    tuningVersion: input.tuningVersion ?? null,
   };
   await db.insert(plannerAgentRun).values(row).run();
   return row;
@@ -169,11 +174,15 @@ export async function plannerAgentCreateRun(
 
 export async function plannerAgentAttachSession(
   db: FlareMoDb,
-  input: { runId: string; sessionId: string },
+  input: { runId: string; sessionId: string; agentVersion?: string | null },
 ): Promise<void> {
   await db
     .update(plannerAgentRun)
-    .set({ sessionId: input.sessionId, updatedAt: new Date().toISOString() })
+    .set({
+      sessionId: input.sessionId,
+      ...(input.agentVersion ? { agentVersion: input.agentVersion } : {}),
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(plannerAgentRun.id, input.runId))
     .run();
 }
@@ -852,6 +861,11 @@ export async function plannerAgentAddAction(
   if (today >= PLANNER_AGENT_ACTIONS_PER_DAY) {
     throw new RangeError(
       `Today's ${PLANNER_AGENT_ACTIONS_PER_DAY} proposals are used up. Propose again tomorrow; for now, answer in words.`,
+    );
+  }
+  if (await plannerFlywheelProposalsPaused(db, { userId: input.userId, now })) {
+    throw new RangeError(
+      "Proposing is paused: the owner has not looked at most of your recent proposals. Answer in words; proposing resumes once they open them.",
     );
   }
   const row: PlannerAgentActionRow = {

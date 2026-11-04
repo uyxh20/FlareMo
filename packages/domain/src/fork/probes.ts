@@ -364,6 +364,18 @@ export const PROBES: Record<string, Probe> = {
       IN_WEEK,
     );
   },
+  planner_tuning: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_tuning (id, user_id, version, instructions, why, state, proposed_by, created_at, activated_at)
+       VALUES (?, ?, 1, ?, '', 'active', 'owner', ?, ?)`,
+      nextId("tuning"),
+      p.user.id,
+      `Ask about ${p.marker} before proposing a task.`,
+      IN_WEEK,
+      IN_WEEK,
+    );
+  },
   articles: async (p) => {
     await plannerTestRun(
       p.rt.database,
@@ -494,6 +506,7 @@ async function agentReads(rt: PlannerTestRuntime): Promise<string> {
     call("read_tasks", { done_days: 90 }),
     call("read_health", { from: "2026-09-01", to: TODAY }),
     call("read_memories", {}),
+    call("read_scorecard", { weeks: 8 }),
   ]);
   const opened = [];
   for (let at = 0; at < ids.length; at += 20) {

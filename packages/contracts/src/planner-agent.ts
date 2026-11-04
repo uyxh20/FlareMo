@@ -144,6 +144,15 @@ export const plannerAgentToolInputs = {
       .optional()
       .describe("Words to find; every memory when left out."),
   }),
+  read_scorecard: z.strictObject({
+    weeks: z
+      .number()
+      .int()
+      .min(1)
+      .max(26)
+      .optional()
+      .describe("How many weeks back from this one; 8 when left out."),
+  }),
   propose_memory: z.strictObject({
     content: z
       .string()
@@ -381,6 +390,8 @@ export const plannerAgentToolDescriptions: Record<
     "The health tracker between two days: each training session, breathwork and night out by day, and each week's totals against the owner's targets.",
   read_memories:
     "What the memory ledger already holds about the owner: each memory with its kind and whether the owner confirmed it or it waits as a proposal. Check here before proposing a memory.",
+  read_scorecard:
+    "How your work has landed with the owner, week by week: how many of your proposals were seen, accepted and kept for seven days, how often the owner edited what you drafted against what they wrote themselves, tasks done by their due day and week goals met for your proposals against the owner's own, and your standing instructions from the owner. Numbers only. A share over fewer than 10 cases says too few.",
   propose_memory:
     "Propose a memory about the owner. It waits on the Memory page until the owner accepts or rejects it; nothing is remembered before that. Only in a review, only for something durable that the diary states, with the owner's own words as the receipt.",
   propose_goal:

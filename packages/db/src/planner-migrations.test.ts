@@ -17,9 +17,11 @@ import {
   plannerAgentChat,
   plannerAgentProposal,
   plannerAgentRun,
+  plannerEvent,
   plannerEvidence,
   plannerGoal,
   plannerGoalFlag,
+  plannerMetricWeek,
   plannerPeriodReview,
   plannerProjectNode,
   plannerReview,
@@ -29,6 +31,7 @@ import {
   plannerTaskEvent,
   plannerTaskPlan,
   plannerTaskSeen,
+  plannerTuning,
   plannerWeek,
 } from "./schema/planner";
 import { applyFlaremoMigrations } from "./test-migrations";
@@ -174,6 +177,29 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "created_at"],
     },
   ],
+  planner_event: [
+    {
+      name: "planner_event_user_kind_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "kind", "occurred_at"],
+    },
+    {
+      name: "planner_event_user_occurred_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "occurred_at"],
+    },
+  ],
+  planner_metric_week: [],
+  planner_tuning: [
+    {
+      name: "planner_tuning_user_state_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "state"],
+    },
+  ],
   planner_task_attachment: [
     {
       name: "planner_task_attachment_removed_idx",
@@ -210,6 +236,9 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_agent_chat: plannerAgentChat,
   planner_agent_action: plannerAgentAction,
   planner_task_attachment: plannerTaskAttachment,
+  planner_event: plannerEvent,
+  planner_metric_week: plannerMetricWeek,
+  planner_tuning: plannerTuning,
 };
 
 let mf: Miniflare;
@@ -380,9 +409,11 @@ describe("planner migrations", () => {
         planner_agent_chat: [],
         planner_agent_proposal: [],
         planner_agent_run: [],
+        planner_event: [],
         planner_evidence: [],
         planner_goal: [],
         planner_goal_flag: [],
+        planner_metric_week: [],
         planner_period_review: [],
         planner_project_node: ["planner_project_node"],
         planner_review: [],
@@ -392,6 +423,7 @@ describe("planner migrations", () => {
         planner_task_event: [],
         planner_task_plan: [],
         planner_task_seen: [],
+        planner_tuning: [],
         planner_week: [],
       });
     });

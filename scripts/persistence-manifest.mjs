@@ -80,6 +80,12 @@ export const RESTORE_TABLES = [
   // Files on tasks: the index rows (migrations/9016_planner_task_attachment.sql).
   // The bytes are in the R2 bucket, outside this backup.
   "planner_task_attachment",
+  // The flywheel: the goal and review log, and the owner's tuning of the agent
+  // (migrations/9017_planner_flywheel.sql), and the weekly scorecard, which the
+  // nightly sweep rebuilds for recent weeks but keeps for older ones.
+  "planner_event",
+  "planner_metric_week",
+  "planner_tuning",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo
   // ids by value, no foreign keys, so any order restores. The events table is
   // the append-only history and is restored like the rest.

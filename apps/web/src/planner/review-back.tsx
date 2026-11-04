@@ -86,6 +86,8 @@ type Props = {
   writing: boolean;
   strings: PlannerGoalsStrings;
   actions: PlannerBackActions;
+  /** Under the checklist: the week's scorecard card (flywheel-card.tsx). */
+  side?: ReactNode;
 };
 
 function AiMessage({ children }: { children: ReactNode }) {
@@ -651,6 +653,7 @@ function Panel(props: Props) {
               : strings.review.writeSummary}
         </Button>
       </section>
+      {props.side}
     </aside>
   );
 }
