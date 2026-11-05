@@ -339,6 +339,29 @@ export async function plannerAttachmentReadsThisMonth(
 }
 
 /**
+ * A read cannot outlive the queue consumer's 15 minutes, so a file still
+ * `pending` 20 minutes after it was added lost its read (a cancelled run, an
+ * old build that read after the response). The owner's Read again may claim
+ * it once more. The row keeps no time of its claim, so this counts from
+ * `createdAt`: a file added long ago and being read right now could be read
+ * twice, which costs one extra read and nothing else.
+ */
+export const plannerAttachmentStalePendingMs = 20 * 60 * 1000;
+
+export function plannerAttachmentReadStale(
+  row: Pick<PlannerTaskAttachmentRow, "readState" | "createdAt">,
+  input: { force?: boolean; now?: Date },
+): boolean {
+  if (row.readState !== "pending" || !input.force) return false;
+  const created = Date.parse(row.createdAt);
+  if (!Number.isFinite(created)) return false;
+  return (
+    (input.now ?? new Date()).getTime() - created >
+    plannerAttachmentStalePendingMs
+  );
+}
+
+/**
  * Decides whether a file is read now, and claims the read. Returns the row to
  * read with its state set to `pending`, or null with the reason recorded on the
  * row: `skipped` when the task is set to store only (or `force` is not given
@@ -353,7 +376,8 @@ export async function plannerClaimAttachmentRead(
     userId: input.userId,
     attachmentId: input.attachmentId,
   });
-  if (row.readState === "pending") return null;
+  if (row.readState === "pending" && !plannerAttachmentReadStale(row, input))
+    return null;
   if (!input.force) {
     const read = await plannerTaskFilesRead(db, {
       userId: input.userId,

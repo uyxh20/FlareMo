@@ -519,6 +519,60 @@ describe("planner attachments API", () => {
       `${API}/attachments/${attachment.id}/read`,
     );
     expect(busy.status).toBe(409);
+
+    // A read lost long ago (pending past the queue's limit) is taken back by
+    // Read again, though not by the browser's first read.
+    await ctx.d1
+      .prepare(
+        "UPDATE planner_task_attachment SET created_at = '2026-01-01T00:00:00.000Z' WHERE id = ?",
+      )
+      .bind(attachment.id)
+      .run();
+    const first = await sendJson(
+      "POST",
+      `${API}/attachments/${attachment.id}/read?first=1`,
+    );
+    expect(first.status).toBe(409);
+    const recovered = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read`),
+    );
+    expect(recovered.attachment.read_state).toBe("read");
+  });
+
+  it("puts a read on the queue when there is one, and the consumer reads it", async () => {
+    withReads();
+    stubAnthropic(() =>
+      Response.json({ content: [{ type: "text", text: "From the queue." }] }),
+    );
+    const queued: unknown[] = [];
+    ctx.current = {
+      ...ctx.current,
+      DATA_EXPORT_QUEUE: {
+        send: async (message: unknown) => {
+          queued.push(message);
+        },
+      },
+    } as unknown as Env;
+    const task = await createTask("Queued");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "shot.png", new Uint8Array([1, 2, 3]), "image/png"),
+      201,
+    );
+    expect(attachment.read_state).toBe("pending");
+    expect(queued).toHaveLength(1);
+    const { forkIsQueueMessage, forkRunQueue } = await import("../fork/queue");
+    expect(forkIsQueueMessage(queued[0])).toBe(true);
+    expect(forkIsQueueMessage({ taskId: "export" })).toBe(false);
+    await forkRunQueue(ctx.current as never, queued);
+    const list = await body<PlannerAttachmentListResponse>(
+      sendJson("GET", `${API}/tasks/${bare(task.id)}/attachments`),
+    );
+    expect(list.attachments[0]?.read_state).toBe("read");
+    expect(list.attachments[0]?.proposal?.change.body).toBe(
+      "Text of shot.png\n\nFrom the queue.",
+    );
+    // A second delivery of the same message finds nothing pending and reads nothing.
+    await forkRunQueue(ctx.current as never, queued);
   });
 
   it("keeps a task's files stored only when its switch is set, and Read again still reads one", async () => {

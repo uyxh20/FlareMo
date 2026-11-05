@@ -100,7 +100,7 @@ session with FlareMo's Origin, or a `memos_pat_` token).
 | `GET /tasks/:id/attachments/:aid/:filename` | The bytes, with range and ETag handling; images, PDFs and plain text inline, the rest as a download. |
 | `DELETE /attachments/:id` | Removes the file (soft). |
 | `PUT /attachments/:id/copy/:part` | One part of the file's reading copy (`audio-01.wav`…`audio-15.wav`, `frame-1.jpg`…`frame-6.jpg`), raw body up to 4 MB. 400 for any other part name. |
-| `POST /attachments/:id/read` | Read again. 400 where reading is not set up, 409 while the file is `pending`; else claims the read and answers the file as it stands. With `?first=1` it is the first read after a reading copy went up, and keeps to the task's store-only switch. |
+| `POST /attachments/:id/read` | Read again. 400 where reading is not set up, 409 while the file is `pending` (unless it has been for over 20 minutes since it was added: then the read is claimed again); else claims the read and answers the file as it stands. With `?first=1` it is the first read after a reading copy went up, and keeps to the task's store-only switch. |
 | `PATCH /tasks/:id/attachments/settings` | `{files_read: boolean}`, the task's switch. |
 
 A file over 10 MB (only audio and video may be) is streamed straight to R2
@@ -113,8 +113,17 @@ the object is deleted again, so the bucket never holds a file no task knows.
 After an upload, where `ANTHROPIC_API_KEY` is set, the Worker claims a read
 (`plannerClaimAttachmentRead`): the file goes `pending`, or `skipped` when the
 task is store-only, or `capped` when the month's 200 are used. The read itself
-(`forkReadAttachment`) runs after the response (`waitUntil`), and the panel
-asks for the detail every three seconds while a file is pending. Text, email
+(`forkReadAttachment`) goes on the Worker's queue (`DATA_EXPORT_QUEUE`, shared
+with upstream's data export by message shape, as `{forkAttachmentRead:
+{userId, attachmentId}}`), because a long recording is several Whisper calls
+and a summary, and work left after a response is cut off 30 seconds later; the
+consumer may run for 15 minutes (`apps/worker/src/fork/queue.ts`). Where there
+is no queue (the tests) it runs after the response (`waitUntil`). The consumer
+skips a file no longer `pending`, so a second delivery reads nothing. The panel
+asks for the detail every three seconds while a file is pending. A file still
+`pending` 20 minutes after it was added lost its read (`plannerAttachmentReadStale`),
+and Read again takes it back instead of answering 409. A comment cut at its cap
+ends on a whole line or sentence, with the cut mark. Text, email
 and HTML are turned into text in the Worker (`packages/domain/src/planner/
 attachment-text.ts`); when that text is under 5,000 characters it is the
 comment, else it goes once to Claude's Messages API for a summary. A picture
@@ -227,7 +236,8 @@ ago, 100 at a time. A failure is logged and never stops the rest of the night.
 | `packages/domain/src/planner/agent-prompts.ts`, `skills/ask-my-diary/SKILL.md` | What the agent is told about files in a task's chat. |
 | `apps/worker/src/routes/planner-attachments-api.ts` | The six routes. |
 | `apps/worker/src/fork/task-attachments.ts` | Serving a file; the nightly purge. |
-| `apps/worker/src/fork/attachment-read.ts` | The read after the response; the one Messages API call for pictures and PDFs. |
+| `apps/worker/src/fork/attachment-read.ts` | The read, started on the queue; the one Messages API call for pictures and PDFs. |
+| `apps/worker/src/fork/queue.ts` | The fork's messages on the Worker's queue: a task file's read. |
 | `apps/web/src/planner/task-panel-attachments.tsx` | The panel section: the list, the states, the card under a file, Read again, the switch. |
 | `apps/web/src/planner/use-chat-files.ts` | Files dropped in Ask my diary: read at once, held as chips, sent with the question. |
 | `apps/web/src/planner/attachment-reading-copy.ts` | The reading copy made in the browser: sound as WAV parts, video frames, a photo as JPEG. |

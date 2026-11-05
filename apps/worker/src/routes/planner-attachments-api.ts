@@ -25,6 +25,7 @@ import {
   plannerAssertAttachmentSize,
   plannerAttachmentCopyKey,
   plannerAttachmentCopyKeys,
+  plannerAttachmentReadStale,
   plannerClaimAttachmentRead,
   plannerListAttachments,
   plannerLoadAttachment,
@@ -37,10 +38,9 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { getRequestContext, type HonoBindings } from "../context";
 import {
-  forkAfterResponse,
   forkAttachmentReadsEnabled,
-  forkReadAttachment,
   forkReadFileText,
+  forkStartAttachmentRead,
 } from "../fork/attachment-read";
 import {
   FORK_CHAT_FILE_PREFIX,
@@ -187,13 +187,10 @@ plannerAttachmentsApi.post("/tasks/:id/attachments", async (c) => {
         attachmentId: attachment.id,
       });
       if (claimed) {
-        await forkAfterResponse(
-          c,
-          forkReadAttachment(c.env, context.db, {
-            user: context.user,
-            row: claimed,
-          }),
-        );
+        await forkStartAttachmentRead(c, context.db, {
+          user: context.user,
+          row: claimed,
+        });
       }
       // The row as it stands now: `pending` while the read runs after the
       // response, `skipped` or `capped` when it was not started.
@@ -316,26 +313,28 @@ plannerAttachmentsApi.post("/attachments/:id/read", async (c) => {
       userId: context.user.id,
       attachmentId: c.req.param("id"),
     });
-    if (before.readState === "pending") {
-      throw new DomainError("This file is being read.", 409);
-    }
     // `?first=1` is the browser asking for a file's first read once its
     // reading copy is up: like the read an upload starts, it keeps to the
     // task's "store only" switch. Without it this is the owner's Read again.
     const first = c.req.query("first") === "1";
+    // A read under way answers 409, unless it was lost long ago (a file left
+    // `pending` past the queue's limit), which Read again takes back.
+    if (
+      before.readState === "pending" &&
+      !plannerAttachmentReadStale(before, { force: !first })
+    ) {
+      throw new DomainError("This file is being read.", 409);
+    }
     const claimed = await plannerClaimAttachmentRead(context.db, {
       userId: context.user.id,
       attachmentId: before.id,
       force: !first,
     });
     if (claimed) {
-      await forkAfterResponse(
-        c,
-        forkReadAttachment(c.env, context.db, {
-          user: context.user,
-          row: claimed,
-        }),
-      );
+      await forkStartAttachmentRead(c, context.db, {
+        user: context.user,
+        row: claimed,
+      });
     }
     const [attachment] = (
       await plannerReadAttachments(context.db, {

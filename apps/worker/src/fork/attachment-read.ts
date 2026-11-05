@@ -84,18 +84,104 @@ const FORK_CLAUDE_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
+/**
+ * What a summary is asked to stay under: well inside the 2,000 it is kept to,
+ * because a model's count runs over (a 5.6-minute recording came back at
+ * about 2,400 and was cut).
+ */
+const SUMMARY_TARGET = 1500;
+
 /** One rule for every read: whole when short, a summary when long. */
-const RULES = `Keep names, numbers, dates and amounts exactly. Plain text only: no markdown, no headings of your own, no introduction, no commentary, no advice, nothing about what you cannot do. If what the file says fits in ${plannerAttachmentReadMax} characters, write it in full, faithfully and in reading order (flatten a table to one line per row), and start your answer with the single word "Text" on its own line. If it is longer, write a summary under ${plannerAttachmentSummaryMax} characters instead: first one sentence on what the document is (its kind, subject, date, who it is for), then its main points as short lines, keeping the names, numbers and dates that matter; start your answer with the single word "Summary" on its own line.`;
+const RULES = `Keep names, numbers, dates and amounts exactly. Plain text only: no markdown, no headings of your own, no introduction, no commentary, no advice, nothing about what you cannot do. If what the file says fits in ${plannerAttachmentReadMax} characters, write it in full, faithfully and in reading order (flatten a table to one line per row), and start your answer with the single word "Text" on its own line. If it is longer, write a summary under ${SUMMARY_TARGET} characters instead: first one sentence on what the document is (its kind, subject, date, who it is for), then its main points as short lines, keeping the names, numbers and dates that matter; start your answer with the single word "Summary" on its own line.`;
 
 const FILE_SYSTEM = `You read one file the owner put on a task in their own diary app, so what it says sits on the task as a comment. For a picture with little or no text, say what it shows in a few plain sentences, under "Text". ${RULES}`;
 
-const VIDEO_SYSTEM = `You read one video the owner put on a task in their own diary app, so what is in it sits on the task as a comment. You get up to six still frames taken evenly through it, in order, and a transcript of its sound when there is any. Say what the video shows and what is said in it. Keep names, numbers, dates and amounts exactly. Plain text only: no markdown, no headings of your own, no introduction, no commentary, no advice, nothing about what you cannot do. If it fits in ${plannerAttachmentReadMax} characters, write what happens in a few plain sentences followed by what is said, faithfully, and start your answer with the single word "Text" on its own line. If what is said is longer than that, write a summary under ${plannerAttachmentSummaryMax} characters instead: one sentence on what the video is, then its main points as short lines; start your answer with the single word "Summary" on its own line.`;
+const VIDEO_SYSTEM = `You read one video the owner put on a task in their own diary app, so what is in it sits on the task as a comment. You get up to six still frames taken evenly through it, in order, and a transcript of its sound when there is any. Say what the video shows and what is said in it. Keep names, numbers, dates and amounts exactly. Plain text only: no markdown, no headings of your own, no introduction, no commentary, no advice, nothing about what you cannot do. If it fits in ${plannerAttachmentReadMax} characters, write what happens in a few plain sentences followed by what is said, faithfully, and start your answer with the single word "Text" on its own line. If what is said is longer than that, write a summary under ${SUMMARY_TARGET} characters instead: one sentence on what the video is, then its main points as short lines; start your answer with the single word "Summary" on its own line.`;
 
 const TEXT_SYSTEM = `You summarise one document the owner put on a task in their own diary app, so what it says sits on the task as a comment. You get the document's text; it is longer than a comment should be, so write the summary form. ${RULES}`;
 
 /** Whether this deployment can read files: the agent's key is set. */
 export function forkAttachmentReadsEnabled(env: FlareMoEnv): boolean {
   return Boolean(env.ANTHROPIC_API_KEY?.trim());
+}
+
+/** The message a task file's read travels in on the queue. */
+export type ForkAttachmentReadMessage = {
+  forkAttachmentRead: { userId: string; attachmentId: string };
+};
+
+/** Whether a queue message is a task file's read (and not upstream's). */
+export function forkIsAttachmentReadMessage(
+  body: unknown,
+): body is ForkAttachmentReadMessage {
+  const read = (body as Partial<ForkAttachmentReadMessage> | null)
+    ?.forkAttachmentRead;
+  return (
+    typeof read?.userId === "string" && typeof read?.attachmentId === "string"
+  );
+}
+
+/**
+ * Starts the read of a claimed task file. A read can take minutes (a long
+ * recording is several Whisper calls and a summary), and work left running
+ * after a response is cut off 30 seconds later, so the read goes on the queue
+ * the Worker already consumes (DATA_EXPORT_QUEUE, shared with upstream's data
+ * export by message shape), whose consumer may run for 15 minutes. Without
+ * the queue (the tests, a deployment without it) it runs after the response.
+ */
+export async function forkStartAttachmentRead(
+  c: Context<HonoBindings>,
+  db: FlareMoDb,
+  input: { user: Pick<UserRow, "id">; row: PlannerTaskAttachmentRow },
+): Promise<void> {
+  const queue = c.env.DATA_EXPORT_QUEUE;
+  if (queue) {
+    try {
+      const message: ForkAttachmentReadMessage = {
+        forkAttachmentRead: {
+          userId: input.user.id,
+          attachmentId: input.row.id,
+        },
+      };
+      await queue.send(message as never);
+      return;
+    } catch {
+      // The queue refused: read after the response instead.
+    }
+  }
+  await forkAfterResponse(c, forkReadAttachment(c.env, db, input));
+}
+
+/**
+ * The queue consumer's half (hooked into the Worker's queue handler): each
+ * message is one claimed file, read in turn. A file no longer pending (read
+ * again meanwhile, removed) is skipped. Never throws.
+ */
+export async function forkQueueAttachmentReads(
+  env: FlareMoEnv,
+  db: FlareMoDb,
+  messages: ForkAttachmentReadMessage[],
+): Promise<void> {
+  const { plannerLoadAttachment } = await import("@flaremo/domain/src/planner");
+  for (const { forkAttachmentRead: read } of messages) {
+    try {
+      const row = await plannerLoadAttachment(db, {
+        userId: read.userId,
+        attachmentId: read.attachmentId,
+      });
+      if (row.readState !== "pending") continue;
+      await forkReadAttachment(env, db, { user: { id: read.userId }, row });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "Queued task file read failed",
+          error:
+            error instanceof Error ? error.message.slice(0, 200) : "unknown",
+        }),
+      );
+    }
+  }
 }
 
 /**
@@ -451,7 +537,11 @@ export async function forkReadFileText(
 export async function forkReadAttachment(
   env: FlareMoEnv,
   db: FlareMoDb,
-  input: { user: UserRow; row: PlannerTaskAttachmentRow; now?: Date },
+  input: {
+    user: Pick<UserRow, "id">;
+    row: PlannerTaskAttachmentRow;
+    now?: Date;
+  },
 ): Promise<"read" | "failed" | "capped"> {
   const { user, row } = input;
   const settle = async (

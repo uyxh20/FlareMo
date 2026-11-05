@@ -108,6 +108,18 @@ describe("plannerCutComment", () => {
       plannerCutComment("x".repeat(plannerAttachmentReadMax)),
     ).toHaveLength(plannerAttachmentReadMax);
   });
+
+  it("ends the cut on a whole sentence or line, never mid-word", () => {
+    const sentence = "The meeting moved to Thursday afternoon. ";
+    const text = sentence.repeat(80);
+    const cut = plannerCutComment(text, 500);
+    expect(cut.length).toBeLessThanOrEqual(500);
+    expect(cut).toMatch(/afternoon\.\n\n\[cut: the file goes on\]$/);
+    const lines = "- one point of the summary\n".repeat(40);
+    expect(plannerCutComment(lines, 300)).toMatch(
+      /summary\n\n\[cut: the file goes on\]$/,
+    );
+  });
 });
 
 describe("plannerEmailToText", () => {

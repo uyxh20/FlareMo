@@ -104,8 +104,10 @@ export function plannerAttachmentNeedsSummary(text: string): boolean {
 }
 
 /**
- * The comment's text, cut at `max` with a mark. A safety net: a whole text is
- * under the cap by definition and a summary is asked to stay under its own.
+ * The comment's text, cut under `max` with a mark. A safety net: a whole text
+ * is under the cap by definition and a summary is asked to stay under its own.
+ * The cut falls at the end of a line or a sentence, so the comment never stops
+ * mid-word; only a text with neither in its last half is cut where it stands.
  */
 export function plannerCutComment(
   text: string,
@@ -114,7 +116,16 @@ export function plannerCutComment(
   const cleaned = plannerCleanText(text);
   if (cleaned.length <= max) return cleaned;
   const mark = "\n\n[cut: the file goes on]";
-  return `${cleaned.slice(0, max - mark.length).trimEnd()}${mark}`;
+  const room = cleaned.slice(0, max - mark.length);
+  const floor = Math.floor(room.length / 2);
+  let end = room.lastIndexOf("\n");
+  // A sentence's end: . ! ? (or a closing quote or bracket after one) then a space.
+  for (const match of room.matchAll(/[.!?…][)"'”’\]]*(?=\s)/g)) {
+    const at = match.index + match[0].length;
+    if (at > end) end = at;
+  }
+  const kept = end >= floor ? room.slice(0, end) : room;
+  return `${kept.trimEnd()}${mark}`;
 }
 
 /** The comment's first line: where the text came from and what it is. */

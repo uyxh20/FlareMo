@@ -25,6 +25,7 @@ import {
 import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
 import { forkAgentScheduled } from "./fork/agent-schedule";
+import { forkIsQueueMessage, forkRunQueue } from "./fork/queue";
 import { jsonError } from "./http";
 import { resolveOauthIntegration } from "./integrations/config";
 import { betterAuthRateLimitBucket, rateLimitGuard } from "./rate-limit";
@@ -512,12 +513,15 @@ export function createFlareMoWorker(
       // the batch ack removes the poison message instead of looping.
       const removalJobIds: string[] = [];
       const exportTaskIds: string[] = [];
+      const forkBodies: unknown[] = []; // fork: task file reads (fork/queue.ts)
       for (const message of batch.messages) {
         const body = message.body as { jobId?: unknown; taskId?: unknown };
         if (typeof body?.jobId === "string" && body.jobId) {
           removalJobIds.push(body.jobId);
         } else if (typeof body?.taskId === "string" && body.taskId) {
           exportTaskIds.push(body.taskId);
+        } else if (forkIsQueueMessage(body)) {
+          forkBodies.push(body);
         } else {
           console.warn(
             JSON.stringify({ message: "Discarded malformed queue message" }),
@@ -528,6 +532,7 @@ export function createFlareMoWorker(
         removalJobIds,
         exportTaskIds,
       });
+      await forkRunQueue(env, forkBodies);
       for (const message of batch.messages) message.ack();
     },
   };
