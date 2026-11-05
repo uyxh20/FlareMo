@@ -169,6 +169,29 @@ copy. Whisper's free allowance on Workers AI is 10,000 neurons a day, roughly
 three hours of audio by Cloudflare's published prices (an estimate). The
 nightly sweep deletes a file's reading copy with the file.
 
+## Files in Ask my diary
+
+The Ask my diary chat takes files too: a drop on the chat, a paste into the
+question box, or the paperclip beside it (the only way on a phone). The chat is
+about no task, so a file there is **not kept**. The browser makes the same
+reading copy, uploads the file to `POST /chat-files` (stored under
+`planner-chat/<user>/<id>/<name>`, its name in the object's metadata) and the
+copy to `PUT /chat-files/:id/copy/:part`, then asks for the read with
+`POST /chat-files/:id/read`. That read runs at once (a recording can take a
+minute), answers the text with the same heading as a task's comment, and deletes
+the file and its copy whether it was read or not.
+
+The text waits in the page as a chip above the question box ("memo.m4a ·
+read"), at most three a question, and goes with the next question as `files`
+on `POST /ask` (each up to 5,400 characters). The agent gets the question with
+each file's text after it, marked as the file's own words
+(`plannerAgentQuestionWithFiles`); the chat shows and keeps only the question
+and the files' names ("📎 memo.m4a"). Sending is held while a file is still being
+read, and a question can be just the files. A task's own chat still puts files
+on the task, as above. A chat file that was never read (the page closed
+mid-upload) is deleted by the nightly sweep after a day. Chat reads do not count
+toward the 200 task reads a month; the AI rate limit applies.
+
 ## What the agent sees
 
 `read_task` ends with a Files block: one line per file with its name, type,
@@ -206,6 +229,7 @@ ago, 100 at a time. A failure is logged and never stops the rest of the night.
 | `apps/worker/src/fork/task-attachments.ts` | Serving a file; the nightly purge. |
 | `apps/worker/src/fork/attachment-read.ts` | The read after the response; the one Messages API call for pictures and PDFs. |
 | `apps/web/src/planner/task-panel-attachments.tsx` | The panel section: the list, the states, the card under a file, Read again, the switch. |
+| `apps/web/src/planner/use-chat-files.ts` | Files dropped in Ask my diary: read at once, held as chips, sent with the question. |
 | `apps/web/src/planner/attachment-reading-copy.ts` | The reading copy made in the browser: sound as WAV parts, video frames, a photo as JPEG. |
 | `apps/web/src/planner/use-attachment-actions.ts` | The upload queue, remove, read again, the switch and the state words, shared by the panel and the chat. |
 | `apps/web/src/planner/ask-chat.tsx` | `PlannerProposalCard`, shared with the chat, renders a proposed comment; a task's chat takes dropped and pasted files. |

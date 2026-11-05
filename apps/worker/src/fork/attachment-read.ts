@@ -230,11 +230,14 @@ async function transcribe(
 
 type Copy = { audio: string[]; frames: string[] };
 
+/** A stored file as the readers need it: a task's file or one dropped in a chat. */
+export type StoredFile = Pick<
+  PlannerTaskAttachmentRow,
+  "r2Key" | "filename" | "contentType" | "size"
+>;
+
 /** Which parts of a file's reading copy are in the bucket, in reading order. */
-async function listCopy(
-  env: FlareMoEnv,
-  row: PlannerTaskAttachmentRow,
-): Promise<Copy> {
+async function listCopy(env: FlareMoEnv, row: StoredFile): Promise<Copy> {
   const prefix = plannerAttachmentCopyKey(row.r2Key, "");
   const listed = await env.ATTACHMENTS.list({ prefix, limit: 100 });
   const parts = listed.objects
@@ -261,7 +264,7 @@ async function getBytes(
  */
 async function transcribeFile(
   env: FlareMoEnv,
-  row: PlannerTaskAttachmentRow,
+  row: StoredFile,
   copy: Copy,
   allowDirect: boolean,
 ): Promise<string> {
@@ -293,7 +296,7 @@ async function transcribeFile(
 /** A recording: its words as said when short, Claude's summary when long. */
 async function readAudio(
   env: FlareMoEnv,
-  row: PlannerTaskAttachmentRow,
+  row: StoredFile,
   copy: Copy,
 ): Promise<Read | null> {
   const text = await transcribeFile(env, row, copy, true);
@@ -305,7 +308,7 @@ async function readAudio(
 /** A video: its frames and the words of its sound, read by Claude together. */
 async function readVideo(
   env: FlareMoEnv,
-  row: PlannerTaskAttachmentRow,
+  row: StoredFile,
   copy: Copy,
 ): Promise<Read | null> {
   const transcript = await transcribeFile(env, row, copy, false);
@@ -361,6 +364,86 @@ function summarise(env: FlareMoEnv, text: string): Promise<Read> {
 }
 
 /**
+ * Reads one stored file into its comment text: the heading ("Text of",
+ * "Summary of", "Transcript of", "What's in") and what the file says. Null
+ * when the file is of no kind that can be read, or nothing came of it; a
+ * model error throws. Shared by a task's files and files dropped in a chat.
+ */
+export async function forkReadFileText(
+  env: FlareMoEnv,
+  row: StoredFile,
+): Promise<{ form: PlannerAttachmentReadForm; text: string } | null> {
+  const kind = plannerAttachmentReadKind({
+    filename: row.filename,
+    contentType: row.contentType,
+  });
+  if (kind === "other") return null;
+  let read: Read;
+  const copy =
+    kind === "audio" || kind === "video" || kind === "image"
+      ? await listCopy(env, row)
+      : { audio: [], frames: [] };
+  if (kind === "audio" || kind === "video") {
+    const media =
+      kind === "audio"
+        ? await readAudio(env, row, copy)
+        : await readVideo(env, row, copy);
+    if (!media) return null;
+    read = media;
+  } else if (kind === "image" && copy.frames[0]) {
+    // The photo's JPEG reading copy: an iPhone HEIC, or one too big for
+    // Claude as it is.
+    const bytes = await getBytes(
+      env,
+      plannerAttachmentCopyKey(row.r2Key, copy.frames[0]),
+    );
+    if (!bytes) return null;
+    read = await readFile(env, "image", bytes, "image/jpeg");
+  } else if (
+    kind === "image" &&
+    !FORK_CLAUDE_IMAGE_TYPES.has(row.contentType ?? "")
+  ) {
+    // A HEIC photo with no copy: Claude cannot take it as it is.
+    return null;
+  } else {
+    const object = await env.ATTACHMENTS.get(row.r2Key);
+    if (!object) return null;
+    const bytes = await object.arrayBuffer();
+    if (kind === "image" || kind === "pdf") {
+      read = await readFile(
+        env,
+        kind,
+        bytes,
+        kind === "pdf" ? "application/pdf" : (row.contentType ?? "image/png"),
+      );
+    } else {
+      const raw = new TextDecoder().decode(bytes);
+      const text = plannerCleanText(
+        kind === "email"
+          ? plannerEmailToText(raw)
+          : kind === "html"
+            ? plannerHtmlToText(raw)
+            : raw,
+      );
+      read = plannerAttachmentNeedsSummary(text)
+        ? await summarise(env, text)
+        : { form: "text", text };
+    }
+  }
+  const content = plannerCutComment(
+    read.text,
+    read.form === "summary"
+      ? plannerAttachmentSummaryMax
+      : plannerAttachmentReadMax,
+  );
+  if (!content) return null;
+  return {
+    form: read.form,
+    text: `${plannerAttachmentCommentHeading(read.form, row.filename)}\n\n${content}`,
+  };
+}
+
+/**
  * Reads one claimed file (its state is `pending`) and files the proposed
  * comment. Ends with the row in `read`, `failed` or `capped`; never throws.
  * `force` means the owner asked for it again: an earlier open card is put away.
@@ -383,72 +466,9 @@ export async function forkReadAttachment(
     });
     return state;
   };
-  const kind = plannerAttachmentReadKind({
-    filename: row.filename,
-    contentType: row.contentType,
-  });
   try {
-    if (kind === "other") return await settle("failed");
-    let read: Read;
-    const copy =
-      kind === "audio" || kind === "video" || kind === "image"
-        ? await listCopy(env, row)
-        : { audio: [], frames: [] };
-    if (kind === "audio" || kind === "video") {
-      const media =
-        kind === "audio"
-          ? await readAudio(env, row, copy)
-          : await readVideo(env, row, copy);
-      if (!media) return await settle("failed");
-      read = media;
-    } else if (kind === "image" && copy.frames[0]) {
-      // The photo's JPEG reading copy: an iPhone HEIC, or one too big for
-      // Claude as it is.
-      const bytes = await getBytes(
-        env,
-        plannerAttachmentCopyKey(row.r2Key, copy.frames[0]),
-      );
-      if (!bytes) return await settle("failed");
-      read = await readFile(env, "image", bytes, "image/jpeg");
-    } else if (
-      kind === "image" &&
-      !FORK_CLAUDE_IMAGE_TYPES.has(row.contentType ?? "")
-    ) {
-      // A HEIC photo with no copy: Claude cannot take it as it is.
-      return await settle("failed");
-    } else {
-      const object = await env.ATTACHMENTS.get(row.r2Key);
-      if (!object) return await settle("failed");
-      const bytes = await object.arrayBuffer();
-      if (kind === "image" || kind === "pdf") {
-        read = await readFile(
-          env,
-          kind,
-          bytes,
-          kind === "pdf" ? "application/pdf" : (row.contentType ?? "image/png"),
-        );
-      } else {
-        const raw = new TextDecoder().decode(bytes);
-        const text = plannerCleanText(
-          kind === "email"
-            ? plannerEmailToText(raw)
-            : kind === "html"
-              ? plannerHtmlToText(raw)
-              : raw,
-        );
-        read = plannerAttachmentNeedsSummary(text)
-          ? await summarise(env, text)
-          : { form: "text", text };
-      }
-    }
-    const content = plannerCutComment(
-      read.text,
-      read.form === "summary"
-        ? plannerAttachmentSummaryMax
-        : plannerAttachmentReadMax,
-    );
-    if (!content) return await settle("failed");
-    const body = `${plannerAttachmentCommentHeading(read.form, row.filename)}\n\n${content}`;
+    const body = await forkReadFileText(env, row);
+    if (!body) return await settle("failed");
 
     // The owner asked again: the earlier card, if still open, is put away so
     // the file shows one proposal.
@@ -469,10 +489,10 @@ export async function forkReadAttachment(
         taskId: row.taskId,
         field: null,
         change: {
-          body,
+          body: body.text,
           attachment_id: row.id,
           filename: row.filename,
-          form: read.form,
+          form: body.form,
         },
         why: `Read from ${row.filename}`,
         now: input.now,
@@ -489,7 +509,10 @@ export async function forkReadAttachment(
       JSON.stringify({
         level: "error",
         message: "Task file read failed",
-        kind,
+        kind: plannerAttachmentReadKind({
+          filename: row.filename,
+          contentType: row.contentType,
+        }),
         error: error instanceof Error ? error.message.slice(0, 200) : "unknown",
       }),
     );

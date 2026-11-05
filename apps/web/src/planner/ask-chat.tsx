@@ -7,6 +7,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   Loader2Icon,
+  PaperclipIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import {
   plannerAttachmentState,
   usePlannerAttachmentActions,
 } from "./use-attachment-actions";
+import { usePlannerChatFiles } from "./use-chat-files";
 import { usePlannerToday } from "./use-planner-clock";
 import "./goals.css";
 
@@ -57,6 +59,10 @@ import "./goals.css";
 // panel's Attachments, so "here is the email, what should I do" is one motion.
 // The files dropped here are listed above the question box with their state;
 // the agent reads their text through read_task once they are read.
+//
+// Ask my diary takes files as well, by drop, paste or the paperclip: each is
+// read at once into text (use-chat-files.ts), shown as a chip above the
+// question box, and sent with the next question; the file itself is not kept.
 
 const en = {
   title: "Ask my diary",
@@ -76,6 +82,17 @@ const en = {
   /** The task's chat takes files too: the same upload as the panel's Attachments. */
   dropFile: "Drop a file here to put it on the task",
   filesOnTask: "Put on the task",
+  /** Ask my diary takes files too: read into the next question, not kept. */
+  attach: "Attach a file",
+  dropFileChat: "Drop a file to read it into your question",
+  filesForQuestion: "Goes with your question",
+  fileReading: "reading…",
+  fileReady: "read",
+  fileUnreadable: "couldn't read it",
+  removeFile: "Remove file",
+  fileTooLarge: (name: string, max: string) => `${name} is over ${max}`,
+  fileTooMany: (max: number) => `At most ${max} files a question`,
+  fileOnly: "Here is a file. What should I take from it?",
   failed: "Couldn't ask. Try again.",
   days: (from: string, to: string) => `Diary ${from} to ${to}`,
   proposal: {
@@ -141,6 +158,16 @@ const zhCN: PlannerAskCopy = {
   send: "发送",
   dropFile: "把文件拖到这里，放到任务上",
   filesOnTask: "已放到任务上",
+  attach: "附加文件",
+  dropFileChat: "把文件拖到这里，读进你的问题",
+  filesForQuestion: "随问题一起发送",
+  fileReading: "正在读取…",
+  fileReady: "已读取",
+  fileUnreadable: "无法读取",
+  removeFile: "移除文件",
+  fileTooLarge: (name: string, max: string) => `${name} 超过 ${max}`,
+  fileTooMany: (max: number) => `每个问题最多 ${max} 个文件`,
+  fileOnly: "这是一个文件。我该从中了解什么？",
   failed: "没能发出，请重试。",
   days: (from: string, to: string) => `日记 ${from} 至 ${to}`,
   proposal: {
@@ -867,16 +894,25 @@ export function PlannerAskChat({
     queryClient.setQueryData(plannerQueryKeys.ask(null, task), response);
   };
 
+  const chatFiles = usePlannerChatFiles({
+    tooLarge: copy.fileTooLarge,
+    tooMany: copy.fileTooMany,
+  });
   const send = useMutation({
-    mutationFn: (question: string) =>
+    mutationFn: (input: {
+      question: string;
+      files: Array<{ filename: string; text: string }>;
+    }) =>
       plannerAskRequest({
         today,
-        text: question,
+        text: input.question,
+        ...(input.files.length > 0 ? { files: input.files } : {}),
         ...(conversation ? { conversation } : {}),
         ...(task && !conversation ? { task } : {}),
       }),
     onSuccess: (response) => {
       remember(response);
+      chatFiles.clear();
       onChange({
         conversation: response.conversation,
         fresh: false,
@@ -924,8 +960,13 @@ export function PlannerAskChat({
     staleTime: 0,
   });
   const strings = usePlannerStrings();
+  const fileInput = useRef<HTMLInputElement>(null);
   const addFiles = (list: readonly File[]) => {
-    if (!task || list.length === 0) return;
+    if (list.length === 0) return;
+    if (!task) {
+      chatFiles.add(list);
+      return;
+    }
     setDropped((names) => [
       ...names,
       ...list.map((file) => file.name).filter((name) => !names.includes(name)),
@@ -933,14 +974,13 @@ export function PlannerAskChat({
     files.actions.add(list);
   };
   const onDrop = (event: DragEvent<HTMLElement>) => {
-    if (!task) return;
     event.preventDefault();
     setOver(false);
     addFiles(Array.from(event.dataTransfer?.files ?? []));
   };
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const list = Array.from(event.clipboardData?.files ?? []);
-    if (!task || list.length === 0) return;
+    if (list.length === 0) return;
     event.preventDefault();
     addFiles(list);
   };
@@ -949,11 +989,18 @@ export function PlannerAskChat({
   );
 
   const busy = running || send.isPending;
+  const attached = task ? [] : chatFiles.ready;
+  const canSend =
+    !busy &&
+    !chatFiles.reading &&
+    (state.draft.trim().length > 0 || attached.length > 0);
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    const question = state.draft.trim();
-    if (!question || busy) return;
-    send.mutate(question);
+    if (!canSend) return;
+    send.mutate({
+      question: state.draft.trim() || copy.fileOnly,
+      files: attached,
+    });
   };
 
   // The newest message stays in view.
@@ -970,7 +1017,6 @@ export function PlannerAskChat({
       className={cn("flex min-h-0 flex-1 flex-col", className)}
       onDragLeave={() => setOver(false)}
       onDragOver={(event) => {
-        if (!task) return;
         event.preventDefault();
         setOver(true);
       }}
@@ -1055,6 +1101,44 @@ export function PlannerAskChat({
           ))}
         </ul>
       )}
+      {!task && (chatFiles.files.length > 0 || chatFiles.notice) && (
+        <ul
+          className="flex flex-col gap-1 border-t border-border px-4 py-2 text-[13px] text-muted-foreground"
+          data-testid="planner-ask-chat-files"
+        >
+          {chatFiles.files.length > 0 && (
+            <li className="font-medium">{copy.filesForQuestion}</li>
+          )}
+          {chatFiles.files.map((entry) => (
+            <li className="flex items-center gap-1.5" key={entry.key}>
+              {entry.state === "reading" && (
+                <Loader2Icon className="size-3 shrink-0 animate-spin" />
+              )}
+              <span className="min-w-0 flex-1 truncate">
+                {entry.filename} ·{" "}
+                {entry.state === "reading"
+                  ? copy.fileReading
+                  : entry.state === "ready"
+                    ? copy.fileReady
+                    : copy.fileUnreadable}
+              </span>
+              <Button
+                aria-label={copy.removeFile}
+                size="icon-xs"
+                title={copy.removeFile}
+                type="button"
+                variant="ghost"
+                onClick={() => chatFiles.remove(entry.key)}
+              >
+                <XIcon />
+              </Button>
+            </li>
+          ))}
+          {chatFiles.notice && (
+            <li className="text-destructive">{chatFiles.notice}</li>
+          )}
+        </ul>
+      )}
       <form
         className={cn(
           "flex items-end gap-2 border-t border-border p-3",
@@ -1071,7 +1155,9 @@ export function PlannerAskChat({
               ? over
                 ? copy.dropFile
                 : copy.placeholderTask
-              : copy.placeholder
+              : over
+                ? copy.dropFileChat
+                : copy.placeholder
           }
           rows={2}
           value={state.draft}
@@ -1088,9 +1174,32 @@ export function PlannerAskChat({
             }
           }}
         />
+        <input
+          className="sr-only"
+          data-testid="planner-ask-file-input"
+          multiple
+          ref={fileInput}
+          tabIndex={-1}
+          type="file"
+          onChange={(event) => {
+            const list = Array.from(event.currentTarget.files ?? []);
+            event.currentTarget.value = "";
+            addFiles(list);
+          }}
+        />
+        <Button
+          aria-label={copy.attach}
+          size="icon"
+          title={copy.attach}
+          type="button"
+          variant="ghost"
+          onClick={() => fileInput.current?.click()}
+        >
+          <PaperclipIcon />
+        </Button>
         <Button
           aria-label={copy.send}
-          disabled={!state.draft.trim() || busy}
+          disabled={!canSend}
           size="icon"
           type="submit"
         >

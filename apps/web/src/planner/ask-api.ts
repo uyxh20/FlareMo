@@ -39,6 +39,8 @@ export function plannerAskRequest(input: {
   conversation?: string;
   task?: string;
   text: string;
+  /** Files dropped in the chat, already read: their names and text. */
+  files?: Array<{ filename: string; text: string }>;
 }) {
   return apiRequest<PlannerAskResponse>(ASK, {
     method: "POST",

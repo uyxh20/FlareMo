@@ -909,4 +909,71 @@ describe("planner attachments API", () => {
     );
     expect(first.attachment.read_state).toBe("skipped");
   });
+
+  // --- Files dropped in Ask my diary ------------------------------------------
+
+  it("reads a file dropped in a chat at once, answers its text and deletes it with its copy", async () => {
+    withReads();
+    stubAnthropic();
+    withWhisper(["Pick up the keys at noon."]);
+    const stored = await body<{ file: { id: string; filename: string } }>(
+      harness.fetchApp(url(`${API}/chat-files`), {
+        method: "POST",
+        headers: {
+          "content-type": "audio/mp4",
+          [plannerAttachmentNameHeader]: encodeURIComponent("note.m4a"),
+        },
+        body: new Uint8Array([1, 2, 3]),
+      }),
+      201,
+    );
+    expect(stored.file.filename).toBe("note.m4a");
+    await body(
+      harness.fetchApp(
+        url(`${API}/chat-files/${stored.file.id}/copy/audio-01.wav`),
+        {
+          method: "PUT",
+          headers: { "content-type": "audio/wav" },
+          body: new Uint8Array([9, 9]),
+        },
+      ),
+    );
+    const prefix = "planner-chat/";
+    expect((await ctx.env.ATTACHMENTS.list({ prefix })).objects.length).toBe(2);
+    const read = await body<{ filename: string; text: string | null }>(
+      sendJson("POST", `${API}/chat-files/${stored.file.id}/read`),
+    );
+    expect(read).toEqual({
+      filename: "note.m4a",
+      text: "Transcript of note.m4a\n\nPick up the keys at noon.",
+    });
+    // Nothing of it is kept.
+    expect((await ctx.env.ATTACHMENTS.list({ prefix })).objects).toHaveLength(
+      0,
+    );
+    expect(
+      (await sendJson("POST", `${API}/chat-files/${stored.file.id}/read`))
+        .status,
+    ).toBe(404);
+
+    // A kind that cannot be read answers null, and is deleted all the same.
+    const zip = await body<{ file: { id: string } }>(
+      harness.fetchApp(url(`${API}/chat-files`), {
+        method: "POST",
+        headers: {
+          "content-type": "application/zip",
+          [plannerAttachmentNameHeader]: "a.zip",
+        },
+        body: new Uint8Array([1]),
+      }),
+      201,
+    );
+    const unread = await body<{ text: string | null }>(
+      sendJson("POST", `${API}/chat-files/${zip.file.id}/read`),
+    );
+    expect(unread.text).toBeNull();
+    expect((await ctx.env.ATTACHMENTS.list({ prefix })).objects).toHaveLength(
+      0,
+    );
+  });
 });

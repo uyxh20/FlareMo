@@ -543,6 +543,11 @@ export const plannerAskQuerySchema = z.object({
   task: taskIdSchema.optional(),
 });
 
+/** The most text one read chat file carries (a whole file is under 5,000 plus its heading). */
+export const plannerChatFileTextMax = 5400;
+/** How many files one question may carry. */
+export const plannerChatFilesPerQuestion = 3;
+
 export const plannerAskSchema = z.strictObject({
   today: daySchema,
   /** The conversation to go on with; a new one starts without it. */
@@ -550,7 +555,42 @@ export const plannerAskSchema = z.strictObject({
   /** The task a new conversation is about (a task's own chat). */
   task: taskIdSchema.optional(),
   text: z.string().trim().min(1).max(4000),
+  /**
+   * Files dropped in the chat, each already read (`POST /chat-files/:id/read`):
+   * its name and its text with the reader's heading. They go to the agent with
+   * the question; the files themselves are not kept.
+   */
+  files: z
+    .array(
+      z.strictObject({
+        filename: z.string().trim().min(1).max(200),
+        text: z.string().trim().min(1).max(plannerChatFileTextMax),
+      }),
+    )
+    .max(plannerChatFilesPerQuestion)
+    .optional(),
 });
+
+/** A file dropped in a chat, stored until it is read (then deleted). */
+export const plannerChatFileSchema = z.object({
+  id: z.uuid(),
+  filename: z.string(),
+});
+export type PlannerChatFileDto = z.infer<typeof plannerChatFileSchema>;
+export const plannerChatFileResponseSchema = z.object({
+  file: plannerChatFileSchema,
+});
+export type PlannerChatFileResponse = z.infer<
+  typeof plannerChatFileResponseSchema
+>;
+/** What a chat file read gave: the reader's heading and text, or null when unreadable. */
+export const plannerChatFileReadResponseSchema = z.object({
+  filename: z.string(),
+  text: z.string().nullable(),
+});
+export type PlannerChatFileReadResponse = z.infer<
+  typeof plannerChatFileReadResponseSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Proposed actions (migration 9015)

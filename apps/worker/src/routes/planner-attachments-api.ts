@@ -2,6 +2,8 @@ import {
   type PlannerAttachmentListResponse,
   type PlannerAttachmentResponse,
   type PlannerAttachmentSettingsResponse,
+  type PlannerChatFileReadResponse,
+  type PlannerChatFileResponse,
   type PlannerDeleteAttachmentResponse,
   plannerAttachmentCopyHeader,
   plannerAttachmentCopyPartMaxBytes,
@@ -10,6 +12,7 @@ import {
   plannerAttachmentMaxBytesFor,
   plannerAttachmentNameHeader,
   plannerAttachmentSettingsSchema,
+  plannerChatFileTextMax,
 } from "@flaremo/contracts";
 import {
   assertAttachmentStorageQuota,
@@ -19,7 +22,9 @@ import {
 import {
   plannerAddAttachment,
   plannerAssertAttachmentAllowed,
+  plannerAssertAttachmentSize,
   plannerAttachmentCopyKey,
+  plannerAttachmentCopyKeys,
   plannerClaimAttachmentRead,
   plannerListAttachments,
   plannerLoadAttachment,
@@ -35,8 +40,12 @@ import {
   forkAfterResponse,
   forkAttachmentReadsEnabled,
   forkReadAttachment,
+  forkReadFileText,
 } from "../fork/attachment-read";
-import { forkTaskAttachmentResponse } from "../fork/task-attachments";
+import {
+  FORK_CHAT_FILE_PREFIX,
+  forkTaskAttachmentResponse,
+} from "../fork/task-attachments";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import { plannerResolveActor } from "./planner-route-helpers";
@@ -336,6 +345,167 @@ plannerAttachmentsApi.post("/attachments/:id/read", async (c) => {
     ).filter((entry) => entry.id === before.id);
     if (!attachment) throw new DomainError("File not found", 404);
     const response: PlannerAttachmentResponse = { attachment };
+    return c.json(response);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// --- Files dropped in a chat (docs/fork-task-attachments.md, "Files in Ask
+// my diary") ---------------------------------------------------------------
+//
+// The Ask my diary chat is about no task, so a file dropped there is not kept:
+// it is stored only until it is read, under `planner-chat/<user>/<id>/<name>`
+// with its reading copy beside it, then the read answers the text and deletes
+// all of it. The page sends that text with the next question. What is never
+// read is deleted by the nightly sweep a day later.
+
+/** Where a chat file sits: found by its id under the user's own prefix. */
+async function chatFileObject(
+  bucket: R2Bucket,
+  userId: string,
+  id: string,
+): Promise<R2Object | null> {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  const listed = await bucket.list({
+    prefix: `${FORK_CHAT_FILE_PREFIX}${userId}/${id}/`,
+    limit: 50,
+    include: ["customMetadata", "httpMetadata"],
+  });
+  return (
+    listed.objects.find((object) => !object.key.includes("~read/")) ?? null
+  );
+}
+
+plannerAttachmentsApi.post("/chat-files", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    const filename = plannerNormalizeAttachmentName(
+      decodeHeaderName(c.req.header(plannerAttachmentNameHeader)),
+    );
+    const contentType =
+      c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() ||
+      "application/octet-stream";
+    const declared = Number(c.req.header("content-length") ?? "NaN");
+    plannerAssertAttachmentSize(Number.isFinite(declared) ? declared : 1, {
+      filename,
+      contentType,
+    });
+    const id = crypto.randomUUID();
+    const safe =
+      filename.replaceAll(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "file";
+    const key = `${FORK_CHAT_FILE_PREFIX}${context.user.id}/${id}/${safe}`;
+    const options = {
+      httpMetadata: { contentType },
+      customMetadata: { filename: encodeURIComponent(filename) },
+    };
+    // A big recording or video streams to R2, as on a task.
+    const object =
+      Number.isFinite(declared) &&
+      declared > plannerAttachmentMaxBytes &&
+      c.req.raw.body
+        ? await c.env.ATTACHMENTS.put(key, c.req.raw.body, options)
+        : await c.env.ATTACHMENTS.put(key, await c.req.arrayBuffer(), options);
+    try {
+      plannerAssertAttachmentSize(object.size, { filename, contentType });
+    } catch (error) {
+      await c.env.ATTACHMENTS.delete(key);
+      throw error;
+    }
+    const response: PlannerChatFileResponse = { file: { id, filename } };
+    return c.json(response, 201);
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+plannerAttachmentsApi.put("/chat-files/:id/copy/:part", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    const part = c.req.param("part");
+    if (!plannerAttachmentCopyParts.includes(part)) {
+      throw new DomainError("Unknown part of a reading copy.", 400);
+    }
+    const object = await chatFileObject(
+      c.env.ATTACHMENTS,
+      context.user.id,
+      c.req.param("id"),
+    );
+    if (!object) throw new DomainError("File not found", 404);
+    const bytes = await c.req.arrayBuffer();
+    if (bytes.byteLength === 0) {
+      throw new DomainError("This part of the reading copy is empty.", 400);
+    }
+    if (bytes.byteLength > plannerAttachmentCopyPartMaxBytes) {
+      throw new DomainError("This part of the reading copy is too big.", 413);
+    }
+    await c.env.ATTACHMENTS.put(
+      plannerAttachmentCopyKey(object.key, part),
+      bytes,
+      {
+        httpMetadata: {
+          contentType: part.endsWith(".wav") ? "audio/wav" : "image/jpeg",
+        },
+      },
+    );
+    return c.json({ ok: true });
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
+// Reads a chat file now (the answer waits for it: a recording can take a
+// minute) and deletes it with its copy, read or not.
+plannerAttachmentsApi.post("/chat-files/:id/read", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner-ai", context.user.id);
+    if (throttled) return throttled;
+    if (!forkAttachmentReadsEnabled(c.env)) {
+      throw new DomainError("Reading files is not set up here.", 400);
+    }
+    const object = await chatFileObject(
+      c.env.ATTACHMENTS,
+      context.user.id,
+      c.req.param("id"),
+    );
+    if (!object) throw new DomainError("File not found", 404);
+    const filename =
+      decodeHeaderName(object.customMetadata?.filename) || "file";
+    let text: string | null = null;
+    try {
+      text =
+        (
+          await forkReadFileText(c.env, {
+            r2Key: object.key,
+            filename,
+            contentType: object.httpMetadata?.contentType ?? null,
+            size: object.size,
+          })
+        )?.text ?? null;
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "Chat file read failed",
+          error:
+            error instanceof Error ? error.message.slice(0, 200) : "unknown",
+        }),
+      );
+    } finally {
+      await c.env.ATTACHMENTS.delete([
+        object.key,
+        ...plannerAttachmentCopyKeys(object.key),
+      ]).catch(() => {});
+    }
+    const response: PlannerChatFileReadResponse = {
+      filename,
+      text: text ? text.slice(0, plannerChatFileTextMax) : null,
+    };
     return c.json(response);
   } catch (error) {
     return jsonError(c, error);

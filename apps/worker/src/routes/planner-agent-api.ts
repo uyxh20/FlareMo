@@ -19,6 +19,8 @@ import {
   plannerAgentFindOpenRun,
   plannerAgentLatestConversation,
   plannerAgentListActions,
+  plannerAgentOwnerTextWithFiles,
+  plannerAgentQuestionWithFiles,
   plannerAgentReadChat,
   plannerAgentRevertAction,
   plannerAgentSettleAction,
@@ -187,6 +189,8 @@ plannerAgentApi.post(
       const { db, user } = context;
       const conversation = body.conversation ?? crypto.randomUUID();
       const ownerKey = plannerAgentAskKey(conversation);
+      // Files dropped in the chat travel with the question, already read.
+      const question = plannerAgentQuestionWithFiles(body.text, body.files);
       const earlier = body.conversation
         ? await plannerAgentReadChat(db, {
             userId: user.id,
@@ -239,7 +243,7 @@ plannerAgentApi.post(
               message: plannerAgentAskMessage({
                 ownerName: user.name,
                 today: body.today,
-                question: body.text,
+                question,
               }),
             })
           : "missing";
@@ -261,7 +265,7 @@ plannerAgentApi.post(
             message: plannerAgentAskKickoff({
               ownerName: user.name,
               today: body.today,
-              question: body.text,
+              question,
               earlier,
               task,
             }),
@@ -273,7 +277,7 @@ plannerAgentApi.post(
           userId: user.id,
           conversationId: conversation,
           role: "owner",
-          text: body.text,
+          text: plannerAgentOwnerTextWithFiles(body.text, body.files),
           runId,
           taskId,
         });

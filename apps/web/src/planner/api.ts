@@ -3,6 +3,8 @@ import {
   type PlannerAttachmentResponse,
   type PlannerAttachmentSettingsResponse,
   type PlannerBoardResponse,
+  type PlannerChatFileReadResponse,
+  type PlannerChatFileResponse,
   type PlannerCommentResponse,
   type PlannerCreateTaskInput,
   type PlannerCreateTaskResponse,
@@ -261,4 +263,42 @@ export function plannerErrorMessage(
   return plannerIsRateLimited(error)
     ? rateLimited
     : errorMessage(error, fallback);
+}
+
+// --- Files dropped in a chat (docs/fork-task-attachments.md, "Files in Ask my diary")
+
+/** Stores a file dropped in a chat until it is read. */
+export function plannerUploadChatFileRequest(file: File) {
+  return apiRequest<PlannerChatFileResponse>(`${PLANNER_API}/chat-files`, {
+    method: "POST",
+    headers: {
+      "content-type": file.type || "application/octet-stream",
+      [plannerAttachmentNameHeader]: encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+}
+
+/** Puts one part of a chat file's reading copy. */
+export function plannerPutChatFileCopyRequest(
+  id: string,
+  part: string,
+  blob: Blob,
+) {
+  return apiRequest<{ ok: true }>(
+    `${PLANNER_API}/chat-files/${encodeURIComponent(id)}/copy/${encodeURIComponent(part)}`,
+    {
+      method: "PUT",
+      headers: { "content-type": blob.type || "application/octet-stream" },
+      body: blob,
+    },
+  );
+}
+
+/** Reads a chat file now and deletes it; its text, or null when unreadable. */
+export function plannerReadChatFileRequest(id: string) {
+  return apiRequest<PlannerChatFileReadResponse>(
+    `${PLANNER_API}/chat-files/${encodeURIComponent(id)}/read`,
+    { method: "POST" },
+  );
 }

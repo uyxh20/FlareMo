@@ -608,4 +608,46 @@ describe("the general agent's Ask chat and schedule", () => {
       .all();
     expect(ended.results).toEqual([{ state: "ended", cost_cents: 12 }]);
   });
+
+  it("sends files dropped in Ask my diary with the question, and keeps only their names in the chat", async () => {
+    const api = fakeAnthropic(() => ["Noted."]);
+    const agentEnv = withEnv();
+    const asked = await body<Ask>(
+      call(
+        "POST",
+        "/ask",
+        {
+          today: TODAY,
+          text: "What does this say?",
+          files: [
+            {
+              filename: "memo.m4a",
+              text: "Transcript of memo.m4a\n\nCall the plumber Friday.",
+            },
+          ],
+        },
+        agentEnv,
+      ),
+    );
+    expect(asked.messages).toMatchObject([
+      { role: "owner", text: "What does this say?\n\n📎 memo.m4a" },
+    ]);
+    const [session] = [...api.sessions.values()];
+    const sent = JSON.stringify(session?.body.initial_events);
+    expect(sent).toContain("What does this say?");
+    expect(sent).toContain('File \\"memo.m4a\\"');
+    expect(sent).toContain("Call the plumber Friday.");
+
+    // Four files, or a file's text over the limit, are refused.
+    const file = { filename: "a.txt", text: "x" };
+    await body(
+      call(
+        "POST",
+        "/ask",
+        { today: TODAY, text: "Too many", files: [file, file, file, file] },
+        agentEnv,
+      ),
+      400,
+    );
+  });
 });

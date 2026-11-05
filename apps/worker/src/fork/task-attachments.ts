@@ -35,6 +35,11 @@ export function forkTaskAttachmentResponse(input: {
   });
 }
 
+/** Where files dropped in a chat wait to be read (planner-attachments-api.ts). */
+export const FORK_CHAT_FILE_PREFIX = "planner-chat/";
+/** A chat file is read within seconds; one still there after a day was abandoned. */
+const CHAT_FILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 /** How many removed files one night deletes at most (100 a batch). */
 const MAX_PURGE_BATCHES = 10;
 
@@ -77,6 +82,24 @@ export async function forkTaskAttachmentsNightly(
     }
     if (purged > 0) {
       console.log(JSON.stringify({ message: "Task files purged", purged }));
+    }
+    // Chat files never read (the page was closed mid-upload): gone after a day.
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_PURGE_BATCHES; page++) {
+      const listed = await env.ATTACHMENTS.list({
+        prefix: FORK_CHAT_FILE_PREFIX,
+        limit: 1000,
+        ...(cursor ? { cursor } : {}),
+      });
+      const stale = listed.objects
+        .filter(
+          (object) =>
+            now.getTime() - object.uploaded.getTime() > CHAT_FILE_MAX_AGE_MS,
+        )
+        .map((object) => object.key);
+      if (stale.length > 0) await env.ATTACHMENTS.delete(stale);
+      if (!listed.truncated) break;
+      cursor = listed.cursor;
     }
   } catch (error) {
     console.error(
