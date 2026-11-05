@@ -1,11 +1,16 @@
-import { plannerAttachmentReadMax } from "@flaremo/contracts";
+import {
+  plannerAttachmentMediaKind,
+  plannerAttachmentReadMax,
+} from "@flaremo/contracts";
 
 // What a file on a task is, for reading it into a comment (fork-owned add-on,
 // docs/fork-task-attachments.md, phase 2), and the readers that need no model:
 // plain text is taken as it is, an email is reduced to its headers and body, a
 // web page to what a reader sees. Pictures and PDFs are read by Claude in the
 // Worker (apps/worker/src/fork/attachment-read.ts), and so is any text longer
-// than a comment should be, as a summary; anything else is stored but not read.
+// than a comment should be, as a summary. Audio is transcribed by Whisper on
+// Workers AI and video is read from its sound and a few still frames, both
+// from a reading copy the browser makes; anything else is stored but not read.
 
 export type PlannerAttachmentReadKind =
   | "text"
@@ -13,6 +18,8 @@ export type PlannerAttachmentReadKind =
   | "html"
   | "image"
   | "pdf"
+  | "audio"
+  | "video"
   | "other";
 
 const TEXT_EXTENSIONS = new Set([
@@ -33,7 +40,11 @@ const IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/gif",
   "image/webp",
+  // iPhone photos: read from the JPEG reading copy the browser makes.
+  "image/heic",
+  "image/heif",
 ]);
+const IMAGE_EXTENSIONS = new Set(["heic", "heif"]);
 
 function extensionOf(filename: string): string {
   const dot = filename.lastIndexOf(".");
@@ -57,7 +68,11 @@ export function plannerAttachmentReadKind(input: {
   ) {
     return "html";
   }
-  if (IMAGE_TYPES.has(type)) return "image";
+  if (IMAGE_TYPES.has(type) || IMAGE_EXTENSIONS.has(extension)) {
+    return "image";
+  }
+  const media = plannerAttachmentMediaKind(input);
+  if (media) return media;
   if (type === "application/pdf" || extension === "pdf") return "pdf";
   if (type.startsWith("text/") || type === "application/json") return "text";
   if (TEXT_EXTENSIONS.has(extension)) return "text";
@@ -72,6 +87,16 @@ export function plannerCleanText(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+/**
+ * What a comment holds: a file's own text, a summary, a recording's words as
+ * said, or a video's scenes and words.
+ */
+export type PlannerAttachmentReadForm =
+  | "text"
+  | "summary"
+  | "transcript"
+  | "video";
 
 /** Whether a file's text is kept whole as the comment, or summarised first. */
 export function plannerAttachmentNeedsSummary(text: string): boolean {
@@ -94,10 +119,16 @@ export function plannerCutComment(
 
 /** The comment's first line: where the text came from and what it is. */
 export function plannerAttachmentCommentHeading(
-  form: "text" | "summary",
+  form: PlannerAttachmentReadForm,
   filename: string,
 ): string {
-  return `${form === "summary" ? "Summary of" : "Text of"} ${filename}`;
+  const lead = {
+    text: "Text of",
+    summary: "Summary of",
+    transcript: "Transcript of",
+    video: "What's in",
+  }[form];
+  return `${lead} ${filename}`;
 }
 
 // --- HTML -------------------------------------------------------------------

@@ -50,13 +50,24 @@ export async function forkTaskAttachmentsNightly(
   now: Date,
 ): Promise<void> {
   try {
-    const { plannerAttachmentsToPurge, plannerFinishAttachmentPurge } =
-      await import("@flaremo/domain/src/planner");
+    const {
+      plannerAttachmentCopyKeys,
+      plannerAttachmentsToPurge,
+      plannerFinishAttachmentPurge,
+    } = await import("@flaremo/domain/src/planner");
     let purged = 0;
     for (let batch = 0; batch < MAX_PURGE_BATCHES; batch++) {
       const rows = await plannerAttachmentsToPurge(db, { now, limit: 100 });
       if (rows.length === 0) break;
       await env.ATTACHMENTS.delete(rows.map((row) => row.r2Key));
+      // Each file's reading copy (audio, video, HEIC) goes with it; deleting
+      // a key that was never written is harmless. R2 takes 1,000 keys a call.
+      const copies = rows.flatMap((row) =>
+        plannerAttachmentCopyKeys(row.r2Key),
+      );
+      for (let start = 0; start < copies.length; start += 1000) {
+        await env.ATTACHMENTS.delete(copies.slice(start, start + 1000));
+      }
       await plannerFinishAttachmentPurge(
         db,
         rows.map((row) => row.id),

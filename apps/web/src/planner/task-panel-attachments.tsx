@@ -38,7 +38,7 @@ import {
 export { plannerAttachmentState } from "./use-attachment-actions";
 
 // The task's files (fork-owned add-on, docs/fork-task-attachments.md): a
-// screenshot, a PDF, an email, anything up to 10 MB and 10 a task. Files
+// screenshot, a PDF, an email, anything up to 10 MB (audio and video 95 MB) and 10 a task. Files
 // arrive by drop on the section, by paste while the panel is open (unless a
 // text box has the focus) or from the file picker, and upload one at a time
 // so the task's room is checked in order. Each shows its name (a link that

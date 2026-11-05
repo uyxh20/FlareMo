@@ -147,6 +147,87 @@ export const plannerCommentBodySchema = z
 
 /** The largest file that can be put on a task, in bytes (10 MB). */
 export const plannerAttachmentMaxBytes = 10 * 1024 * 1024;
+/**
+ * The largest audio or video file, in bytes (95 MB): just under the 100 MB a
+ * request may carry on Cloudflare's free plan. The Worker streams such a file
+ * to R2 instead of holding it in memory, and reads it from a small "reading
+ * copy" the browser makes (`plannerAttachmentCopyParts`), never whole.
+ */
+export const plannerAttachmentMediaMaxBytes = 95 * 1024 * 1024;
+
+const PLANNER_AUDIO_EXTENSIONS = new Set([
+  "mp3",
+  "m4a",
+  "aac",
+  "wav",
+  "ogg",
+  "oga",
+  "opus",
+  "flac",
+  "weba",
+]);
+const PLANNER_VIDEO_EXTENSIONS = new Set(["mp4", "mov", "m4v", "webm", "mkv"]);
+
+/**
+ * Whether a file is audio or video, from its MIME type first and its
+ * extension second; null for anything else. A `.webm` with no type counts as
+ * video (a screen recording is the likelier one).
+ */
+export function plannerAttachmentMediaKind(input: {
+  filename: string;
+  contentType: string | null;
+}): "audio" | "video" | null {
+  const type =
+    (input.contentType ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
+  if (type.startsWith("audio/")) return "audio";
+  if (type.startsWith("video/")) return "video";
+  const dot = input.filename.lastIndexOf(".");
+  const extension = dot > 0 ? input.filename.slice(dot + 1).toLowerCase() : "";
+  if (PLANNER_VIDEO_EXTENSIONS.has(extension)) return "video";
+  if (PLANNER_AUDIO_EXTENSIONS.has(extension)) return "audio";
+  return null;
+}
+
+/** The size limit for this file: 95 MB for audio and video, 10 MB otherwise. */
+export function plannerAttachmentMaxBytesFor(input: {
+  filename: string;
+  contentType: string | null;
+}): number {
+  return plannerAttachmentMediaKind(input)
+    ? plannerAttachmentMediaMaxBytes
+    : plannerAttachmentMaxBytes;
+}
+
+/**
+ * The reading copy of a file the Worker cannot read as it is (an audio or
+ * video file, an iPhone HEIC photo, a photo too big for Claude): made in the
+ * browser and stored beside the file, under `<file key>~read/<part>`.
+ *   audio-01.wav … audio-15.wav  the sound, 16 kHz mono, two minutes a part
+ *   frame-1.jpg … frame-6.jpg    still frames of a video, or the photo itself
+ * The read transcribes the parts with Whisper and gives Claude the frames.
+ */
+export const plannerAttachmentCopyAudioParts = 15;
+export const plannerAttachmentCopyAudioSeconds = 120;
+export const plannerAttachmentCopyFrames = 6;
+/** The largest one part may be (a two-minute WAV part is 3.84 MB). */
+export const plannerAttachmentCopyPartMaxBytes = 4 * 1024 * 1024;
+/** Every part name a reading copy may hold, in reading order. */
+export const plannerAttachmentCopyParts: readonly string[] = [
+  ...Array.from(
+    { length: plannerAttachmentCopyAudioParts },
+    (_, index) => `audio-${String(index + 1).padStart(2, "0")}.wav`,
+  ),
+  ...Array.from(
+    { length: plannerAttachmentCopyFrames },
+    (_, index) => `frame-${index + 1}.jpg`,
+  ),
+];
+/**
+ * The upload header that says a reading copy follows: the file is stored but
+ * not read yet; the browser uploads the copy's parts, then asks for the read.
+ */
+export const plannerAttachmentCopyHeader = "x-planner-reading-copy";
+
 /** How many files one task can hold. */
 export const plannerAttachmentsPerTask = 10;
 /** The longest file name kept, in characters; longer names are cut. */

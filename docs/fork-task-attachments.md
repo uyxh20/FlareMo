@@ -30,8 +30,11 @@ files, and takes them in its chat) are what this document describes.
   an email (`.eml`) is reduced to From, To, Cc, Date, Subject and its body, a
   web page (`.html`) to what a reader sees (no tags, styles, scripts or
   comments), all without a model; a picture or a PDF goes to Claude, which
-  writes it out when short and summarises when long. Any other kind is stored
-  and marked unreadable. **Read** / **Read again** asks for a read on a file
+  writes it out when short and summarises when long. A recording is
+  transcribed ("Transcript of <name>", or a summary when long), a video is
+  described with what is said in it ("What's in <name>"), and an iPhone HEIC
+  photo is read like any picture (see "Audio, video and iPhone photos" below).
+  Any other kind (Word, Excel, zip…) is stored and marked unreadable. **Read** / **Read again** asks for a read on a file
   that was not read, failed, was capped or whose card was dismissed.
 - **Store only, don't read these files**, a switch under the list, keeps the
   task's files stored without reading them (an old quote the owner does not
@@ -50,7 +53,10 @@ files, and takes them in its chat) are what this document describes.
 
 | Limit | Value | Where |
 | --- | --- | --- |
-| Size of one file | 10 MB | `plannerAttachmentMaxBytes` (contracts); checked in the panel, on the declared length and on the real bytes |
+| Size of one file | 10 MB; audio and video 95 MB | `plannerAttachmentMaxBytes`, `plannerAttachmentMediaMaxBytes`, `plannerAttachmentMaxBytesFor` (contracts); checked in the panel, on the declared length and on the real bytes |
+| Transcribed per recording or video | the first 30 minutes (15 parts of two minutes) | `plannerAttachmentCopyAudioParts`, `plannerAttachmentCopyAudioSeconds` |
+| Frames per video | 6, at most 1,024 px | `plannerAttachmentCopyFrames`; `attachment-reading-copy.ts` |
+| One part of a reading copy | 4 MB | `plannerAttachmentCopyPartMaxBytes` |
 | Files on one task | 10 | `plannerAttachmentsPerTask`; checked in the panel and twice on the server |
 | File name | 200 characters, no `/`, `\` or control characters | `plannerNormalizeAttachmentName` |
 | Removed file kept | 7 days | `PLANNER_ATTACHMENT_PURGE_DAYS` |
@@ -93,9 +99,12 @@ session with FlareMo's Origin, or a `memos_pat_` token).
 | `POST /tasks/:id/attachments` | The file as the raw body; its MIME type in `Content-Type`, its name percent-encoded in `x-planner-filename`. 201 with the file, 413 over 10 MB, 400 when the task is full or the file is empty. |
 | `GET /tasks/:id/attachments/:aid/:filename` | The bytes, with range and ETag handling; images, PDFs and plain text inline, the rest as a download. |
 | `DELETE /attachments/:id` | Removes the file (soft). |
-| `POST /attachments/:id/read` | Read again. 400 where reading is not set up, 409 while the file is `pending`; else claims the read and answers the file as it stands. |
+| `PUT /attachments/:id/copy/:part` | One part of the file's reading copy (`audio-01.wav`…`audio-15.wav`, `frame-1.jpg`…`frame-6.jpg`), raw body up to 4 MB. 400 for any other part name. |
+| `POST /attachments/:id/read` | Read again. 400 where reading is not set up, 409 while the file is `pending`; else claims the read and answers the file as it stands. With `?first=1` it is the first read after a reading copy went up, and keeps to the task's store-only switch. |
 | `PATCH /tasks/:id/attachments/settings` | `{files_read: boolean}`, the task's switch. |
 
+A file over 10 MB (only audio and video may be) is streamed straight to R2
+rather than held in the Worker's memory; its real size is checked once stored.
 The upload puts the object first and records the row second; if the row fails
 the object is deleted again, so the bucket never holds a file no task knows.
 
@@ -118,6 +127,47 @@ form}` and the file goes `read`; the day's proposal cap makes it `capped`, any
 error `failed`. Read again on a file that
 already has a card dismisses that card first, so a file shows one card. Nothing
 of a file or its text is logged: only the kind and an error's status.
+
+## Audio, video and iPhone photos
+
+A Worker cannot decode sound or video, and Claude takes neither a HEIC photo
+nor a picture over 5 MB, so for these the browser makes a **reading copy**
+from the file it is uploading (`apps/web/src/planner/attachment-reading-copy.ts`):
+
+- **Audio and video**: the sound is decoded at 16 kHz (an offline audio
+  context resamples as it decodes), mixed to mono and cut into WAV parts of
+  two minutes, at most 15 (30 minutes).
+- **Video**: six JPEG frames taken evenly through it, at most 1,024 px.
+- **HEIC, or a photo over about 3.75 MB**: one JPEG, at most 2,048 px.
+
+The file itself is uploaded as it is, with `x-planner-reading-copy: 1`, so it
+is stored but not read yet. The parts go up one by one
+(`PUT /attachments/:id/copy/:part`) and sit beside the file under
+`<file key>~read/<part>`; then the browser asks for the first read
+(`POST /attachments/:id/read?first=1`). The row stays dimmed as
+"uploading…" until all of that is done.
+
+The read (`forkReadAttachment`) then:
+
+- **Audio**: each WAV part goes to Whisper on Workers AI
+  (`@cf/openai/whisper-large-v3-turbo`, the `AI` binding, no key of its own) and
+  the words are joined. Under 5,000 characters they are the comment as said,
+  headed "Transcript of <name>"; longer, Claude summarises them ("Summary of").
+  A recording with no copy (sent by a script, or from a browser that could not
+  decode it) goes to Whisper as it is when it is under 20 MB.
+- **Video**: the sound is transcribed the same way, and the frames and the
+  transcript go to Claude in one call, which says what the video shows and what
+  is said in it ("What's in <name>"), or summarises when long.
+- **Photo**: Claude reads the JPEG copy instead of the file. A HEIC with no copy
+  is marked unreadable.
+
+Every step in the browser is best effort. A browser that cannot decode a file
+(a HEIC outside Safari, an unusual codec) leaves that part out; with no copy
+at all the file is stored and Read stays on offer. Decoding holds the whole
+sound in memory, so a recording longer than about two hours gets no sound
+copy. Whisper's free allowance on Workers AI is 10,000 neurons a day, roughly
+three hours of audio by Cloudflare's published prices (an estimate). The
+nightly sweep deletes a file's reading copy with the file.
 
 ## What the agent sees
 
@@ -156,6 +206,7 @@ ago, 100 at a time. A failure is logged and never stops the rest of the night.
 | `apps/worker/src/fork/task-attachments.ts` | Serving a file; the nightly purge. |
 | `apps/worker/src/fork/attachment-read.ts` | The read after the response; the one Messages API call for pictures and PDFs. |
 | `apps/web/src/planner/task-panel-attachments.tsx` | The panel section: the list, the states, the card under a file, Read again, the switch. |
+| `apps/web/src/planner/attachment-reading-copy.ts` | The reading copy made in the browser: sound as WAV parts, video frames, a photo as JPEG. |
 | `apps/web/src/planner/use-attachment-actions.ts` | The upload queue, remove, read again, the switch and the state words, shared by the panel and the chat. |
 | `apps/web/src/planner/ask-chat.tsx` | `PlannerProposalCard`, shared with the chat, renders a proposed comment; a task's chat takes dropped and pasted files. |
 | `apps/web/src/planner/api.ts`, `strings.ts`, `history-labels.ts` | The client calls, the words (en and zh-CN), the History labels. |

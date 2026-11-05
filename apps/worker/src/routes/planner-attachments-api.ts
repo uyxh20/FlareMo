@@ -3,7 +3,11 @@ import {
   type PlannerAttachmentResponse,
   type PlannerAttachmentSettingsResponse,
   type PlannerDeleteAttachmentResponse,
+  plannerAttachmentCopyHeader,
+  plannerAttachmentCopyPartMaxBytes,
+  plannerAttachmentCopyParts,
   plannerAttachmentMaxBytes,
+  plannerAttachmentMaxBytesFor,
   plannerAttachmentNameHeader,
   plannerAttachmentSettingsSchema,
 } from "@flaremo/contracts";
@@ -15,6 +19,7 @@ import {
 import {
   plannerAddAttachment,
   plannerAssertAttachmentAllowed,
+  plannerAttachmentCopyKey,
   plannerClaimAttachmentRead,
   plannerListAttachments,
   plannerLoadAttachment,
@@ -81,12 +86,22 @@ plannerAttachmentsApi.post("/tasks/:id/attachments", async (c) => {
     if (throttled) return throttled;
     const taskId = parseTaskId(c.req.param("id"));
 
+    const filename = plannerNormalizeAttachmentName(
+      decodeHeaderName(c.req.header(plannerAttachmentNameHeader)),
+    );
+    const contentType =
+      c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() ||
+      "application/octet-stream";
+    const file = { filename, contentType };
+
     // The declared size is checked before the body is read, so an oversized
     // upload is refused without buffering it. The real size is checked again.
+    // Audio and video may be up to 95 MB, everything else 10 MB.
     const declared = Number(c.req.header("content-length") ?? "NaN");
-    if (Number.isFinite(declared) && declared > plannerAttachmentMaxBytes) {
+    const max = plannerAttachmentMaxBytesFor(file);
+    if (Number.isFinite(declared) && declared > max) {
       throw new DomainError(
-        `A file can be at most ${plannerAttachmentMaxBytes / (1024 * 1024)} MB.`,
+        `${max === plannerAttachmentMaxBytes ? "A file" : "An audio or video file"} can be at most ${max / (1024 * 1024)} MB.`,
         413,
       );
     }
@@ -94,43 +109,70 @@ plannerAttachmentsApi.post("/tasks/:id/attachments", async (c) => {
       userId: context.user.id,
       taskId,
       size: Number.isFinite(declared) ? declared : 1,
+      ...file,
     });
 
-    const bytes = await c.req.arrayBuffer();
-    await plannerAssertAttachmentAllowed(context.db, {
-      userId: context.user.id,
-      taskId,
-      size: bytes.byteLength,
-    });
-    await assertAttachmentStorageQuota(
-      context.db,
-      context.limits,
-      bytes.byteLength,
-      { userLimits: context.userLimits, userId: context.user.id },
-    );
-
-    const filename = plannerNormalizeAttachmentName(
-      decodeHeaderName(c.req.header(plannerAttachmentNameHeader)),
-    );
-    const contentType =
-      c.req.header("content-type")?.split(";")[0]?.trim().toLowerCase() ||
-      "application/octet-stream";
     objectKey = forkAttachmentObjectKey(context.user.id, filename);
-    const object = await c.env.ATTACHMENTS.put(objectKey, bytes, {
-      httpMetadata: { contentType },
-    });
+    let size: number;
+    let object: R2Object;
+    if (
+      Number.isFinite(declared) &&
+      declared > plannerAttachmentMaxBytes &&
+      c.req.raw.body
+    ) {
+      // A big audio or video file goes straight through to R2 as a stream: a
+      // Worker has 128 MB of memory, too little to hold 95 MB and work on it.
+      // The stream's length is the declared one; R2 refuses a body that ends
+      // short or runs long, and the real size is checked once it is stored.
+      await assertAttachmentStorageQuota(context.db, context.limits, declared, {
+        userLimits: context.userLimits,
+        userId: context.user.id,
+      });
+      object = await c.env.ATTACHMENTS.put(objectKey, c.req.raw.body, {
+        httpMetadata: { contentType },
+      });
+      size = object.size;
+      await plannerAssertAttachmentAllowed(context.db, {
+        userId: context.user.id,
+        taskId,
+        size,
+        ...file,
+      });
+    } else {
+      const bytes = await c.req.arrayBuffer();
+      await plannerAssertAttachmentAllowed(context.db, {
+        userId: context.user.id,
+        taskId,
+        size: bytes.byteLength,
+        ...file,
+      });
+      await assertAttachmentStorageQuota(
+        context.db,
+        context.limits,
+        bytes.byteLength,
+        { userLimits: context.userLimits, userId: context.user.id },
+      );
+      object = await c.env.ATTACHMENTS.put(objectKey, bytes, {
+        httpMetadata: { contentType },
+      });
+      size = bytes.byteLength;
+    }
     let attachment = await plannerAddAttachment(context.db, {
       user: context.user,
       actor: await plannerResolveActor(c, context.credential),
       taskId,
       filename,
       contentType,
-      size: bytes.byteLength,
+      size,
       r2Key: objectKey,
       etag: object.httpEtag,
     });
     objectKey = null;
-    if (forkAttachmentReadsEnabled(c.env)) {
+    // A reading copy follows (audio, video, an iPhone photo): the file stays
+    // `stored` until the browser has put the copy's parts and asks for the
+    // read. If it never does, the file shows Read like any unread file.
+    const copyFollows = c.req.header(plannerAttachmentCopyHeader) === "1";
+    if (forkAttachmentReadsEnabled(c.env) && !copyFollows) {
       const claimed = await plannerClaimAttachmentRead(context.db, {
         userId: context.user.id,
         attachmentId: attachment.id,
@@ -205,6 +247,52 @@ plannerAttachmentsApi.delete("/attachments/:id", async (c) => {
   }
 });
 
+// One part of a file's reading copy (contracts, `plannerAttachmentCopyParts`):
+// a two-minute WAV of its sound, or a JPEG still. The browser makes the copy
+// from the file it is uploading, because a Worker cannot decode audio or
+// video; the parts sit beside the file and are deleted with it.
+plannerAttachmentsApi.put("/attachments/:id/copy/:part", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const throttled = await rateLimitGuard(c, "planner", context.user.id);
+    if (throttled) return throttled;
+    const part = c.req.param("part");
+    if (!plannerAttachmentCopyParts.includes(part)) {
+      throw new DomainError("Unknown part of a reading copy.", 400);
+    }
+    const declared = Number(c.req.header("content-length") ?? "NaN");
+    if (
+      Number.isFinite(declared) &&
+      declared > plannerAttachmentCopyPartMaxBytes
+    ) {
+      throw new DomainError("This part of the reading copy is too big.", 413);
+    }
+    const row = await plannerLoadAttachment(context.db, {
+      userId: context.user.id,
+      attachmentId: c.req.param("id"),
+    });
+    const bytes = await c.req.arrayBuffer();
+    if (bytes.byteLength === 0) {
+      throw new DomainError("This part of the reading copy is empty.", 400);
+    }
+    if (bytes.byteLength > plannerAttachmentCopyPartMaxBytes) {
+      throw new DomainError("This part of the reading copy is too big.", 413);
+    }
+    await c.env.ATTACHMENTS.put(
+      plannerAttachmentCopyKey(row.r2Key, part),
+      bytes,
+      {
+        httpMetadata: {
+          contentType: part.endsWith(".wav") ? "audio/wav" : "image/jpeg",
+        },
+      },
+    );
+    return c.json({ ok: true });
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
 // "Read again": a file that failed, was capped, was skipped or whose card was
 // dismissed is read once more. 409 while a read is already under way.
 plannerAttachmentsApi.post("/attachments/:id/read", async (c) => {
@@ -222,10 +310,14 @@ plannerAttachmentsApi.post("/attachments/:id/read", async (c) => {
     if (before.readState === "pending") {
       throw new DomainError("This file is being read.", 409);
     }
+    // `?first=1` is the browser asking for a file's first read once its
+    // reading copy is up: like the read an upload starts, it keeps to the
+    // task's "store only" switch. Without it this is the owner's Read again.
+    const first = c.req.query("first") === "1";
     const claimed = await plannerClaimAttachmentRead(context.db, {
       userId: context.user.id,
       attachmentId: before.id,
-      force: true,
+      force: !first,
     });
     if (claimed) {
       await forkAfterResponse(

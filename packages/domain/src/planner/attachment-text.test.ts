@@ -29,7 +29,14 @@ describe("plannerAttachmentReadKind", () => {
     expect(kind("data.json", "application/octet-stream")).toBe("text");
     expect(kind("README.md", null)).toBe("text");
     expect(kind("archive.zip", "application/zip")).toBe("other");
-    expect(kind("movie.mov", null)).toBe("other");
+    expect(kind("movie.mov", null)).toBe("video");
+    expect(kind("clip", "video/mp4")).toBe("video");
+    expect(kind("memo.m4a", "audio/mp4")).toBe("audio");
+    expect(kind("memo.m4a", null)).toBe("audio");
+    expect(kind("voice.ogg", "application/octet-stream")).toBe("audio");
+    expect(kind("IMG_0001.HEIC", null)).toBe("image");
+    expect(kind("photo", "image/heif")).toBe("image");
+    expect(kind("sheet.xlsx", null)).toBe("other");
   });
 });
 

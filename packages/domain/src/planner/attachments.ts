@@ -3,7 +3,10 @@ import {
   type PlannerAgentActionDto,
   type PlannerAttachmentDto,
   type PlannerAttachmentReadState,
+  plannerAttachmentCopyParts,
   plannerAttachmentMaxBytes,
+  plannerAttachmentMaxBytesFor,
+  plannerAttachmentMediaKind,
   plannerAttachmentNameMax,
   plannerAttachmentReadsPerMonth,
   plannerAttachmentsPerTask,
@@ -69,6 +72,21 @@ export function plannerAttachmentPath(row: {
   return `/api/app/planner/tasks/${encodeURIComponent(
     row.taskId.replace(/^tasks\//, ""),
   )}/attachments/${row.id}/${encodeURIComponent(row.filename)}`;
+}
+
+/**
+ * Where one part of a file's reading copy sits in the bucket: beside the file,
+ * under `<file key>~read/` (contracts, `plannerAttachmentCopyParts`).
+ */
+export function plannerAttachmentCopyKey(r2Key: string, part: string): string {
+  return `${r2Key}~read/${part}`;
+}
+
+/** Every key a file's reading copy may use, for the sweep to delete with it. */
+export function plannerAttachmentCopyKeys(r2Key: string): string[] {
+  return plannerAttachmentCopyParts.map((part) =>
+    plannerAttachmentCopyKey(r2Key, part),
+  );
 }
 
 export function plannerAttachmentToDto(
@@ -159,14 +177,23 @@ export function plannerNormalizeAttachmentName(value: unknown): string {
 }
 
 /** The size check the route does before anything is stored, as a 413. */
-export function plannerAssertAttachmentSize(bytes: number): void {
+export function plannerAssertAttachmentSize(
+  bytes: number,
+  file?: { filename: string; contentType: string | null },
+): void {
   if (!Number.isFinite(bytes) || bytes < 0) {
     throw new ValidationError("The file's size is unknown.");
   }
   if (bytes === 0) throw new ValidationError("The file is empty.");
-  if (bytes > plannerAttachmentMaxBytes) {
+  // Audio and video may be larger (95 MB); everything else stays at 10 MB.
+  const max = file
+    ? plannerAttachmentMaxBytesFor(file)
+    : plannerAttachmentMaxBytes;
+  if (bytes > max) {
     throw new DomainError(
-      `A file can be at most ${plannerAttachmentMaxBytes / (1024 * 1024)} MB.`,
+      plannerAttachmentMediaKind(file ?? { filename: "", contentType: null })
+        ? `An audio or video file can be at most ${max / (1024 * 1024)} MB.`
+        : `A file can be at most ${max / (1024 * 1024)} MB.`,
       413,
     );
   }
@@ -401,9 +428,20 @@ export async function plannerCountAttachments(
  */
 export async function plannerAssertAttachmentAllowed(
   db: FlareMoDb,
-  input: { userId: string; taskId: string; size: number },
+  input: {
+    userId: string;
+    taskId: string;
+    size: number;
+    filename?: string;
+    contentType?: string | null;
+  },
 ) {
-  plannerAssertAttachmentSize(input.size);
+  plannerAssertAttachmentSize(
+    input.size,
+    input.filename === undefined
+      ? undefined
+      : { filename: input.filename, contentType: input.contentType ?? null },
+  );
   const taskId = plannerNormalizeTaskId(input.taskId);
   const task = await plannerLoadLiveTask(db, input.userId, taskId);
   const count = await plannerCountAttachments(db, {
@@ -442,6 +480,8 @@ export async function plannerAddAttachment(
     userId: input.user.id,
     taskId,
     size: input.size,
+    filename: input.filename,
+    contentType: input.contentType,
   });
   const filename = plannerNormalizeAttachmentName(input.filename);
   const id = crypto.randomUUID();

@@ -6,6 +6,7 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
+  plannerAttachmentCopyHeader,
   plannerAttachmentMaxBytes,
   plannerAttachmentNameHeader,
   plannerAttachmentResponseSchema,
@@ -684,5 +685,228 @@ describe("planner attachments API", () => {
     expect(attachment.proposal?.change.body).toBe(
       "Summary of long.pdf\n\nA pilot snapshot, 2 Nov 2026.\n- Two coaches in pilot.",
     );
+  });
+
+  // --- Audio, video and iPhone photos: the reading copy ----------------------
+
+  /** Whisper on the AI binding, replaced: each call answers the next words. */
+  const withWhisper = (answers: string[]) => {
+    const run = vi.fn(async (_model: string, _input: { audio: string }) => ({
+      text: answers.shift() ?? "",
+    }));
+    ctx.current = { ...ctx.current, AI: { run } } as unknown as Env;
+    return run;
+  };
+
+  const uploadWithCopy = (
+    taskId: string,
+    name: string,
+    bytes: Uint8Array | string,
+    type: string,
+  ) =>
+    harness.fetchApp(url(`${API}/tasks/${bare(taskId)}/attachments`), {
+      method: "POST",
+      headers: {
+        "content-type": type,
+        [plannerAttachmentNameHeader]: encodeURIComponent(name),
+        [plannerAttachmentCopyHeader]: "1",
+      },
+      body: bytes,
+    });
+
+  const putPart = (id: string, part: string, bytes: Uint8Array, type: string) =>
+    harness.fetchApp(url(`${API}/attachments/${id}/copy/${part}`), {
+      method: "PUT",
+      headers: { "content-type": type },
+      body: bytes,
+    });
+
+  it("transcribes a recording from its reading copy with Whisper, part by part, and keeps a short transcript whole", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const run = withWhisper([
+      "Call the plumber on Friday.",
+      "Budget is 300 euros.",
+    ]);
+    const task = await createTask("Voice memo");
+
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      uploadWithCopy(
+        task.id,
+        "memo.m4a",
+        new Uint8Array([1, 2, 3]),
+        "audio/mp4",
+      ),
+      201,
+    );
+    // Stored, not read: the copy has not arrived yet.
+    expect(attachment.read_state).toBe("stored");
+    expect(run).not.toHaveBeenCalled();
+
+    const wav = new Uint8Array([82, 73, 70, 70, 9, 9]);
+    await body(putPart(attachment.id, "audio-01.wav", wav, "audio/wav"));
+    await body(putPart(attachment.id, "audio-02.wav", wav, "audio/wav"));
+    const read = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read?first=1`),
+    );
+    expect(read.attachment.read_state).toBe("read");
+    expect(read.attachment.proposal?.change.body).toBe(
+      "Transcript of memo.m4a\n\nCall the plumber on Friday. Budget is 300 euros.",
+    );
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[0]?.[0]).toBe("@cf/openai/whisper-large-v3-turbo");
+    expect(run.mock.calls[0]?.[1]).toEqual({
+      audio: btoa(String.fromCharCode(...wav)),
+    });
+    // A short transcript needs no Claude.
+    expect(sent).toHaveLength(0);
+  });
+
+  it("sends a recording with no copy to Whisper as it is, and summarises a long transcript with Claude", async () => {
+    withReads();
+    const sent = stubAnthropic(() =>
+      Response.json({
+        content: [{ type: "text", text: "Summary\nA long talk." }],
+      }),
+    );
+    withWhisper(["word ".repeat(1200)]);
+    const task = await createTask("Lecture");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      upload(task.id, "talk.mp3", new Uint8Array([7, 7, 7]), "audio/mpeg"),
+      201,
+    );
+    expect(attachment.read_state).toBe("read");
+    expect(attachment.proposal?.change.body).toBe(
+      "Summary of talk.mp3\n\nA long talk.",
+    );
+    expect(sent).toHaveLength(1);
+  });
+
+  it("reads a video from its frames and the words of its sound, in one Claude call", async () => {
+    withReads();
+    const sent = stubAnthropic(() =>
+      Response.json({
+        content: [
+          {
+            type: "text",
+            text: "Text\nA kitchen tap drips. Someone says it started Monday.",
+          },
+        ],
+      }),
+    );
+    const run = withWhisper(["It started Monday."]);
+    const task = await createTask("Leak");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      uploadWithCopy(
+        task.id,
+        "leak.mov",
+        new Uint8Array([0, 0, 0, 1]),
+        "video/quicktime",
+      ),
+      201,
+    );
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1]);
+    await body(putPart(attachment.id, "frame-1.jpg", jpeg, "image/jpeg"));
+    await body(putPart(attachment.id, "frame-2.jpg", jpeg, "image/jpeg"));
+    await body(
+      putPart(attachment.id, "audio-01.wav", new Uint8Array([1]), "audio/wav"),
+    );
+    const read = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read?first=1`),
+    );
+    expect(read.attachment.proposal?.change.body).toBe(
+      "What's in leak.mov\n\nA kitchen tap drips. Someone says it started Monday.",
+    );
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(sent).toHaveLength(1);
+    const messages = sent[0]?.body.messages as
+      | Array<{ content: Array<Record<string, unknown>> }>
+      | undefined;
+    const content = messages?.[0]?.content ?? [];
+    expect(content.filter((block) => block.type === "image")).toHaveLength(2);
+    expect(content[0]).toMatchObject({
+      type: "image",
+      source: { media_type: "image/jpeg" },
+    });
+    expect(String(content.at(-1)?.text)).toContain("It started Monday.");
+    expect(String(sent[0]?.body.system)).toContain("read one video");
+  });
+
+  it("reads an iPhone photo from its JPEG copy, and marks one with no copy unreadable", async () => {
+    withReads();
+    const sent = stubAnthropic();
+    const task = await createTask("Receipt");
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      uploadWithCopy(
+        task.id,
+        "IMG_0001.HEIC",
+        new Uint8Array([1, 2]),
+        "image/heic",
+      ),
+      201,
+    );
+    await body(
+      putPart(
+        attachment.id,
+        "frame-1.jpg",
+        new Uint8Array([0xff, 0xd8]),
+        "image/jpeg",
+      ),
+    );
+    const read = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read?first=1`),
+    );
+    expect(read.attachment.read_state).toBe("read");
+    expect(sent[0]?.body).toMatchObject({
+      messages: [
+        {
+          content: [
+            { type: "image", source: { media_type: "image/jpeg" } },
+            { type: "text" },
+          ],
+        },
+      ],
+    });
+
+    const bare_ = await body<PlannerAttachmentResponse>(
+      upload(task.id, "IMG_0002.heic", new Uint8Array([1, 2]), "image/heic"),
+      201,
+    );
+    expect(bare_.attachment.read_state).toBe("failed");
+    expect(sent).toHaveLength(1);
+  });
+
+  it("keeps to the store-only switch on a first read, takes only known parts, and lets audio be over 10 MB", async () => {
+    withReads();
+    withWhisper([]);
+    const task = await createTask("Big recording");
+    await body(
+      sendJson("PATCH", `${API}/tasks/${bare(task.id)}/attachments/settings`, {
+        files_read: false,
+      }),
+    );
+    const big = new Uint8Array(plannerAttachmentMaxBytes + 1024);
+    const { attachment } = await body<PlannerAttachmentResponse>(
+      uploadWithCopy(task.id, "long.wav", big, "audio/wav"),
+      201,
+    );
+    expect(attachment.size).toBe(big.byteLength);
+    // The same size as a document is refused.
+    expect((await upload(task.id, "long.txt", big)).status).toBe(413);
+
+    expect(
+      (
+        await putPart(
+          attachment.id,
+          "evil.sh",
+          new Uint8Array([1]),
+          "text/plain",
+        )
+      ).status,
+    ).toBe(400);
+    const first = await body<PlannerAttachmentResponse>(
+      sendJson("POST", `${API}/attachments/${attachment.id}/read?first=1`),
+    );
+    expect(first.attachment.read_state).toBe("skipped");
   });
 });

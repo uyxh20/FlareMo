@@ -13,6 +13,7 @@ import {
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
   type PlannerUpdateTaskInput,
+  plannerAttachmentCopyHeader,
   plannerAttachmentNameHeader,
 } from "@flaremo/contracts";
 import type { Task } from "@/api";
@@ -135,10 +136,14 @@ export function plannerRevertEventRequest(
 
 /**
  * Puts a file on a task (docs/fork-task-attachments.md): the file is the body,
- * its name travels percent-encoded in a header. 413 when it is over 10 MB, 400
+ * its name travels percent-encoded in a header. 413 when it is over 10 MB (95 MB for audio and video), 400
  * when the task already holds 10 files.
  */
-export function plannerUploadAttachmentRequest(taskId: string, file: File) {
+export function plannerUploadAttachmentRequest(
+  taskId: string,
+  file: File,
+  options: { copyFollows?: boolean } = {},
+) {
   return apiRequest<PlannerAttachmentResponse>(
     `${PLANNER_API}/tasks/${taskSegment(taskId)}/attachments`,
     {
@@ -146,8 +151,26 @@ export function plannerUploadAttachmentRequest(taskId: string, file: File) {
       headers: {
         "content-type": file.type || "application/octet-stream",
         [plannerAttachmentNameHeader]: encodeURIComponent(file.name),
+        // A reading copy follows: store the file, read it once the copy is up.
+        ...(options.copyFollows ? { [plannerAttachmentCopyHeader]: "1" } : {}),
       },
       body: file,
+    },
+  );
+}
+
+/** Puts one part of a file's reading copy (a WAV of its sound, or a JPEG). */
+export function plannerPutAttachmentCopyRequest(
+  attachmentId: string,
+  part: string,
+  blob: Blob,
+) {
+  return apiRequest<{ ok: true }>(
+    `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}/copy/${encodeURIComponent(part)}`,
+    {
+      method: "PUT",
+      headers: { "content-type": blob.type || "application/octet-stream" },
+      body: blob,
     },
   );
 }
@@ -161,9 +184,12 @@ export function plannerDeleteAttachmentRequest(attachmentId: string) {
 }
 
 /** Reads a file into a proposed comment once more; 409 while a read is under way. */
-export function plannerReadAttachmentRequest(attachmentId: string) {
+export function plannerReadAttachmentRequest(
+  attachmentId: string,
+  options: { first?: boolean } = {},
+) {
   return apiRequest<PlannerAttachmentResponse>(
-    `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}/read`,
+    `${PLANNER_API}/attachments/${encodeURIComponent(attachmentId)}/read${options.first ? "?first=1" : ""}`,
     { method: "POST" },
   );
 }

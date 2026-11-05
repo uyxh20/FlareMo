@@ -2,7 +2,7 @@ import {
   type PlannerAgentActionDto,
   type PlannerAttachmentDto,
   type PlannerTaskDetailResponse,
-  plannerAttachmentMaxBytes,
+  plannerAttachmentMaxBytesFor,
   plannerAttachmentsPerTask,
 } from "@flaremo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,10 +12,12 @@ import { formatBytes } from "@/lib/utils";
 import {
   plannerDeleteAttachmentRequest,
   plannerErrorMessage,
+  plannerPutAttachmentCopyRequest,
   plannerReadAttachmentRequest,
   plannerSetAttachmentSettingsRequest,
   plannerUploadAttachmentRequest,
 } from "./api";
+import { plannerMakeReadingCopy } from "./attachment-reading-copy";
 import { plannerQueryKeys } from "./query-keys";
 import { type PlannerStrings, usePlannerStrings } from "./strings";
 import { plannerToastId } from "./use-planner-actions";
@@ -96,10 +98,28 @@ export function usePlannerAttachmentActions(taskId: string) {
 
     const uploadOne = async (file: File, key: number) => {
       try {
-        const { attachment } = await plannerUploadAttachmentRequest(
-          taskId,
-          file,
-        );
+        // Audio, video and iPhone photos get a reading copy first (sound as
+        // WAV parts, frames as JPEGs); the file is stored as it is, the copy
+        // goes up beside it, then the first read is asked for. The row stays
+        // dimmed as "uploading…" until all of it is done.
+        const copy = await plannerMakeReadingCopy(file);
+        const withCopy = Boolean(copy && copy.length > 0);
+        let { attachment } = await (withCopy
+          ? plannerUploadAttachmentRequest(taskId, file, { copyFollows: true })
+          : plannerUploadAttachmentRequest(taskId, file));
+        if (copy && withCopy) {
+          try {
+            for (const { part, blob } of copy) {
+              await plannerPutAttachmentCopyRequest(attachment.id, part, blob);
+            }
+            attachment = (
+              await plannerReadAttachmentRequest(attachment.id, { first: true })
+            ).attachment;
+          } catch {
+            // Reading is not set up here, or a part failed: the file is
+            // stored, and Read stays on offer.
+          }
+        }
         setDetail((detail) => ({
           ...detail,
           attachments: [...detail.attachments, attachment],
@@ -126,11 +146,15 @@ export function usePlannerAttachmentActions(taskId: string) {
         });
         const accepted: { file: File; key: number }[] = [];
         for (const file of files) {
-          if (file.size > plannerAttachmentMaxBytes) {
-            toast.error(
-              copy.tooLarge(file.name, formatBytes(plannerAttachmentMaxBytes)),
-              { id: plannerToastId },
-            );
+          // Audio and video may be 95 MB, everything else 10 MB.
+          const max = plannerAttachmentMaxBytesFor({
+            filename: file.name,
+            contentType: file.type || null,
+          });
+          if (file.size > max) {
+            toast.error(copy.tooLarge(file.name, formatBytes(max)), {
+              id: plannerToastId,
+            });
             continue;
           }
           if (held + queued + accepted.length >= plannerAttachmentsPerTask) {
