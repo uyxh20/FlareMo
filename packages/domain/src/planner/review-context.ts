@@ -8,6 +8,7 @@ import {
   type PlannerPillar,
   plannerAddDays,
   plannerIsoWeekOf,
+  plannerLinkSummarySource,
   plannerMemoKeyQuestion,
   plannerMemoNextSteps,
   plannerMonthStartOf,
@@ -278,6 +279,25 @@ export const PLANNER_DIARY_CHARS_SMALL = 12_000;
  * then cut to the same length, so a long entry cannot crowd out the rest of
  * the week and a short one wastes nothing.
  */
+/**
+ * fork: link summaries. A summary the agent wrote from a link is something the
+ * owner read, so a model reading the diary is told it is not their words.
+ */
+export function plannerMarkLinkSummary<
+  T extends { content: string; source: string },
+>(row: T): T {
+  return row.source === plannerLinkSummarySource
+    ? {
+        ...row,
+        content: `[${PLANNER_LINK_SUMMARY_LABEL}] ${row.content}`,
+      }
+    : row;
+}
+
+/** How a link summary is labelled wherever a model reads the diary. */
+export const PLANNER_LINK_SUMMARY_LABEL =
+  "Link summary the agent wrote from something the owner read; not the owner's words";
+
 export function plannerFitDiary(
   rows: ReadonlyArray<{ at: string; content: string }>,
   budget: number,
@@ -332,7 +352,11 @@ export async function plannerReadWeekDiary(
       ),
     );
   const rows = await db
-    .select({ at: memos.createdAt, content: memos.content })
+    .select({
+      at: memos.createdAt,
+      content: memos.content,
+      source: memos.source,
+    })
     .from(memos)
     .where(
       and(
@@ -347,7 +371,7 @@ export async function plannerReadWeekDiary(
     .orderBy(asc(memos.createdAt))
     .limit(200)
     .all();
-  return plannerFitDiary(rows, budget);
+  return plannerFitDiary(rows.map(plannerMarkLinkSummary), budget);
 }
 
 /** A memory made or changed during the week, as the review reads it. */

@@ -81,7 +81,8 @@ export class LinkMetadataError extends Error {
   }
 }
 
-function validateExternalUrl(value: string | URL) {
+// fork: exported for the link reader (apps/worker/src/fork/link-read.ts).
+export function validateExternalUrl(value: string | URL) {
   let url: URL;
   try {
     url = value instanceof URL ? new URL(value.href) : new URL(value);

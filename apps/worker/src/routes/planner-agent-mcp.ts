@@ -21,6 +21,7 @@ import {
   type HonoBindings,
 } from "../context";
 import { forkIsAgentKey } from "../fork/agent-key";
+import { forkReadLink } from "../fork/link-read";
 import { jsonError } from "../http";
 import {
   formatZodError,
@@ -174,6 +175,8 @@ plannerAgentMcpApi.post("/agent/mcp", async (c) => {
           db: owner.db,
           user: owner.user,
           cascade: plannerCascadeStyleOf(c.env.FLAREMO_REVIEW_CASCADE),
+          // fork: link summaries (docs/fork-link-summaries.md).
+          readLink: (url) => forkReadLink(url, { ai: c.env.AI }),
         },
         call.data.name,
         call.data.arguments ?? {},

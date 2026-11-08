@@ -2,8 +2,11 @@ import {
   type CreateMemoInput,
   type PlannerAgentActionDto,
   plannerAgentActionFields,
+  plannerAgentLinkSchema,
   plannerColumns,
   plannerEventRevertible,
+  plannerLinkSummarySource,
+  plannerLinkSummaryTag,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { plannerTaskEvent } from "@flaremo/db/src/schema/planner";
@@ -12,6 +15,7 @@ import { NotFoundError, ValidationError } from "../errors";
 import { getMemoById } from "../memos-read";
 import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
+import { replaceMemoRelations } from "../relations";
 import {
   PLANNER_AGENT_ACTION_ACTOR_PREFIX,
   plannerAgentActionToDto,
@@ -52,6 +56,13 @@ export function plannerAgentActionActor(actionId: string): PlannerActor {
 
 /** What the diary records as the source of an entry the agent drafted. */
 export const PLANNER_AGENT_ENTRY_SOURCE = "agent-draft";
+
+/** A link summary's text, with the #link tag added when the agent left it out. */
+export function plannerLinkSummaryContent(content: string): string {
+  const tag = `#${plannerLinkSummaryTag}`;
+  const has = new RegExp(`(^|\\s)${tag}(?![\\w/-])`).test(content);
+  return has ? content : `${content}\n\n${tag}`;
+}
 
 const asString = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
@@ -255,13 +266,25 @@ export async function plannerAgentAcceptAction(
       case "entry_new": {
         const content = asString(row.change.content)?.trim();
         if (!content) throw new ValidationError("This proposal has no text.");
+        // fork: link summaries. A summary made from a link is saved as one,
+        // tagged #link, and points back at the owner's entry it came from.
+        const link = plannerAgentLinkSchema.safeParse(row.change.link);
         const entry: CreateMemoInput = {
-          content,
+          content: link.success ? plannerLinkSummaryContent(content) : content,
           visibility: "private",
-          source: PLANNER_AGENT_ENTRY_SOURCE,
+          source: link.success
+            ? plannerLinkSummarySource
+            : PLANNER_AGENT_ENTRY_SOURCE,
         };
         const memo = await createMemo(db, user, entry, input.quota);
         landedId = memo.id;
+        if (link.success && link.data.from_entry_id) {
+          await replaceMemoRelations(db, user, memo.id, {
+            relations: [
+              { related_memo: link.data.from_entry_id, type: "reference" },
+            ],
+          }).catch(() => undefined);
+        }
         break;
       }
       case "entry_edit": {
