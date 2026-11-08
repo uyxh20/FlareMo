@@ -350,6 +350,8 @@ export class DevEnv {
           },
         ),
       ),
+      // The cascade ladder in the weekly review, for the replay on dev.
+      reviewCascade: clean(this.env.FLAREMO_DEV_REVIEW_CASCADE) ?? "",
     };
   }
 
@@ -1492,6 +1494,8 @@ Embedding is off on dev (FLAREMO_EMBEDDING_PROVIDER "none"): dev shares the free
 plan's daily AI allowance with live. To test search on dev, set
 FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai before deploy.
 
+FLAREMO_DEV_REVIEW_CASCADE=ladder turns on the review's cascade ladder
+(docs/fork-general-agent.md); unset, the review is as live.
 The general agent is off on dev unless FLAREMO_DEV_AGENT,
 FLAREMO_DEV_AGENT_ENVIRONMENT, FLAREMO_DEV_AGENT_STORE and FLAREMO_DEV_AGENT_VAULT
 are set before deploy (scripts/fork/general-agent.ts --target dev prints them).

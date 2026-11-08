@@ -2981,6 +2981,24 @@ e2e("dev environment against a fake Cloudflare", () => {
     );
   });
 
+  test("the dev config sets the review's cascade ladder only when asked", (t) => {
+    const vars = (env) => {
+      const h = harness(t, { env });
+      h.devEnv.writeConfig(h.devEnv.resolveSettings({ d1Id: DEV_D1_ID }));
+      return parseConfigText(readFileSync(h.devEnv.paths.devConfig, "utf8"))
+        .vars;
+    };
+    assert.equal(vars({}).FLAREMO_REVIEW_CASCADE, undefined);
+    assert.equal(
+      vars({ FLAREMO_DEV_REVIEW_CASCADE: "ladder" }).FLAREMO_REVIEW_CASCADE,
+      "ladder",
+    );
+    assert.throws(
+      () => vars({ FLAREMO_DEV_REVIEW_CASCADE: "flat" }),
+      /must be "ladder" or unset/,
+    );
+  });
+
   test("provision refuses the production D1 id before anything runs", (t) => {
     const h = harness(t);
     assert.throws(

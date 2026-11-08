@@ -116,6 +116,7 @@ export function buildDevConfig({
   ratelimitNamespaceId = DEV.ratelimitNamespaceId,
   embeddingProvider = "none",
   agent = {},
+  reviewCascade = "",
   migrationsDir,
 }) {
   const example = parseConfigText(exampleText, "wrangler.jsonc.example");
@@ -240,6 +241,15 @@ export function buildDevConfig({
       }
       set(["vars", "FLAREMO_AGENT_MONTH_USD"], month);
     }
+  }
+  // The cascade ladder (docs/fork-general-agent.md): "ladder" or nothing.
+  if (reviewCascade) {
+    if (reviewCascade !== "ladder") {
+      throw new Error(
+        `FLAREMO_DEV_REVIEW_CASCADE must be "ladder" or unset, not "${reviewCascade}".`,
+      );
+    }
+    set(["vars", "FLAREMO_REVIEW_CASCADE"], reviewCascade);
   }
   const crons = example.triggers?.crons ?? [];
   if (crons.includes(AGENT_SUNDAY_CRON)) {
