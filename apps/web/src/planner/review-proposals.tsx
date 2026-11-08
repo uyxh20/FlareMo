@@ -3,14 +3,17 @@ import {
   type PlannerAgentProposalsResponse,
   type PlannerBoardCard,
   type PlannerBoardResponse,
+  type PlannerPillar,
+  plannerPillars,
   plannerTodoCap,
 } from "@flaremo/contracts";
 import { type ReactNode, useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PlannerPillarLabel, plannerPillarClass } from "./goal-cards";
 import type { PlannerGoalsStrings } from "./goals-strings";
-import { PlannerBadge } from "./goals-ui";
+import { PlannerBadge, PlannerChoice } from "./goals-ui";
 import {
   type PlannerForwardState,
   plannerNamedGoals,
@@ -68,7 +71,9 @@ export function plannerAddProposedGoal(
       goals: forward.goals.map((goal) => {
         if (goal.id !== empty.id) return goal;
         const { fromSummary: _summary, ...rest } = goal;
-        return { ...rest, id, title };
+        // Custom: the goal stays shown under Choose the week even if its text
+        // is cleared later, and its objective can still be changed there.
+        return { ...rest, id, title, custom: true };
       }),
       tasks:
         id === empty.id
@@ -201,33 +206,41 @@ function Section({
 function Card({
   proposal,
   strings,
+  pillar = proposal.pillar,
+  editor,
   children,
 }: {
   proposal: PlannerAgentProposalDto;
   strings: PlannerGoalsStrings;
+  /** The objective the card is tinted with; the proposal's own by default. */
+  pillar?: PlannerPillar | null;
+  /** Replaces the fixed objective label and title with editable fields. */
+  editor?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div
       className={cn(
         "flex min-w-0 flex-col gap-1.5 rounded-xl border border-dashed border-border bg-card px-3.5 py-3",
-        proposal.pillar && plannerPillarClass(proposal.pillar),
+        pillar && plannerPillarClass(pillar),
       )}
       data-testid="planner-proposal"
     >
-      <div className="flex items-baseline gap-2">
-        {proposal.pillar && (
-          <PlannerPillarLabel
-            className="shrink-0"
-            pillar={proposal.pillar}
-            short
-            strings={strings}
-          />
-        )}
-        <span className="min-w-0 leading-snug font-medium [overflow-wrap:anywhere]">
-          {proposal.title}
-        </span>
-      </div>
+      {editor ?? (
+        <div className="flex items-baseline gap-2">
+          {pillar && (
+            <PlannerPillarLabel
+              className="shrink-0"
+              pillar={pillar}
+              short
+              strings={strings}
+            />
+          )}
+          <span className="min-w-0 leading-snug font-medium [overflow-wrap:anywhere]">
+            {proposal.title}
+          </span>
+        </div>
+      )}
       {proposal.serves && (
         <p
           className="text-[13px] leading-snug [overflow-wrap:anywhere]"
@@ -260,6 +273,82 @@ function Card({
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * A proposed goal, editable before it is added: the owner can reword it and
+ * move it to another objective, then Add makes it a goal of the week.
+ */
+function GoalProposal({
+  proposal,
+  forward,
+  strings,
+  actions,
+}: {
+  proposal: PlannerAgentProposalDto;
+  forward: PlannerForwardState;
+  strings: PlannerGoalsStrings;
+  actions: PlannerProposalActions;
+}) {
+  const text = strings.review.forward.proposals;
+  const [title, setTitle] = useState(proposal.title);
+  const [pillar, setPillar] = useState<PlannerPillar>(
+    proposal.pillar ?? plannerPillars[0],
+  );
+  const room =
+    forward.goals.length < 12 ||
+    forward.goals.some((goal) => goal.pillar === pillar && !goal.title.trim());
+  return (
+    <Card
+      editor={
+        <div className="flex flex-col gap-2">
+          <PlannerChoice
+            label={strings.editor.objective}
+            options={plannerPillars.map((item) => ({
+              value: item,
+              className: plannerPillarClass(item),
+              label: (
+                <>
+                  <i aria-hidden="true" className="planner-dot" />
+                  {strings.pillarShort[item]}
+                </>
+              ),
+            }))}
+            value={pillar}
+            onChange={setPillar}
+          />
+          <Textarea
+            aria-label={strings.review.forward.goalPlaceholder}
+            className="min-h-14 bg-background"
+            data-testid="planner-proposal-title"
+            maxLength={1000}
+            placeholder={strings.review.forward.goalPlaceholder}
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </div>
+      }
+      pillar={pillar}
+      proposal={proposal}
+      strings={strings}
+    >
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => actions.dismiss(proposal)}
+      >
+        {text.dismiss}
+      </Button>
+      <Button
+        disabled={!room || !title.trim()}
+        size="sm"
+        variant="outline"
+        onClick={() => actions.addGoal({ ...proposal, title, pillar })}
+      >
+        {text.add}
+      </Button>
+    </Card>
   );
 }
 
@@ -308,32 +397,15 @@ export function PlannerGoalProposals({
       {open.length === 0 && !pending && (
         <p className="text-[13px] text-muted-foreground">{text.suggestHint}</p>
       )}
-      {open.map((proposal) => {
-        const room =
-          forward.goals.length < 12 ||
-          forward.goals.some(
-            (goal) => goal.pillar === proposal.pillar && !goal.title.trim(),
-          );
-        return (
-          <Card key={proposal.id} proposal={proposal} strings={strings}>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => actions.dismiss(proposal)}
-            >
-              {text.dismiss}
-            </Button>
-            <Button
-              disabled={!room}
-              size="sm"
-              variant="outline"
-              onClick={() => actions.addGoal(proposal)}
-            >
-              {text.add}
-            </Button>
-          </Card>
-        );
-      })}
+      {open.map((proposal) => (
+        <GoalProposal
+          actions={actions}
+          forward={forward}
+          key={proposal.id}
+          proposal={proposal}
+          strings={strings}
+        />
+      ))}
     </Section>
   );
 }

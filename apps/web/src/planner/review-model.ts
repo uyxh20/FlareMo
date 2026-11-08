@@ -14,7 +14,6 @@ import {
   type PlannerReviewResponse,
   type PlannerSummaryMemoInput,
   type PlannerVerdictKind,
-  plannerAddDays,
   plannerGoalResults,
   plannerMemoNextSteps,
   plannerPillarNames,
@@ -757,8 +756,8 @@ export function plannerLookBackInput(
 // ---------------------------------------------------------------------------
 
 /**
- * The plan's goals to start from: the ones already saved for the week, else the
- * Next Steps of the latest summary, else one empty goal per objective.
+ * The plan's goals to start from: the ones already saved for the week, else
+ * one empty goal per objective (not shown until filled).
  */
 export function plannerInitialPlanGoals(
   review: Pick<
@@ -773,20 +772,13 @@ export function plannerInitialPlanGoals(
       title: plannerGoalText(goal),
     }));
   }
-  // The server reads the Next Steps from this week's summary once it exists,
-  // else from last week's.
-  const from = review.summary
-    ? review.review_week
-    : plannerAddDays(review.review_week, -7);
-  return plannerPillars.map((pillar) => {
-    const step = review.suggested_goals[pillar]?.trim();
-    return {
-      id: plannerNewId(),
-      pillar,
-      title: step ?? "",
-      ...(step ? { fromSummary: from } : {}),
-    };
-  });
+  // The summary's Next Steps are not pre-filled as goals: the agent's goal
+  // proposals cover them, and the owner adds the ones they want.
+  return plannerPillars.map((pillar) => ({
+    id: plannerNewId(),
+    pillar,
+    title: "",
+  }));
 }
 
 export function plannerNewForwardState(
@@ -810,10 +802,9 @@ export function plannerNewForwardState(
 }
 
 /**
- * The summary memo was written: its Next Steps fill the plan's goals, unless
- * the plan was saved before. Once the owner changed the plan, only the goals
- * still holding an older summary's Next Steps, untouched, are refreshed (a
- * typed goal loses its `fromSummary`), and no goal is added back. A goal that
+ * The summary memo was written: goals an older draft filled from a summary's
+ * Next Steps, untouched (a typed goal loses its `fromSummary`), are refreshed
+ * from the new one. Nothing is pre-filled or added otherwise. A goal that
  * changes loses the tasks drafted for it.
  */
 export function plannerPlanFromMemo(
@@ -831,28 +822,34 @@ export function plannerPlanFromMemo(
     const step = steps[pillar];
     if (!step) continue;
     const goal = goals.find((item) => item.pillar === pillar);
-    if (goal && goal.title === step) continue;
-    if (forward.edited && !(goal?.fromSummary && goal.fromSummary !== week)) {
-      continue;
-    }
-    if (goal) {
-      goals = goals.map((item) =>
-        item.id === goal.id
-          ? { ...item, title: step, fromSummary: week }
-          : item,
-      );
-      tasks = tasks.filter((task) => task.goal_id !== goal.id);
-    } else {
-      goals = [
-        ...goals,
-        { id: plannerNewId(), pillar, title: step, fromSummary: week },
-      ];
-    }
+    // Only a goal an older draft filled from a summary is refreshed; no goal
+    // is created from the Next Steps any more (the agent proposes goals).
+    if (!goal?.fromSummary || goal.fromSummary === week) continue;
+    if (goal.title === step) continue;
+    goals = goals.map((item) =>
+      item.id === goal.id ? { ...item, title: step, fromSummary: week } : item,
+    );
+    tasks = tasks.filter((task) => task.goal_id !== goal.id);
   }
   return goals === forward.goals ? forward : { ...forward, goals, tasks };
 }
 
 /** The plan's goals that have a title: the ones that will be saved. */
+/**
+ * The goals Choose the week shows: the starting slot per objective stays
+ * hidden until it is filled, added with "+ Add a goal", or saved before.
+ */
+export function plannerShownGoals(
+  forward: Pick<PlannerForwardState, "goals" | "knownGoalIds">,
+) {
+  return forward.goals.filter(
+    (goal) =>
+      goal.custom ||
+      goal.title.trim() ||
+      forward.knownGoalIds.includes(goal.id),
+  );
+}
+
 export function plannerNamedGoals(forward: Pick<PlannerForwardState, "goals">) {
   return forward.goals.filter((goal) => goal.title.trim());
 }

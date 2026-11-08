@@ -125,10 +125,14 @@ test("the review opens each chapter from its address", async ({ page }) => {
 
   await page.goto("/review?part=forward&step=2");
   await expect(page.getByTestId("planner-forward-step")).toBeVisible();
-  await expect(page.getByTestId("planner-plan-slot").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "+ Add a goal" }),
+  ).toBeVisible();
 
   await page.reload();
-  await expect(page.getByTestId("planner-plan-slot").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "+ Add a goal" }),
+  ).toBeVisible();
 });
 
 test("Look back starts and takes a typed answer without a model", async ({
@@ -188,6 +192,7 @@ test("a week planned in Look forward lands on the cockpit", async ({
 }) => {
   const goal = `E2E weekly goal ${Date.now()}`;
   await page.goto("/review?part=forward&step=2");
+  await page.getByRole("button", { name: "+ Add a goal" }).click();
   const slot = page.getByTestId("planner-plan-slot").first();
   await expect(slot).toBeVisible();
   await slot.getByRole("textbox").fill(goal);
@@ -205,4 +210,91 @@ test("a week planned in Look forward lands on the cockpit", async ({
   await expect(
     page.getByTestId("planner-goal-card").filter({ hasText: goal }),
   ).toBeVisible();
+});
+
+test("Choose the week: a proposed goal is edited, then Add makes it a goal of the week", async ({
+  page,
+}) => {
+  const proposal = (id: string, pillar: string, title: string) => ({
+    id,
+    kind: "goal",
+    week_start: "2026-11-02",
+    pillar,
+    title,
+    lines: [],
+    goal_ref: null,
+    serves: null,
+    why: "Because it came up this week.",
+    quote: null,
+    source_day: null,
+    state: "open",
+  });
+  // The page asks the agent only when one is set up: turn that on in the
+  // review's own response.
+  await page.route("**/api/**", async (route) => {
+    if (
+      route.request().method() !== "GET" ||
+      /proposals/.test(route.request().url())
+    ) {
+      return route.fallback();
+    }
+    const response = await route.fetch();
+    const type = response.headers()["content-type"] ?? "";
+    if (!type.includes("json")) return route.fulfill({ response });
+    const body = await response.json();
+    if (body && "plan_goals" in body && typeof body.ai === "boolean") {
+      body.ai = true;
+    }
+    return route.fulfill({ response, json: body });
+  });
+  await page.route("**/proposals?*", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          json: {
+            proposals: [
+              proposal("p-work", "work", "Sign the DocuSign"),
+              proposal("p-health", "health", "Run three times"),
+            ],
+            pending: false,
+            agent: true,
+            drafting: null,
+          },
+        })
+      : route.fallback(),
+  );
+  await page.goto("/review?part=forward&step=2");
+  const cards = page.getByTestId("planner-proposal");
+  await expect(cards).toHaveCount(2);
+  // No pre-filled goal cards under the proposals: only goals saved for the
+  // week before (an earlier test may have saved one) show, each with text.
+  const slots = page.getByTestId("planner-plan-slot");
+  const before = await slots.count();
+  for (const box of await slots.getByRole("textbox").all()) {
+    await expect(box).not.toHaveValue("");
+  }
+
+  await page.setViewportSize({ width: 1100, height: 900 });
+  const first = cards.first();
+  await first.getByTestId("planner-proposal-title").fill("Sign the contract");
+  await first.getByRole("button", { name: "Objective" }).click();
+  await first.getByRole("button", { name: "Add", exact: true }).click();
+
+  await expect(slots).toHaveCount(before + 1);
+  const added = slots.filter({
+    has: page.locator("textarea", { hasText: "Sign the contract" }),
+  });
+  await expect(added).toHaveCount(1);
+  // It lands under the objective picked, not the proposal's own.
+  await expect(
+    added.getByRole("button", { name: "Objective", pressed: true }),
+  ).toBeVisible();
+  await expect(cards).toHaveCount(1);
+
+  // Clearing the added goal's text does not make its card vanish mid-edit.
+  await added.getByRole("textbox").fill("");
+  await expect(slots).toHaveCount(before + 1);
+
+  // "+ Add a goal" shows one more empty goal to write.
+  await page.getByRole("button", { name: "+ Add a goal" }).click();
+  await expect(slots).toHaveCount(before + 2);
 });
