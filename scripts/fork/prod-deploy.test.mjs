@@ -4,6 +4,7 @@ import test, { describe } from "node:test";
 import { PROD } from "./dev-env-guard.mjs";
 import {
   agentVarsFromEnv,
+  reviewCascadeFromEnv,
   assertProdConfig,
   bindingDrift,
   buildProdConfig,
@@ -374,6 +375,21 @@ describe("prod-deploy flow", () => {
     assert.throws(() => agentVarsFromEnv({ FLAREMO_PROD_AGENT: "agent_01a" }));
     assert.throws(() =>
       agentVarsFromEnv({ ...env, FLAREMO_PROD_AGENT: "nope" }),
+    );
+  });
+
+  test("the review cascade var comes from the environment, ladder or flat", () => {
+    assert.deepEqual(reviewCascadeFromEnv({}), {});
+    assert.deepEqual(
+      reviewCascadeFromEnv({ FLAREMO_PROD_REVIEW_CASCADE: "ladder" }),
+      { FLAREMO_REVIEW_CASCADE: "ladder" },
+    );
+    assert.deepEqual(
+      reviewCascadeFromEnv({ FLAREMO_PROD_REVIEW_CASCADE: "flat" }),
+      { FLAREMO_REVIEW_CASCADE: "flat" },
+    );
+    assert.throws(() =>
+      reviewCascadeFromEnv({ FLAREMO_PROD_REVIEW_CASCADE: "yes" }),
     );
   });
 });

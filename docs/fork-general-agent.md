@@ -272,7 +272,7 @@ pnpm exec tsx scripts/fork/general-agent.ts --owner <first name> --target dev
 ```
 
 For the target (`dev` or `prod`) it creates or updates the agent "Schizo Diary
-agent (<target>)" (Claude Opus, high effort) with its four skills, the
+agent (<target>)" (Claude Opus, medium effort) with its four skills, the
 sandbox `schizo-diary-agent`, the memory store `review-notes-<target>` (the memo
 agent's, so its notes carry over) and an empty vault. Dev and prod have their
 own agent and skills, so a skill change tried on dev reaches prod only when the
@@ -292,6 +292,9 @@ Then give the Worker the secret `ANTHROPIC_API_KEY` and the vars it prints:
   and `FLAREMO_PROD_AGENT_VAULT` set to the printed ids; it puts them on the
   Worker, and later deploys keep them (`--keep-vars`). The old `FLAREMO_REVIEW_MEMO_*` vars do nothing now and can
   be removed.
+- **The ladder on live:** run the prod deploy with
+  `FLAREMO_PROD_REVIEW_CASCADE=ladder` (or `flat` to turn it off again). Unset
+  keeps whatever live has. Live never sets `FLAREMO_REVIEW_AS_OF`.
 
 ## The eval
 

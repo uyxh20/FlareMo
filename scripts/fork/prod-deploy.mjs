@@ -107,6 +107,20 @@ export function agentVarsFromEnv(env) {
   return vars;
 }
 
+/**
+ * The review's cascade ladder, from FLAREMO_PROD_REVIEW_CASCADE: "ladder" turns
+ * it on, "flat" turns it off. Unset leaves live's own var as it is (later
+ * deploys keep it through live's own vars). Anything else is refused.
+ */
+export function reviewCascadeFromEnv(env) {
+  const value = env.FLAREMO_PROD_REVIEW_CASCADE?.trim();
+  if (!value) return {};
+  if (value !== "ladder" && value !== "flat") {
+    throw new Error('FLAREMO_PROD_REVIEW_CASCADE must be "ladder" or "flat".');
+  }
+  return { FLAREMO_REVIEW_CASCADE: value };
+}
+
 /** Refuse to write anything unless the config targets exactly production. */
 export function assertProdConfig(config) {
   const problems = [];
@@ -398,6 +412,7 @@ async function writeConfig(io) {
   const config = buildProdConfig(io.readExample(), {
     ...vars,
     ...agentVarsFromEnv(io.env ?? process.env),
+    ...reviewCascadeFromEnv(io.env ?? process.env),
   });
   assertProdConfig(config);
   io.writeRootConfig(`${JSON.stringify(config, null, 2)}\n`);

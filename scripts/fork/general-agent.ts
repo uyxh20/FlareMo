@@ -34,7 +34,9 @@ import { PROD } from "./dev-env-guard.mjs";
 const API = "https://api.anthropic.com/v1";
 const AGENTS = "managed-agents-2026-04-01";
 const MEMORY = "agent-memory-2026-07-22";
-const MODEL = { id: "claude-opus-5-5", effort: { type: "high" } };
+// Medium effort since 8 Nov 2026 (the owner's call: the review reads a lot and
+// the ladder gives it the structure, so it needs less thinking time).
+const MODEL = { id: "claude-opus-5-5", effort: { type: "medium" } };
 const ENVIRONMENT_NAME = "schizo-diary-agent";
 const ORIGINS = { dev: DEV.publicUrl, prod: PROD.publicUrl } as const;
 const SKILLS_DIR = new URL("../../skills/", import.meta.url).pathname;
