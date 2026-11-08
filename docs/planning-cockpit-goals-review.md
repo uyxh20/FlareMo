@@ -1,8 +1,8 @@
 # Goals and the weekly review
 
-Status: built 2026-10-10 on `feat/goals-weekly-review`. It goes to `flaremo-dev` first; live gets it only on the owner's word. A fork-only add-on to the planning cockpit ([planning-cockpit-implementation-plan.md](planning-cockpit-implementation-plan.md)), under the same guardrails. Not proposed upstream.
+Status: built 2026-10-10 on `feat/goals-weekly-review` and live since 2026-10-12 (merged and deployed that evening; the release log in [architecture.html](architecture.html) starts at version 17 and does not list it). Later changes (the single Review page, the general agent, Choose the week, and since version 47 the cascade ladder, see [fork-general-agent.md](fork-general-agent.md)) are in that release log and in the notes below. A fork-only add-on to the planning cockpit ([planning-cockpit-implementation-plan.md](planning-cockpit-implementation-plan.md)), under the same guardrails. Not proposed upstream.
 
-It delivers the weekly review and the goal UI. The monthly review is not part of it. The approved design is the mock at https://claude.ai/artifact/TX9qjid1ihff2oH3Srsec8.
+It delivers the weekly review and the goal UI. The month, quarter and year reviews were added later and have their own page: [planning-cockpit-period-review.md](planning-cockpit-period-review.md). The approved design is the mock at https://claude.ai/artifact/TX9qjid1ihff2oH3Srsec8.
 
 ## What the owner sees
 

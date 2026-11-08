@@ -1,6 +1,6 @@
 # The month, quarter and year reviews
 
-Status: built 2026-10-17 on `feat/period-reviews`, folded into the one review page on `feat/unified-review` the same day. It goes to `flaremo-dev` first; live gets it only on the owner's word. A fork-only add-on inside the weekly review ([planning-cockpit-goals-review.md](planning-cockpit-goals-review.md)), under the same guardrails. Not proposed upstream. The agreed design is the page at https://claude.ai/artifact/Q2GCUEXzJBbdouPa6KJyrJ: every Sunday one Review, the date picks the chapters, nothing to choose.
+Status: built 2026-10-17 on `feat/period-reviews`, folded into the one review page on `feat/unified-review` the same day. The period reviews are live since 2026-10-17 (version 31, migration 9013 added the period review tables); the single Review page reached live with version 33 (2026-10-20). A fork-only add-on inside the weekly review ([planning-cockpit-goals-review.md](planning-cockpit-goals-review.md)), under the same guardrails. Not proposed upstream. The agreed design is the page at https://claude.ai/artifact/Q2GCUEXzJBbdouPa6KJyrJ: every Sunday one Review, the date picks the chapters, nothing to choose.
 
 ## The idea in one paragraph
 

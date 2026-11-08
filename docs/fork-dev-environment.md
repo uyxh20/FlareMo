@@ -90,6 +90,15 @@ third-party credentials. `--include-side-effect-tables` copies them.
   the free plan's daily Workers AI and Vectorize allowance with live, and a
   clone would re-embed the whole diary. To test search on dev, set
   `FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai` before `deploy`.
+- The diary agent runs on dev only when all four of `FLAREMO_DEV_AGENT`,
+  `FLAREMO_DEV_AGENT_ENVIRONMENT`, `FLAREMO_DEV_AGENT_STORE` and
+  `FLAREMO_DEV_AGENT_VAULT` are set (see `fork-general-agent.md`, "Setting it
+  up"). Its Sunday prep never runs on dev. `FLAREMO_DEV_AGENT_MONTH_USD` sets
+  its monthly spend cap on dev (default $30).
+- `FLAREMO_DEV_REVIEW_CASCADE=ladder` turns on the review's cascade ladder for a
+  dev deploy; unset keeps the flat review. Live has its own switch,
+  `FLAREMO_PROD_REVIEW_CASCADE` on the prod deploy (see `fork-general-agent.md`,
+  "The cascade ladder").
 - `deploy` and `clone` find the dev D1 by its name (`flaremo-dev`), so a wiped
   `.wrangler/fork-dev/state.json` no longer needs `--d1-id`.
 - The import briefly makes the dev D1 unavailable (wrangler warns about it).
