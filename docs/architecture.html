@@ -281,7 +281,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-11-08 · describes main and live version #46 (shipped 2026-11-08), which added a Summarize button to the composer for <a href="#agent">link summaries</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
+      <p class="meta">Last updated 2026-11-08 · describes main and live version #47 (shipped 2026-11-08), which turned on the <a href="#review">cascade ladder</a> in the weekly review and moved the <a href="#agent">diary agent</a> from high to medium effort. Version #46 added a Summarize button to the composer for link summaries. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
     </header>
 
     <!-- ============================================================ -->
@@ -715,6 +715,7 @@
         <figcaption>Dev and live both have the Anthropic key; the OpenRouter key stays as a dormant fallback. Any step the agent cannot take goes to the next model; if every model fails, the page uses its own drafts. The goal check runs on Sonnet 5.5 at medium effort when it falls back. Per <code>docs/planning-cockpit-goals-review.md</code> and <code>docs/fork-general-agent.md</code>.</figcaption>
       </figure>
       <p class="note"><b>Choose the week, live since version #44 (2026-11-08):</b> one set of suggested goals, not two. The agent's proposed goals are stacked rows whose wording and objective (pillar) you can change before Add; Add makes the row a goal of the week, shown underneath. The summary's Next Steps no longer pre-fill four goal cards at the bottom; the empty starting slot per objective stays hidden until you fill it or press "+ Add a goal". No migration. Code: <code>apps/web/src/planner/review-proposals.tsx</code>, <code>review-forward.tsx</code>, <code>review-model.ts</code> (<code>plannerShownGoals</code>).</p>
+      <p class="note"><b>The cascade ladder, live since version #47 (2026-11-08):</b> the review now judges the week against the goal cascade, not the week alone. For each objective the agent sees the year, quarter, month and week goal, each upper goal with "x of n points struck" and the weeks left in the month, quarter and year. The memo gets two bullets per objective before Evidence: <b>Serves</b> (the month goal and its open points) and <b>Moved</b> (Advanced, Maintained, Drifted or Idle), and Pattern and Risk name the goal most behind its time. Rules: "0 of n struck" is a question to check against the diary, never a verdict (struck counts lag); "losing" needs a diary fact; a missed weekly goal or broken tracked target is Drifted, never Maintained. A switch, the Worker var <code>FLAREMO_REVIEW_CASCADE=ladder</code>, turns it on or off in one deploy (<code>FLAREMO_PROD_REVIEW_CASCADE=ladder</code> or <code>flat</code> for the prod script). Tested on dev against the live review (about 21% more cost per replayed week; one live week, 2 to 8 Nov: same open point, richer month and quarter view, no invented facts). The agent also moved from high to medium effort the same day, for the review and for Ask my diary. A dev-only replay cut (<code>FLAREMO_REVIEW_AS_OF</code>, never set on live) hides what was written after a replayed week. No migration. Code: <code>packages/domain/src/planner/review-cascade.ts</code>; details: <code>docs/fork-general-agent.md</code>, "The cascade ladder".</p>
       <p class="note"><b>Retired: the weekly memo agent of 17 October.</b> It ran look back alone on a Managed Agent; the general diary agent took over every job in version #33. Its <code>FLAREMO_REVIEW_MEMO_*</code> vars are still on live and do nothing. Since version #42 each saved look back and look forward is also written to the <a href="#flywheel">flywheel</a> log (sizes and counts only), and Look back's side panel carries the flywheel card.</p>
       <figure>
         <div class="fig">
@@ -874,7 +875,7 @@
             <text x="280" y="20" class="t-s t-m">AT ANTHROPIC</text>
             <rect x="280" y="34" width="270" height="252" rx="12" class="n n-ai" />
             <text x="298" y="60" class="t-h">Claude Managed Agent</text>
-            <text x="298" y="80" class="t-s">Opus 5.5 · high effort · own one per site</text>
+            <text x="298" y="80" class="t-s">Opus 5.5 · medium effort · own one per site</text>
             <rect x="296" y="94" width="238" height="30" rx="6" class="n-soft" /><text x="308" y="114" class="t-s">one session per review or chat</text>
             <rect x="296" y="130" width="238" height="30" rx="6" class="n-soft" /><text x="308" y="150" class="t-s">skills: review · period · ask · goal check</text>
             <rect x="296" y="166" width="238" height="30" rx="6" class="n-soft" /><text x="308" y="186" class="t-s">own notes (memory store) · key in a vault</text>
@@ -1458,6 +1459,7 @@
         <table>
           <thead><tr><th>Live</th><th>Date</th><th>What changed</th><th>Migration</th><th>Live rows</th></tr></thead>
           <tbody>
+            <tr><td>#47</td><td class="num">2026-11-08</td><td>Cascade ladder in the weekly review (Serves and Moved per objective, month and quarter goals with weeks left) and the diary agent on medium instead of high effort</td><td class="num">none</td><td class="num">5,137 → 5,137</td></tr>
             <tr><td>#46</td><td class="num">2026-11-08</td><td>Summarize button (✦) in the memo composer: opens Ask my diary with the summary request for the link you pasted; the draft stays</td><td class="num">none</td><td class="num">5,117 → 5,117</td></tr>
             <tr><td>#45</td><td class="num">2026-11-08</td><td>Link summaries: drop a web page, YouTube video or PDF link into Ask my diary or use Summarize link on an entry; the agent proposes a #link summary entry that reviews and memories never read as your words</td><td class="num">none</td><td class="num">5,099 → 5,099</td></tr>
             <tr><td>#44</td><td class="num">2026-11-08</td><td>Choose the week: one list of proposed goals, editable (text and objective) before Add; no pre-filled goal cards from the summary</td><td class="num">none</td><td class="num">5,099 → 5,099</td></tr>
