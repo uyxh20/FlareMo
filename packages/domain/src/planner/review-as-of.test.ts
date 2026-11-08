@@ -32,18 +32,18 @@ describe("the cut", () => {
 
 describe("what passes the cut", () => {
   const asOf = { at: "2026-10-20T07:31:02.000Z", weekStart: "2026-10-12" };
-  const before = plannerBeforeAsOf(asOf);
+  const keep = plannerBeforeAsOf(asOf);
   it("keeps what came before, drops what came after", () => {
-    expect(before("2026-10-18T21:00:00.000Z")).toBe(true);
-    expect(before("2026-10-20T07:31:02.000Z")).toBe(false);
-    expect(before("2026-11-01T10:00:00.000Z")).toBe(false);
+    expect(keep("2026-10-18T21:00:00.000Z")).toBe(true);
+    expect(keep("2026-10-20T07:31:02.000Z")).toBe(false);
+    expect(keep("2026-11-01T10:00:00.000Z")).toBe(false);
   });
   it("compares a bare day with the cut's day", () => {
-    expect(before("2026-10-19")).toBe(true);
-    expect(before("2026-10-20")).toBe(false);
+    expect(keep("2026-10-19")).toBe(true);
+    expect(keep("2026-10-20")).toBe(false);
   });
   it("keeps rows with no time, and everything when there is no cut", () => {
-    expect(before(null)).toBe(true);
+    expect(keep(null)).toBe(true);
     expect(plannerBeforeAsOf(undefined)("2099-01-01T00:00:00.000Z")).toBe(true);
   });
 });

@@ -873,7 +873,7 @@ ${plannerDiaryMarker(context.weekStart)}`,
         : ""
     }
 - Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.${
-      ladder ? `\n${plannerCascadeMemoRules(name).join("\n")}` : ""
+      ladder ? `\n${plannerCascadeMemoRules().join("\n")}` : ""
     }
 - No preamble: start with the H1 line. Under 900 words.`,
     material: `${answersBlock(context, request)}

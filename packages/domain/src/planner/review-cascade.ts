@@ -184,9 +184,9 @@ export const plannerCascadeMemoBullets = [
 
 /**
  * The memo rules the ladder adds: what the two bullets hold and how critical
- * to be. `name` is the owner's name as the prompts use it.
+ * to be.
  */
-export function plannerCascadeMemoRules(name: string): string[] {
+export function plannerCascadeMemoRules(): string[] {
   return [
     `- **Serves:** the month goal of that objective (the quarter's when the month has none), its open points, and the weeks left, from the cascade. One line. Write "No month or quarter goal." when there is none.`,
     `- **Moved:** one word first, then one sentence of evidence: "Advanced" when this week struck or clearly progressed an open point of that goal; "Maintained" when the work served the goal without moving a point; "Drifted" when the week's work in this objective went elsewhere, or when the week's own goal for it was missed or a tracked target was broken (a missed weekly goal is never "Maintained"); "Idle" when nothing in this objective happened. Then the gap in plain words: which goal is losing, how many weeks are left, and whether the week's effort went where the cascade points. Only from the record: a "losing" or "behind" call needs a diary fact behind it, not a point count; when the record is thin, say so instead of guessing.`,
