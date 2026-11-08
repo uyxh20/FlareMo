@@ -32,6 +32,7 @@ export * from "./period-review-context";
 export * from "./period-review-prompts";
 export * from "./plans";
 export * from "./review";
+export * from "./review-as-of";
 export * from "./review-cascade";
 export * from "./review-context";
 export * from "./review-happened";

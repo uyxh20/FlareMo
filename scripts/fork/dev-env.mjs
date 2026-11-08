@@ -352,6 +352,8 @@ export class DevEnv {
       ),
       // The cascade ladder in the weekly review, for the replay on dev.
       reviewCascade: clean(this.env.FLAREMO_DEV_REVIEW_CASCADE) ?? "",
+      // Replays of past weeks: the agent sees nothing after the reviewed Sunday.
+      reviewAsOf: clean(this.env.FLAREMO_DEV_REVIEW_AS_OF) ?? "",
     };
   }
 
@@ -1496,6 +1498,8 @@ FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai before deploy.
 
 FLAREMO_DEV_REVIEW_CASCADE=ladder turns on the review's cascade ladder
 (docs/fork-general-agent.md); unset, the review is as live.
+FLAREMO_DEV_REVIEW_AS_OF=review-week hides from the agent what was written
+after a replayed week's look back was saved (replays only).
 The general agent is off on dev unless FLAREMO_DEV_AGENT,
 FLAREMO_DEV_AGENT_ENVIRONMENT, FLAREMO_DEV_AGENT_STORE and FLAREMO_DEV_AGENT_VAULT
 are set before deploy (scripts/fork/general-agent.ts --target dev prints them).

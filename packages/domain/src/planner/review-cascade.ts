@@ -135,7 +135,7 @@ export function plannerCascadeLadderLines(
   const left = (count: { left: number; total: number }) =>
     `${count.left} of ${count.total} weeks left after this one`;
   const lines = [
-    `Goal cascade for ${plannerWeekCode(context.weekStart)}, by objective, top down. Points in [struck] are done; the counts and the weeks left are the app's, not estimates. Judge the week by what it moved on the month goal's open points, and through it on the quarter and the year.`,
+    `Goal cascade for ${plannerWeekCode(context.weekStart)}, by objective, top down. Points in [struck] are done; the counts and the weeks left are the app's, not estimates. Judge the week by what it moved on the month goal's open points, and through it on the quarter and the year. The struck counts lag: ${context.ownerName} strikes points late or not at all, so "0 of n struck" is a question to check against the diary, never a verdict on its own. A goal is losing when the record shows no work toward its open points, not when its count is low.`,
     `Time: week ${iso.week} of ${iso.year}. ${MONTHS[month]}: ${left(monthLeft)}. Q${quarter} ${year}: ${left(quarterLeft)}. ${year}: ${left(yearLeft)}.`,
   ];
   const byPillar = (goals: readonly PlannerGoalDto[], pillar: PlannerPillar) =>
@@ -184,12 +184,12 @@ export const plannerCascadeMemoBullets = [
 
 /**
  * The memo rules the ladder adds: what the two bullets hold and how critical
- * to be. `name` is the owner's name as the prompts use it.
+ * to be.
  */
-export function plannerCascadeMemoRules(name: string): string[] {
+export function plannerCascadeMemoRules(): string[] {
   return [
     `- **Serves:** the month goal of that objective (the quarter's when the month has none), its open points, and the weeks left, from the cascade. One line. Write "No month or quarter goal." when there is none.`,
-    `- **Moved:** one word first, then one sentence of evidence: "Advanced" when this week struck or clearly progressed an open point of that goal; "Maintained" when the work served the goal without moving a point; "Drifted" when the week's work in this objective went elsewhere; "Idle" when nothing in this objective happened. Then the gap in plain words: which goal is losing, how many weeks are left, and whether the week's effort went where the cascade points. Only from the record; when the record is thin, say so instead of guessing.`,
+    `- **Moved:** one word first, then one sentence of evidence: "Advanced" when this week struck or clearly progressed an open point of that goal; "Maintained" when the work served the goal without moving a point; "Drifted" when the week's work in this objective went elsewhere, or when the week's own goal for it was missed or a tracked target was broken (a missed weekly goal is never "Maintained"); "Idle" when nothing in this objective happened. Then the gap in plain words: which goal is losing, how many weeks are left, and whether the week's effort went where the cascade points. Only from the record: a "losing" or "behind" call needs a diary fact behind it, not a point count; when the record is thin, say so instead of guessing.`,
     `- In Pattern and Risk, name the month or quarter goal most behind its time left, with its count of open points.`,
     `- Be direct about the gap between the plan and the week. No praise, no softening; also no criticism the record does not support.`,
   ];

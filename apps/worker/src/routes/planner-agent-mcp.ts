@@ -10,7 +10,9 @@ import {
 import {
   PlannerAgentToolError,
   plannerAgentCallTool,
+  plannerAsOfEnabled,
   plannerCascadeStyleOf,
+  plannerReviewAsOf,
 } from "@flaremo/domain/src/planner";
 import { type Context, Hono } from "hono";
 import { MEMOS_PAT_CONFIG_ID, MEMOS_PAT_PREFIX } from "../auth-env";
@@ -170,6 +172,11 @@ plannerAgentMcpApi.post("/agent/mcp", async (c) => {
       return streamableToolError(c, id, formatZodError(call.error));
     }
     try {
+      // The replay's cut (dev only, docs/fork-general-agent.md): with the
+      // var set, a review session sees nothing written after its Sunday.
+      const asOf = plannerAsOfEnabled(c.env.FLAREMO_REVIEW_AS_OF)
+        ? await plannerReviewAsOf(owner.db, owner.user.id)
+        : null;
       const text = await plannerAgentCallTool(
         {
           db: owner.db,
@@ -177,6 +184,7 @@ plannerAgentMcpApi.post("/agent/mcp", async (c) => {
           cascade: plannerCascadeStyleOf(c.env.FLAREMO_REVIEW_CASCADE),
           // fork: link summaries (docs/fork-link-summaries.md).
           readLink: (url) => forkReadLink(url, { ai: c.env.AI }),
+          ...(asOf ? { asOf } : {}),
         },
         call.data.name,
         call.data.arguments ?? {},
