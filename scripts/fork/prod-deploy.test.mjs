@@ -4,7 +4,6 @@ import test, { describe } from "node:test";
 import { PROD } from "./dev-env-guard.mjs";
 import {
   agentVarsFromEnv,
-  reviewCascadeFromEnv,
   assertProdConfig,
   bindingDrift,
   buildProdConfig,
@@ -13,6 +12,7 @@ import {
   pendingMigrations,
   previousDeployment,
   redact,
+  reviewCascadeFromEnv,
   rollback,
   strayMigrations,
 } from "./prod-deploy.mjs";
