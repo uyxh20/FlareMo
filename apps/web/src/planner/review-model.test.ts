@@ -1393,9 +1393,10 @@ describe("Look forward: the plan's goals", () => {
     ]);
   });
 
-  it("else starts one goal per objective, filled from the latest summary's Next Steps", () => {
+  it("else starts one empty goal per objective, without pre-filling the summary's Next Steps", () => {
     const goals = plannerInitialPlanGoals(
       review({
+        summary: { id: "memos/summary-41", content: MEMO },
         suggested_goals: { work: "  Close two customers  ", health: "   " },
       }),
     );
@@ -1407,26 +1408,13 @@ describe("Look forward: the plan's goals", () => {
       })),
     ).toEqual([
       { pillar: "of", title: "", fromSummary: undefined },
-      // Before this week's summary is written, the steps are last week's.
-      { pillar: "work", title: "Close two customers", fromSummary: LAST_WEEK },
+      { pillar: "work", title: "", fromSummary: undefined },
       { pillar: "ai", title: "", fromSummary: undefined },
       { pillar: "health", title: "", fromSummary: undefined },
     ]);
     // Each goal has a UUID of its own, which the server keeps.
     for (const item of goals) expect(item.id).toMatch(UUID);
     expect(new Set(goals.map((item) => item.id)).size).toBe(4);
-  });
-
-  it("marks goals filled from this week's summary with this week once it is written", () => {
-    const goals = plannerInitialPlanGoals(
-      review({
-        summary: { id: "memos/summary-41", content: MEMO },
-        suggested_goals: { work: "Close two customers." },
-      }),
-    );
-    expect(goals.find((item) => item.pillar === "work")?.fromSummary).toBe(
-      REVIEW_WEEK,
-    );
   });
 
   it("opens Look forward unseen, on its first step, with nothing planned", () => {
@@ -1446,53 +1434,14 @@ describe("Look forward: the plan's goals", () => {
     });
   });
 
-  it("fills the plan's goals from the memo's Next Steps, dropping the tasks of a goal that changed", () => {
+  it("does not fill or add goals from the memo's Next Steps", () => {
     const of = planGoal({ pillar: "of", title: "" });
     const work = planGoal({ pillar: "work", title: "Old work goal" });
+    const plan = forward({ goals: [of, work], tasks: [task(work.id)] });
+    expect(plannerPlanFromMemo(plan, MEMO, false, REVIEW_WEEK)).toBe(plan);
     const ai = planGoal({ pillar: "ai", title: "Try the new model" });
-    const health = planGoal({ pillar: "health", title: "Run three times" });
-    const kept = [task(ai.id), task(health.id)];
-    const plan = forward({
-      goals: [of, work, ai, health],
-      tasks: [task(work.id), ...kept],
-    });
-    const next = plannerPlanFromMemo(plan, MEMO, false, REVIEW_WEEK);
-    expect(next.goals).toEqual([
-      {
-        ...of,
-        title: "Keep the Sunday review under an hour.",
-        fromSummary: REVIEW_WEEK,
-      },
-      { ...work, title: "Close two customers.", fromSummary: REVIEW_WEEK },
-      ai,
-      health,
-    ]);
-    expect(next.tasks).toEqual(kept);
-  });
-
-  it("adds a goal for an objective the plan has none for", () => {
-    const ai = planGoal({ pillar: "ai", title: "Try the new model" });
-    const next = plannerPlanFromMemo(
-      forward({ goals: [ai] }),
-      MEMO,
-      false,
-      REVIEW_WEEK,
-    );
-    expect(next.goals).toEqual([
-      ai,
-      {
-        id: expect.stringMatching(UUID),
-        pillar: "of",
-        title: "Keep the Sunday review under an hour.",
-        fromSummary: REVIEW_WEEK,
-      },
-      {
-        id: expect.stringMatching(UUID),
-        pillar: "work",
-        title: "Close two customers.",
-        fromSummary: REVIEW_WEEK,
-      },
-    ]);
+    const few = forward({ goals: [ai] });
+    expect(plannerPlanFromMemo(few, MEMO, false, REVIEW_WEEK)).toBe(few);
   });
 
   it("leaves a plan the owner changed, or one saved before, as it is", () => {

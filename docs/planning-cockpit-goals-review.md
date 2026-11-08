@@ -56,7 +56,7 @@ One Sunday review in chapters: Look back on the week, then, on the Sunday a mont
 
 The model drafts answer options first and coaches in the chat as the owner answers. The side panel shows 19 weeks of both scores against their floors, and what has been answered so far.
 
-Look back ends in the summary memo. It streams into a sheet with Stop, then Edit, Write again, Copy markdown and Save. It is not saved until the owner presses Save, so they can edit the markdown first; the text they save is the one kept, and its Next Steps fill Look forward. After saving, the main button is Look forward, until the memo is edited again. Look forward from the chat opens the sheet while the memo is unsaved:
+Look back ends in the summary memo. It streams into a sheet with Stop, then Edit, Write again, Copy markdown and Save. It is not saved until the owner presses Save, so they can edit the markdown first; the text they save is the one kept, and the agent proposes goals from it for Look forward. After saving, the main button is Look forward, until the memo is edited again. Look forward from the chat opens the sheet while the memo is unsaved:
 
 - It has the same shape as the owner's past summaries (`packages/contracts/src/planner-review-memo.ts`) and carries the `vault-summary` tag.
 - There is one memo per week, keyed by its client id `weekly-review-summary:<Monday>`.
@@ -64,7 +64,7 @@ Look back ends in the summary memo. It streams into a sheet with Stop, then Edit
 **Look forward** plans the next week in four steps:
 
 1. Settle the clashes the last conflict check flagged, by rewriting a goal or keeping it for now. A rewrite changes the goal's title and makes it active; its lines and note stay, and the old title is kept as a struck line, since goals keep no other history.
-2. Choose the week's goals, one slot per objective. The Next Steps of the week's summary (or, before it exists, the one before) fill the slots as starting points.
+2. Choose the week's goals. The agent's proposed goals show as stacked rows; each row's wording and objective can be edited before Add, and Add makes it a goal of the week. The summary's Next Steps are no longer pre-filled as goal cards; goals already added, and "+ Add a goal", show below.
 3. Plan their tasks: linked from the board or new, under the To Do cap of 7.
 4. Commit with the question for next Sunday, after a conflict check that only flags.
 
