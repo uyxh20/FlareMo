@@ -24,6 +24,12 @@ import {
   plannerVerdictLine,
   plannerWeekCode,
 } from "@flaremo/contracts";
+import {
+  plannerCascadeCloseRules,
+  plannerCascadeLadderLines,
+  plannerCascadeMemoBullets,
+  plannerCascadeMemoRules,
+} from "./review-cascade";
 import type { PlannerReviewContext } from "./review-context";
 
 /** How many "what happened" claims the opening asks for, at most (review-happened.ts). */
@@ -325,13 +331,21 @@ export function plannerReviewContextBlock(
     const step = context.previousSteps[pillar];
     return step ? [`- ${plannerPillarNames[pillar]}: ${step}`] : [];
   });
+  // The cascade: four flat lines, or the ladder per objective with the app's
+  // counts (fork-owned, review-cascade.ts) when the Worker asks for it.
+  const cascade =
+    context.cascade === "ladder"
+      ? plannerCascadeLadderLines(context)
+      : [
+          `North star: ${context.northStar ? goalText(context.northStar) : "not written"}`,
+          `Year goals ${year}: ${goalsByPillar(context.yearGoals)}`,
+          `Q${quarter} ${year} goals: ${goalsByPillar(context.quarterGoals)}`,
+          `${month} goals: ${goalsByPillar(context.monthGoals)}`,
+        ];
   const lines = [
     plannerReadingRules(context.ownerName),
     "",
-    `North star: ${context.northStar ? goalText(context.northStar) : "not written"}`,
-    `Year goals ${year}: ${goalsByPillar(context.yearGoals)}`,
-    `Q${quarter} ${year} goals: ${goalsByPillar(context.quarterGoals)}`,
-    `${month} goals: ${goalsByPillar(context.monthGoals)}`,
+    ...cascade,
     `Weekly scores, Authenticity/Achievement (floors ${plannerFormatScore(plannerScoreFloors.auth)} and ${plannerFormatScore(plannerScoreFloors.ach)}): ${
       context.scores.length
         ? context.scores.map(scoreText).join(", ")
@@ -597,7 +611,11 @@ export function plannerCloseMessages(
 
 Authenticity (1 to 5, 0.5 steps): 5 surfaced uncomfortable truths before being asked; 4 honest when prompted, named what they were tempted to hide; 3 some avoidance or rationalization; 2 blind spots left alone, edited the story to look better; 1 hid misses.
 Achievement (1 to 5, 0.5 steps): 5 exceeded all goals, stretch included; 4 main goals met, some stretch; 3 most goals met, some misses; 2 significant misses on main goals; 1 priorities not delivered. ${judge}
-The floors are Authenticity ${plannerFormatScore(plannerScoreFloors.auth)} and Achievement ${plannerFormatScore(plannerScoreFloors.ach)}. Score what the answers show, not the floors.
+The floors are Authenticity ${plannerFormatScore(plannerScoreFloors.auth)} and Achievement ${plannerFormatScore(plannerScoreFloors.ach)}. Score what the answers show, not the floors.${
+        context.cascade === "ladder"
+          ? `\n\n${plannerCascadeCloseRules(name)}`
+          : ""
+      }
 
 Trajectory: pattern, risk and opportunity, one sentence each; three candidate key questions for the ${nextWeek} review, each starting "Did I"; three verdicts in exactly these formats: "Continue. {specific reason}." / "Pivot toward {X}, away from {Y}. {evidence}." / "Pause for {question}. Without answering this, next week risks {specific cost}."; and the verdict you recommend.
 
@@ -770,6 +788,7 @@ export function plannerMemoParts(
     : Object.keys(context.previousSteps).length
       ? `no ${code} goals were set in advance, so the week is judged against last week's Next Steps`
       : `no ${code} goals or Next Steps were set in advance, so the week is judged on what the diary and tasks show`;
+  const ladder = context.cascade === "ladder";
   const drafted = request.drafted;
   const changed =
     drafted &&
@@ -788,13 +807,14 @@ export function plannerMemoParts(
             achBasis: "(one sentence)",
           }),
           "",
+          ...(ladder ? plannerCascadeMemoBullets : []),
           "- **Evidence:** (text)",
           "- **Learnings:** (text)",
           "- **Blockers:** (text)",
           "- **Next Steps:** (text)",
         ].join("\n");
       }
-      return `${plannerMemoPillarHeadings[pillar]}\n(the same four bullets)`;
+      return `${plannerMemoPillarHeadings[pillar]}\n(the same ${ladder ? "six" : "four"} bullets)`;
     })
     .join("\n\n");
   return {
@@ -852,7 +872,9 @@ ${plannerDiaryMarker(context.weekStart)}`,
         ? `\n- ${name} changed the drafted scores, and the drafts below were written for the old ones. Write the basis of each changed score afresh from the evidence, and keep nothing from the drafts that contradicts ${name}'s scores.`
         : ""
     }
-- Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.
+- Copy the Gap row, the Key question line, the Verdict line and the two Raw Logs lines exactly as given.${
+      ladder ? `\n${plannerCascadeMemoRules(name).join("\n")}` : ""
+    }
 - No preamble: start with the H1 line. Under 900 words.`,
     material: `${answersBlock(context, request)}
 

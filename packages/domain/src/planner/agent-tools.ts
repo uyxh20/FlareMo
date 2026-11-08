@@ -52,6 +52,7 @@ import { plannerReadTaskHistory } from "./history-read";
 import { plannerSyncHistory } from "./history-sync";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
 import { plannerReadPeriodContext } from "./period-review-context";
+import type { PlannerCascadeStyle } from "./review-cascade";
 import {
   plannerFindSummaryMemo,
   plannerReadReviewContext,
@@ -82,6 +83,8 @@ export type PlannerAgentToolContext = {
   db: FlareMoDb;
   user: UserRow;
   now?: Date;
+  /** How review_week shows the goal cascade (review-cascade.ts); flat by default. */
+  cascade?: PlannerCascadeStyle;
 };
 
 /** A tool call the agent can fix: the message goes back to it as the result. */
@@ -462,6 +465,7 @@ const handlers: Handlers = {
       weekStart: input.week,
       today,
       diaryChars: PLANNER_AGENT_DIARY_CHARS,
+      cascade: context.cascade,
     });
     const span = plannerWeekInstants(input.week);
     const entries = await readEntries(db, user.id, span, 400);

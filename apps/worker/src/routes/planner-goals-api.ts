@@ -57,6 +57,7 @@ import {
   plannerAgentProposeTasksMessage,
   plannerAgentSettleProposal,
   plannerAgentWeekKey,
+  plannerCascadeStyleOf,
   plannerCheckMessages,
   plannerCloseMessages,
   plannerCoachMessages,
@@ -461,6 +462,7 @@ async function aiSetup(
       model?.provider === "workers-ai"
         ? PLANNER_DIARY_CHARS_SMALL
         : PLANNER_DIARY_CHARS,
+    cascade: plannerCascadeStyleOf(c.env.FLAREMO_REVIEW_CASCADE),
   });
   return { model, agent, review, context };
 }
@@ -890,6 +892,7 @@ plannerGoalsApi.post(
         weekStart,
         today,
         diaryChars: PLANNER_AGENT_DIARY_CHARS,
+        cascade: plannerCascadeStyleOf(c.env.FLAREMO_REVIEW_CASCADE),
       });
       const open = await plannerAgentFindOpenRun(context.db, owner);
       const listed = async (

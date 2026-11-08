@@ -9,6 +9,7 @@ import {
   plannerAgentFindOpenRun,
   plannerAgentOpeningMessage,
   plannerAgentWeekKey,
+  plannerCascadeStyleOf,
   plannerReadReviewContext,
   plannerReviewStatus,
 } from "@flaremo/domain/src/planner";
@@ -60,6 +61,7 @@ export async function plannerAgentSundayPrep(
     weekStart,
     today,
     diaryChars: PLANNER_DIARY_CHARS,
+    cascade: plannerCascadeStyleOf(env.FLAREMO_REVIEW_CASCADE),
   });
   await plannerStartAgent(agent, {
     db,
