@@ -714,6 +714,7 @@
         </div>
         <figcaption>Dev and live both have the Anthropic key; the OpenRouter key stays as a dormant fallback. Any step the agent cannot take goes to the next model; if every model fails, the page uses its own drafts. The goal check runs on Sonnet 5.5 at medium effort when it falls back. Per <code>docs/planning-cockpit-goals-review.md</code> and <code>docs/fork-general-agent.md</code>.</figcaption>
       </figure>
+      <p class="note"><b>Choose the week, live since version #44 (2026-11-08):</b> one set of suggested goals, not two. The agent's proposed goals are stacked rows whose wording and objective (pillar) you can change before Add; Add makes the row a goal of the week, shown underneath. The summary's Next Steps no longer pre-fill four goal cards at the bottom; the empty starting slot per objective stays hidden until you fill it or press "+ Add a goal". No migration. Code: <code>apps/web/src/planner/review-proposals.tsx</code>, <code>review-forward.tsx</code>, <code>review-model.ts</code> (<code>plannerShownGoals</code>).</p>
       <p class="note"><b>Retired: the weekly memo agent of 17 October.</b> It ran look back alone on a Managed Agent; the general diary agent took over every job in version #33. Its <code>FLAREMO_REVIEW_MEMO_*</code> vars are still on live and do nothing. Since version #42 each saved look back and look forward is also written to the <a href="#flywheel">flywheel</a> log (sizes and counts only), and Look back's side panel carries the flywheel card.</p>
       <figure>
         <div class="fig">
