@@ -133,8 +133,8 @@ A personal access token (`memos_pat_…`) could always read and change cockpit t
 
 The owner drops a link (a blog post, an article, a YouTube video, a PDF) into an entry or into Ask my diary, and the general agent reads it and proposes a summary entry, which the owner annotates with comments in their own words. See [fork-link-summaries.md](fork-link-summaries.md).
 
-- Upstream hook-ins: the ⋯ menu item in `memo-card-menu.tsx`, the exported address check in `memos-link-metadata.ts`, and one filter in memory dreaming (`consolidation.ts`). `packages/domain/src/fork/link-summary-wiring.test.ts` fails if a merge drops one.
-- Undo: delete the files listed under "Fork-owned files", the three hook-ins, `read_link` and `link` in `packages/contracts/src/planner-agent.ts`, and the `plannerLinkSummarySource` lines in `agent-apply.ts`, `agent-tools.ts`, `agent-store.ts`, `review-context.ts` and `period-review-context.ts`. Saved summaries stay as ordinary entries.
+- Upstream hook-ins: the ⋯ menu item in `memo-card-menu.tsx`, the composer button in `composer-toolbar.tsx`, the exported address check in `memos-link-metadata.ts`, and one filter in memory dreaming (`consolidation.ts`). `packages/domain/src/fork/link-summary-wiring.test.ts` fails if a merge drops one.
+- Undo: delete the files listed under "Fork-owned files", the four hook-ins, `read_link` and `link` in `packages/contracts/src/planner-agent.ts`, and the `plannerLinkSummarySource` lines in `agent-apply.ts`, `agent-tools.ts`, `agent-store.ts`, `review-context.ts` and `period-review-context.ts`. Saved summaries stay as ordinary entries.
 
 ## Upstream files with a hook-in
 
@@ -162,6 +162,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/web/src/components/workspace/workspace-layout.tsx` | Ask my diary: one import and `<PlannerAskBubble />` after the account dialog, so every page has the chat bubble in its bottom-right corner (`apps/web/src/planner/ask-bubble.tsx`; it draws nothing where the agent is not set up). |
 | `apps/web/src/components/memo-card.tsx` | One import and `<HealthMemoLabels memo={memo} />` under the card body. |
 | `apps/web/src/components/memo-card/memo-card-menu.tsx` | Backdating: one import, a `forkDateOpen` state, `<ForkMemoDateMenuItem />` after "Edit", and `<ForkMemoDateDialog />` next to the menu (it renders nothing until first opened). Link summaries: one import and `<ForkSummarizeLinkMenuItem memo={memo} />` after the date item (it renders nothing without a link or without the agent). |
+| `apps/web/src/components/composer/composer-toolbar.tsx` | Link summaries: one import and `<ForkComposerSummarizeButton content={draft.content} disabled={isPending} />` last in the toolbar (greyed out until the text holds a link; renders nothing without the agent). |
 | `apps/worker/src/memos-link-metadata.ts` | Link summaries: `validateExternalUrl` is exported, so the link reader (`apps/worker/src/fork/link-read.ts`) checks every address and redirect the same way. |
 | `packages/domain/src/memory/consolidation.ts` | Link summaries: one import and `ne(memos.source, FORK_LINK_SUMMARY_SOURCE)` in `collectDreamingSources`, so memory dreaming never takes a summary of something the owner read as a fact about them. |
 | `apps/web/src/components/memo-card/memo-card-body.tsx` | An expanded memo had a hidden 1,600px height cap, so a long memo, such as a weekly summary, was cut off even after "Expand". Expanded is now `max-h-none`. CSS cannot animate to `none`, so expanding and collapsing snap instead of sliding. Undo: put `max-h-[1600px]` back. |

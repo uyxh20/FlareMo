@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// Link summaries (docs/fork-link-summaries.md) rest on three small hook-ins in
+// Link summaries (docs/fork-link-summaries.md) rest on four small hook-ins in
 // upstream files. After an upstream sync that drops one, this fails loudly
 // instead of the menu item vanishing, a redirect skipping the address check, or
 // dreaming taking a summary of a web page as a fact about the owner.
@@ -14,6 +14,14 @@ describe("the link summary hook-ins", () => {
     const text = read("apps/web/src/components/memo-card/memo-card-menu.tsx");
     expect(text).toMatch(/from "@\/fork\/summarize-link"/);
     expect(text).toContain("<ForkSummarizeLinkMenuItem memo={memo} />");
+  });
+
+  it("composer-toolbar.tsx renders the Summarize button", () => {
+    const text = read("apps/web/src/components/composer/composer-toolbar.tsx");
+    expect(text).toMatch(/from "@\/fork\/summarize-link"/);
+    expect(text).toMatch(
+      /<ForkComposerSummarizeButton\s+content=\{draft\.content\}/,
+    );
   });
 
   it("memos-link-metadata.ts exports its address check", () => {

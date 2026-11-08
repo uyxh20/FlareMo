@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ForkComposerSummarizeButton } from "@/fork/summarize-link"; // fork: link summaries
 import { useI18n } from "@/i18n";
 import type { MemoCaptureInput } from "@/lib/local-memo-capture";
 
@@ -185,6 +186,10 @@ export function ComposerToolbar({
           <Maximize2Icon />
         </Button>
       )}
+      <ForkComposerSummarizeButton
+        content={draft.content}
+        disabled={isPending}
+      />
     </div>
   );
 }

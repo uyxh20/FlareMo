@@ -16,4 +16,10 @@ describe("Summarize link", () => {
       "Summarize the key points of this link into a diary entry:\nhttps://example.com/a\n(From my entry m1.)",
     );
   });
+
+  it("leaves the entry out for a link not saved yet", () => {
+    expect(forkSummarizeDraft(["https://a.org/x", "https://b.org/y"])).toBe(
+      "Summarize the key points of these links into a diary entry:\nhttps://a.org/x\nhttps://b.org/y",
+    );
+  });
 });
