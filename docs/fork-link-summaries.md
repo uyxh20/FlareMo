@@ -13,6 +13,10 @@ watched into the diary.
   holds a web address (up to three are passed). It opens a new Ask my diary
   chat with the request typed in, naming the entry, so the owner can add what
   to focus on before sending.
+- **From the composer:** the ✦ button at the end of the composer's toolbar
+  (greyed out until the text holds a link) opens the same chat for a link not
+  saved yet. The draft stays in the composer, so the owner can still save
+  their own note with the link.
 - **From Ask my diary:** paste the link and ask for a summary.
 
 The agent answers with a card: the proposed entry, and a line saying how much
