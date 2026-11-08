@@ -232,6 +232,15 @@ export function buildDevConfig({
       }
       set(["vars", name], agent[name]);
     }
+    // The agent's monthly spend cap on dev (FLAREMO_DEV_AGENT_MONTH_USD);
+    // the Worker's default ($30) when left out.
+    const month = agent.FLAREMO_AGENT_MONTH_USD;
+    if (month !== undefined) {
+      if (!/^\d+(\.\d+)?$/.test(month)) {
+        throw new Error("FLAREMO_DEV_AGENT_MONTH_USD must be a dollar amount.");
+      }
+      set(["vars", "FLAREMO_AGENT_MONTH_USD"], month);
+    }
   }
   // The cascade ladder (docs/fork-general-agent.md): "ladder" or nothing.
   if (reviewCascade) {
