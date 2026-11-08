@@ -51,6 +51,7 @@ import {
   plannerReadPeriodGoals,
   plannerReadWeekGoals,
 } from "./goals";
+import type { PlannerCascadeStyle } from "./review-cascade";
 
 // What the weekly review's model reads (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): the goal cascade, recent scores, the
@@ -609,6 +610,11 @@ export type PlannerReviewContext = {
   health: PlannerWeekHealth | null;
   /** Memories made or changed during the week. */
   memories: PlannerWeekMemory[];
+  /**
+   * How the context shows the goal cascade: four flat lines (the default) or
+   * the ladder per objective with counts (fork-owned, review-cascade.ts).
+   */
+  cascade?: PlannerCascadeStyle;
 };
 
 /** One task as the review reads it, beyond its title. */
@@ -648,6 +654,7 @@ export async function plannerReadReviewContext(
     weekStart: string;
     today: string;
     diaryChars?: number;
+    cascade?: PlannerCascadeStyle;
   },
 ): Promise<PlannerReviewContext> {
   const { userId, weekStart } = input;
@@ -808,6 +815,7 @@ export async function plannerReadReviewContext(
     weekStart,
     planWeek,
     today: input.today,
+    cascade: input.cascade ?? "flat",
     northStar,
     yearGoals,
     quarterGoals,

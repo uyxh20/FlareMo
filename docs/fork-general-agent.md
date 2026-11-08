@@ -49,6 +49,43 @@ The agent's MCP server is `POST /api/app/planner/agent/mcp`
   refused unless a review session is at its memo or propose step, and a quote
   it gives must be found word for word in the owner's entry.
 
+## The cascade ladder
+
+Since November 2026 the review can be asked to judge the week against the
+goal cascade, not the week alone (`packages/domain/src/planner/review-cascade.ts`).
+It is off unless the Worker var `FLAREMO_REVIEW_CASCADE` is `ladder`; flat,
+the default, is the review as before. With the ladder on:
+
+- `review_week` (and the model's context) shows the cascade per objective,
+  top down: the year goal, the quarter goal, the month goal and the week's own
+  goal, each upper goal with "x of n points struck", and the weeks left in the
+  month, the quarter and the year once this week is over. The counts are the
+  app's, not the model's. A week belongs to the month of its Thursday, as on
+  the Goals page. Goal state is today's: points have no history of when they
+  were struck.
+- The memo gets two bullets before Evidence in every objective's section:
+  **Serves** (the month goal, its open points and the weeks left) and **Moved**
+  (Advanced, Maintained, Drifted or Idle, then the gap in plain words), with
+  rules to be direct about the gap and to name the goal most behind its time
+  in Pattern and Risk. Next Steps are read as before.
+- The scores step weighs the month goal's open points in the Achievement
+  basis, and its Risk, key questions and verdicts name a month or quarter goal.
+
+The Sunday prep, the review routes and the agent's MCP server all read the
+var, so one deploy switches every step at once. Nothing else changes: the
+opening, the coach, the proposals and the goal check already read the
+cascade.
+
+**The replay** (`scripts/fork/review-cascade-sim/run.ts`) compares the two on
+dev: it runs past Sundays the owner reviewed in the app (opening, scores with
+the owner's saved answers, memo with the owner's saved scores, question and
+verdict, proposals, goal check) through the dev Worker as the app does, once
+with the var unset and once with `ladder`, and shuffles the memos for blind
+reading. No coach replay: a new coach question cannot change an old answer.
+It reads the dev database read-only for the saved answers and each session's
+cost, stops at a dollar budget, and writes the answers outside the
+repository. Dev only.
+
 ## Standing instructions
 
 The owner's active tuning version (`docs/fork-flywheel.md`) is added to the
