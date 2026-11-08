@@ -341,12 +341,14 @@ export class DevEnv {
       // The general agent (scripts/fork/general-agent.ts prints the ids);
       // off unless all four are given.
       agent: Object.fromEntries(
-        Object.keys(AGENT_VARS).flatMap((name) => {
-          const value = clean(
-            this.env[name.replace("FLAREMO_", "FLAREMO_DEV_")],
-          );
-          return value ? [[name, value]] : [];
-        }),
+        [...Object.keys(AGENT_VARS), "FLAREMO_AGENT_MONTH_USD"].flatMap(
+          (name) => {
+            const value = clean(
+              this.env[name.replace("FLAREMO_", "FLAREMO_DEV_")],
+            );
+            return value ? [[name, value]] : [];
+          },
+        ),
       ),
     };
   }
@@ -1493,7 +1495,8 @@ FLAREMO_DEV_EMBEDDING_PROVIDER=workers-ai before deploy.
 The general agent is off on dev unless FLAREMO_DEV_AGENT,
 FLAREMO_DEV_AGENT_ENVIRONMENT, FLAREMO_DEV_AGENT_STORE and FLAREMO_DEV_AGENT_VAULT
 are set before deploy (scripts/fork/general-agent.ts --target dev prints them).
-Its Sunday prep never runs on dev.
+Its Sunday prep never runs on dev. FLAREMO_DEV_AGENT_MONTH_USD raises its
+monthly spend cap on dev (the Worker's default is $30).
 
 Auth: wrangler reads CLOUDFLARE_API_TOKEN. The script passes
 CLOUDFLARE_API_TOKEN, else CLOUDFLARE_API, else the placeholder "proxy-injected"
