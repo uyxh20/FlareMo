@@ -86,6 +86,22 @@ It reads the dev database read-only for the saved answers and each session's
 cost, stops at a dollar budget, and writes the answers outside the
 repository. Dev only.
 
+**The replay's cut** (`packages/domain/src/planner/review-as-of.ts`). A
+replay of a past week runs against the diary as it is today, so without a
+cut the agent reads the owner's own saved review of that week, tasks made
+later and later weeks' scores, and copies them (round 1 showed it). With the
+dev var `FLAREMO_REVIEW_AS_OF=review-week` the agent's MCP server hides, for
+the week of the open review session, everything written after the owner
+saved that week's look back (or after the Tuesday following the week, when
+it was never saved): diary entries, memories, health days, tasks made or
+finished later, comments and history on a task, goals made later and later
+weeks' scores. `review_week`, `read_goals` and `read_tasks` take "today" as
+the cut's day. Goal state cannot be rolled back: points struck and results
+stay as they are today, and a task's status and notes are today's. Off (the
+default) changes nothing, and live never sets it: a live review has nothing
+after its Sunday to hide. Set it on dev for both arms of a replay, with
+`FLAREMO_DEV_REVIEW_AS_OF=review-week` before `deploy`.
+
 ## Standing instructions
 
 The owner's active tuning version (`docs/fork-flywheel.md`) is added to the

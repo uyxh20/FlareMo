@@ -117,6 +117,7 @@ export function buildDevConfig({
   embeddingProvider = "none",
   agent = {},
   reviewCascade = "",
+  reviewAsOf = "",
   migrationsDir,
 }) {
   const example = parseConfigText(exampleText, "wrangler.jsonc.example");
@@ -250,6 +251,15 @@ export function buildDevConfig({
       );
     }
     set(["vars", "FLAREMO_REVIEW_CASCADE"], reviewCascade);
+  }
+  // The replay's cut at the reviewed Sunday: "review-week" or nothing.
+  if (reviewAsOf) {
+    if (reviewAsOf !== "review-week") {
+      throw new Error(
+        `FLAREMO_DEV_REVIEW_AS_OF must be "review-week" or unset, not "${reviewAsOf}".`,
+      );
+    }
+    set(["vars", "FLAREMO_REVIEW_AS_OF"], reviewAsOf);
   }
   const crons = example.triggers?.crons ?? [];
   if (crons.includes(AGENT_SUNDAY_CRON)) {

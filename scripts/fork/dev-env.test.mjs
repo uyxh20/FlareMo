@@ -2997,6 +2997,15 @@ e2e("dev environment against a fake Cloudflare", () => {
       () => vars({ FLAREMO_DEV_REVIEW_CASCADE: "flat" }),
       /must be "ladder" or unset/,
     );
+    assert.equal(vars({}).FLAREMO_REVIEW_AS_OF, undefined);
+    assert.equal(
+      vars({ FLAREMO_DEV_REVIEW_AS_OF: "review-week" }).FLAREMO_REVIEW_AS_OF,
+      "review-week",
+    );
+    assert.throws(
+      () => vars({ FLAREMO_DEV_REVIEW_AS_OF: "yes" }),
+      /must be "review-week" or unset/,
+    );
   });
 
   test("provision refuses the production D1 id before anything runs", (t) => {

@@ -137,6 +137,9 @@ export type FlareMoEnv = Env & {
   // points struck and weeks left, and memo and scores rules that judge the
   // week against it) or flat (default). See docs/fork-general-agent.md.
   FLAREMO_REVIEW_CASCADE?: string;
+  // Dev only, for replays of past weeks: "review-week" hides from the agent
+  // what was written after the reviewed week's look back was saved.
+  FLAREMO_REVIEW_AS_OF?: string;
   // Optional Cloudflare account analytics for the owner usage panel (see
   // src/cf-analytics.ts). Written by `pnpm setup:usage`; token needs only the
   // "Account Analytics: Read" permission. Queries are filtered down to this

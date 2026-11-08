@@ -54,6 +54,7 @@ import { plannerReadTaskHistory } from "./history-read";
 import { plannerSyncHistory } from "./history-sync";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
 import { plannerReadPeriodContext } from "./period-review-context";
+import { type PlannerAsOf, plannerBeforeAsOf } from "./review-as-of";
 import type { PlannerCascadeStyle } from "./review-cascade";
 import {
   plannerFindSummaryMemo,
@@ -93,6 +94,8 @@ export type PlannerAgentToolContext = {
   readLink?: (url: string) => Promise<PlannerAgentLinkReading>;
   /** How review_week shows the goal cascade (review-cascade.ts); flat by default. */
   cascade?: PlannerCascadeStyle;
+  /** The replay's cut (review-as-of.ts): nothing after it is shown. Off by default. */
+  asOf?: PlannerAsOf;
 };
 
 /** What the Worker's link reader found at one address. */
@@ -192,6 +195,7 @@ async function readEntries(
   userId: string,
   range: { from: string; to: string } | { ids: readonly string[] },
   limit: number,
+  asOf?: PlannerAsOf,
 ): Promise<EntryRow[]> {
   const rows = await db
     .select({
@@ -212,6 +216,8 @@ async function readEntries(
               gte(memos.createdAt, range.from),
               lt(memos.createdAt, range.to),
             ),
+        // The replay's cut: entries written after it are not there yet.
+        ...(asOf ? [lt(memos.createdAt, asOf.at)] : []),
       ),
     )
     .orderBy(asc(memos.createdAt))
@@ -600,10 +606,17 @@ type Handlers = {
   ) => Promise<string>;
 };
 
+/** The day the tools call today: the replay's cut day when one is set. */
+function toolToday(context: PlannerAgentToolContext): string {
+  return context.asOf
+    ? healthToday(new Date(context.asOf.at))
+    : healthToday(context.now);
+}
+
 const handlers: Handlers = {
   async review_week(context, input) {
     const { db, user } = context;
-    const today = healthToday(context.now);
+    const today = toolToday(context);
     const review = await plannerReadReviewContext(db, {
       userId: user.id,
       ownerName: user.name,
@@ -613,7 +626,7 @@ const handlers: Handlers = {
       cascade: context.cascade,
     });
     const span = plannerWeekInstants(input.week);
-    const entries = await readEntries(db, user.id, span, 400);
+    const entries = await readEntries(db, user.id, span, 400, context.asOf);
     const name = firstName(user);
     return [
       `# The week starting Monday ${input.week} (today is ${today})`,
@@ -650,7 +663,13 @@ const handlers: Handlers = {
     const { db, user } = context;
     const name = firstName(user);
     const [entries, summary] = await Promise.all([
-      readEntries(db, user.id, plannerWeekInstants(input.week), 400),
+      readEntries(
+        db,
+        user.id,
+        plannerWeekInstants(input.week),
+        400,
+        context.asOf,
+      ),
       plannerFindSummaryMemo(db, { userId: user.id, weekStart: input.week }),
     ]);
     const own = entries.filter((entry) => !entry.summary);
@@ -681,6 +700,7 @@ const handlers: Handlers = {
         to: healthLocalDayStart(plannerAddDays(input.to, 1)),
       },
       ENTRY_INDEX_MAX + 1,
+      context.asOf,
     );
     const shown = entries.slice(0, ENTRY_INDEX_MAX);
     return [
@@ -702,6 +722,7 @@ const handlers: Handlers = {
       user.id,
       { ids: input.ids },
       input.ids.length,
+      context.asOf,
     );
     const found = new Set(entries.map((entry) => entry.id));
     const missing = input.ids.filter((id) => !found.has(id));
@@ -736,6 +757,7 @@ const handlers: Handlers = {
       user.id,
       { ids: rows.map((row) => row.id) },
       rows.length,
+      context.asOf,
     );
     const byId = new Map(entries.map((entry) => [entry.id, entry]));
     const words = input.query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -762,13 +784,25 @@ const handlers: Handlers = {
   },
 
   async read_goals(context, input) {
-    const today = healthToday(context.now);
+    const today = toolToday(context);
     const year = input.year ?? Number(today.slice(0, 4));
-    const goals = await plannerReadGoalsYear(context.db, {
+    const read = await plannerReadGoalsYear(context.db, {
       userId: context.user.id,
       year,
       today,
     });
+    // The replay's cut: goals made later and the weeks from the reviewed
+    // one on (its scores are saved at the cut) are not there yet.
+    const before = plannerBeforeAsOf(context.asOf);
+    const goals = context.asOf
+      ? {
+          ...read,
+          goals: read.goals.filter((goal) => before(goal.created_at)),
+          weeks: read.weeks.filter(
+            (week) => week.week_start < (context.asOf?.weekStart ?? ""),
+          ),
+        }
+      : read;
     return [
       `# Goals of ${year} (today is ${today})`,
       "",
@@ -788,12 +822,35 @@ const handlers: Handlers = {
   },
 
   async read_tasks(context, input) {
-    const today = healthToday(context.now);
-    const board = await plannerReadBoard(context.db, {
+    const today = toolToday(context);
+    const read = await plannerReadBoard(context.db, {
       userId: context.user.id,
       today,
       doneDays: input.done_days ?? 14,
     });
+    // The replay's cut: tasks made or finished after it are not there yet
+    // (a task finished later shows nowhere rather than as done).
+    const before = plannerBeforeAsOf(context.asOf);
+    const cut = (cards: typeof read.columns.todo) =>
+      cards.filter(
+        (card) => before(card.created_at) && before(card.completed_at),
+      );
+    const board = context.asOf
+      ? {
+          ...read,
+          columns: {
+            ...read.columns,
+            backlog: cut(read.columns.backlog),
+            todo: cut(read.columns.todo),
+            doing: cut(read.columns.doing),
+            done: cut(read.columns.done),
+            other: cut(read.columns.other),
+            ...(read.columns.dropped
+              ? { dropped: cut(read.columns.dropped) }
+              : {}),
+          },
+        }
+      : read;
     const column = (title: string, cards: typeof board.columns.todo) => [
       `## ${title} (${cards.length})`,
       ...(cards.length
@@ -823,7 +880,8 @@ const handlers: Handlers = {
 
   async read_task(context, input) {
     const { db, user } = context;
-    const today = healthToday(context.now);
+    const today = toolToday(context);
+    const before = plannerBeforeAsOf(context.asOf);
     let detail: Awaited<ReturnType<typeof plannerReadTaskDetail>>;
     try {
       detail = await plannerReadTaskDetail(db, {
@@ -851,11 +909,21 @@ const handlers: Handlers = {
       userId: user.id,
       now: plannerNow(context.now),
     });
-    const history = await plannerReadTaskHistory(db, {
-      userId: user.id,
-      taskId: task.id,
-      limit: 30,
-    });
+    const history = (
+      await plannerReadTaskHistory(db, {
+        userId: user.id,
+        taskId: task.id,
+        limit: 30,
+      })
+    ).filter((event) => before(event.occurred_at));
+    if (context.asOf) {
+      detail.comments = detail.comments.filter((comment) =>
+        before(comment.created_at),
+      );
+      detail.attachments = detail.attachments.filter((file) =>
+        before(file.created_at),
+      );
+    }
     return [
       `# Task ${task.id} (today is ${today})`,
       `Title: ${task.title}`,
@@ -915,6 +983,7 @@ const handlers: Handlers = {
         `## ${week.start} to ${week.end}: training ${s.training.sessions} of ${s.training.target}; breathwork on ${s.breath.days} days (${s.breath.minutes} min, target ${s.breath.target}); nights out ${s.night_out.nights} (${s.night_out.units} units, ${s.night_out.year_used} of ${s.night_out.year_target} this year)${week.trackers.length ? `; ${week.trackers.map((t) => `${t.kind}: ${t.days} days, ${t.minutes} min`).join("; ")}` : ""}`,
         ...week.entries
           .filter((entry) => entry.day <= input.to)
+          .filter((entry) => plannerBeforeAsOf(context.asOf)(entry.day))
           .map(
             (entry) =>
               `- ${entry.day} ${entry.kind}${entry.variant ? ` (${entry.variant})` : ""}${entry.minutes ? `, ${entry.minutes} min` : ""}${entry.units !== null ? `, ${entry.units} units` : ""}${entry.home_at ? `, home ${entry.home_at}` : ""}${entry.bender ? ", bender" : ""}${entry.feel ? `, felt: ${oneLine(entry.feel, 120)}` : ""}`,
@@ -925,11 +994,16 @@ const handlers: Handlers = {
   },
 
   async read_memories(context, input) {
-    const result = await listMemories(context.db, context.user, {
+    const listed = await listMemories(context.db, context.user, {
       q: input.query || undefined,
       status: "active",
       pageSize: 100,
     });
+    const before = plannerBeforeAsOf(context.asOf);
+    const result = {
+      ...listed,
+      memories: listed.memories.filter((memory) => before(memory.created_at)),
+    };
     if (result.memories.length === 0) {
       return input.query
         ? `No memory holds "${input.query}".`
