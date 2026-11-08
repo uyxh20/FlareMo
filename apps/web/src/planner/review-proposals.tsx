@@ -71,7 +71,9 @@ export function plannerAddProposedGoal(
       goals: forward.goals.map((goal) => {
         if (goal.id !== empty.id) return goal;
         const { fromSummary: _summary, ...rest } = goal;
-        return { ...rest, id, title };
+        // Custom: the goal stays shown under Choose the week even if its text
+        // is cleared later, and its objective can still be changed there.
+        return { ...rest, id, title, custom: true };
       }),
       tasks:
         id === empty.id

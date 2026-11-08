@@ -63,6 +63,7 @@ import {
   plannerPrefillTasks,
   plannerRestoreReviewState,
   plannerSettledInput,
+  plannerShownGoals,
   plannerStepScore,
   plannerSummaryInput,
   plannerSysOnce,
@@ -2436,5 +2437,19 @@ describe("saved state", () => {
     expect(restored.goals[1]).not.toHaveProperty("fromSummary");
     expect(restored.goals[2]).not.toHaveProperty("custom");
     expect(restored.tasks).toEqual([keptTask]);
+  });
+});
+
+describe("plannerShownGoals", () => {
+  it("hides the empty starting slots until filled, added or saved", () => {
+    const goals = [
+      { id: "a", pillar: "of" as const, title: "" },
+      { id: "b", pillar: "work" as const, title: "Ship it" },
+      { id: "c", pillar: "ai" as const, title: "", custom: true },
+      { id: "d", pillar: "health" as const, title: "" },
+    ];
+    expect(
+      plannerShownGoals({ goals, knownGoalIds: ["d"] }).map((goal) => goal.id),
+    ).toEqual(["b", "c", "d"]);
   });
 });

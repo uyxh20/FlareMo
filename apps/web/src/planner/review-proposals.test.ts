@@ -77,7 +77,7 @@ describe("plannerAddProposedGoal", () => {
     expect(next.edited).toBe(true);
     // The fresh slot takes the proposal's id, so the save is logged as the agent's.
     expect(next.goals).toEqual([
-      { id: "p-goal", pillar: "work", title: "Ship the agent" },
+      { id: "p-goal", pillar: "work", title: "Ship the agent", custom: true },
       { id: "g2", pillar: "health", title: "Run twice" },
     ]);
     // Added once only.

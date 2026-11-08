@@ -33,6 +33,7 @@ import {
   plannerNamedGoals,
   plannerOtherTodo,
   plannerPickableCards,
+  plannerShownGoals,
   plannerTodoCount,
 } from "./review-model";
 import {
@@ -366,16 +367,9 @@ function ChooseWeek(props: Props) {
         strings={strings}
       />
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {forward.goals
-          .filter(
-            (goal) =>
-              goal.custom ||
-              goal.title.trim() ||
-              forward.knownGoalIds.includes(goal.id),
-          )
-          .map((goal) => (
-            <GoalSlot goal={goal} key={goal.id} props={props} />
-          ))}
+        {plannerShownGoals(forward).map((goal) => (
+          <GoalSlot goal={goal} key={goal.id} props={props} />
+        ))}
       </div>
       <div className="mt-3">
         <Button

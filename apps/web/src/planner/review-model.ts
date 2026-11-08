@@ -835,6 +835,21 @@ export function plannerPlanFromMemo(
 }
 
 /** The plan's goals that have a title: the ones that will be saved. */
+/**
+ * The goals Choose the week shows: the starting slot per objective stays
+ * hidden until it is filled, added with "+ Add a goal", or saved before.
+ */
+export function plannerShownGoals(
+  forward: Pick<PlannerForwardState, "goals" | "knownGoalIds">,
+) {
+  return forward.goals.filter(
+    (goal) =>
+      goal.custom ||
+      goal.title.trim() ||
+      forward.knownGoalIds.includes(goal.id),
+  );
+}
+
 export function plannerNamedGoals(forward: Pick<PlannerForwardState, "goals">) {
   return forward.goals.filter((goal) => goal.title.trim());
 }

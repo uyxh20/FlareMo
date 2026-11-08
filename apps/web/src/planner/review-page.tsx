@@ -118,6 +118,7 @@ import {
   plannerPlanSignature,
   plannerPrefillTasks,
   plannerRestoreReviewState,
+  plannerShownGoals,
   plannerStepScore,
   plannerSummaryInput,
   plannerSysOnce,
@@ -1444,11 +1445,25 @@ function ReviewSession({
       })),
     addGoal: () =>
       setForward((current) => {
-        if (current.goals.length >= 12) return current;
+        // The starting slots stay hidden under Choose the week until filled,
+        // so "+ Add a goal" reveals one of them before adding a new goal.
+        const shown = plannerShownGoals(current);
         const pillar =
           plannerPillars.find(
-            (item) => !current.goals.some((goal) => goal.pillar === item),
+            (item) => !shown.some((goal) => goal.pillar === item),
           ) ?? "of";
+        const hidden = current.goals.filter((goal) => !shown.includes(goal));
+        const slot = hidden.find((goal) => goal.pillar === pillar) ?? hidden[0];
+        if (slot) {
+          return {
+            ...current,
+            edited: true,
+            goals: current.goals.map((goal) =>
+              goal.id === slot.id ? { ...goal, custom: true } : goal,
+            ),
+          };
+        }
+        if (current.goals.length >= 12) return current;
         return {
           ...current,
           edited: true,
