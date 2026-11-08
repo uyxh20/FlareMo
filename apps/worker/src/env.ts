@@ -133,6 +133,10 @@ export type FlareMoEnv = Env & {
   FLAREMO_AGENT_VAULT?: string;
   FLAREMO_AGENT_RUN_USD?: string;
   FLAREMO_AGENT_MONTH_USD?: string;
+  // How the review shows the goal cascade: "ladder" (per objective, with
+  // points struck and weeks left, and memo and scores rules that judge the
+  // week against it) or flat (default). See docs/fork-general-agent.md.
+  FLAREMO_REVIEW_CASCADE?: string;
   // Optional Cloudflare account analytics for the owner usage panel (see
   // src/cf-analytics.ts). Written by `pnpm setup:usage`; token needs only the
   // "Account Analytics: Read" permission. Queries are filtered down to this

@@ -10,6 +10,7 @@ import {
 import {
   PlannerAgentToolError,
   plannerAgentCallTool,
+  plannerCascadeStyleOf,
 } from "@flaremo/domain/src/planner";
 import { type Context, Hono } from "hono";
 import { MEMOS_PAT_CONFIG_ID, MEMOS_PAT_PREFIX } from "../auth-env";
@@ -169,7 +170,11 @@ plannerAgentMcpApi.post("/agent/mcp", async (c) => {
     }
     try {
       const text = await plannerAgentCallTool(
-        { db: owner.db, user: owner.user },
+        {
+          db: owner.db,
+          user: owner.user,
+          cascade: plannerCascadeStyleOf(c.env.FLAREMO_REVIEW_CASCADE),
+        },
         call.data.name,
         call.data.arguments ?? {},
       );
