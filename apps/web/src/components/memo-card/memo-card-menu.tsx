@@ -32,6 +32,7 @@ import {
   ForkMemoDateDialog,
   ForkMemoDateMenuItem,
 } from "@/fork/memo-date-dialog"; // fork: edit created time
+import { ForkSummarizeLinkMenuItem } from "@/fork/summarize-link"; // fork: link summaries
 import { useI18n } from "@/i18n";
 
 // The share-image dialog pulls in html-to-image and the plugin card registry;
@@ -140,6 +141,7 @@ export function MemoCardMenu({
                     <ForkMemoDateMenuItem
                       onSelect={() => setForkDateOpen(true)}
                     />
+                    <ForkSummarizeLinkMenuItem memo={memo} />
                     <DropdownMenuItem onClick={() => onPin(id, !memo.pinned)}>
                       <PinIcon />
                       {memo.pinned ? t("memo.unpin") : t("memo.pin")}

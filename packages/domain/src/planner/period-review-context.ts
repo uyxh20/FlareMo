@@ -48,6 +48,7 @@ import {
 import {
   type PlannerDiaryEntry,
   plannerFitDiary,
+  plannerMarkLinkSummary,
   plannerWeekInstants,
 } from "./review-context";
 
@@ -347,7 +348,12 @@ export async function plannerReadPeriodContext(
       )
       .all(),
     db
-      .select({ id: memos.id, at: memos.createdAt, content: memos.content })
+      .select({
+        id: memos.id,
+        at: memos.createdAt,
+        content: memos.content,
+        source: memos.source,
+      })
       .from(memos)
       .where(
         and(
@@ -515,7 +521,8 @@ export async function plannerReadPeriodContext(
       done: string[];
     }
   >(weeks.map((monday) => [monday, { diary: [], health: [], done: [] }]));
-  for (const entry of diaryRows) {
+  // fork: link summaries are labelled as not the owner's words.
+  for (const entry of diaryRows.map(plannerMarkLinkSummary)) {
     raw.push({
       source: "memo",
       id: entry.id,

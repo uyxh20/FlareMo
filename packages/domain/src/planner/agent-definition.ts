@@ -37,7 +37,8 @@ export function plannerAgentMcpServers(publicOrigin: string) {
  * server and its only writes are proposals the owner decides on. With
  * `propose: true` (a review's session, and the agent's stored definition) the
  * three review propose tools are on and the action tools off; with
- * `propose: false` (an Ask chat) it is the other way round.
+ * `propose: false` (an Ask chat) it is the other way round. read_link goes
+ * with the action tools.
  */
 export function plannerAgentTools(options: { propose: boolean }) {
   return [
@@ -59,8 +60,9 @@ export function plannerAgentTools(options: { propose: boolean }) {
         enabled: true,
         permission_policy: { type: "always_allow" as const },
       },
+      // read_link (link summaries) is an Ask chat's, like the action tools.
       configs: (options.propose
-        ? plannerAgentActionTools
+        ? [...plannerAgentActionTools, "read_link"]
         : plannerAgentProposeTools
       ).map((name) => ({ name, enabled: false })),
     },

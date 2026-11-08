@@ -1,6 +1,7 @@
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoryItems, memoryRejections, memos } from "@flaremo/db";
-import { and, desc, eq, gt, gte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm";
+import { FORK_LINK_SUMMARY_SOURCE } from "../fork/link-summary"; // fork: link summaries
 import {
   computeFingerprint,
   type MemoryActor,
@@ -270,7 +271,14 @@ export async function collectDreamingSources(
       createdAt: memos.createdAt,
     })
     .from(memos)
-    .where(and(eq(memos.userId, user.id), gt(memos.createdAt, sinceIso)))
+    .where(
+      and(
+        eq(memos.userId, user.id),
+        gt(memos.createdAt, sinceIso),
+        // fork: a link summary is what the owner read, not a fact about them.
+        ne(memos.source, FORK_LINK_SUMMARY_SOURCE),
+      ),
+    )
     .orderBy(desc(memos.createdAt))
     .limit(Math.ceil(maxSources / 2));
 

@@ -138,19 +138,22 @@ export const forkDataSources: readonly ForkDataSource[] = [
     module: "diary",
     kind: "content",
     owner: "upstream",
-    holds: "Diary entries (memos), including comments and weekly summaries",
+    holds:
+      "Diary entries (memos), including comments, weekly summaries and link summaries (source link-summary)",
     uses: {
       lookBack: yes(
-        "entries written in the reviewed week, up to 200, fitted to 12,000 or 40,000 characters; with the agent set up, the steps point it at review_week instead",
+        "entries written in the reviewed week, up to 200, fitted to 12,000 or 40,000 characters, link summaries labelled as not the owner's words; with the agent set up, the steps point it at review_week instead",
       ),
       lookForward: no("the goal check reads goals only"),
       search: yes(
         "keyword index (memos_fts) and semantic index (resource memo)",
       ),
-      memory: yes("extraction from entries and the nightly dreaming sweep"),
+      memory: yes(
+        "extraction from entries and the nightly dreaming sweep (which skips link summaries); a memory's quote is never found in a link summary",
+      ),
       mcp: yes("list, get, create, update, search"),
       agent: yes(
-        "every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search",
+        "every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search; a link summary reads as one, and a comment names its entry",
       ),
       userExport: yes("every entry, including archived and trashed"),
       backup: IN_BACKUP,

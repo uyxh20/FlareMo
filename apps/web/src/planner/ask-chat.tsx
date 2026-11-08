@@ -491,6 +491,11 @@ function PlannerProposalBody({
           </p>
         </div>
       )}
+      {action.kind === "entry_new" && isRecord(change.link) && (
+        <p className="text-xs text-muted-foreground">
+          {plannerLinkReadLabel(change.link.read)}
+        </p>
+      )}
       {action.kind === "entry_new" && (
         <div className="[overflow-wrap:anywhere]">
           <PlannerMarkdown
@@ -1208,4 +1213,20 @@ export function PlannerAskChat({
       </form>
     </div>
   );
+}
+
+/** fork: link summaries. What the card says about how much was read. */
+export function plannerLinkReadLabel(read: unknown): string {
+  switch (read) {
+    case "full":
+      return "Link summary · read in full";
+    case "partial":
+      return "Link summary · only part of it could be read";
+    default:
+      return "Link summary · only the title and description could be read";
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

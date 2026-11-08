@@ -86,6 +86,12 @@ Since November 2026 (the control panel, design option B) it can also propose:
 - `propose_entry_state`, archiving an entry or bringing it back, pinning or
   unpinning it.
 
+Since November 2026 it also reads links the owner gives it (`read_link`) and
+proposes a summary entry (`propose_entry` with `link`), saved as a link
+summary that the rest of the diary never reads as the owner's words; see
+`docs/fork-link-summaries.md`. The sandbox still has no web: the Worker
+fetches the link.
+
 Nothing it proposes deletes: dropping a task and archiving an entry are as far
 as it goes. Weekly goals themselves (adding or rewriting a goal) stay off until
 goals keep a change log of their own; only the task's link to a goal is open.

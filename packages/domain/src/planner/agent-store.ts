@@ -8,6 +8,7 @@ import {
   type PlannerAgentProposalDto,
   type PlannerAskMessage,
   type PlannerPillar,
+  plannerLinkSummarySource,
   plannerSummaryMemoSource,
   plannerSummaryMemoTag,
 } from "@flaremo/contracts";
@@ -383,6 +384,8 @@ export async function plannerAgentFindQuote(
     isNull(memos.deletedAt),
     inArray(memos.status, ["normal", "archived"]),
     ne(memos.source, plannerSummaryMemoSource),
+    // fork: link summaries are what the owner read, never their own words.
+    ne(memos.source, plannerLinkSummarySource),
     notInArray(memos.id, summaries),
   );
   const since = new Date(
