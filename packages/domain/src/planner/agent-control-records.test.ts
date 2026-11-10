@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { healthRescan } from "../health/sync";
 import { createMemory } from "../memory";
+import { createMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import {
   PLANNER_AGENT_STALE,
@@ -127,10 +128,11 @@ const healthRow = async (id: string) =>
       source: string;
       memo_id: string | null;
       edited: number;
+      dismissed: number;
       deleted_at: string | null;
     }>(
       rt.database,
-      `SELECT day, kind, variant, minutes, home_at, units, source, memo_id, edited, deleted_at FROM health_entry WHERE id = '${id}'`,
+      `SELECT day, kind, variant, minutes, home_at, units, source, memo_id, edited, dismissed, deleted_at FROM health_entry WHERE id = '${id}'`,
     )
   )[0];
 
@@ -200,7 +202,12 @@ describe("the agent correcting records", () => {
       });
 
       await undo(proposal?.id ?? "");
-      expect((await memoryRow(id))?.content).toBe("Lives in Hull.");
+      // Undo puts the words back; no owner function lowers verification, so the
+      // memory stays marked as confirmed (the card says so).
+      expect(await memoryRow(id)).toMatchObject({
+        content: "Lives in Hull.",
+        verification: "confirmed",
+      });
     });
 
     it("refuses a stale correction, and an Undo after the words changed again", async () => {
@@ -413,6 +420,96 @@ describe("the agent correcting records", () => {
       });
     });
 
+    it("removes a false row through the owner's dismiss, the nightly re-read leaves it dismissed, and Undo brings it back", async () => {
+      // A row the diary really read, so the re-read has a memo to read again.
+      await createMemo(rt.db, rt.user, {
+        content: "crossfit done",
+        visibility: "private",
+        source: "web",
+      });
+      await healthRescan(rt.db, rt.user.id, NOW);
+      const [read] = await plannerTestRows<{ id: string }>(
+        rt.database,
+        "SELECT id FROM health_entry WHERE memo_id IS NOT NULL",
+      );
+      const rowId = read?.id ?? "";
+      expect(rowId).not.toBe("");
+      const day = (await healthRow(rowId))?.day ?? "";
+      await expect(
+        call("propose_health_change", {
+          action: "remove",
+          entry_id: rowId,
+          minutes: 20,
+          why: "x",
+        }),
+      ).rejects.toThrow(/remove takes only entry_id/);
+      await call("propose_health_change", {
+        action: "remove",
+        entry_id: rowId,
+        why: "The diary said skipped the gym, but a session was logged.",
+      });
+      const [proposal] = await actions();
+      expect(proposal?.change).toMatchObject({
+        action: "remove",
+        was: { day, kind: "training" },
+        label: expect.stringContaining(`${day} training`),
+      });
+      expect((await healthRow(rowId))?.dismissed).toBe(0);
+
+      await accept(proposal?.id ?? "");
+      expect((await healthRow(rowId))?.dismissed).toBe(1);
+      await healthRescan(rt.db, rt.user.id, NOW);
+      expect((await healthRow(rowId))?.dismissed).toBe(1);
+      // A dismissed row is not proposed again.
+      await expect(
+        call("propose_health_change", {
+          action: "remove",
+          entry_id: rowId,
+          why: "x",
+        }),
+      ).rejects.toThrow(/already dismissed/);
+
+      await undo(proposal?.id ?? "");
+      expect(await healthRow(rowId)).toMatchObject({
+        dismissed: 0,
+        deleted_at: null,
+      });
+      const events = await plannerTestRows<{ action: string }>(
+        rt.database,
+        `SELECT action FROM health_entry_event WHERE entry_id = '${rowId}' ORDER BY at, rowid`,
+      );
+      expect(events.map((event) => event.action)).toEqual(
+        expect.arrayContaining(["dismiss", "restore"]),
+      );
+    });
+
+    it("refuses a stale remove, and an Undo after the row changed", async () => {
+      await seedHealth("h-1");
+      await call("propose_health_change", {
+        action: "remove",
+        entry_id: "h-1",
+        why: "x",
+      });
+      const [proposal] = await actions();
+      await plannerTestRun(
+        rt.database,
+        "UPDATE health_entry SET minutes = 50 WHERE id = 'h-1'",
+      );
+      await expect(accept(proposal?.id ?? "")).rejects.toThrow(
+        PLANNER_AGENT_STALE,
+      );
+      await plannerTestRun(
+        rt.database,
+        "UPDATE health_entry SET minutes = 30 WHERE id = 'h-1'",
+      );
+      await accept(proposal?.id ?? "");
+      await plannerTestRun(
+        rt.database,
+        "UPDATE health_entry SET minutes = 60 WHERE id = 'h-1'",
+      );
+      await expect(undo(proposal?.id ?? "")).rejects.toThrow(/changed since/);
+    });
+
     it("adds a manual row on accept, and Undo soft-deletes it", async () => {
       await call("propose_health_change", {
         action: "add",
@@ -488,6 +585,69 @@ describe("the agent correcting records", () => {
           ...patch,
         },
       });
+
+    it("adds and edits only this week's goals and later ones, by the tool's today", async () => {
+      // NOW is 2026-10-28, so this week starts 2026-10-26.
+      for (const past of ["2026-10-19", "2026-09-07"]) {
+        await expect(
+          call("propose_goal_change", {
+            action: "add",
+            period_start: past,
+            pillar: "work",
+            title: "Too late",
+            why: "x",
+          }),
+        ).rejects.toThrow(/past week/);
+      }
+      await call("propose_goal_change", {
+        action: "add",
+        period_start: "2026-10-26",
+        pillar: "work",
+        title: "This week is fine",
+        why: "x",
+      });
+      expect(await actions()).toHaveLength(1);
+
+      const old = await seedGoal({ periodStart: "2026-10-19" });
+      await expect(
+        call("propose_goal_change", {
+          action: "edit",
+          goal_id: old.id,
+          title: "Rewritten",
+          why: "x",
+        }),
+      ).rejects.toThrow(/past/);
+      const next = await seedGoal({ periodStart: "2026-11-02" });
+      await call("propose_goal_change", {
+        action: "edit",
+        goal_id: next.id,
+        title: "Rewritten",
+        why: "x",
+      });
+      expect(await actions()).toHaveLength(2);
+
+      // The replay's cut day counts as today: from 2026-12-01, 2026-11-02 is past.
+      const replay = (args: unknown) =>
+        plannerAgentCallTool(
+          {
+            db: rt.db,
+            user: rt.user,
+            now: NOW,
+            asOf: { at: "2026-12-01T00:00:00.000Z" } as never,
+          },
+          "propose_goal_change",
+          args,
+        );
+      await expect(
+        replay({
+          action: "add",
+          period_start: "2026-11-02",
+          pillar: "work",
+          title: "Replay",
+          why: "x",
+        }),
+      ).rejects.toThrow(/past week/);
+    });
 
     it("adds a weekly goal on accept as the proposal, and Undo soft-deletes it", async () => {
       await expect(

@@ -446,14 +446,14 @@ export const plannerAgentToolInputs = {
   propose_health_change: z
     .strictObject({
       action: z
-        .enum(["fix", "add"])
+        .enum(["fix", "add", "remove"])
         .describe(
-          "fix changes a row the diary read wrongly; add makes a row the diary missed.",
+          "fix changes a row the diary read wrongly; add makes a row the diary missed; remove takes away a false row (the diary said 'skipped the gym' but a session was logged). A row's kind cannot be changed: that is remove plus add.",
         ),
       entry_id: idSchema
         .optional()
         .describe(
-          "Only with fix: the health row's id, as read_health lists it.",
+          "Only with fix or remove: the health row's id, as read_health lists it.",
         ),
       day: daySchema
         .optional()
@@ -494,18 +494,27 @@ export const plannerAgentToolInputs = {
     })
     .refine(
       (value) =>
-        value.action === "fix"
+        value.action === "remove"
           ? !!value.entry_id &&
-            value.kind === undefined &&
-            [value.day, value.variant, value.minutes, value.home_at].some(
-              (field) => field !== undefined,
-            )
-          : value.entry_id === undefined &&
-            value.day !== undefined &&
-            value.kind !== undefined,
+            [
+              value.day,
+              value.kind,
+              value.variant,
+              value.minutes,
+              value.home_at,
+            ].every((field) => field === undefined)
+          : value.action === "fix"
+            ? !!value.entry_id &&
+              value.kind === undefined &&
+              [value.day, value.variant, value.minutes, value.home_at].some(
+                (field) => field !== undefined,
+              )
+            : value.entry_id === undefined &&
+              value.day !== undefined &&
+              value.kind !== undefined,
       {
         message:
-          "fix takes entry_id and at least one of day, variant, minutes, home_at (no kind); add takes day and kind (no entry_id).",
+          "fix takes entry_id and at least one of day, variant, minutes, home_at (no kind); add takes day and kind (no entry_id); remove takes only entry_id.",
         path: ["action"],
       },
     ),
@@ -523,7 +532,9 @@ export const plannerAgentToolInputs = {
         ),
       period_start: mondaySchema
         .optional()
-        .describe("Only with add: the Monday of the week the goal is for."),
+        .describe(
+          "Only with add: the Monday of the week the goal is for: this week or a later one (never a past week).",
+        ),
       pillar: plannerPillarSchema
         .optional()
         .describe(
@@ -668,9 +679,9 @@ export const plannerAgentToolDescriptions: Record<
   propose_memory_change:
     "Propose correcting a memory the ledger holds (new words) or forgetting it (archived, never deleted), only when the owner asks. Take the id from read_memories. It shows in the answer's card and can be undone; a corrected memory reads as confirmed by the owner once accepted. Only in an Ask chat. Not for a new memory (that is propose_memory, in a review).",
   propose_goal_change:
-    "Propose adding a weekly goal for a week (action add: period_start a Monday, pillar, title, optional lines and note) or rewriting one the owner already has (action edit: goal_id from read_goals, with the title, lines, note or pillar as they should read), only when the owner asks. Weekly goals only: no delete, and no status, result or score, which are the owner's own verdicts. It shows in the answer's card and can be undone; the change log keeps the old words. Only in an Ask chat.",
+    "Propose adding a weekly goal for a week (action add: period_start a Monday, pillar, title, optional lines and note) or rewriting one the owner already has (action edit: goal_id from read_goals, with the title, lines, note or pillar as they should read; this week's or a later week's goal only, past weeks are closed), only when the owner asks. Weekly goals only: no delete, and no status, result or score, which are the owner's own verdicts. It shows in the answer's card and can be undone; the change log keeps the old words. Only in an Ask chat.",
   propose_health_change:
-    "Propose fixing a health row the diary read wrongly (its day, variant, minutes or home time; take the id from read_health) or adding one the diary missed (day and kind, with variant, minutes or home_at), only when the owner asks. It shows in the answer's card and can be undone. Only in an Ask chat.",
+    "Propose fixing a health row the diary read wrongly (its day, variant, minutes or home time; take the id from read_health) adding one the diary missed (day and kind, with variant, minutes or home_at), or removing a false row (action remove, the id from read_health: the diary said 'skipped the gym' but a session was logged; the nightly re-read leaves a removed row removed), only when the owner asks. A row's kind cannot be changed: that is remove plus add. It shows in the answer's card and can be undone. Only in an Ask chat.",
 };
 
 /** The tools that write a review proposal: off in every session but a review's. */

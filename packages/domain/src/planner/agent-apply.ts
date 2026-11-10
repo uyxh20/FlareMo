@@ -21,6 +21,7 @@ import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { healthSnapshot, healthToDto } from "../health/rows";
 import {
   healthCreateEntry,
+  healthDismissEntry,
   healthFindEntry,
   healthPatchEntry,
   healthRevertEntry,
@@ -45,7 +46,11 @@ import {
   plannerAgentReopenAction,
   plannerAgentSettleAction,
 } from "./agent-store";
-import { plannerRestoreBoardRank } from "./board-rank";
+import {
+  plannerColumnStoredRanks,
+  plannerRestoreBoardRank,
+  plannerRestoreBoardRanks,
+} from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
 import {
@@ -339,6 +344,16 @@ export async function plannerAgentAcceptAction(
             ? (now as Record<string, unknown>)
             : { [field]: now };
         const spot = field === "place";
+        // A place may re-spread the whole target column (the card above has no
+        // key), so keep every card's rank from before, and what the accept wrote.
+        const targetColumn = spot ? column(row.change.column) : undefined;
+        const ranksBefore = targetColumn
+          ? await plannerColumnStoredRanks(db, {
+              userId: user.id,
+              column: targetColumn,
+              today: input.today,
+            })
+          : undefined;
         await plannerChangeTask(db, {
           user,
           actor,
@@ -374,6 +389,17 @@ export async function plannerAgentAcceptAction(
                 : undefined,
           },
         });
+        if (ranksBefore && targetColumn) {
+          before = {
+            ...before,
+            column_ranks: ranksBefore,
+            written_ranks: await plannerColumnStoredRanks(db, {
+              userId: user.id,
+              column: targetColumn,
+              today: input.today,
+            }),
+          };
+        }
         landedId = row.taskId;
         break;
       }
@@ -555,6 +581,24 @@ export async function plannerAgentAcceptAction(
         const dto = healthToDto(current) as unknown as Record<string, unknown>;
         if (Object.keys(was).some((key) => !same(was[key], dto[key]))) {
           throw new ValidationError(PLANNER_AGENT_STALE);
+        }
+        if (row.change.action === "remove") {
+          if (current.dismissed) throw new ValidationError(PLANNER_AGENT_STALE);
+          await healthDismissEntry(db, {
+            userId: user.id,
+            entryId,
+            now: input.now,
+          });
+          const removed = await healthFindEntry(db, {
+            userId: user.id,
+            entryId,
+          });
+          before = {
+            ...JSON.parse(healthSnapshot(current)),
+            accepted: removed ? JSON.parse(healthSnapshot(removed)) : null,
+          };
+          landedId = entryId;
+          break;
         }
         const patch: Record<string, unknown> = {};
         for (const key of ["day", "variant", "minutes", "home_at"]) {
@@ -752,6 +796,19 @@ export async function plannerAgentRevertAction(
           column: oldColumn,
           boardRank: asString(was.board_rank) ?? null,
         });
+        // The accept may have re-spread the target column: put every card's
+        // rank back (only cards still there holding what the accept wrote).
+        const ranks = was.column_ranks;
+        const written = was.written_ranks;
+        const target = column(row.change.column);
+        if (target && ranks && typeof ranks === "object") {
+          await plannerRestoreBoardRanks(db, {
+            user,
+            column: target,
+            ranks: ranks as Record<string, string | null>,
+            written: (written ?? {}) as Record<string, string | null>,
+          });
+        }
       }
       // plannerRevertEvent settles the action on its first line.
       await settle();

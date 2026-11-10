@@ -54,7 +54,7 @@ Created by `migrations/9010_planner_health.sql` and `9011_planner_health_tracker
 
 | Table | Holds |
 | --- | --- |
-| `health_entry` | One row per memo and kind (a unique partial index enforces it). A row the diary missed can also be added by hand: `source: manual`, no `memo_id`, `edited`; only the diary agent's accepted proposal does that today (`healthCreateEntry`), and the diary read never touches it. `deleted_at` and `dismissed` are soft; `edited` marks an owner's hand edit. |
+| `health_entry` | One row per memo and kind (a unique partial index enforces it). A row the diary missed can also be added by hand: `source: manual`, no `memo_id`, `edited`; only the diary agent's accepted proposal does that today (`healthCreateEntry`), and the diary read never touches it. The diary agent's accepted `remove` proposal goes through the same dismiss as the x (`healthDismissEntry`), and its Undo restores the row with a `restore` event. `deleted_at` and `dismissed` are soft; `edited` marks an owner's hand edit. |
 | `health_entry_event` | Append-only history, written in the same D1 batch as each row change. |
 | `health_target` | The owner's targets. Defaults when empty: training 3 a week, breath 7 a week, night out 12 units a year. Empty on live (counted 14 Oct 2026); the route that set it was removed, and the table is kept. |
 | `health_sync_state` | The marker that the first full read of the diary happened, plus the bookmarks (migration 9012): where an unfinished full read stopped, who is running it, and where an unfinished nightly read stopped. |

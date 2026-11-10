@@ -153,12 +153,19 @@ Since November 2026 (the control panel, design option B) it can also propose:
   (`action: fix`, `entry_id` from `read_health`, any of `day`, `variant`,
   `minutes`, `home_at`; `was` holds the values of just those fields) or adding
   one it missed (`action: add`, `day` and `kind`, with `variant`, `minutes` or
-  `home_at`). Stored as kind `health_change`. `read_health` now prints each
-  row's id;
+  `home_at`), adding one it missed (`action: add`, `day` and `kind`, with
+  `variant`, `minutes` or `home_at`), or removing a false row (`action: remove`,
+  `entry_id` only; for example the diary said "skipped the gym" but a session
+  was logged; `was` holds the row's day, kind, variant, minutes and home time).
+  The agent cannot change a row's kind: that is remove plus add. Stored as kind
+  `health_change`. `read_health` now prints each row's id;
 - `propose_goal_change`, adding a weekly goal (`action: add`, `period_start`
-  a Monday within about two months back and six ahead, `pillar`, `title`,
+  a Monday, this week or later (up to about six months ahead; a past week is
+  refused), `pillar`, `title`,
   optional `lines` and `note`) or rewriting one the owner has (`action: edit`,
-  `goal_id` from `read_goals`, any of `title`, `lines`, `note`, `pillar`).
+  `goal_id` from `read_goals`, any of `title`, `lines`, `note`, `pillar`; only
+  a goal of this week or a later one, a past week's goal is refused; "today" is
+  the tool context's, so a replay's `asOf` day counts).
   Weekly goals only, never a delete, and never a goal's status, result or
   score: those are the owner's own verdicts, and the tool refuses them (its
   input has no such fields). Stored as kind `goal_change`; an edit keeps `was`
@@ -234,7 +241,12 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
 - an archive or pin: the entry gets back what it held;
 - a place: the column move is reverted through History as above and the old
   `board_rank` is written back (no event; only if the task is back in its old
-  column; a same-column place has no History line, only the rank);
+  column; a same-column place has no History line, only the rank). A place can
+  re-spread the whole target column (when the card above has no key), so the
+  accept also keeps every card's rank from before (`column_ranks`) and what it
+  wrote (`written_ranks`); Undo restores a card's old rank (null included) only
+  while the card is still in that column and still holds the rank the accept
+  wrote, so a card the owner re-ordered or moved since keeps their change;
 - an entry link: only the one link the accept wrote is removed (or the removed
   one added back), refused when it is not there to take away;
 - a memory correction or forget: the accept is the owner's own click, with the
@@ -245,12 +257,20 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
   `restoreMemory` (refused if the memory is no longer archived). `updateMemory`
   reads the owner's hand as a confirmation, so a corrected memory reads as
   confirmed by you after the accept, and Undo restores the words but not
-  necessarily the old confidence level (there is no function that lowers it);
+  the old confidence level (no owner function lowers it), so the card says
+  "Undo puts the words back; the memory stays marked as confirmed by you".
+  A correction changes only the words, so tier and fact key never need
+  restoring;
 - a health row fix: accepted through `healthPatchEntry` (the row becomes
   `edited`, so the nightly re-read keeps it), the full row snapshot kept as
   `before`; Undo (`healthRevertEntry`) writes that snapshot back as a
   `restore` event, `edited` included, so a row the diary had read is read again
   by the next re-read; refused if the row differs from what the accept left;
+- a health row remove: `healthDismissEntry` (the row is `dismissed`, which the
+  nightly and manual re-reads leave alone, and a `dismiss` event); Undo is
+  `healthRevertEntry` with the row snapshot taken before (a `restore` event
+  that un-dismisses it), refused if the row changed since. Accept is refused
+  when the row no longer matches `was`;
 - a health row add: `healthCreateEntry` makes a `manual` row with no memo; Undo
   soft-deletes it (`deleted_at` and a `delete` event, never removed); refused
   if the row was fixed since.

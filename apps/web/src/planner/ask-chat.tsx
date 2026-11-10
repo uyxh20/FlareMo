@@ -128,6 +128,9 @@ const en = {
     memoryForget: "Forget memory",
     healthFix: "Fix health row",
     healthAdd: "Add health row",
+    healthRemove: "Remove health row",
+    memoryUndoNote:
+      "Undo puts the words back; the memory stays marked as confirmed by you.",
     goalAdd: "New weekly goal",
     goalEdit: "Edit weekly goal",
     goalField: {
@@ -235,6 +238,8 @@ const zhCN: PlannerAskCopy = {
     memoryForget: "忘掉记忆",
     healthFix: "修正健康记录",
     healthAdd: "添加健康记录",
+    healthRemove: "移除健康记录",
+    memoryUndoNote: "撤销会恢复原来的文字；这条记忆仍标记为由你确认。",
     goalAdd: "新周目标",
     goalEdit: "修改周目标",
     goalField: {
@@ -509,7 +514,9 @@ function PlannerProposalBody({
       heading =
         change.action === "add"
           ? copy.proposal.healthAdd
-          : copy.proposal.healthFix;
+          : change.action === "remove"
+            ? copy.proposal.healthRemove
+            : copy.proposal.healthFix;
       break;
     case "entry_state":
       heading =
@@ -604,6 +611,11 @@ function PlannerProposalBody({
         <p className="font-medium [overflow-wrap:anywhere]">
           {isRecord(change.was) ? (asString(change.was.content) ?? "") : ""} →{" "}
           {asString(change.content) ?? ""}
+        </p>
+      )}
+      {action.kind === "memory_change" && change.action === "correct" && (
+        <p className="text-xs text-muted-foreground">
+          {copy.proposal.memoryUndoNote}
         </p>
       )}
       {action.kind === "health_change" && change.action === "fix" && (

@@ -367,6 +367,59 @@ describe("the agent as a control panel", () => {
     expect((await memoRow(accepted.landed_id ?? ""))?.status).toBe("archived");
   });
 
+  it("undoes a place that re-spread a column nobody had ranked: every card's rank is null again", async () => {
+    const a = await task("First");
+    const b = await task("Second");
+    const c = await task("Third");
+    for (const id of [a, b, c]) {
+      await plannerChangeTask(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: id,
+        today: TODAY,
+        change: { column: "todo" },
+      });
+    }
+    const board = async () =>
+      (
+        await plannerReadBoard(rt.db, {
+          userId: rt.user.id,
+          today: TODAY,
+          doneDays: 14,
+        })
+      ).columns.todo;
+    const original = (await board()).map((card) => card.title);
+    expect((await board()).every((card) => card.board_rank === null)).toBe(
+      true,
+    );
+    const last = (await board()).at(-1)?.id ?? "";
+    // Between the first and second card: the card above has no key, so it re-spreads.
+    const second = (await board())[1]?.id ?? "";
+
+    await asking();
+    await call("propose_task_change", {
+      task_id: last,
+      column: "todo",
+      before_id: second,
+      why: "Second place.",
+    });
+    const [place] = await actions();
+    await accept(place?.id ?? "");
+    const moved = await board();
+    expect(moved[1]?.id).toBe(last);
+    expect(moved.every((card) => card.board_rank !== null)).toBe(true);
+
+    await undo(place?.id ?? "");
+    const restored = await board();
+    expect(restored.map((card) => card.title)).toEqual(original);
+    expect(restored.every((card) => card.board_rank === null)).toBe(true);
+    const stored = await plannerTestRows<{ board_rank: string | null }>(
+      rt.database,
+      "SELECT board_rank FROM planner_task_plan",
+    );
+    expect(stored.every((row) => row.board_rank === null)).toBe(true);
+  });
+
   it("places a task at an exact spot: records where it was, accepts, refuses when its rank moved, and undoes column and rank", async () => {
     const a = await task("Anchor A");
     const b = await task("Anchor B");
