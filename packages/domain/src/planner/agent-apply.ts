@@ -39,6 +39,11 @@ import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
 import { replaceMemoRelations } from "../relations";
 import {
+  type PlannerAgentEditResult,
+  plannerAgentApplyEdit,
+  plannerAgentWordless,
+} from "./agent-edit";
+import {
   PLANNER_AGENT_ACTION_ACTOR_PREFIX,
   plannerAgentActionToDto,
   plannerAgentFindAction,
@@ -53,6 +58,7 @@ import {
 } from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
+import { plannerRecordEvents } from "./flywheel";
 import {
   plannerGoalSnapshot,
   plannerLatestGoalVersion,
@@ -299,6 +305,8 @@ export async function plannerAgentAcceptAction(
     today: string;
     /** The memo quota scope the request runs under, for a diary entry. */
     quota?: QuotaScope;
+    /** The owner's own values for what the card lets them change (agent-edit.ts). */
+    edit?: unknown;
     now?: Date;
   },
 ): Promise<PlannerAgentActionDto> {
@@ -321,7 +329,29 @@ export async function plannerAgentAcceptAction(
   // upstream's activity log records only the new value of a title, notes,
   // priority or due date.
   let before: Record<string, unknown> | undefined;
+  // The change to write: the proposal's, with the owner's edited values laid
+  // over it. `was` stays the agent's, so the stale check is still against what
+  // the record held when it proposed.
+  // A flagged entry or goal carries no words of the agent's: only the owner's,
+  // from `edit`, are written (older proposals may still hold the agent's).
+  let change: Record<string, unknown> = plannerAgentWordless(row);
+  let edited: PlannerAgentEditResult | null = null;
   try {
+    if (input.edit !== undefined) {
+      edited = await plannerAgentApplyEdit(db, {
+        userId: user.id,
+        row,
+        edit: input.edit,
+        today: input.today,
+      });
+      if (edited) {
+        change = {
+          ...edited.change,
+          proposed: edited.proposed,
+          edited: edited.edited,
+        };
+      }
+    }
     switch (row.kind) {
       case "task_change": {
         const field = plannerAgentActionFields.find(
@@ -330,13 +360,13 @@ export async function plannerAgentAcceptAction(
         if (!row.taskId || !field) {
           throw new ValidationError("This proposal names no task field.");
         }
-        const value = row.change[field];
+        const value = change[field];
         const detail = await plannerReadTaskDetail(db, {
           userId: user.id,
           taskId: row.taskId,
         });
         const now = plannerAgentTaskFieldNow(detail, field);
-        if ("was" in row.change && !same(row.change.was, now)) {
+        if ("was" in change && !same(change.was, now)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
         before =
@@ -346,7 +376,7 @@ export async function plannerAgentAcceptAction(
         const spot = field === "place";
         // A place may re-spread the whole target column (the card above has no
         // key), so keep every card's rank from before, and what the accept wrote.
-        const targetColumn = spot ? column(row.change.column) : undefined;
+        const targetColumn = spot ? column(change.column) : undefined;
         const ranksBefore = targetColumn
           ? await plannerColumnStoredRanks(db, {
               userId: user.id,
@@ -373,10 +403,10 @@ export async function plannerAgentAcceptAction(
               field === "column"
                 ? column(value)
                 : spot
-                  ? column(row.change.column)
+                  ? column(change.column)
                   : undefined,
-            beforeId: spot ? asString(row.change.before_id) : undefined,
-            afterId: spot ? asString(row.change.after_id) : undefined,
+            beforeId: spot ? asString(change.before_id) : undefined,
+            afterId: spot ? asString(change.after_id) : undefined,
             goalId:
               field === "goal_id"
                 ? value === null
@@ -404,16 +434,17 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "task_new": {
-        const title = asString(row.change.title)?.trim();
+        const title = asString(change.title)?.trim();
         if (!title) throw new ValidationError("This proposal has no title.");
-        const target = column(row.change.column);
+        const target = column(change.column);
         const created = await plannerAddTask(db, {
           user,
           actor,
           title,
-          notes: asString(row.change.notes),
-          priority: priority(row.change.priority),
-          dueAt: asString(row.change.due_at),
+          notes: asString(change.notes),
+          priority: priority(change.priority),
+          dueAt: asString(change.due_at),
+          goalId: asString(change.goal_id),
           column: target,
           // A card in To Do is always planned: one proposed there is planned
           // for today, as the panel does for a task dragged in.
@@ -425,7 +456,7 @@ export async function plannerAgentAcceptAction(
       }
       case "comment_new": {
         // A comment read from a file on the task (docs/fork-task-attachments.md).
-        const body = asString(row.change.body)?.trim();
+        const body = asString(change.body)?.trim();
         if (!row.taskId || !body) {
           throw new ValidationError("This proposal has no text.");
         }
@@ -439,11 +470,11 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "entry_new": {
-        const content = asString(row.change.content)?.trim();
+        const content = asString(change.content)?.trim();
         if (!content) throw new ValidationError("This proposal has no text.");
         // fork: link summaries. A summary made from a link is saved as one,
         // tagged #link, and points back at the owner's entry it came from.
-        const link = plannerAgentLinkSchema.safeParse(row.change.link);
+        const link = plannerAgentLinkSchema.safeParse(change.link);
         const entry: CreateMemoInput = {
           content: link.success ? plannerLinkSummaryContent(content) : content,
           visibility: "private",
@@ -463,10 +494,14 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "entry_edit": {
-        const content = asString(row.change.content)?.trim();
-        if (!content) throw new ValidationError("This proposal has no text.");
-        const memo = await entryOf(db, user, row.change);
-        if ("was" in row.change && !same(row.change.was, memo.content)) {
+        const content = asString(change.content)?.trim();
+        if (!content) {
+          throw new ValidationError(
+            "Rewrite the entry on the card first: the agent only flags what looks off.",
+          );
+        }
+        const memo = await entryOf(db, user, change);
+        if ("was" in change && !same(change.was, memo.content)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
         before = { content: memo.content };
@@ -475,22 +510,22 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "entry_state": {
-        const memo = await entryOf(db, user, row.change);
-        if (typeof row.change.archived === "boolean") {
+        const memo = await entryOf(db, user, change);
+        if (typeof change.archived === "boolean") {
           const was = memo.status === "archived";
-          if ("was" in row.change && !same(row.change.was, was)) {
+          if ("was" in change && !same(change.was, was)) {
             throw new ValidationError(PLANNER_AGENT_STALE);
           }
           before = { archived: was };
           await updateMemo(db, user, memo.id, {
-            status: row.change.archived ? "archived" : "normal",
+            status: change.archived ? "archived" : "normal",
           });
-        } else if (typeof row.change.pinned === "boolean") {
-          if ("was" in row.change && !same(row.change.was, memo.pinned)) {
+        } else if (typeof change.pinned === "boolean") {
+          if ("was" in change && !same(change.was, memo.pinned)) {
             throw new ValidationError(PLANNER_AGENT_STALE);
           }
           before = { pinned: memo.pinned };
-          await updateMemo(db, user, memo.id, { pinned: row.change.pinned });
+          await updateMemo(db, user, memo.id, { pinned: change.pinned });
         } else {
           throw new ValidationError("This proposal changes nothing.");
         }
@@ -498,18 +533,18 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "entry_link": {
-        const memo = await entryOf(db, user, row.change);
-        const related = asString(row.change.related_entry_id);
+        const memo = await entryOf(db, user, change);
+        const related = asString(change.related_entry_id);
         if (!related)
           throw new ValidationError("This proposal names no entry.");
         const target = parseResourceName(related, "memos");
         const current = await plannerEntryReferences(db, memo.id);
-        if ("was" in row.change && !same(row.change.was, current)) {
+        if ("was" in change && !same(change.was, current)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
         before = { references: current };
         const next =
-          row.change.remove === true
+          change.remove === true
             ? current.filter((id) => id !== target)
             : [...current.filter((id) => id !== target), target];
         await replaceReferences(db, user, memo.id, next);
@@ -517,9 +552,9 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "memory_change": {
-        const memory = await memoryOf(db, user, row.change);
+        const memory = await memoryOf(db, user, change);
         const now = { content: memory.content, status: memory.status };
-        if ("was" in row.change && !same(row.change.was, now)) {
+        if ("was" in change && !same(change.was, now)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
         if (memory.status !== "active") {
@@ -533,10 +568,10 @@ export async function plannerAgentAcceptAction(
           fact_key: memory.factKey,
           tier: memory.tier,
         };
-        if (row.change.action === "forget") {
+        if (change.action === "forget") {
           await archiveMemory(db, user, USER_MEMORY_ACTOR, memory.id);
         } else {
-          const content = asString(row.change.content);
+          const content = asString(change.content);
           if (!content) throw new ValidationError("The new words are missing.");
           await memoryWrite(
             updateMemory(db, user, USER_MEMORY_ACTOR, memory.id, { content }),
@@ -546,17 +581,15 @@ export async function plannerAgentAcceptAction(
         break;
       }
       case "health_change": {
-        if (row.change.action === "add") {
+        if (change.action === "add") {
           const made = await healthCreateEntry(db, {
             userId: user.id,
-            day: asString(row.change.day) ?? "",
-            kind: asString(row.change.kind) ?? "",
-            variant: asString(row.change.variant),
+            day: asString(change.day) ?? "",
+            kind: asString(change.kind) ?? "",
+            variant: asString(change.variant),
             minutes:
-              typeof row.change.minutes === "number"
-                ? row.change.minutes
-                : undefined,
-            homeAt: asString(row.change.home_at),
+              typeof change.minutes === "number" ? change.minutes : undefined,
+            homeAt: asString(change.home_at),
             now: input.now,
           });
           const created = await healthFindEntry(db, {
@@ -570,19 +603,19 @@ export async function plannerAgentAcceptAction(
           landedId = made.id;
           break;
         }
-        const entryId = asString(row.change.health_id);
+        const entryId = asString(change.health_id);
         if (!entryId) throw new ValidationError("This proposal names no row.");
         const current = await healthFindEntry(db, {
           userId: user.id,
           entryId,
         });
         if (!current) throw new ValidationError("That health row is gone.");
-        const was = (row.change.was ?? {}) as Record<string, unknown>;
+        const was = (change.was ?? {}) as Record<string, unknown>;
         const dto = healthToDto(current) as unknown as Record<string, unknown>;
         if (Object.keys(was).some((key) => !same(was[key], dto[key]))) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
-        if (row.change.action === "remove") {
+        if (change.action === "remove") {
           if (current.dismissed) throw new ValidationError(PLANNER_AGENT_STALE);
           await healthDismissEntry(db, {
             userId: user.id,
@@ -602,7 +635,7 @@ export async function plannerAgentAcceptAction(
         }
         const patch: Record<string, unknown> = {};
         for (const key of ["day", "variant", "minutes", "home_at"]) {
-          if (key in row.change) patch[key] = row.change[key];
+          if (key in change) patch[key] = change[key];
         }
         await healthPatchEntry(db, {
           userId: user.id,
@@ -620,14 +653,17 @@ export async function plannerAgentAcceptAction(
       }
       case "goal_change": {
         const proposalActor = plannerProposalActor(row.id);
-        if (row.change.action === "add") {
-          const title = asString(row.change.title)?.trim();
-          const week = asString(row.change.period_start);
-          const pillar = asString(row.change.pillar) as
-            | PlannerPillar
-            | undefined;
-          if (!title || !week || !pillar) {
+        if (change.action === "add") {
+          const title = asString(change.title)?.trim();
+          const week = asString(change.period_start);
+          const pillar = asString(change.pillar) as PlannerPillar | undefined;
+          if (!week || !pillar) {
             throw new ValidationError("This proposal is missing its goal.");
+          }
+          if (!title) {
+            throw new ValidationError(
+              "Write the goal's title on the card first.",
+            );
           }
           const created = await plannerCreateGoal(db, {
             userId: user.id,
@@ -638,40 +674,38 @@ export async function plannerAgentAcceptAction(
               periodStart: week,
               pillar,
               title,
-              lines: Array.isArray(row.change.lines)
-                ? (row.change.lines as PlannerGoalLine[])
+              lines: Array.isArray(change.lines)
+                ? (change.lines as PlannerGoalLine[])
                 : [],
-              note: asString(row.change.note) ?? null,
+              note: asString(change.note) ?? null,
             },
           });
           before = { created: true, goal: goalWords(created) };
           landedId = created.id;
           break;
         }
-        const goal = await goalOf(
-          db,
-          user,
-          asString(row.change.goal_id) ?? null,
-        );
+        const goal = await goalOf(db, user, asString(change.goal_id) ?? null);
         if (goal.level !== "week") {
           throw new ValidationError("Only a weekly goal can be changed here.");
         }
         const now = goalWords({ ...goal, lines: plannerGoalToDto(goal).lines });
-        if ("was" in row.change && !same(row.change.was, now)) {
+        if ("was" in change && !same(change.was, now)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
         const patch: PlannerGoalPatch = {};
-        if (typeof row.change.title === "string")
-          patch.title = row.change.title;
-        if (Array.isArray(row.change.lines)) {
-          patch.lines = row.change.lines as PlannerGoalLine[];
+        if (typeof change.title === "string") patch.title = change.title;
+        if (Array.isArray(change.lines)) {
+          patch.lines = change.lines as PlannerGoalLine[];
         }
-        if (typeof row.change.note === "string") patch.note = row.change.note;
-        if (typeof row.change.pillar === "string") {
-          patch.pillar = row.change.pillar as PlannerPillar;
+        if (typeof change.note === "string") patch.note = change.note;
+        if (typeof change.pillar === "string") {
+          patch.pillar = change.pillar as PlannerPillar;
         }
+        if (patch.pillar === goal.pillar) delete patch.pillar;
         if (Object.keys(patch).length === 0) {
-          throw new ValidationError("This proposal changes nothing.");
+          throw new ValidationError(
+            "Change the goal's words or objective on the card first.",
+          );
         }
         before = now;
         await plannerUpdateGoal(db, {
@@ -698,7 +732,31 @@ export async function plannerAgentAcceptAction(
     id: row.id,
     landedId,
     before,
+    change: edited ? change : undefined,
   });
+  if (edited) {
+    // The learning log: which fields the owner fixed, by name only.
+    await plannerRecordEvents(
+      db,
+      [
+        {
+          userId: user.id,
+          kind: "proposal.accepted_edited",
+          subject: "proposal",
+          subjectId: row.id,
+          origin: "proposal",
+          proposalId: row.id,
+          data: {
+            action_kind: row.kind,
+            field: row.field,
+            fields: Object.keys(edited.edited).join(","),
+            count: Object.keys(edited.edited).length,
+          },
+        },
+      ],
+      input.now,
+    );
+  }
   const after = await plannerAgentFindAction(db, {
     userId: user.id,
     id: row.id,

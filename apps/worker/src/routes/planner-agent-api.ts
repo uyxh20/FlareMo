@@ -8,7 +8,11 @@ import {
   plannerAskSchema,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
-import { NotFoundError, parseResourceName } from "@flaremo/domain";
+import {
+  NotFoundError,
+  parseResourceName,
+  ValidationError,
+} from "@flaremo/domain";
 import {
   plannerAgentAcceptAction,
   plannerAgentAddChat,
@@ -22,6 +26,10 @@ import {
   plannerAgentOwnerTextWithFiles,
   plannerAgentQuestionWithFiles,
   plannerAgentReadChat,
+  plannerAgentRecordRedo,
+  plannerAgentRedoDismiss,
+  plannerAgentRedoQuestion,
+  plannerAgentRedoRestore,
   plannerAgentRevertAction,
   plannerAgentSettleAction,
   plannerReadTaskDetail,
@@ -190,7 +198,11 @@ plannerAgentApi.post(
       const conversation = body.conversation ?? crypto.randomUUID();
       const ownerKey = plannerAgentAskKey(conversation);
       // Files dropped in the chat travel with the question, already read.
-      const question = plannerAgentQuestionWithFiles(body.text, body.files);
+      let question = plannerAgentQuestionWithFiles(body.text ?? "", body.files);
+      // The chat shows a redo as the owner's note.
+      const ownerText = body.redo
+        ? `Redo: ${body.redo.note}`
+        : plannerAgentOwnerTextWithFiles(body.text ?? "", body.files);
       const earlier = body.conversation
         ? await plannerAgentReadChat(db, {
             userId: user.id,
@@ -227,6 +239,26 @@ plannerAgentApi.post(
             409,
           );
         }
+      }
+      // The one-line redo: the card's open rows are dismissed (reason `redo`,
+      // kept for the flywheel) before the turn, so the agent's new proposals
+      // are not taken for repeats of open ones; a failed send opens them again.
+      const redone = body.redo
+        ? await plannerAgentRedoDismiss(db, {
+            userId: user.id,
+            conversationId: conversation,
+            ids: body.redo.action_ids,
+          })
+        : [];
+      if (body.redo) {
+        if (redone.length === 0) {
+          throw new ValidationError("Nothing on that card is open to redo.");
+        }
+        question = plannerAgentRedoQuestion({
+          ownerName: user.name,
+          note: body.redo.note,
+          actions: redone,
+        });
       }
       try {
         const open = await plannerAgentFindOpenRun(db, {
@@ -277,13 +309,26 @@ plannerAgentApi.post(
           userId: user.id,
           conversationId: conversation,
           role: "owner",
-          text: plannerAgentOwnerTextWithFiles(body.text, body.files),
+          text: ownerText,
           runId,
           taskId,
         });
       } catch (error) {
+        if (redone.length > 0) {
+          await plannerAgentRedoRestore(db, {
+            userId: user.id,
+            actions: redone,
+          }).catch(() => {});
+        }
         plannerLogAgentError("ask", error);
         return c.json(plannerAgentFailure(error), 503);
+      }
+      if (redone.length > 0) {
+        await plannerAgentRecordRedo(db, {
+          userId: user.id,
+          conversationId: conversation,
+          actions: redone,
+        });
       }
       const response: PlannerAskResponse = {
         enabled: true,
@@ -352,6 +397,7 @@ plannerAgentApi.post(
               user,
               id,
               today: body.today,
+              edit: body.edit,
               quota: { userLimits: context.userLimits, userId: user.id },
             })
           : await plannerAgentSettleAction(db, {

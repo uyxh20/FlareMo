@@ -16,7 +16,6 @@ import {
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
   type PlannerGoalDto,
-  type PlannerGoalLine,
   type PlannerPillar,
   plannerAddDays,
   plannerAgentInputFields,
@@ -60,6 +59,7 @@ import {
   plannerAgentFindQuote,
 } from "./agent-store";
 import { plannerBoardDoneDaysMax, plannerReadBoard } from "./board";
+import { plannerEntryRetag } from "./entry-tags";
 import {
   plannerCurrentTuning,
   plannerFlywheelWeekOf,
@@ -69,7 +69,6 @@ import {
   plannerGoalToDto,
   plannerLoadLiveGoal,
   plannerReadGoalsYear,
-  plannerReadWeekGoals,
   plannerRequireWeeklyGoal,
 } from "./goals";
 import { plannerReadTaskHistory } from "./history-read";
@@ -1400,23 +1399,58 @@ const handlers: Handlers = {
 
   async propose_entry_edit(context, input) {
     const memo = await proposedEntry(context, input.entry_id);
-    if (memo.content.trim() === input.content.trim()) {
-      throw new PlannerAgentToolError(
-        "The entry already reads like that. Nothing was proposed.",
-      );
-    }
+    // The quote must be this entry's own words, found word for word.
+    const receipt = input.quote
+      ? await receiptOf(context, input.quote, memo.id)
+      : null;
     const action = await fileAction(context, {
       kind: "entry_edit",
       taskId: null,
       field: null,
       change: {
         entry_id: memo.id,
-        content: input.content,
+        flag: input.flag,
+        ...(receipt ? { quote: receipt.quote } : {}),
         was: memo.content,
+        preview: entryPreview(memo.content),
       },
       why: input.why,
     });
-    return `Proposed edit ${action.id} of entry ${memo.id}. The card shows the owner what changes; nothing is changed before they accept it.`;
+    return `Flagged entry ${memo.id} (${action.id}). The card shows the owner the entry with your flag; the owner rewrites it there, and nothing changes before they accept.`;
+  },
+
+  async propose_entry_tags(context, input) {
+    const memo = await proposedEntry(context, input.entry_id);
+    const retag = plannerEntryRetag(memo.content, {
+      add: input.add ?? [],
+      remove: input.remove ?? [],
+    });
+    if ("refused" in retag) throw new PlannerAgentToolError(retag.refused);
+    const action = await fileAction(context, {
+      kind: "entry_edit",
+      taskId: null,
+      field: null,
+      change: {
+        entry_id: memo.id,
+        tags: { add: retag.added, remove: retag.removed },
+        content: retag.content,
+        was: memo.content,
+        preview: entryPreview(memo.content),
+      },
+      why: input.why,
+    });
+    return `Proposed ${[
+      retag.added.length
+        ? `adding ${retag.added.map((t) => `#${t}`).join(" ")}`
+        : "",
+      retag.removed.length
+        ? `removing ${retag.removed.map((t) => `#${t}`).join(" ")}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(
+        " and ",
+      )} on entry ${memo.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
   },
 
   async propose_entry_state(context, input) {
@@ -1639,6 +1673,8 @@ const handlers: Handlers = {
         change: {
           action: "fix",
           health_id: row.id,
+          // The row's kind: the card's variant picker offers this kind's.
+          row_kind: row.kind,
           ...patch,
           was,
           label: `${row.day} ${row.kind.replace("_", " ")}`,
@@ -1692,21 +1728,8 @@ const handlers: Handlers = {
   async propose_goal_change(context, input) {
     const today = toolToday(context);
     const current = plannerWeekStartOf(today);
-    const lineObjects = (
-      lines: readonly string[],
-      existing: readonly PlannerGoalLine[] = [],
-    ): PlannerGoalLine[] => {
-      // A line that stays word for word keeps its note and its strike.
-      const left = [...existing];
-      return lines.map((text) => {
-        const at = left.findIndex((line) => line.text === text);
-        if (at < 0) return { text };
-        return left.splice(at, 1)[0] as PlannerGoalLine;
-      });
-    };
     if (input.action === "add") {
       const week = input.period_start as string;
-      const title = input.title as string;
       if (week < current) {
         throw new PlannerAgentToolError(
           `period_start is in a past week (this week starts ${current}): a past week is closed. A weekly goal can be added to this week or a later one.`,
@@ -1717,22 +1740,8 @@ const handlers: Handlers = {
           "period_start is too far ahead: a weekly goal is for this week or one within about six months ahead.",
         );
       }
-      const goals = await plannerReadWeekGoals(context.db, {
-        userId: context.user.id,
-        weekStart: week,
-      });
-      if (
-        goals.some(
-          (goal) =>
-            goal.pillar === input.pillar &&
-            goal.title.trim().toLowerCase() === title.toLowerCase(),
-        )
-      ) {
-        throw new PlannerAgentToolError(
-          `The week of ${week} already has a goal with that title under that objective. Nothing was proposed.`,
-        );
-      }
-      const lines = lineObjects(input.lines ?? []);
+      // No title yet: the owner writes it on the card, and the twin check runs
+      // on Accept.
       const action = await fileAction(context, {
         kind: "goal_change",
         taskId: null,
@@ -1741,16 +1750,13 @@ const handlers: Handlers = {
           action: "add",
           period_start: week,
           pillar: input.pillar,
-          title,
-          ...(lines.length ? { lines } : {}),
-          ...(input.note ? { note: input.note } : {}),
-          goal_title: title,
+          flag: input.flag,
           week,
-          label: title,
+          label: input.flag,
         },
         why: input.why,
       });
-      return `Proposed a new weekly goal for the week of ${week} (${action.id}). It shows in this answer's card; nothing is added before the owner accepts it.`;
+      return `Proposed a new weekly goal for the week of ${week} (${action.id}). The card asks the owner to write its title; nothing is added before they accept it.`;
     }
     const goalId = input.goal_id as string;
     try {
@@ -1773,33 +1779,10 @@ const handlers: Handlers = {
       note: goal.note,
       pillar: goal.pillar,
     };
-    const patch: Record<string, unknown> = {};
-    if (input.title !== undefined && input.title !== goal.title) {
-      patch.title = input.title;
-    }
-    if (input.lines !== undefined) {
-      const lines = lineObjects(input.lines, goal.lines);
-      if (JSON.stringify(lines) !== JSON.stringify(goal.lines)) {
-        patch.lines = lines;
-      }
-    }
-    if (input.note !== undefined && input.note !== (goal.note ?? "")) {
-      patch.note = input.note;
-    }
-    if (input.pillar !== undefined && input.pillar !== goal.pillar) {
-      patch.pillar = input.pillar;
-    }
-    if (Object.keys(patch).length === 0) {
+    if (input.pillar !== undefined && input.pillar === goal.pillar) {
       throw new PlannerAgentToolError(
-        "The goal already reads like that. Nothing was proposed.",
+        "The goal is already under that objective. Leave pillar out to only flag it.",
       );
-    }
-    const after = {
-      title: (patch.title as string | undefined) ?? goal.title,
-      lines: (patch.lines as PlannerGoalLine[] | undefined) ?? goal.lines,
-    };
-    if (!after.title.trim() && after.lines.length === 0) {
-      throw new PlannerAgentToolError("A goal needs a title or a line.");
     }
     const action = await fileAction(context, {
       kind: "goal_change",
@@ -1808,15 +1791,16 @@ const handlers: Handlers = {
       change: {
         action: "edit",
         goal_id: goal.id,
-        ...patch,
+        flag: input.flag,
+        ...(input.pillar !== undefined ? { pillar: input.pillar } : {}),
         was,
         goal_title: goal.title || goal.lines[0]?.text || "Goal",
         week: goal.period_start,
-        label: after.title || goal.title,
+        label: goal.title || goal.lines[0]?.text || "Goal",
       },
       why: input.why,
     });
-    return `Proposed rewriting weekly goal ${goal.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
+    return `Flagged weekly goal ${goal.id} (${action.id}). The card shows the owner the goal with your flag; the owner rewrites it there, and nothing changes before they accept.`;
   },
 
   async propose_add_task(context, input) {

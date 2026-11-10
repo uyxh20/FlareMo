@@ -1,5 +1,6 @@
 import type {
   PlannerAgentActionResponse,
+  PlannerAgentEdit,
   PlannerAskResponse,
   PlannerOkResponse,
 } from "@flaremo/contracts";
@@ -38,9 +39,15 @@ export function plannerAskRequest(input: {
   today: string;
   conversation?: string;
   task?: string;
-  text: string;
+  /** The question; left out for a redo. */
+  text?: string;
   /** Files dropped in the chat, already read: their names and text. */
   files?: Array<{ filename: string; text: string }>;
+  /**
+   * The one-line redo: the card's open rows, dismissed as `redo`, and what to
+   * change; the agent redraws them as a new card.
+   */
+  redo?: { action_ids: string[]; note: string };
 }) {
   return apiRequest<PlannerAskResponse>(ASK, {
     method: "POST",
@@ -51,7 +58,12 @@ export function plannerAskRequest(input: {
 /** Accepts a proposed action (the accept is what writes it) or dismisses it. */
 export function plannerSettleActionRequest(
   id: string,
-  input: { state: "accepted" | "dismissed"; today: string },
+  input: {
+    state: "accepted" | "dismissed";
+    today: string;
+    /** Only with accepted: the values the owner changed on the card. */
+    edit?: PlannerAgentEdit;
+  },
 ) {
   return apiRequest<PlannerAgentActionResponse>(
     `${ACTIONS}/${encodeURIComponent(id)}`,

@@ -1,3 +1,4 @@
+import { plannerAgentEditBaseline } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { healthRescan } from "../health/sync";
 import { createMemory } from "../memory";
@@ -8,7 +9,11 @@ import {
   plannerAgentAcceptAction,
   plannerAgentRevertAction,
 } from "./agent-apply";
-import { plannerAgentCreateRun, plannerAgentListActions } from "./agent-store";
+import {
+  plannerAgentAddAction,
+  plannerAgentCreateRun,
+  plannerAgentListActions,
+} from "./agent-store";
 import { plannerAgentCallTool } from "./agent-tools";
 import { plannerReadGoalVersions } from "./goal-version";
 import {
@@ -45,8 +50,8 @@ const actions = () =>
     now: NOW,
   });
 
-const accept = (id: string) =>
-  plannerAgentAcceptAction(rt.db, { user: rt.user, id, today: TODAY });
+const accept = (id: string, edit?: unknown) =>
+  plannerAgentAcceptAction(rt.db, { user: rt.user, id, today: TODAY, edit });
 
 const undo = (id: string) =>
   plannerAgentRevertAction(rt.db, {
@@ -594,7 +599,7 @@ describe("the agent correcting records", () => {
             action: "add",
             period_start: past,
             pillar: "work",
-            title: "Too late",
+            flag: "Too late",
             why: "x",
           }),
         ).rejects.toThrow(/past week/);
@@ -603,7 +608,7 @@ describe("the agent correcting records", () => {
         action: "add",
         period_start: "2026-10-26",
         pillar: "work",
-        title: "This week is fine",
+        flag: "This week is fine",
         why: "x",
       });
       expect(await actions()).toHaveLength(1);
@@ -613,7 +618,7 @@ describe("the agent correcting records", () => {
         call("propose_goal_change", {
           action: "edit",
           goal_id: old.id,
-          title: "Rewritten",
+          flag: "Looks off",
           why: "x",
         }),
       ).rejects.toThrow(/past/);
@@ -621,7 +626,7 @@ describe("the agent correcting records", () => {
       await call("propose_goal_change", {
         action: "edit",
         goal_id: next.id,
-        title: "Rewritten",
+        flag: "Looks off",
         why: "x",
       });
       expect(await actions()).toHaveLength(2);
@@ -643,19 +648,19 @@ describe("the agent correcting records", () => {
           action: "add",
           period_start: "2026-11-02",
           pillar: "work",
-          title: "Replay",
+          flag: "Replay",
           why: "x",
         }),
       ).rejects.toThrow(/past week/);
     });
 
-    it("adds a weekly goal on accept as the proposal, and Undo soft-deletes it", async () => {
+    it("adds a weekly goal only once the owner wrote its title, and Undo soft-deletes it", async () => {
       await expect(
         call("propose_goal_change", {
           action: "add",
           period_start: "2026-11-03",
           pillar: "work",
-          title: "x",
+          flag: "x",
           why: "x",
         }),
       ).rejects.toThrow(/Monday/);
@@ -664,28 +669,49 @@ describe("the agent correcting records", () => {
           action: "add",
           period_start: "2030-11-04",
           pillar: "work",
-          title: "x",
+          flag: "x",
           why: "x",
         }),
       ).rejects.toThrow(/too far/);
+      // The agent writes no title, lines or note.
+      await expect(
+        call("propose_goal_change", {
+          action: "add",
+          period_start: WEEK,
+          pillar: "ai",
+          flag: "x",
+          title: "Read the agents paper",
+          why: "x",
+        }),
+      ).rejects.toThrow(/Unrecognized key/);
       await call("propose_goal_change", {
         action: "add",
         period_start: WEEK,
         pillar: "ai",
-        title: "Read the agents paper",
-        lines: ["Skim", "Notes"],
-        why: "Asked for it.",
+        flag: "You wrote you'd read the agents paper",
+        why: "Asked what is missing.",
       });
       const [proposal] = await actions();
       expect(proposal?.kind).toBe("goal_change");
       expect(proposal?.change).toMatchObject({
         action: "add",
         week: WEEK,
-        goal_title: "Read the agents paper",
+        flag: "You wrote you'd read the agents paper",
       });
+      expect(proposal?.change.title).toBeUndefined();
       expect(await weekGoals()).toHaveLength(0);
 
-      const accepted = await accept(proposal?.id ?? "");
+      // No title: refused, and the card stays open.
+      await expect(accept(proposal?.id ?? "")).rejects.toThrow(/title/);
+      await expect(
+        accept(proposal?.id ?? "", { lines: ["Skim"] }),
+      ).rejects.toThrow(/title/);
+      expect((await actions())[0]?.state).toBe("open");
+
+      const accepted = await accept(proposal?.id ?? "", {
+        title: "Read the agents paper",
+        lines: ["Skim", "Notes"],
+      });
       const goalId = accepted.landed_id ?? "";
       const [goal] = await weekGoals();
       expect(goal).toMatchObject({
@@ -694,6 +720,11 @@ describe("the agent correcting records", () => {
         pillar: "ai",
         title: "Read the agents paper",
         lines: [{ text: "Skim" }, { text: "Notes" }],
+      });
+      expect(accepted.change).toMatchObject({
+        title: "Read the agents paper",
+        goal_title: "Read the agents paper",
+        edited: { title: "Read the agents paper", lines: ["Skim", "Notes"] },
       });
       const [created] = await versions(goalId);
       expect(created).toMatchObject({
@@ -710,24 +741,46 @@ describe("the agent correcting records", () => {
       ]);
     });
 
+    it("refuses an owner's title that twins a goal of that week and objective", async () => {
+      await seedGoal();
+      await call("propose_goal_change", {
+        action: "add",
+        period_start: WEEK,
+        pillar: "work",
+        flag: "x",
+        why: "x",
+      });
+      const [proposal] = await actions();
+      await expect(
+        accept(proposal?.id ?? "", { title: "ship the invoice flow" }),
+      ).rejects.toThrow(/already has a goal/);
+      await accept(proposal?.id ?? "", {
+        title: "ship the invoice flow",
+        pillar: "ai",
+      });
+      expect(await weekGoals()).toHaveLength(2);
+    });
+
     it("refuses to undo an added goal that was edited or given tasks since", async () => {
       await call("propose_goal_change", {
         action: "add",
         period_start: WEEK,
         pillar: "work",
-        title: "Close the quarter",
+        flag: "x",
         why: "x",
       });
       await call("propose_goal_change", {
         action: "add",
         period_start: WEEK,
         pillar: "health",
-        title: "Sleep before midnight",
+        flag: "y",
         why: "x",
       });
       const [first, second] = await actions();
-      const a = await accept(first?.id ?? "");
-      const b = await accept(second?.id ?? "");
+      const a = await accept(first?.id ?? "", { title: "Close the quarter" });
+      const b = await accept(second?.id ?? "", {
+        title: "Sleep before midnight",
+      });
       await plannerUpdateGoal(rt.db, {
         userId: rt.user.id,
         goalId: a.landed_id ?? "",
@@ -752,30 +805,19 @@ describe("the agent correcting records", () => {
       expect(await weekGoals()).toHaveLength(2);
     });
 
-    it("rewrites a goal on accept, keeps the notes of unchanged lines, and Undo restores the words", async () => {
+    it("flags a goal, writes the owner's words on accept, keeps the notes of unchanged lines, and Undo restores them", async () => {
       const goal = await seedGoal();
-      await expect(
-        call("propose_goal_change", {
-          action: "edit",
-          goal_id: goal.id,
-          title: "Ship the invoice flow",
-          why: "x",
-        }),
-      ).rejects.toThrow(/already reads like that/);
       await call("propose_goal_change", {
         action: "edit",
         goal_id: goal.id,
-        title: "Ship invoices",
-        lines: ["Draft", "Review with Dana"],
-        note: "Due Friday",
-        why: "Reworded.",
+        flag: "You wrote Dana reviews it, not that you send it",
+        why: "Asked to check this week's goals.",
       });
       const [proposal] = await actions();
       expect(proposal?.change).toMatchObject({
         action: "edit",
         goal_id: goal.id,
-        title: "Ship invoices",
-        lines: [{ text: "Draft", note: "v1" }, { text: "Review with Dana" }],
+        flag: "You wrote Dana reviews it, not that you send it",
         was: {
           title: "Ship the invoice flow",
           lines: [
@@ -788,8 +830,36 @@ describe("the agent correcting records", () => {
         week: WEEK,
         goal_title: "Ship the invoice flow",
       });
+      expect(proposal?.change.title).toBeUndefined();
 
-      const accepted = await accept(proposal?.id ?? "");
+      // Nothing changed on the card: refused.
+      await expect(accept(proposal?.id ?? "")).rejects.toThrow(
+        /words or objective/,
+      );
+      await expect(
+        accept(proposal?.id ?? "", {
+          title: "Ship the invoice flow",
+          lines: ["Draft", "Send"],
+        }),
+      ).rejects.toThrow(/words or objective/);
+      expect((await actions())[0]?.state).toBe("open");
+      expect((await weekGoals())[0]?.title).toBe("Ship the invoice flow");
+    });
+
+    it("writes the owner's rewritten goal and Undo restores the words", async () => {
+      const goal = await seedGoal();
+      await call("propose_goal_change", {
+        action: "edit",
+        goal_id: goal.id,
+        flag: "Looks off",
+        why: "x",
+      });
+      const [proposal] = await actions();
+      const accepted = await accept(proposal?.id ?? "", {
+        title: "Ship invoices",
+        lines: ["Draft", "Review with Dana"],
+        note: "Due Friday",
+      });
       expect(accepted.landed_id).toBe(goal.id);
       const [after] = await weekGoals();
       expect(after).toMatchObject({
@@ -806,6 +876,16 @@ describe("the agent correcting records", () => {
         title: "Ship the invoice flow",
       });
       expect(updated?.afterJson).toMatchObject({ title: "Ship invoices" });
+      const log = await plannerTestRows<{ data: string }>(
+        rt.database,
+        "SELECT data FROM planner_event WHERE kind = 'proposal.accepted_edited'",
+      );
+      expect(JSON.parse(log[0]?.data ?? "{}")).toMatchObject({
+        action_kind: "goal_change",
+        fields: "title,lines,note",
+        count: 3,
+      });
+      expect(log[0]?.data).not.toContain("invoice");
 
       await undo(proposal?.id ?? "");
       const [back] = await weekGoals();
@@ -817,9 +897,106 @@ describe("the agent correcting records", () => {
           { text: "Send", struck: true },
         ],
       });
-      const log = await versions(goal.id);
-      expect(log.map((v) => v.action)).toEqual(["create", "update", "restore"]);
-      expect(log[2]?.actor).toBe(`proposal:${proposal?.id}`);
+      const versionsLog = await versions(goal.id);
+      expect(versionsLog.map((v) => v.action)).toEqual([
+        "create",
+        "update",
+        "restore",
+      ]);
+      expect(versionsLog[2]?.actor).toBe(`proposal:${proposal?.id}`);
+    });
+
+    it("an open goal edit from before the flags never writes the agent's words", async () => {
+      const goal = await seedGoal();
+      const run = await plannerTestRows<{ id: string }>(
+        rt.database,
+        "SELECT id FROM planner_agent_run LIMIT 1",
+      );
+      // A row as the old tool filed it: the agent's title and lines.
+      await plannerAgentAddAction(rt.db, {
+        userId: rt.user.id,
+        runId: run[0]?.id ?? null,
+        conversationId: CONVERSATION,
+        kind: "goal_change",
+        taskId: null,
+        field: null,
+        change: {
+          action: "edit",
+          goal_id: goal.id,
+          title: "The agent's title",
+          lines: [{ text: "The agent's line" }],
+          was: {
+            title: "Ship the invoice flow",
+            lines: [
+              { text: "Draft", note: "v1" },
+              { text: "Send", struck: true },
+            ],
+            note: null,
+            pillar: "work",
+          },
+          goal_title: "Ship the invoice flow",
+          week: WEEK,
+          label: "The agent's title",
+        },
+        why: "Old row.",
+        now: NOW,
+      });
+      const [old] = await actions();
+      await expect(accept(old?.id ?? "")).rejects.toThrow(/words or objective/);
+      expect((await weekGoals())[0]?.title).toBe("Ship the invoice flow");
+      // The card starts from the goal's own words.
+      const row = {
+        kind: "goal_change" as const,
+        field: null,
+        change: old?.change ?? {},
+      };
+      expect(plannerAgentEditBaseline(row, "title")).toBe(
+        "Ship the invoice flow",
+      );
+      expect(plannerAgentEditBaseline(row, "lines")).toEqual(["Draft", "Send"]);
+      await accept(old?.id ?? "", { lines: ["Draft", "Send", "Invoice Acme"] });
+      expect((await weekGoals())[0]).toMatchObject({
+        title: "Ship the invoice flow",
+        lines: [
+          { text: "Draft", note: "v1" },
+          { text: "Send", struck: true },
+          { text: "Invoice Acme" },
+        ],
+      });
+
+      // An old add row: its agent title is never the goal's.
+      await plannerAgentAddAction(rt.db, {
+        userId: rt.user.id,
+        runId: run[0]?.id ?? null,
+        conversationId: CONVERSATION,
+        kind: "goal_change",
+        taskId: null,
+        field: null,
+        change: {
+          action: "add",
+          period_start: WEEK,
+          pillar: "ai",
+          title: "Agent's goal",
+          goal_title: "Agent's goal",
+          week: WEEK,
+          label: "Agent's goal",
+        },
+        why: "Old add.",
+        now: NOW,
+      });
+      const add = (await actions()).find((a) => a.state === "open");
+      expect(
+        plannerAgentEditBaseline(
+          { kind: "goal_change", field: null, change: add?.change ?? {} },
+          "title",
+        ),
+      ).toBeNull();
+      await expect(accept(add?.id ?? "")).rejects.toThrow(/title/);
+      await accept(add?.id ?? "", { title: "My own goal" });
+      expect((await weekGoals()).map((g) => g.title)).toContain("My own goal");
+      expect((await weekGoals()).map((g) => g.title)).not.toContain(
+        "Agent's goal",
+      );
     });
 
     it("refuses a stale edit, and an Undo after the goal changed again", async () => {
@@ -827,7 +1004,7 @@ describe("the agent correcting records", () => {
       await call("propose_goal_change", {
         action: "edit",
         goal_id: goal.id,
-        title: "Ship invoices",
+        flag: "x",
         why: "x",
       });
       const [proposal] = await actions();
@@ -837,18 +1014,31 @@ describe("the agent correcting records", () => {
         patch: { title: "Ship the billing flow" },
         now: NOW,
       });
-      await expect(accept(proposal?.id ?? "")).rejects.toThrow(
-        PLANNER_AGENT_STALE,
-      );
+      await expect(
+        accept(proposal?.id ?? "", { title: "Ship invoices" }),
+      ).rejects.toThrow(PLANNER_AGENT_STALE);
       expect((await weekGoals())[0]?.title).toBe("Ship the billing flow");
 
+      // A move to another objective is a value: accepted as proposed.
+      await expect(
+        call("propose_goal_change", {
+          action: "edit",
+          goal_id: goal.id,
+          pillar: "work",
+          flag: "x",
+          why: "x",
+        }),
+      ).rejects.toThrow(/already under/);
       await call("propose_goal_change", {
         action: "edit",
         goal_id: goal.id,
         pillar: "ai",
+        flag: "y",
         why: "x",
       });
-      const open = (await actions()).find((a) => a.id !== proposal?.id);
+      const open = (await actions()).find(
+        (a) => a.id !== proposal?.id && a.state === "open",
+      );
       await accept(open?.id ?? "");
       await plannerUpdateGoal(rt.db, {
         userId: rt.user.id,
@@ -869,12 +1059,15 @@ describe("the agent correcting records", () => {
         { status: "closed" },
         { result: "met" },
         { score: 4 },
+        { title: "Ship invoices" },
+        { lines: ["x"] },
+        { note: "x" },
       ]) {
         await expect(
           call("propose_goal_change", {
             action: "edit",
             goal_id: goal.id,
-            title: "Ship invoices",
+            flag: "x",
             ...extra,
             why: "x",
           }),
@@ -884,6 +1077,7 @@ describe("the agent correcting records", () => {
         call("propose_goal_change", {
           action: "delete",
           goal_id: goal.id,
+          flag: "x",
           why: "x",
         }),
       ).rejects.toThrow();
@@ -897,7 +1091,7 @@ describe("the agent correcting records", () => {
         call("propose_goal_change", {
           action: "edit",
           goal_id: month.id,
-          title: "Nov",
+          flag: "x",
           why: "x",
         }),
       ).rejects.toThrow(/No weekly goal/);
@@ -905,7 +1099,7 @@ describe("the agent correcting records", () => {
         call("propose_goal_change", {
           action: "edit",
           goal_id: "nope",
-          title: "Nov",
+          flag: "x",
           why: "x",
         }),
       ).rejects.toThrow(/No weekly goal/);

@@ -66,6 +66,9 @@ import { plannerNow, plannerRunBatch } from "./shared";
 //   version, the owner accepts, edits or dismisses it, and four weeks on keeps
 //   or rolls it back against the number it aimed to move.
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
 const DAY_MS = 86_400_000;
 const KEEP_DAYS = 7;
 /** An edit this soon after the write is the write itself (a revision of the save). */
@@ -280,6 +283,15 @@ export async function plannerFlywheelRollup(
     den: created.length,
   });
   const settled = created.filter((row) => row.state !== "open");
+  // Sent back with the one-line redo (change.settled_reason): a card wrong as
+  // a whole, which a dismiss alone does not tell apart.
+  put(tally, "proposals_redone", "ai", {
+    num: settled.filter(
+      (row) =>
+        row.state === "dismissed" && row.change.settled_reason === "redo",
+    ).length,
+    den: settled.length,
+  });
   put(tally, "proposals_accepted", "ai", {
     num: settled.filter(
       (row) => row.state === "accepted" || row.state === "reverted",
@@ -379,6 +391,12 @@ export async function plannerFlywheelRollup(
     if (!changed) kept += 1;
   }
   put(tally, "kept_7d", "ai", { num: kept, den: judged.length });
+  // Accepted with a value the owner changed on the card (change.edited): a
+  // proposal that was nearly right, which a plain accept rate hides.
+  put(tally, "proposals_edited", "ai", {
+    num: landed.filter((row) => isRecord(row.change.edited)).length,
+    den: landed.length,
+  });
 
   // --- Diary entries written in the week: edited within seven days?
   const aiEntries = new Set(
