@@ -202,6 +202,45 @@ its own line and the others go on; **Dismiss** settles the rows still open;
 its own card, with **Undo** once accepted. One answer holds at most 25
 proposals (`PLANNER_AGENT_ACTIONS_PER_ANSWER`).
 
+### Edit before Accept
+
+Every value on an open row is a field ("fix it, then accept"), drawn as a small
+inline control in the app's own input styling. The agent is for many edits at
+once and for things buried in the diary; one simple task is faster typed by
+hand, and it may say so. What is editable, by row:
+
+| Row | Fields |
+| --- | ------ |
+| New task | title, column, due day (or none), weekly goal (or none) |
+| Task change | its one value: title, column, due day, priority, effort, start day or goal; for a place, the column and top, bottom or the agent's own spot |
+| Health add | kind and variant, minutes, day |
+| Health fix | minutes, and variant (from the row's own kind) |
+| Weekly goal add | objective and week |
+| Weekly goal edit | objective, when the proposal moves it |
+
+Goal titles and lines, diary entry text, comments and memory wording are not
+editable: whose words they are is still open. A row whose values differ from the
+proposal shows an **Edited** tag with a **Reset**; unticked rows stay skipped.
+
+`POST /agent/actions/:id` takes an optional `edit` with `state: "accepted"`: a
+flat object of only the keys the row offers (`plannerAgentEditableKeys`, one
+list for the card and the Worker), for example `{ "due_at": "2026-11-09" }` or
+`{ "column": "doing", "spot": "bottom" }`. `plannerAgentApplyEdit`
+(`agent-edit.ts`) refuses any other key and checks each value the way the tool
+checked the proposal (a weekly goal, a real column, an anchor on the board, a
+variant that fits the kind, a goal week not in the past, no twin), then lays it
+over the proposal's `change`. The write goes through the owner's usual code, and
+the stale check still reads the agent's original `was`. A refused edit leaves the
+row open with the reason on its line.
+
+The action row keeps both versions in `change` (no migration): the merged values
+that were written, `proposed` (the agent's values for the edited keys) and
+`edited` (the owner's). Undo reads the merged `change`, so it puts back what was
+really written. The flywheel logs `proposal.accepted_edited` in `planner_event`
+(field names only, never words) and the scorecard counts `proposals_edited`:
+accepted rows the owner changed, of those accepted (see
+[fork-flywheel.md](fork-flywheel.md)).
+
 A card shows the proposed text or value and the agent's reason, with
 **Accept** and **Dismiss**. The accept is the write: the Worker makes the
 change through the same code the panel's own edits use (`plannerChangeTask`,
@@ -223,7 +262,7 @@ expired by the nightly sweep. A task chat and the global chat each list only
 their own conversations (`planner_agent_chat.task_id`).
 
 Routes: `GET/POST /ask` take `task` for a task's chat and return `actions`;
-`POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today }`;
+`POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today, edit? }`;
 `POST /agent/actions/:id/revert` with `{ today }` (Undo).
 
 ## Undo

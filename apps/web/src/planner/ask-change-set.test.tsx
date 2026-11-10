@@ -16,7 +16,12 @@ import {
   plannerGroupActions,
   plannerLineDiff,
 } from "./ask-chat";
-import { type PlannerTestMount, plannerTestMount } from "./test-render";
+import { plannerFetchGoalsYear } from "./goals-api";
+import {
+  type PlannerTestMount,
+  plannerTestMount,
+  plannerTestType,
+} from "./test-render";
 
 // One card per answer (docs/fork-general-agent.md, "One card per answer"):
 // every proposal of one answer sits in one card with a tick box each; Accept
@@ -34,6 +39,12 @@ vi.mock("./ask-api", async (importOriginal) => ({
   plannerRevertActionRequest: vi.fn(),
 }));
 
+vi.mock("./goals-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./goals-api")>()),
+  plannerFetchGoalsYear: vi.fn(),
+}));
+
+const fetchGoals = vi.mocked(plannerFetchGoalsYear);
 const fetchAsk = vi.mocked(plannerFetchAsk);
 const settleAction = vi.mocked(plannerSettleActionRequest);
 const revertAction = vi.mocked(plannerRevertActionRequest);
@@ -104,6 +115,29 @@ const button = (container: Element, text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchGoals.mockResolvedValue({
+    year: 2026,
+    today: "2026-11-10",
+    current_week: "2026-11-09",
+    north_star: null,
+    weeks: [],
+    goals: [
+      {
+        id: "goal-1",
+        level: "week",
+        period_start: "2026-11-09",
+        pillar: "work",
+        title: "Ship the invoice flow",
+        lines: [],
+        status: "active",
+        note: null,
+        result: null,
+        sort_order: 0,
+        created_at: "2026-11-09T08:00:00.000Z",
+        updated_at: "2026-11-09T08:00:00.000Z",
+      },
+    ],
+  } as never);
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -295,7 +329,16 @@ describe("one card per answer", () => {
     const card = container.querySelector('[data-testid="planner-change-set"]');
     expect(card?.textContent).toContain("Move on the board");
     expect(card?.textContent).toContain("Mover");
-    expect(card?.textContent).toContain("below Anchor");
+    // An open place is two fields: the column, and the agent's spot in it.
+    const spot = card?.querySelector<HTMLSelectElement>(
+      'select[aria-label="place"]',
+    );
+    expect(spot?.value).toBe("anchor");
+    expect(spot?.selectedOptions[0]?.textContent).toBe("Below Anchor");
+    expect(
+      card?.querySelector<HTMLSelectElement>('select[aria-label="column"]')
+        ?.value,
+    ).toBe("todo");
     expect(card?.textContent).toContain("Link entries");
     expect(card?.textContent).toContain(
       "Slept badly. #sleep → Skipped the gym.",
@@ -358,7 +401,12 @@ describe("one card per answer", () => {
     expect(text).toContain("Forget memory");
     expect(text).toContain("Hates mornings.");
     expect(text).toContain("Fix health row");
-    expect(text).toContain("minutes: 30 min → 45 min");
+    // The fix's minutes are a field; the day (no field) stays words.
+    expect(text).toContain("minutes: 30 min →");
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="minutes"]')
+        ?.value,
+    ).toBe("45");
     expect(text).toContain("day: 2026-11-02 → 2026-11-03");
     expect(text).toContain("Add health row");
     expect(text).toContain("2026-11-01 night out");
@@ -411,5 +459,284 @@ describe("one card per answer", () => {
     expect(text).toContain("Edit weekly goal");
     expect(text).toContain("title: Ship the invoice flow → Ship invoices");
     expect(text).toContain("lines: Draft → Draft · Review");
+  });
+});
+
+// Edit before Accept (docs/fork-general-agent.md): every value on an open row is
+// a field. A value that differs from the proposal marks the row Edited, Reset
+// puts it back, and Accept sends only the edited values as `edit`.
+describe("editing a card before Accept", () => {
+  /** Picks an option the way React hears it: the native setter, then a change event. */
+  function choose(select: HTMLSelectElement | null | undefined, value: string) {
+    if (!select) throw new Error("There is no such select.");
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      "value",
+    )?.set;
+    act(() => {
+      setter?.call(select, value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+  const rows = (container: Element) =>
+    Array.from(container.querySelectorAll('[data-testid="planner-proposal"]'));
+  const newTask = (id: string, title: string) =>
+    action(id, {
+      kind: "task_new",
+      task_id: null,
+      field: null,
+      change: { title, column: "backlog", due_at: "2026-11-12" },
+    });
+
+  it("shows Edited on a changed row only, and Reset puts the proposal back", async () => {
+    const container = show([action("a", {}), action("b", {})]);
+    await settle();
+    const [first, second] = rows(container);
+    const due = first?.querySelector<HTMLInputElement>(
+      'input[aria-label="due date"]',
+    );
+    expect(due).not.toBeNull();
+    expect(first?.textContent).not.toContain("Edited");
+
+    plannerTestType(due as HTMLInputElement, "2026-11-09");
+    expect(rows(container)[0]?.textContent).toContain("Edited");
+    expect(rows(container)[1]?.textContent).not.toContain("Edited");
+    expect(
+      rows(container)[0]?.querySelector<HTMLInputElement>(
+        'input[aria-label="due date"]',
+      )?.value,
+    ).toBe("2026-11-09");
+
+    await act(async () => {
+      (
+        button(rows(container)[0] as Element, "Reset") as HTMLButtonElement
+      ).click();
+    });
+    expect(rows(container)[0]?.textContent).not.toContain("Edited");
+    expect(
+      rows(container)[0]?.querySelector<HTMLInputElement>(
+        'input[aria-label="due date"]',
+      )?.value,
+    ).toBe("2026-11-07");
+    expect(second).toBeDefined();
+  });
+
+  it("typing the proposed value back is not an edit", async () => {
+    const container = show([action("a", {}), action("b", {})]);
+    await settle();
+    const due = () =>
+      rows(container)[0]?.querySelector<HTMLInputElement>(
+        'input[aria-label="due date"]',
+      ) as HTMLInputElement;
+    plannerTestType(due(), "2026-11-09");
+    expect(rows(container)[0]?.textContent).toContain("Edited");
+    plannerTestType(due(), "2026-11-07");
+    expect(rows(container)[0]?.textContent).not.toContain("Edited");
+  });
+
+  it("sends only the edited values with Accept, and nothing for an untouched row", async () => {
+    const rowsIn = [
+      newTask("a", "Call the bank"),
+      newTask("b", "Send the deck"),
+    ];
+    settleAction.mockImplementation(async (id, input) => ({
+      action: {
+        ...(rowsIn.find((row) => row.id === id) as PlannerAgentActionDto),
+        state: input.state,
+      },
+    }));
+    const container = show(rowsIn);
+    await settle();
+    const first = rows(container)[0] as Element;
+    plannerTestType(
+      first.querySelector<HTMLInputElement>(
+        'input[aria-label="title"]',
+      ) as HTMLInputElement,
+      "Call the bank about the card",
+    );
+    choose(
+      first.querySelector<HTMLSelectElement>('select[aria-label="column"]'),
+      "todo",
+    );
+    // The goal picker lists this week's goals, and "No goal".
+    const goal = rows(container)[0]?.querySelector<HTMLSelectElement>(
+      'select[aria-label="goal"]',
+    );
+    expect(Array.from(goal?.options ?? []).map((o) => o.textContent)).toEqual([
+      "No goal",
+      "Ship the invoice flow",
+    ]);
+    choose(goal, "goal-1");
+    expect(rows(container)[0]?.textContent).toContain("Edited");
+    expect(rows(container)[1]?.textContent).not.toContain("Edited");
+
+    await act(async () => {
+      button(container, "Accept 2")?.click();
+    });
+    await settle();
+    expect(settleAction.mock.calls).toEqual([
+      [
+        "a",
+        {
+          state: "accepted",
+          today: expect.any(String),
+          edit: {
+            title: "Call the bank about the card",
+            column: "todo",
+            goal_id: "goal-1",
+          },
+        },
+      ],
+      ["b", { state: "accepted", today: expect.any(String) }],
+    ]);
+  });
+
+  it("an unticked row stays skipped, edited or not", async () => {
+    const rowsIn = [newTask("a", "One"), newTask("b", "Two")];
+    settleAction.mockImplementation(async (id, input) => ({
+      action: {
+        ...(rowsIn.find((row) => row.id === id) as PlannerAgentActionDto),
+        state: input.state,
+      },
+    }));
+    const container = show(rowsIn);
+    await settle();
+    choose(
+      rows(container)[0]?.querySelector<HTMLSelectElement>(
+        'select[aria-label="column"]',
+      ),
+      "doing",
+    );
+    await act(async () => {
+      rows(container)[0]
+        ?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+        ?.click();
+    });
+    await act(async () => {
+      button(container, "Accept 1")?.click();
+    });
+    await settle();
+    expect(settleAction.mock.calls.map(([id]) => id)).toEqual(["b"]);
+  });
+
+  it("a lone card edits too, and sends the place as column and spot", async () => {
+    const place = action("p", {
+      field: "place",
+      change: {
+        column: "todo",
+        before_id: "tasks/q",
+        was: { column: "backlog", board_rank: null },
+        task_title: "Mover",
+        anchor_title: "Anchor",
+      },
+    });
+    settleAction.mockResolvedValue({ action: { ...place, state: "accepted" } });
+    const container = show([place]);
+    await settle();
+    const card = container.querySelector('[data-testid="planner-proposal"]');
+    const spot = () =>
+      card?.querySelector<HTMLSelectElement>('select[aria-label="place"]');
+    expect(
+      Array.from(spot()?.options ?? []).map((option) => option.textContent),
+    ).toEqual(["Above Anchor", "Top of the column", "Bottom of the column"]);
+    choose(
+      card?.querySelector<HTMLSelectElement>('select[aria-label="column"]'),
+      "doing",
+    );
+    // Another column has no agent's spot: the options are top and bottom.
+    expect(spot()?.value).toBe("top");
+    expect(
+      Array.from(spot()?.options ?? []).map((option) => option.textContent),
+    ).toEqual(["Top of the column", "Bottom of the column"]);
+    choose(spot(), "bottom");
+    await act(async () => {
+      button(container, "Accept")?.click();
+    });
+    await settle();
+    expect(settleAction).toHaveBeenCalledWith("p", {
+      state: "accepted",
+      today: expect.any(String),
+      edit: { column: "doing", spot: "bottom" },
+    });
+  });
+
+  it("offers a health add as kind, minutes and day, and no field for words", async () => {
+    const health = action("h", {
+      kind: "health_change",
+      task_id: null,
+      field: null,
+      change: {
+        action: "add",
+        day: "2026-11-08",
+        kind: "training",
+        variant: "push",
+        minutes: 30,
+        label: "2026-11-08 training",
+      },
+    });
+    const memory = action("m", {
+      kind: "entry_edit",
+      task_id: null,
+      field: null,
+      entry_id: "memos/m",
+      change: { entry_id: "memos/m", content: "New text", was: "Old text" },
+    });
+    settleAction.mockResolvedValue({
+      action: { ...health, state: "accepted" },
+    });
+    const container = show([health, memory]);
+    await settle();
+    const [healthRow, entryRow] = rows(container);
+    choose(
+      healthRow?.querySelector<HTMLSelectElement>('select[aria-label="Kind"]'),
+      "breath:wim_hof",
+    );
+    plannerTestType(
+      rows(container)[0]?.querySelector<HTMLInputElement>(
+        'input[aria-label="minutes"]',
+      ) as HTMLInputElement,
+      "15",
+    );
+    // The diary entry's words are not a field.
+    expect(
+      entryRow?.querySelectorAll(
+        "input:not([type=checkbox]), select, textarea",
+      ),
+    ).toHaveLength(0);
+    await act(async () => {
+      button(container, "Accept 2")?.click();
+    });
+    await settle();
+    expect(settleAction.mock.calls[0]).toEqual([
+      "h",
+      {
+        state: "accepted",
+        today: expect.any(String),
+        edit: { kind: "breath", variant: "wim_hof", minutes: 15 },
+      },
+    ]);
+  });
+
+  it("marks an accepted row Edited from what the server kept, with no controls", async () => {
+    const container = show([
+      {
+        ...newTask("a", "Call the bank about the card"),
+        state: "accepted",
+        change: {
+          title: "Call the bank about the card",
+          column: "todo",
+          proposed: { title: "Call the bank" },
+          edited: { title: "Call the bank about the card" },
+        },
+      },
+      { ...newTask("b", "Send the deck"), state: "accepted" },
+    ]);
+    await settle();
+    const [first, second] = rows(container);
+    expect(first?.textContent).toContain("Edited");
+    expect(second?.textContent).not.toContain("Edited");
+    expect(container.querySelectorAll("select, input[type=date]")).toHaveLength(
+      0,
+    );
   });
 });

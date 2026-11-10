@@ -1014,11 +1014,21 @@ export async function plannerAgentLandAction(
     landedId: string;
     /** The changed field's value before the write, for a revert. */
     before?: Record<string, unknown>;
+    /**
+     * The change as it was written, when the owner edited values on the card:
+     * the proposal's change with their values over it, plus `proposed` and
+     * `edited` (the agent's and the owner's values for the edited keys).
+     */
+    change?: Record<string, unknown>;
   },
 ): Promise<void> {
   await db
     .update(plannerAgentAction)
-    .set({ landedId: input.landedId, before: input.before ?? null })
+    .set({
+      landedId: input.landedId,
+      before: input.before ?? null,
+      ...(input.change ? { change: input.change } : {}),
+    })
     .where(
       and(
         eq(plannerAgentAction.userId, input.userId),

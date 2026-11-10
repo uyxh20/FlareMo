@@ -1639,6 +1639,8 @@ const handlers: Handlers = {
         change: {
           action: "fix",
           health_id: row.id,
+          // The row's kind: the card's variant picker offers this kind's.
+          row_kind: row.kind,
           ...patch,
           was,
           label: `${row.day} ${row.kind.replace("_", " ")}`,

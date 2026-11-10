@@ -32,6 +32,16 @@ import {
   plannerRevertActionRequest,
   plannerSettleActionRequest,
 } from "./ask-api";
+import {
+  type PlannerCardEditing,
+  PlannerCardField,
+  usePlannerCardEdits,
+  usePlannerGoalChoices,
+} from "./ask-card-edit";
+import {
+  plannerCardEditableKeys,
+  plannerCardEditBody,
+} from "./ask-card-edit-model";
 import { plannerDueLabel } from "./dates";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerMarkdown } from "./review-markdown";
@@ -173,6 +183,24 @@ const en = {
     undo: "Undo",
     undoAll: (count: number) => (count === 1 ? "Undo" : `Undo all ${count}`),
     undoFailed: "Couldn't undo. Try again.",
+    edited: "Edited",
+    reset: "Reset",
+    resetLabel: "Put back what the agent proposed",
+    noGoal: "No goal",
+    noDue: "No due date",
+    spotTop: "Top of the column",
+    spotBottom: "Bottom of the column",
+    spotAbove: (anchor: string) => `Above ${anchor}`,
+    spotBelow: (anchor: string) => `Below ${anchor}`,
+    healthKind: "Kind",
+    healthKinds: {
+      training: "Training",
+      breath: "Breathwork",
+      night_out: "Night out",
+    } as Record<string, string>,
+    minutesUnit: "min",
+    week: "Week",
+    weekOf: (day: string) => `Week of ${day}`,
   },
 };
 
@@ -281,6 +309,24 @@ const zhCN: PlannerAskCopy = {
     undo: "撤销",
     undoAll: (count: number) => (count === 1 ? "撤销" : `全部撤销 ${count} 项`),
     undoFailed: "没能撤销，请重试。",
+    edited: "已修改",
+    reset: "还原",
+    resetLabel: "还原为代理的提议",
+    noGoal: "无目标",
+    noDue: "无截止日期",
+    spotTop: "列顶部",
+    spotBottom: "列底部",
+    spotAbove: (anchor: string) => `在${anchor}之上`,
+    spotBelow: (anchor: string) => `在${anchor}之下`,
+    healthKind: "类型",
+    healthKinds: {
+      training: "训练",
+      breath: "呼吸",
+      night_out: "夜出",
+    } as Record<string, string>,
+    minutesUnit: "分钟",
+    week: "周",
+    weekOf: (day: string) => `${day} 起的一周`,
   },
 };
 
@@ -432,14 +478,31 @@ function PlannerProposalBody({
   today,
   copy,
   verdict,
+  editing,
 }: {
   action: PlannerAgentActionDto;
   today: string;
   copy: PlannerAskCopy;
   verdict: string | null;
+  /** The open card's edits; null once the card is settled (no controls). */
+  editing?: PlannerCardEditing | null;
 }) {
   const strings = usePlannerStrings();
   const { change } = action;
+  const keys = editing ? plannerCardEditableKeys(action) : [];
+  /** The control for one editable key, or null when the card has none. */
+  const control = (name: Parameters<typeof PlannerCardField>[0]["name"]) =>
+    editing && keys.includes(name) ? (
+      <PlannerCardField
+        action={action}
+        copy={copy}
+        editing={editing}
+        name={name}
+        today={today}
+      />
+    ) : null;
+  const differs = editing ? Object.keys(editing.edit).length > 0 : false;
+  const editedTag = differs || (!editing && isRecord(change.edited));
 
   /** A field's value as a short line; an empty one reads "none" as the
    * value before and "cleared" as the value proposed. */
@@ -568,21 +631,41 @@ function PlannerProposalBody({
             · {subject}
           </span>
         )}
-        {verdict && (
-          <span className="ml-auto shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-            {verdict}
+        {(editedTag || verdict) && (
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {editedTag && (
+              <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+                {copy.proposal.edited}
+              </span>
+            )}
+            {differs && editing && (
+              <button
+                aria-label={copy.proposal.resetLabel}
+                className="rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+                type="button"
+                onClick={editing.reset}
+              >
+                {copy.proposal.reset}
+              </button>
+            )}
+            {verdict && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                {verdict}
+              </span>
+            )}
           </span>
         )}
       </header>
       {shortField && action.field && (
-        <p className="font-medium [overflow-wrap:anywhere]">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 font-medium [overflow-wrap:anywhere]">
           {"was" in change && (
             <span className="font-normal text-muted-foreground">
-              {value(action.field, change.was, true)} →{" "}
+              {value(action.field, change.was, true)} →
             </span>
           )}
-          {value(action.field, change[action.field])}
-        </p>
+          {control(action.field as "title") ??
+            value(action.field, change[action.field])}
+        </div>
       )}
       {action.kind === "task_change" && action.field === "notes" && (
         <div className="[overflow-wrap:anywhere]">
@@ -592,15 +675,22 @@ function PlannerProposalBody({
           />
         </div>
       )}
-      {action.kind === "task_change" && action.field === "place" && (
-        <p className="font-medium [overflow-wrap:anywhere]">
-          {copy.proposal.placeLine(
-            value("column", change.column),
-            change.after_id !== undefined,
-            asString(change.anchor_title) ?? "",
-          )}
-        </p>
-      )}
+      {action.kind === "task_change" &&
+        action.field === "place" &&
+        (editing && keys.length > 0 ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {control("column")}
+            {control("spot")}
+          </div>
+        ) : (
+          <p className="font-medium [overflow-wrap:anywhere]">
+            {copy.proposal.placeLine(
+              value("column", change.column),
+              change.after_id !== undefined,
+              asString(change.anchor_title) ?? "",
+            )}
+          </p>
+        ))}
       {action.kind === "entry_link" && (
         <p className="font-medium [overflow-wrap:anywhere]">
           {asString(change.preview) ?? ""} →{" "}
@@ -629,17 +719,31 @@ function PlannerProposalBody({
                   isRecord(change.was) ? change.was[field] : null,
                   copy,
                 )}{" "}
-                → {healthValue(change[field], copy)}
+                →{" "}
+                {editing && keys.includes(field as "variant" | "minutes") ? (
+                  <span className="inline-flex align-middle">
+                    {control(field as "variant" | "minutes")}
+                  </span>
+                ) : (
+                  healthValue(change[field], copy)
+                )}
               </li>
             ))}
         </ul>
       )}
       {action.kind === "goal_change" && change.action === "add" && (
-        <div className="flex flex-col gap-0.5 [overflow-wrap:anywhere]">
-          <p className="text-xs text-muted-foreground">
-            {copy.proposal.pillar[String(change.pillar)] ??
-              String(change.pillar ?? "")}
-          </p>
+        <div className="flex flex-col gap-1 [overflow-wrap:anywhere]">
+          {editing && keys.length > 0 ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {control("pillar")}
+              {control("period_start")}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {copy.proposal.pillar[String(change.pillar)] ??
+                String(change.pillar ?? "")}
+            </p>
+          )}
           {goalLines(change.lines).length > 0 && (
             <p className="font-medium">{goalLines(change.lines).join(" · ")}</p>
           )}
@@ -657,46 +761,87 @@ function PlannerProposalBody({
                   isRecord(change.was) ? change.was[field] : null,
                   copy,
                 )}{" "}
-                → {goalValue(field, change[field], copy)}
+                →{" "}
+                {editing && keys.includes(field as "pillar") ? (
+                  <span className="inline-flex align-middle">
+                    {control(field as "pillar")}
+                  </span>
+                ) : (
+                  goalValue(field, change[field], copy)
+                )}
               </li>
             ))}
         </ul>
       )}
-      {action.kind === "health_change" && change.action === "add" && (
-        <p className="font-medium [overflow-wrap:anywhere]">
-          {[
-            asString(change.variant),
-            typeof change.minutes === "number"
-              ? copy.proposal.minutes(change.minutes)
-              : null,
-            asString(change.home_at)
-              ? copy.proposal.homeAt(asString(change.home_at) ?? "")
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      )}
+      {action.kind === "health_change" &&
+        change.action === "add" &&
+        editing &&
+        keys.length > 0 && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {control("kind")}
+            {control("minutes")}
+            {control("day")}
+            {asString(change.home_at) && (
+              <span className="text-xs text-muted-foreground">
+                {copy.proposal.homeAt(asString(change.home_at) ?? "")}
+              </span>
+            )}
+          </div>
+        )}
+      {action.kind === "health_change" &&
+        change.action === "add" &&
+        !(editing && keys.length > 0) && (
+          <p className="font-medium [overflow-wrap:anywhere]">
+            {[
+              asString(change.variant),
+              typeof change.minutes === "number"
+                ? copy.proposal.minutes(change.minutes)
+                : null,
+              asString(change.home_at)
+                ? copy.proposal.homeAt(asString(change.home_at) ?? "")
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        )}
       {action.kind === "task_new" && (
         <div className="flex flex-col gap-1 [overflow-wrap:anywhere]">
-          <p className="font-medium">{asString(change.title) ?? ""}</p>
+          {control("title") ?? (
+            <p className="font-medium">{asString(change.title) ?? ""}</p>
+          )}
           {asString(change.notes) && (
             <PlannerMarkdown
               diaryLabel={copy.days}
               markdown={asString(change.notes) ?? ""}
             />
           )}
-          <p className="text-xs text-muted-foreground">
-            {[
-              change.due_at ? value("due_at", change.due_at) : null,
-              change.priority && change.priority !== "none"
-                ? value("priority", change.priority)
-                : null,
-              change.column ? value("column", change.column) : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          {editing && keys.length > 0 ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {control("column")}
+              {control("due_at")}
+              {control("goal_id")}
+              {typeof change.priority === "string" &&
+                change.priority !== "none" && (
+                  <span className="text-xs text-muted-foreground">
+                    {value("priority", change.priority)}
+                  </span>
+                )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {[
+                change.due_at ? value("due_at", change.due_at) : null,
+                change.priority && change.priority !== "none"
+                  ? value("priority", change.priority)
+                  : null,
+                change.column ? value("column", change.column) : null,
+                asString(change.goal_title),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
         </div>
       )}
       {action.kind === "entry_new" && isRecord(change.link) && (
@@ -798,11 +943,22 @@ export function PlannerProposalCard({
 }) {
   const refresh = usePlannerActionRefresh(task);
   const [error, setError] = useState<string | null>(null);
+  const cardEdits = usePlannerCardEdits();
+  const open = action.state === "open";
+  const goals = usePlannerGoalChoices(
+    open && plannerCardEditableKeys(action).includes("goal_id"),
+    today,
+  );
+  const edit = plannerCardEditBody(action, cardEdits.edits[action.id]);
   const settle = useMutation({
     mutationFn: (state: "accepted" | "dismissed" | "reverted") =>
       state === "reverted"
         ? plannerRevertActionRequest(action.id, { today })
-        : plannerSettleActionRequest(action.id, { state, today }),
+        : plannerSettleActionRequest(action.id, {
+            state,
+            today,
+            ...(state === "accepted" && edit ? { edit } : {}),
+          }),
     onSuccess: (response, state) => {
       setError(null);
       onSettled(response.action);
@@ -820,7 +976,6 @@ export function PlannerProposalCard({
     },
   });
 
-  const open = action.state === "open";
   return (
     <article
       aria-label={copy.proposal.cardLabel}
@@ -834,6 +989,16 @@ export function PlannerProposalCard({
       <PlannerProposalBody
         action={action}
         copy={copy}
+        editing={
+          open
+            ? {
+                edit: cardEdits.edits[action.id] ?? {},
+                set: (patch) => cardEdits.set(action, patch),
+                reset: () => cardEdits.reset(action.id),
+                goals,
+              }
+            : null
+        }
         today={today}
         verdict={verdictOf(action, copy)}
       />
@@ -903,6 +1068,16 @@ export function PlannerChangeSet({
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const cardEdits = usePlannerCardEdits();
+  const goals = usePlannerGoalChoices(
+    actions.length > 1 &&
+      actions.some(
+        (action) =>
+          action.state === "open" &&
+          plannerCardEditableKeys(action).includes("goal_id"),
+      ),
+    today,
+  );
   if (actions.length === 1) {
     return (
       <PlannerProposalCard
@@ -939,6 +1114,10 @@ export function PlannerChangeSet({
     setBusy(false);
   };
 
+  const editOf = (action: PlannerAgentActionDto) => {
+    const edit = plannerCardEditBody(action, cardEdits.edits[action.id]);
+    return edit ? { edit } : {};
+  };
   const accept = () =>
     run(
       ticked,
@@ -947,6 +1126,7 @@ export function PlannerChangeSet({
           await plannerSettleActionRequest(action.id, {
             state: "accepted",
             today,
+            ...editOf(action),
           })
         ).action,
       copy.proposal.failed,
@@ -1020,6 +1200,16 @@ export function PlannerChangeSet({
                 <PlannerProposalBody
                   action={action}
                   copy={copy}
+                  editing={
+                    isOpen
+                      ? {
+                          edit: cardEdits.edits[action.id] ?? {},
+                          set: (patch) => cardEdits.set(action, patch),
+                          reset: () => cardEdits.reset(action.id),
+                          goals,
+                        }
+                      : null
+                  }
                   today={today}
                   verdict={verdictOf(action, copy)}
                 />

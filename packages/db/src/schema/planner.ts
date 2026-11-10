@@ -614,7 +614,7 @@ export const plannerEvent = sqliteTable(
     userId: text("user_id").notNull(),
     kind: text("kind").notNull(),
     subject: text("subject", {
-      enum: ["goal", "review", "tuning", "scorecard"],
+      enum: ["goal", "review", "tuning", "scorecard", "proposal"],
     }).notNull(),
     subjectId: text("subject_id"),
     origin: text("origin", { enum: ["manual", "proposal"] })

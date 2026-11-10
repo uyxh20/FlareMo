@@ -352,6 +352,7 @@ plannerAgentApi.post(
               user,
               id,
               today: body.today,
+              edit: body.edit,
               quota: { userLimits: context.userLimits, userId: user.id },
             })
           : await plannerAgentSettleAction(db, {

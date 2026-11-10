@@ -930,11 +930,102 @@ export const plannerAgentActionDtoSchema = z.object({
 });
 export type PlannerAgentActionDto = z.infer<typeof plannerAgentActionDtoSchema>;
 
-/** Accept an action (which writes it) or dismiss it. */
-export const plannerAgentSettleActionSchema = z.strictObject({
-  state: z.enum(["accepted", "dismissed"]),
-  today: daySchema,
+/**
+ * The values the owner may change on a card before Accept ("every value on the
+ * card is a field"). Values only: never a goal's or an entry's words. Which keys
+ * a given action takes is `plannerAgentEditableKeys`; the accept refuses the rest.
+ */
+export const plannerAgentEditSchema = z.strictObject({
+  /** A new task's title, or a task title change's value. */
+  title: z.string().trim().min(1).max(2000).optional(),
+  /** A column: a new task's, a column move's, or a place's target. */
+  column: columnSchema.optional(),
+  /** A due day; null clears a new task's due day. */
+  due_at: daySchema.nullable().optional(),
+  start_date: daySchema.optional(),
+  priority: taskPrioritySchema.optional(),
+  effort: z.number().min(0).max(999).optional(),
+  /** A weekly goal's id; null for no goal. */
+  goal_id: idSchema.nullable().optional(),
+  /** A place: top or bottom of the column, or the agent's own anchor. */
+  spot: z.enum(["top", "bottom", "anchor"]).optional(),
+  /** A health row to add: its kind, with variant and minutes. */
+  kind: z.enum(["training", "breath", "night_out"]).optional(),
+  variant: z.string().trim().min(1).max(32).nullable().optional(),
+  minutes: z.number().int().min(1).max(600).nullable().optional(),
+  day: daySchema.optional(),
+  /** A weekly goal's objective, and the week a new one is for. */
+  pillar: plannerPillarSchema.optional(),
+  period_start: mondaySchema.optional(),
 });
+export type PlannerAgentEdit = z.infer<typeof plannerAgentEditSchema>;
+export type PlannerAgentEditKey = keyof PlannerAgentEdit;
+
+/**
+ * The keys of `edit` an action takes: what the card shows as a field. The web
+ * card draws a control per key, and the accept refuses any other key.
+ */
+export function plannerAgentEditableKeys(action: {
+  kind: (typeof plannerAgentActionKinds)[number];
+  field: string | null;
+  change: Record<string, unknown>;
+}): readonly PlannerAgentEditKey[] {
+  const { kind, field, change } = action;
+  switch (kind) {
+    case "task_new":
+      return ["title", "column", "due_at", "goal_id"];
+    case "task_change":
+      switch (field) {
+        case "title":
+        case "priority":
+        case "due_at":
+        case "effort":
+        case "start_date":
+        case "column":
+        case "goal_id":
+          return [field];
+        case "place":
+          return ["column", "spot"];
+        default:
+          return [];
+      }
+    case "health_change":
+      if (change.action === "add") {
+        return ["kind", "variant", "minutes", "day"];
+      }
+      if (change.action === "fix") {
+        const keys: PlannerAgentEditKey[] = [];
+        // A variant is picked from the row's kind, which older proposals lack.
+        if ("variant" in change && typeof change.row_kind === "string") {
+          keys.push("variant");
+        }
+        if ("minutes" in change) keys.push("minutes");
+        return keys;
+      }
+      return [];
+    case "goal_change":
+      return change.action === "add"
+        ? ["pillar", "period_start"]
+        : "pillar" in change
+          ? ["pillar"]
+          : [];
+    default:
+      return [];
+  }
+}
+
+/** Accept an action (which writes it) or dismiss it. */
+export const plannerAgentSettleActionSchema = z
+  .strictObject({
+    state: z.enum(["accepted", "dismissed"]),
+    today: daySchema,
+    /** Only with accepted: the owner's own values for the keys the card lets them change. */
+    edit: plannerAgentEditSchema.optional(),
+  })
+  .refine((value) => value.edit === undefined || value.state === "accepted", {
+    message: "edit goes only with accepted.",
+    path: ["edit"],
+  });
 
 /** Put back what an accepted action wrote. */
 export const plannerAgentRevertActionSchema = z.strictObject({

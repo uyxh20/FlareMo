@@ -875,7 +875,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     kind: "content",
     owner: "fork",
     holds:
-      "Actions the agent proposed from a chat: one task field, a new task or a new diary entry, with why, and whether the owner accepted, dismissed or reverted it",
+      "Actions the agent proposed from a chat: one task field, a new task or a new diary entry, with why, and whether the owner accepted, dismissed or reverted it; when the owner edited values on the card, the agent's values and theirs are kept together in the change (proposed and edited)",
     uses: {
       lookBack: no("an accepted action is in the task or entry it wrote"),
       lookForward: no("an accepted action is in the task or entry it wrote"),
@@ -910,7 +910,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     kind: "history",
     owner: "fork",
     holds:
-      "The flywheel log: each change to a goal, each review step and each tuning decision, with who started it and sizes, never words",
+      "The flywheel log: each change to a goal, each review step, each tuning decision and each proposal accepted with edits (field names only), with who started it and sizes, never words",
     uses: {
       lookBack: no("a log of changes, not part of the week's story"),
       lookForward: no("a log of changes, not part of the plan"),

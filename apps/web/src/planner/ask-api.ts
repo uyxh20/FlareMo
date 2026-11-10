@@ -1,5 +1,6 @@
 import type {
   PlannerAgentActionResponse,
+  PlannerAgentEdit,
   PlannerAskResponse,
   PlannerOkResponse,
 } from "@flaremo/contracts";
@@ -51,7 +52,12 @@ export function plannerAskRequest(input: {
 /** Accepts a proposed action (the accept is what writes it) or dismisses it. */
 export function plannerSettleActionRequest(
   id: string,
-  input: { state: "accepted" | "dismissed"; today: string },
+  input: {
+    state: "accepted" | "dismissed";
+    today: string;
+    /** Only with accepted: the values the owner changed on the card. */
+    edit?: PlannerAgentEdit;
+  },
 ) {
   return apiRequest<PlannerAgentActionResponse>(
     `${ACTIONS}/${encodeURIComponent(id)}`,

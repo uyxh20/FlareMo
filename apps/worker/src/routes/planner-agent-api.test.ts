@@ -510,6 +510,77 @@ describe("the general agent's Ask chat and schedule", () => {
       ),
       400,
     );
+
+    // Edit before Accept: the owner's values ride in `edit`, the Worker writes
+    // them over the proposal, and Undo puts back what the field held.
+    const editId = crypto.randomUUID();
+    await d1
+      .prepare(
+        `INSERT INTO planner_agent_action
+           (id, user_id, run_id, conversation_id, kind, task_id, field, change, why, state, created_at)
+         SELECT ?, user_id, NULL, ?, 'task_change', ?, 'due_at', ?, 'Friday.', 'open', ?
+           FROM planner_agent_chat LIMIT 1`,
+      )
+      .bind(
+        editId,
+        conversation,
+        taskId,
+        JSON.stringify({ due_at: "2026-11-07", was: null }),
+        new Date().toISOString(),
+      )
+      .run();
+    const accept = (extra: Record<string, unknown>, state = "accepted") =>
+      call(
+        "POST",
+        `/agent/actions/${editId}`,
+        { state, today: TODAY, ...extra },
+        agentEnv,
+      );
+    // An unknown key, a key this card does not offer, and an edit on a dismiss.
+    await body(accept({ edit: { notes: "words" } }), 400);
+    await body(accept({ edit: { title: "Another title" } }), 400);
+    await body(accept({ edit: { due_at: "2026-11-09" } }, "dismissed"), 400);
+    expect(
+      (await read(`&conversation=${conversation}`)).actions.find(
+        (action) => action.id === editId,
+      ),
+    ).toMatchObject({ state: "open" });
+    const { action: edited } = await body<{
+      action: {
+        state: string;
+        change: { due_at: string; proposed: unknown; edited: unknown };
+      };
+    }>(accept({ edit: { due_at: "2026-11-09" } }));
+    expect(edited).toMatchObject({
+      state: "accepted",
+      change: {
+        due_at: "2026-11-09",
+        proposed: { due_at: "2026-11-07" },
+        edited: { due_at: "2026-11-09" },
+      },
+    });
+    expect(
+      (
+        await body<{ task: { due_at: string | null } }>(
+          call("GET", `/tasks/${bare}`),
+        )
+      ).task.due_at,
+    ).toBe("2026-11-09");
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${editId}/revert`,
+        { today: TODAY },
+        agentEnv,
+      ),
+    );
+    expect(
+      (
+        await body<{ task: { due_at: string | null } }>(
+          call("GET", `/tasks/${bare}`),
+        )
+      ).task.due_at,
+    ).toBeNull();
   });
 
   it("stops at the month's cap", async () => {
