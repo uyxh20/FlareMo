@@ -1558,6 +1558,42 @@ const handlers: Handlers = {
         }
       }
     };
+    if (input.action === "remove") {
+      const row = await healthFindEntry(context.db, {
+        userId: context.user.id,
+        entryId: input.entry_id as string,
+      });
+      if (!row) {
+        throw new PlannerAgentToolError(
+          "No health row of the owner's has that id. Use an id from read_health.",
+        );
+      }
+      if (!healthIsBuiltinKind(row.kind) || row.dismissed) {
+        throw new PlannerAgentToolError(
+          "That health row cannot be removed: it is already dismissed or belongs to a tracker.",
+        );
+      }
+      const label = `${row.day} ${row.kind.replace("_", " ")}${row.variant ? ` ${row.variant}` : ""}`;
+      const action = await fileAction(context, {
+        kind: "health_change",
+        taskId: null,
+        field: null,
+        change: {
+          action: "remove",
+          health_id: row.id,
+          was: {
+            day: row.day,
+            kind: row.kind,
+            variant: row.variant,
+            minutes: row.minutes,
+            home_at: row.homeAt,
+          },
+          label,
+        },
+        why: input.why,
+      });
+      return `Proposed removing health row ${row.id} (${label}) (${action.id}). It shows in this answer's card; nothing is removed before the owner accepts it. A removed row stays removed when the diary is re-read.`;
+    }
     if (input.action === "fix") {
       const row = await healthFindEntry(context.db, {
         userId: context.user.id,
@@ -1654,7 +1690,7 @@ const handlers: Handlers = {
   },
 
   async propose_goal_change(context, input) {
-    const today = healthToday(context.now);
+    const today = toolToday(context);
     const current = plannerWeekStartOf(today);
     const lineObjects = (
       lines: readonly string[],
@@ -1671,12 +1707,14 @@ const handlers: Handlers = {
     if (input.action === "add") {
       const week = input.period_start as string;
       const title = input.title as string;
-      if (
-        week < plannerAddDays(current, -56) ||
-        week > plannerAddDays(current, 182)
-      ) {
+      if (week < current) {
         throw new PlannerAgentToolError(
-          "period_start is too far from today: a weekly goal is for a week within about two months back and six months ahead.",
+          `period_start is in a past week (this week starts ${current}): a past week is closed. A weekly goal can be added to this week or a later one.`,
+        );
+      }
+      if (week > plannerAddDays(current, 182)) {
+        throw new PlannerAgentToolError(
+          "period_start is too far ahead: a weekly goal is for this week or one within about six months ahead.",
         );
       }
       const goals = await plannerReadWeekGoals(context.db, {
@@ -1724,6 +1762,11 @@ const handlers: Handlers = {
     }
     const row = await plannerLoadLiveGoal(context.db, context.user.id, goalId);
     const goal = plannerGoalToDto(row);
+    if (goal.period_start && goal.period_start < current) {
+      throw new PlannerAgentToolError(
+        `That goal is for the week of ${goal.period_start}, which is past (this week starts ${current}): a past week is closed and its goals are not rewritten here.`,
+      );
+    }
     const was = {
       title: goal.title,
       lines: goal.lines,

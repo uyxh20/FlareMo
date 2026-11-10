@@ -225,6 +225,78 @@ export async function plannerRestoreBoardRank(
 }
 
 /**
+ * The stored rank (`<column>|<key>` or null) of every card the board shows in a
+ * column, by task id. The agent's "place" records it before and after an accept,
+ * because the accept may re-spread the whole column.
+ */
+export async function plannerColumnStoredRanks(
+  db: FlareMoDb,
+  input: { userId: string; column: PlannerColumn; today: string },
+): Promise<Record<string, string | null>> {
+  const board = await plannerReadBoard(db, {
+    userId: input.userId,
+    today: plannerRequireDay(input.today, "today"),
+    doneDays: plannerBoardDoneDaysMax,
+  });
+  const ranks: Record<string, string | null> = {};
+  for (const card of board.columns[input.column]) {
+    ranks[card.id] =
+      card.board_rank === null
+        ? null
+        : plannerFormatBoardRank(input.column, card.board_rank);
+  }
+  return ranks;
+}
+
+/**
+ * Undo of a "place" that re-spread its column: puts back the stored rank of each
+ * card in `ranks`. The safer rule: a card is restored only while it is still in
+ * `column` AND still holds the rank the accept wrote (`written[id]`), so a card
+ * the owner re-ordered or moved after the accept keeps what they did. Writes no
+ * event. Returns how many cards it restored.
+ */
+export async function plannerRestoreBoardRanks(
+  db: FlareMoDb,
+  input: {
+    user: UserRow;
+    column: PlannerColumn;
+    ranks: Record<string, string | null>;
+    written: Record<string, string | null>;
+    now?: Date;
+  },
+): Promise<number> {
+  let restored = 0;
+  for (const [id, old] of Object.entries(input.ranks)) {
+    const task = await plannerLoadLiveTask(db, input.user.id, id).catch(
+      () => null,
+    );
+    if (!task) continue;
+    const plan = await plannerLoadPlan(db, input.user.id, id);
+    const column = plannerColumnFor({
+      status: task.status,
+      horizon: plan?.horizon ?? null,
+      periodStart: plan?.periodStart ?? null,
+      droppedAt: plan?.droppedAt ?? null,
+    });
+    if (column !== input.column) continue;
+    if ((plan?.boardRank ?? null) !== (input.written[id] ?? null)) continue;
+    if (old === (plan?.boardRank ?? null)) continue;
+    if (
+      await plannerRestoreBoardRank(db, {
+        user: input.user,
+        taskId: id,
+        column: input.column,
+        boardRank: old,
+        now: input.now,
+      })
+    ) {
+      restored += 1;
+    }
+  }
+  return restored;
+}
+
+/**
  * A new task's place when its column already has a manual order: above every
  * ranked card, so the card the "+" just made is on top. Returns whether it
  * wrote a rank. A column nobody has ranked keeps its natural order, so nothing
