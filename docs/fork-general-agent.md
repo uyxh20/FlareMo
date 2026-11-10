@@ -130,6 +130,11 @@ only for show, so nothing is lost when it fails.
 - Cost: no model cost. Each reply is one status read and one long-lived
   stream from the Worker (two of the free plan's 50 calls a request), held at
   most 15 minutes. Parsing the stream takes a few milliseconds of CPU.
+- **Check on dev before live** (only mocks have run it so far): a long coach
+  reply shows piece by piece; `wrangler tail` shows no
+  `planner_agent_stream_no_deltas` line (logged once per stream when the agent
+  spoke but no live text came, with counts only, meaning the `event_deltas[]`
+  query or the event names are off) and no CPU-limit error on that request.
 - Only the coach streams. The opening, the scores and the goal check are JSON
   read whole, and the memo is a file the agent writes, so they show as before.
   Ask my diary still asks every 3 seconds.

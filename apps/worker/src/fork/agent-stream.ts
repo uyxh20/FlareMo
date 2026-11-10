@@ -50,6 +50,8 @@ const ENDS = new Set([
 export async function* plannerAgentPreview(
   body: ReadableStream<Uint8Array>,
   filter: () => PlannerPreviewFilter,
+  /** Counts what came, for the one log line when no live text did. */
+  seen: { deltas: number; messages: number } = { deltas: 0, messages: 0 },
 ): AsyncGenerator<PlannerAgentPreviewLine> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -87,11 +89,13 @@ export async function* plannerAgentPreview(
     if (event.type === "event_delta") {
       const text = event.delta?.content?.text;
       if (event.event_id === current && typeof text === "string") {
+        seen.deltas += 1;
         yield* add(text);
       }
       return false;
     }
     if (event.type === "agent.message") {
+      seen.messages += 1;
       const whole = textOf(event);
       if (event.id !== current || !whole.startsWith(raw)) {
         yield* start(event.id ?? "");
@@ -159,9 +163,23 @@ export async function plannerAgentPreviewResponse(
     clearTimeout(timer);
     return Response.json({ error: { message: "Not found." } }, { status: 404 });
   }
-  const lines = plannerAgentPreview(source, filter);
+  // Previews come from a beta query (event_deltas[]); if Anthropic stops
+  // sending them the page quietly shows whole replies. A stream that saw the
+  // agent's messages but no live text says so once, with counts only.
+  const seen = { deltas: 0, messages: 0 };
+  const lines = plannerAgentPreview(source, filter, seen);
   const encoder = new TextEncoder();
+  let stopped = false;
   const stop = async () => {
+    if (!stopped && seen.messages > 0 && seen.deltas === 0) {
+      console.warn(
+        JSON.stringify({
+          event: "planner_agent_stream_no_deltas",
+          messages: seen.messages,
+        }),
+      );
+    }
+    stopped = true;
     clearTimeout(timer);
     abort.abort();
     await lines.return(undefined).catch(() => undefined);
