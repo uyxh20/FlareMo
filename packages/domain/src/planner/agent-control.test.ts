@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMemo, updateMemo } from "../memos-write";
+import { listMemoRelations } from "../relations";
 import type { TaskActor } from "../tasks";
 import {
   PLANNER_AGENT_STALE,
@@ -12,6 +13,7 @@ import {
   plannerAgentListActions,
 } from "./agent-store";
 import { plannerAgentCallTool } from "./agent-tools";
+import { plannerReadBoard } from "./board";
 import { plannerSyncHistory } from "./history-sync";
 import { plannerReadTaskPlan } from "./plans";
 import { plannerAddTask, plannerChangeTask } from "./task-change";
@@ -363,5 +365,210 @@ describe("the agent as a control panel", () => {
     const accepted = await accept(made?.id ?? "");
     await undo(accepted.id);
     expect((await memoRow(accepted.landed_id ?? ""))?.status).toBe("archived");
+  });
+
+  it("places a task at an exact spot: records where it was, accepts, refuses when its rank moved, and undoes column and rank", async () => {
+    const a = await task("Anchor A");
+    const b = await task("Anchor B");
+    const moved = await task("Mover");
+    for (const id of [a, b, moved]) {
+      await plannerChangeTask(rt.db, {
+        user: rt.user,
+        actor: USER,
+        taskId: id,
+        today: TODAY,
+        change: { column: "todo" },
+      });
+    }
+    // Pin an order: A, B, Mover.
+    await plannerChangeTask(rt.db, {
+      user: rt.user,
+      actor: USER,
+      taskId: b,
+      today: TODAY,
+      change: { column: "todo", afterId: a },
+    });
+    await plannerChangeTask(rt.db, {
+      user: rt.user,
+      actor: USER,
+      taskId: moved,
+      today: TODAY,
+      change: { column: "todo", afterId: b },
+    });
+    const order = async (column: "todo" | "doing") =>
+      (
+        await plannerReadBoard(rt.db, {
+          userId: rt.user.id,
+          today: TODAY,
+          doneDays: 14,
+        })
+      ).columns[column].map((card) => card.title);
+    expect(await order("todo")).toEqual(["Anchor A", "Anchor B", "Mover"]);
+    const rankOf = async (id: string) =>
+      (await plannerReadTaskPlan(rt.db, { user: rt.user, taskId: id })).plan
+        ?.board_rank;
+    const oldRank = await rankOf(moved);
+
+    await asking();
+    await expect(
+      call("propose_task_change", {
+        task_id: moved,
+        column: "todo",
+        after_id: b,
+        why: "x",
+      }),
+    ).rejects.toThrow(/already at that spot/);
+    await expect(
+      call("propose_task_change", {
+        task_id: moved,
+        column: "doing",
+        before_id: a,
+        why: "x",
+      }),
+    ).rejects.toThrow(/not on the board in doing/);
+    await call("propose_task_change", {
+      task_id: moved,
+      column: "todo",
+      before_id: a,
+      why: "Top of the list, as asked.",
+    });
+    const [place] = await actions();
+    expect(place).toMatchObject({ kind: "task_change", field: "place" });
+    expect(place?.change).toMatchObject({
+      column: "todo",
+      before_id: a,
+      was: { column: "todo", board_rank: oldRank },
+      task_title: "Mover",
+      anchor_title: "Anchor A",
+    });
+
+    await accept(place?.id ?? "");
+    expect(await order("todo")).toEqual(["Mover", "Anchor A", "Anchor B"]);
+    await undo(place?.id ?? "");
+    expect(await order("todo")).toEqual(["Anchor A", "Anchor B", "Mover"]);
+    expect(await rankOf(moved)).toBe(oldRank);
+
+    // A rank that moved after the proposal refuses the accept.
+    await call("propose_task_change", {
+      task_id: moved,
+      column: "todo",
+      before_id: b,
+      why: "Asked.",
+    });
+    const stale = (await actions()).find((action) => action.state === "open");
+    await plannerChangeTask(rt.db, {
+      user: rt.user,
+      actor: USER,
+      taskId: moved,
+      today: TODAY,
+      change: { column: "todo", beforeId: a },
+    });
+    await expect(accept(stale?.id ?? "")).rejects.toThrow(PLANNER_AGENT_STALE);
+
+    // Across columns: the column move is logged and Undo puts column and rank back.
+    const doing = await task("In doing");
+    await plannerChangeTask(rt.db, {
+      user: rt.user,
+      actor: USER,
+      taskId: doing,
+      today: TODAY,
+      change: { column: "doing" },
+    });
+    const beforeColumn = await rankOf(a);
+    await call("propose_task_change", {
+      task_id: a,
+      column: "doing",
+      before_id: doing,
+      why: "Start it.",
+    });
+    const cross = (await actions()).find(
+      (action) => action.state === "open" && action.task_id === a,
+    );
+    await accept(cross?.id ?? "");
+    expect(await order("doing")).toEqual(["Anchor A", "In doing"]);
+    await undo(cross?.id ?? "");
+    expect(await order("doing")).toEqual(["In doing"]);
+    expect(await rankOf(a)).toBe(beforeColumn);
+    expect(await order("todo")).toContain("Anchor A");
+  });
+
+  it("links two entries on accept, refuses a duplicate and a stale link, and undoes just that link", async () => {
+    const one = await entry("Slept badly. #sleep");
+    const two = await entry("Skipped the gym. #gym");
+    const three = await entry("Called mum.");
+    const refs = async (id: string) =>
+      (await listMemoRelations(rt.db, rt.user, id))
+        .filter((row) => row.type === "reference")
+        .map((row) => row.relatedMemoId)
+        .sort();
+    await asking();
+    await expect(
+      call("propose_entry_link", {
+        entry_id: one.id,
+        related_entry_id: one.id,
+        why: "x",
+      }),
+    ).rejects.toThrow(/itself/);
+    await expect(
+      call("propose_entry_link", {
+        entry_id: one.id,
+        related_entry_id: two.id,
+        remove: true,
+        why: "x",
+      }),
+    ).rejects.toThrow(/not linked/);
+    await call("propose_entry_link", {
+      entry_id: one.id,
+      related_entry_id: two.id,
+      why: "Both about the bad week.",
+    });
+    const [link] = await actions();
+    expect(link).toMatchObject({ kind: "entry_link" });
+    expect(link?.change).toMatchObject({
+      entry_id: one.id,
+      related_entry_id: two.id,
+      was: [],
+    });
+    await accept(link?.id ?? "");
+    expect(await refs(one.id)).toEqual([two.id]);
+    await expect(
+      call("propose_entry_link", {
+        entry_id: one.id,
+        related_entry_id: two.id,
+        why: "x",
+      }),
+    ).rejects.toThrow(/already linked/);
+
+    // A later link stays when this one is undone.
+    await call("propose_entry_link", {
+      entry_id: one.id,
+      related_entry_id: three.id,
+      why: "Asked.",
+    });
+    const second = (await actions()).find((action) => action.state === "open");
+    await accept(second?.id ?? "");
+    expect(await refs(one.id)).toEqual([two.id, three.id].sort());
+    await undo(link?.id ?? "");
+    expect(await refs(one.id)).toEqual([three.id]);
+
+    // Unlinking: proposed from the current set, stale when the set changes.
+    await call("propose_entry_link", {
+      entry_id: one.id,
+      related_entry_id: three.id,
+      remove: true,
+      why: "Asked.",
+    });
+    const unlink = (await actions()).find((action) => action.state === "open");
+    await call("propose_entry_link", {
+      entry_id: one.id,
+      related_entry_id: two.id,
+      why: "Asked.",
+    });
+    const add = (await actions()).find(
+      (action) => action.state === "open" && action.id !== unlink?.id,
+    );
+    await accept(add?.id ?? "");
+    await expect(accept(unlink?.id ?? "")).rejects.toThrow(PLANNER_AGENT_STALE);
+    await undo(add?.id ?? "");
   });
 });

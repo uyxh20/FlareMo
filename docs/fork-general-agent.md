@@ -137,7 +137,13 @@ Since November 2026 (the control panel, design option B) it can also propose:
   asks for that edit (a typo, a line, a #tag): the whole entry as it should
   read, shown on the card as the lines it removes and adds;
 - `propose_entry_state`, archiving an entry or bringing it back, pinning or
-  unpinning it.
+  unpinning it;
+- in `propose_task_change`, `column` with `before_id` or `after_id`: the task
+  at an exact spot of that column (the field is stored as `place`, with
+  `was: { column, board_rank }`; the card reads "To To Do, above <task>");
+- `propose_entry_link`, linking two entries (or `remove: true` to unlink): a
+  `reference` relation from `entry_id` to `related_entry_id`, with `was` the
+  entry's sorted reference ids.
 
 Since November 2026 it also reads links the owner gives it (`read_link`) and
 proposes a summary entry (`propose_entry` with `link`), saved as a link
@@ -202,7 +208,12 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
 - a new entry: archived, never deleted;
 - an entry edit: the old text comes back as a new version (upstream keeps each
   version in `memo_revisions`); refused if the entry was edited again since;
-- an archive or pin: the entry gets back what it held.
+- an archive or pin: the entry gets back what it held;
+- a place: the column move is reverted through History as above and the old
+  `board_rank` is written back (no event; only if the task is back in its old
+  column; a same-column place has no History line, only the rank);
+- an entry link: only the one link the accept wrote is removed (or the removed
+  one added back), refused when it is not there to take away.
 
 The route syncs the task archive before and after, so the lines upstream wrote
 for the accept are there to revert and History shows the revert at once.

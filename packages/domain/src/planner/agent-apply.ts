@@ -9,9 +9,11 @@ import {
   plannerLinkSummaryTag,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
+import { memoRelations } from "@flaremo/db";
 import { plannerTaskEvent } from "@flaremo/db/src/schema/planner";
 import { and, desc, eq } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../errors";
+import { parseResourceName } from "../ids";
 import { getMemoById } from "../memos-read";
 import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
@@ -24,6 +26,7 @@ import {
   plannerAgentReopenAction,
   plannerAgentSettleAction,
 } from "./agent-store";
+import { plannerRestoreBoardRank } from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
 import { plannerEventToDto } from "./history-read";
@@ -120,6 +123,11 @@ export function plannerAgentTaskFieldNow(
         periodStart: plan?.period_start ?? null,
         droppedAt: plan?.dropped_at ?? null,
       });
+    case "place":
+      return {
+        column: plannerAgentTaskFieldNow(detail, "column"),
+        board_rank: plan?.board_rank ?? null,
+      };
     default:
       return null;
   }
@@ -127,6 +135,42 @@ export function plannerAgentTaskFieldNow(
 
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * The entries `entryId` references now, sorted: what an entry link records as
+ * `was`, and what its accept and undo compare. Comments are not references.
+ */
+export async function plannerEntryReferences(
+  db: FlareMoDb,
+  entryId: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ related: memoRelations.relatedMemoId })
+    .from(memoRelations)
+    .where(
+      and(
+        eq(memoRelations.memoId, parseResourceName(entryId, "memos")),
+        eq(memoRelations.type, "reference"),
+      ),
+    )
+    .all();
+  return rows.map((row) => row.related).sort();
+}
+
+/** Sets an entry's whole set of references (comments are never touched). */
+async function replaceReferences(
+  db: FlareMoDb,
+  user: UserRow,
+  entryId: string,
+  ids: string[],
+) {
+  await replaceMemoRelations(db, user, entryId, {
+    relations: ids.map((related_memo) => ({
+      related_memo,
+      type: "reference" as const,
+    })),
+  });
+}
 
 /** The diary entry an entry action names, or a ValidationError. */
 async function entryOf(
@@ -196,7 +240,11 @@ export async function plannerAgentAcceptAction(
         if ("was" in row.change && !same(row.change.was, now)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
         }
-        before = { [field]: now };
+        before =
+          field === "place"
+            ? (now as Record<string, unknown>)
+            : { [field]: now };
+        const spot = field === "place";
         await plannerChangeTask(db, {
           user,
           actor,
@@ -212,7 +260,14 @@ export async function plannerAgentAcceptAction(
                 ? value
                 : undefined,
             startDate: field === "start_date" ? asString(value) : undefined,
-            column: field === "column" ? column(value) : undefined,
+            column:
+              field === "column"
+                ? column(value)
+                : spot
+                  ? column(row.change.column)
+                  : undefined,
+            beforeId: spot ? asString(row.change.before_id) : undefined,
+            afterId: spot ? asString(row.change.after_id) : undefined,
             goalId:
               field === "goal_id"
                 ? value === null
@@ -322,6 +377,25 @@ export async function plannerAgentAcceptAction(
         landedId = memo.id;
         break;
       }
+      case "entry_link": {
+        const memo = await entryOf(db, user, row.change);
+        const related = asString(row.change.related_entry_id);
+        if (!related)
+          throw new ValidationError("This proposal names no entry.");
+        const target = parseResourceName(related, "memos");
+        const current = await plannerEntryReferences(db, memo.id);
+        if ("was" in row.change && !same(row.change.was, current)) {
+          throw new ValidationError(PLANNER_AGENT_STALE);
+        }
+        before = { references: current };
+        const next =
+          row.change.remove === true
+            ? current.filter((id) => id !== target)
+            : [...current.filter((id) => id !== target), target];
+        await replaceReferences(db, user, memo.id, next);
+        landedId = memo.id;
+        break;
+      }
       default:
         throw new ValidationError("Unknown proposal kind.");
     }
@@ -408,7 +482,8 @@ export async function plannerAgentRevertAction(
       )
         .map(plannerEventToDto)
         .filter(plannerEventRevertible);
-      if (lines.length === 0) {
+      // A "place" inside the column writes no event: only its rank.
+      if (lines.length === 0 && row.field !== "place") {
         throw new ValidationError(
           "There is nothing in the task's History to put back.",
         );
@@ -420,6 +495,18 @@ export async function plannerAgentRevertAction(
           taskId,
           eventId: line.id,
           today: input.today,
+        });
+      }
+      if (row.field === "place") {
+        const was = row.before ?? {};
+        const oldColumn = column(was.column);
+        if (!oldColumn)
+          throw new ValidationError("Its old place was not kept.");
+        await plannerRestoreBoardRank(db, {
+          user,
+          taskId,
+          column: oldColumn,
+          boardRank: asString(was.board_rank) ?? null,
         });
       }
       // plannerRevertEvent settles the action on its first line.
@@ -460,6 +547,29 @@ export async function plannerAgentRevertAction(
       } else {
         throw new ValidationError("What it held before was not kept.");
       }
+      await settle();
+      break;
+    }
+    case "entry_link": {
+      const memo = await entryOf(db, user, row.change);
+      const related = asString(row.change.related_entry_id);
+      if (!related) throw new ValidationError("This proposal names no entry.");
+      const target = parseResourceName(related, "memos");
+      const current = await plannerEntryReferences(db, memo.id);
+      const has = current.includes(target);
+      const removed = row.change.remove === true;
+      // Only the one link the accept wrote is touched; the rest stay as they are.
+      if (removed ? has : !has) {
+        throw new ValidationError(
+          "The links of this entry changed since, so this cannot be put back.",
+        );
+      }
+      await replaceReferences(
+        db,
+        user,
+        memo.id,
+        removed ? [...current, target] : current.filter((id) => id !== target),
+      );
       await settle();
       break;
     }

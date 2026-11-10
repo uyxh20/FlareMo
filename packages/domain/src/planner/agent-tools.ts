@@ -13,7 +13,7 @@ import {
   type PlannerGoalDto,
   type PlannerPillar,
   plannerAddDays,
-  plannerAgentActionFields,
+  plannerAgentInputFields,
   plannerAgentToolInputs,
   plannerFlywheelMetrics,
   plannerLinkSummarySource,
@@ -33,17 +33,21 @@ import {
 } from "@flaremo/db/src/schema/planner";
 import { and, asc, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { healthReadWeek, healthToday } from "../health/read";
+import { parseResourceName } from "../ids";
 import { createMemory, isRejectedRecently, listMemories } from "../memory";
 import { computeFingerprint } from "../memory/shared";
 import { getMemoById, listMemos } from "../memos-read";
-import { plannerAgentTaskFieldNow } from "./agent-apply";
+import {
+  plannerAgentTaskFieldNow,
+  plannerEntryReferences,
+} from "./agent-apply";
 import {
   plannerAgentAddAction,
   plannerAgentAddProposal,
   plannerAgentAskKey,
   plannerAgentFindQuote,
 } from "./agent-store";
-import { plannerReadBoard } from "./board";
+import { plannerBoardDoneDaysMax, plannerReadBoard } from "./board";
 import {
   plannerCurrentTuning,
   plannerFlywheelWeekOf,
@@ -611,6 +615,78 @@ function toolToday(context: PlannerAgentToolContext): string {
   return context.asOf
     ? healthToday(new Date(context.asOf.at))
     : healthToday(context.now);
+}
+
+/**
+ * A column with before_id or after_id: the task at an exact spot of that
+ * column, which may be the one it is in. Recorded as the `place` field, with
+ * the column and rank it holds now (`was`) so the accept can tell it moved.
+ */
+async function proposePlace(
+  context: PlannerAgentToolContext,
+  input: PlannerAgentToolInput<"propose_task_change">,
+  taskId: string,
+  detail: Awaited<ReturnType<typeof plannerReadTaskDetail>>,
+): Promise<string> {
+  const column = input.column;
+  const anchorId = plannerNormalizeTaskId(
+    (input.before_id ?? input.after_id) as string,
+  );
+  if (!column) throw new PlannerAgentToolError("column is required.");
+  const was = plannerAgentTaskFieldNow(detail, "place") as {
+    column: string;
+    board_rank: string | null;
+  };
+  if (detail.plan?.dropped_at) {
+    throw new PlannerAgentToolError(
+      "The task is dropped off the board. Propose bringing it back first.",
+    );
+  }
+  if (anchorId === taskId) {
+    throw new PlannerAgentToolError(
+      "before_id and after_id must name another task.",
+    );
+  }
+  const board = await plannerReadBoard(context.db, {
+    userId: context.user.id,
+    today: toolToday(context),
+    doneDays: plannerBoardDoneDaysMax,
+  });
+  const cards = board.columns[column];
+  const anchorAt = cards.findIndex((card) => card.id === anchorId);
+  const anchor = cards[anchorAt];
+  if (!anchor) {
+    throw new PlannerAgentToolError(
+      `Task ${anchorId} is not on the board in ${column}. Use an id from read_tasks.`,
+    );
+  }
+  const own = cards.findIndex((card) => card.id === taskId);
+  if (
+    own !== -1 &&
+    (input.before_id !== undefined
+      ? own + 1 === anchorAt
+      : own === anchorAt + 1)
+  ) {
+    throw new PlannerAgentToolError(
+      "The task is already at that spot. Nothing was proposed.",
+    );
+  }
+  const action = await fileAction(context, {
+    kind: "task_change",
+    taskId,
+    field: "place",
+    change: {
+      column,
+      ...(input.before_id !== undefined
+        ? { before_id: anchorId }
+        : { after_id: anchorId }),
+      was,
+      task_title: detail.task.title,
+      anchor_title: anchor.title,
+    },
+    why: input.why,
+  });
+  return `Proposed placing task ${taskId} in ${column}, ${input.before_id !== undefined ? "above" : "below"} task ${anchorId} (${action.id}). It shows in this answer's card; the owner accepts or dismisses it. Say in your answer that you proposed it, not that you moved it.`;
 }
 
 const handlers: Handlers = {
@@ -1229,11 +1305,17 @@ const handlers: Handlers = {
         "No task has that id. Use an id from read_tasks.",
       );
     });
-    const field = plannerAgentActionFields.find(
+    const field = plannerAgentInputFields.find(
       (name) => input[name] !== undefined,
     );
     if (!field) {
       throw new PlannerAgentToolError("Propose exactly one field per call.");
+    }
+    if (
+      field === "column" &&
+      (input.before_id !== undefined || input.after_id !== undefined)
+    ) {
+      return proposePlace(context, input, taskId, detail);
     }
     let goalTitle: string | null = null;
     if (field === "goal_id" && input.goal_id) {
@@ -1348,6 +1430,38 @@ const handlers: Handlers = {
       why: input.why,
     });
     return `Proposed ${input.archived !== undefined ? (input.archived ? "archiving" : "bringing back") : input.pinned ? "pinning" : "unpinning"} entry ${memo.id} (${action.id}). It shows in this answer's card.`;
+  },
+
+  async propose_entry_link(context, input) {
+    const memo = await proposedEntry(context, input.entry_id);
+    const other = await proposedEntry(context, input.related_entry_id);
+    if (memo.id === other.id) {
+      throw new PlannerAgentToolError("An entry cannot link to itself.");
+    }
+    const was = await plannerEntryReferences(context.db, memo.id);
+    const linked = was.includes(parseResourceName(other.id, "memos"));
+    if (input.remove ? !linked : linked) {
+      throw new PlannerAgentToolError(
+        input.remove
+          ? "The entries are not linked. Nothing was proposed."
+          : "The entries are already linked. Nothing was proposed.",
+      );
+    }
+    const action = await fileAction(context, {
+      kind: "entry_link",
+      taskId: null,
+      field: null,
+      change: {
+        entry_id: memo.id,
+        related_entry_id: other.id,
+        ...(input.remove ? { remove: true } : {}),
+        was,
+        preview: entryPreview(memo.content),
+        related_preview: entryPreview(other.content),
+      },
+      why: input.why,
+    });
+    return `Proposed ${input.remove ? "unlinking" : "linking"} entry ${memo.id} and entry ${other.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
   },
 
   async propose_add_task(context, input) {

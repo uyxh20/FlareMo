@@ -117,7 +117,13 @@ const en = {
       column: "column",
       goal_id: "goal",
       dropped: "drop",
+      place: "place",
     },
+    placeHeading: "Move on the board",
+    placeLine: (column: string, below: boolean, anchor: string) =>
+      `To ${column}, ${below ? "below" : "above"} ${anchor}`,
+    link: "Link entries",
+    unlink: "Unlink entries",
     cleared: "cleared",
     none: "none",
     cardLabel: "Proposed changes",
@@ -192,7 +198,13 @@ const zhCN: PlannerAskCopy = {
       column: "列",
       goal_id: "目标",
       dropped: "移出",
+      place: "位置",
     },
+    placeHeading: "在看板上移动",
+    placeLine: (column: string, below: boolean, anchor: string) =>
+      `移到${column}，在${anchor}${below ? "之下" : "之上"}`,
+    link: "关联日记",
+    unlink: "取消关联日记",
     cleared: "已清除",
     none: "无",
     cardLabel: "提议的改动",
@@ -317,7 +329,8 @@ function usePlannerActionRefresh(task: string | null) {
     if (
       action.kind === "entry_new" ||
       action.kind === "entry_edit" ||
-      action.kind === "entry_state"
+      action.kind === "entry_state" ||
+      action.kind === "entry_link"
     ) {
       void queryClient.invalidateQueries({ queryKey: ["memos"] });
       return;
@@ -390,15 +403,17 @@ function PlannerProposalBody({
   switch (action.kind) {
     case "task_change":
       heading =
-        action.field === "dropped"
-          ? change.dropped
-            ? copy.proposal.drop
-            : copy.proposal.undrop
-          : action.field === "goal_id" && change.goal_id === null
-            ? copy.proposal.unlinkGoal
-            : copy.proposal.change(
-                copy.proposal.field[action.field ?? "notes"],
-              );
+        action.field === "place"
+          ? copy.proposal.placeHeading
+          : action.field === "dropped"
+            ? change.dropped
+              ? copy.proposal.drop
+              : copy.proposal.undrop
+            : action.field === "goal_id" && change.goal_id === null
+              ? copy.proposal.unlinkGoal
+              : copy.proposal.change(
+                  copy.proposal.field[action.field ?? "notes"],
+                );
       break;
     case "task_new":
       heading = copy.proposal.newTask;
@@ -408,6 +423,9 @@ function PlannerProposalBody({
       break;
     case "entry_edit":
       heading = copy.proposal.edit;
+      break;
+    case "entry_link":
+      heading = change.remove ? copy.proposal.unlink : copy.proposal.link;
       break;
     case "entry_state":
       heading =
@@ -432,6 +450,7 @@ function PlannerProposalBody({
     action.kind === "task_change" &&
     action.field &&
     action.field !== "notes" &&
+    action.field !== "place" &&
     action.field !== "dropped";
 
   return (
@@ -468,6 +487,21 @@ function PlannerProposalBody({
             markdown={asString(change.notes) ?? ""}
           />
         </div>
+      )}
+      {action.kind === "task_change" && action.field === "place" && (
+        <p className="font-medium [overflow-wrap:anywhere]">
+          {copy.proposal.placeLine(
+            value("column", change.column),
+            change.after_id !== undefined,
+            asString(change.anchor_title) ?? "",
+          )}
+        </p>
+      )}
+      {action.kind === "entry_link" && (
+        <p className="font-medium [overflow-wrap:anywhere]">
+          {asString(change.preview) ?? ""} →{" "}
+          {asString(change.related_preview) ?? ""}
+        </p>
       )}
       {action.kind === "task_new" && (
         <div className="flex flex-col gap-1 [overflow-wrap:anywhere]">

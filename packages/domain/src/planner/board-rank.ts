@@ -173,6 +173,58 @@ export async function plannerSetBoardRank(
 }
 
 /**
+ * Writes a task's stored rank string back as it was (Undo of an agent's
+ * "place"): `boardRank` is the old `<column>|<key>`, or null when the card
+ * had none. It writes only when the task is in the column the rank belongs to
+ * now (a card in another column keeps whatever order that column gave it), and
+ * like any rank change it writes no event. Returns whether it wrote.
+ */
+export async function plannerRestoreBoardRank(
+  db: FlareMoDb,
+  input: {
+    user: UserRow;
+    taskId: string;
+    column: PlannerColumn;
+    boardRank: string | null;
+    now?: Date;
+  },
+): Promise<boolean> {
+  const taskId = plannerNormalizeTaskId(input.taskId);
+  const task = await plannerLoadLiveTask(db, input.user.id, taskId);
+  const plan = await plannerLoadPlan(db, input.user.id, taskId);
+  const column = plannerColumnFor({
+    status: task.status,
+    horizon: plan?.horizon ?? null,
+    periodStart: plan?.periodStart ?? null,
+    droppedAt: plan?.droppedAt ?? null,
+  });
+  if (column !== input.column) return false;
+  if (input.boardRank === null) {
+    if (!plan) return false;
+    await db
+      .update(plannerTaskPlan)
+      .set({ boardRank: null })
+      .where(
+        and(
+          eq(plannerTaskPlan.userId, input.user.id),
+          eq(plannerTaskPlan.taskId, taskId),
+        ),
+      )
+      .run();
+    return true;
+  }
+  await plannerRunBatch(db, [
+    rankUpsert(db, {
+      userId: input.user.id,
+      taskId,
+      stored: input.boardRank,
+      nowIso: plannerNow(input.now).toISOString(),
+    }),
+  ]);
+  return true;
+}
+
+/**
  * A new task's place when its column already has a manual order: above every
  * ranked card, so the card the "+" just made is on top. Returns whether it
  * wrote a rank. A column nobody has ranked keeps its natural order, so nothing

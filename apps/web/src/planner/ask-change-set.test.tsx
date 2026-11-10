@@ -264,4 +264,41 @@ describe("one card per answer", () => {
       "Felt strong.",
     );
   });
+
+  it("shows a place on the board and an entry link as rows", async () => {
+    const container = show([
+      action("p", {
+        field: "place",
+        change: {
+          column: "todo",
+          after_id: "tasks/q",
+          was: { column: "backlog", board_rank: null },
+          task_title: "Mover",
+          anchor_title: "Anchor",
+        },
+      }),
+      action("l", {
+        kind: "entry_link",
+        task_id: null,
+        field: null,
+        entry_id: "memos/l",
+        change: {
+          entry_id: "memos/l",
+          related_entry_id: "memos/m",
+          was: [],
+          preview: "Slept badly. #sleep",
+          related_preview: "Skipped the gym.",
+        },
+      }),
+    ]);
+    await settle();
+    const card = container.querySelector('[data-testid="planner-change-set"]');
+    expect(card?.textContent).toContain("Move on the board");
+    expect(card?.textContent).toContain("Mover");
+    expect(card?.textContent).toContain("below Anchor");
+    expect(card?.textContent).toContain("Link entries");
+    expect(card?.textContent).toContain(
+      "Slept badly. #sleep → Skipped the gym.",
+    );
+  });
 });
