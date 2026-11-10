@@ -570,7 +570,7 @@
             <text x="780" y="99" class="t-b">73 / 124</text>
           </svg>
         </div>
-        <figcaption><b>Gap and its fix.</b> Importing data (<code>import-export/import-data.ts</code>) saves entries as "not indexed" without queueing them; 486 of the 506 imported entries are missing. Keyword search is unaffected. The <b>search catch-up</b> (<code>fork/search-catchup.ts</code>, branch <code>fix/search-catchup</code>, not live yet) indexes 4 of them every 10 minutes, within the free plan's 50 database queries per run, so the backlog clears in about 20 hours after it ships. The admin "rebuild" action is not used: it tries everything in one run and would stop after about 15 entries.</figcaption>
+        <figcaption><b>Gap and its fix.</b> Importing data (<code>import-export/import-data.ts</code>) saves entries as "not indexed" without queueing them; 486 of the 506 imported entries are missing. Keyword search is unaffected. The <b>search catch-up</b> (<code>fork/search-catchup.ts</code>, live since version #48, 2026-11-10) indexes 4 of them every 10 minutes, within the free plan's 50 database queries per run, so the backlog clears in about 20 hours. The bar above is the count before it started. Version #48 also fixed the semantic search query itself (<code>returnMetadata</code> now "none"; the runtime rejected <code>false</code>). The admin "rebuild" action is not used: it tries everything in one run and would stop after about 15 entries.</figcaption>
       </figure>
     </section>
 
