@@ -12,7 +12,14 @@ import {
   healthReadWeek,
   healthReadYear,
 } from "./read";
-import { healthDismissEntry, healthPatchEntry } from "./write";
+import { healthSnapshot } from "./rows";
+import {
+  healthCreateEntry,
+  healthDismissEntry,
+  healthFindEntry,
+  healthPatchEntry,
+  healthRevertEntry,
+} from "./write";
 
 // Reading and fixing health rows against a real D1 (fork-owned add-on,
 // docs/fork-health-tracker.md). "Now" is fixed to Tue 13 Oct 2026, noon local.
@@ -456,6 +463,133 @@ describe("health read and write", () => {
         "SELECT deleted_at FROM health_entry WHERE id = 'g'",
       );
       expect(row?.deleted_at).toBeNull();
+    });
+  });
+  describe("adding and reverting a row", () => {
+    const create = (input: Partial<Parameters<typeof healthCreateEntry>[1]>) =>
+      healthCreateEntry(rt.db, {
+        userId: rt.user.id,
+        day: "2026-10-12",
+        kind: "training",
+        now: NOW,
+        ...input,
+      });
+
+    const snap = async (entryId: string) => {
+      const row = await healthFindEntry(rt.db, {
+        userId: rt.user.id,
+        entryId,
+      });
+      if (!row) throw new Error("no such row");
+      return JSON.parse(healthSnapshot(row));
+    };
+
+    it("makes a manual, edited row with its create event and units", async () => {
+      const night = await create({ kind: "night_out", homeAt: "04:10" });
+      expect(night).toMatchObject({
+        units: 1,
+        bender: false,
+        home_at: "04:10",
+      });
+      const waiting = await create({ kind: "night_out", day: "2026-10-11" });
+      expect(waiting).toMatchObject({ units: null, needs_check: true });
+      const breath = await create({ kind: "breath", variant: "meditation" });
+      expect(breath.minutes).toBe(10);
+      const [row] = await plannerTestRows<{
+        source: string;
+        memo_id: string | null;
+        edited: number;
+      }>(
+        rt.database,
+        `SELECT source, memo_id, edited FROM health_entry WHERE id = '${night.id}'`,
+      );
+      expect(row).toEqual({ source: "manual", memo_id: null, edited: 1 });
+      expect(
+        (await events()).filter((e) => e.action === "create"),
+      ).toHaveLength(3);
+      const week = await healthReadWeek(rt.db, {
+        userId: rt.user.id,
+        now: NOW,
+      });
+      expect(week.entries.map((entry) => entry.id)).toContain(night.id);
+    });
+
+    it("refuses what the diary read would refuse", async () => {
+      await expect(create({ kind: "swim" })).rejects.toThrow(ValidationError);
+      await expect(create({ variant: "zumba" })).rejects.toThrow(/variant/);
+      await expect(create({ kind: "night_out", variant: "x" })).rejects.toThrow(
+        /no variant/,
+      );
+      await expect(create({ kind: "night_out", minutes: 5 })).rejects.toThrow(
+        /no minutes/,
+      );
+      await expect(create({ homeAt: "02:00" })).rejects.toThrow(/home time/);
+      await expect(create({ day: "2026-02-30" })).rejects.toThrow(/day/);
+    });
+
+    it("puts a fixed row back, refusing when it changed since", async () => {
+      await seed({
+        id: "g",
+        kind: "training",
+        day: "2026-10-13",
+        variant: "gym",
+        minutes: 30,
+      });
+      const before = await snap("g");
+      await healthPatchEntry(rt.db, {
+        userId: rt.user.id,
+        entryId: "g",
+        patch: { minutes: 50 },
+      });
+      const accepted = await snap("g");
+      await healthPatchEntry(rt.db, {
+        userId: rt.user.id,
+        entryId: "g",
+        patch: { minutes: 55 },
+      });
+      await expect(
+        healthRevertEntry(rt.db, {
+          userId: rt.user.id,
+          entryId: "g",
+          before,
+          accepted,
+        }),
+      ).rejects.toThrow(/changed since/);
+      await healthPatchEntry(rt.db, {
+        userId: rt.user.id,
+        entryId: "g",
+        patch: { minutes: 50 },
+      });
+      const dto = await healthRevertEntry(rt.db, {
+        userId: rt.user.id,
+        entryId: "g",
+        before,
+        accepted,
+      });
+      expect(dto.minutes).toBe(30);
+      expect((await events()).at(-1)?.action).toBe("restore");
+    });
+
+    it("soft-deletes a created row when reverted with no before", async () => {
+      const made = await create({});
+      await healthRevertEntry(rt.db, {
+        userId: rt.user.id,
+        entryId: made.id,
+        before: null,
+        accepted: await snap(made.id),
+      });
+      expect(
+        await healthFindEntry(rt.db, { userId: rt.user.id, entryId: made.id }),
+      ).toBeNull();
+      const week = await healthReadWeek(rt.db, {
+        userId: rt.user.id,
+        now: NOW,
+      });
+      expect(week.entries).toEqual([]);
+      expect((await events()).map((e) => e.action)).toEqual([
+        "create",
+        "delete",
+      ]);
     });
   });
 });

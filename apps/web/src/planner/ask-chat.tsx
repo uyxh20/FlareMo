@@ -124,6 +124,18 @@ const en = {
       `To ${column}, ${below ? "below" : "above"} ${anchor}`,
     link: "Link entries",
     unlink: "Unlink entries",
+    memoryCorrect: "Correct memory",
+    memoryForget: "Forget memory",
+    healthFix: "Fix health row",
+    healthAdd: "Add health row",
+    healthField: {
+      day: "day",
+      variant: "variant",
+      minutes: "minutes",
+      home_at: "home at",
+    } as Record<string, string>,
+    minutes: (count: number) => `${count} min`,
+    homeAt: (time: string) => `home ${time}`,
     cleared: "cleared",
     none: "none",
     cardLabel: "Proposed changes",
@@ -205,6 +217,18 @@ const zhCN: PlannerAskCopy = {
       `移到${column}，在${anchor}${below ? "之下" : "之上"}`,
     link: "关联日记",
     unlink: "取消关联日记",
+    memoryCorrect: "修正记忆",
+    memoryForget: "忘掉记忆",
+    healthFix: "修正健康记录",
+    healthAdd: "添加健康记录",
+    healthField: {
+      day: "日期",
+      variant: "类型",
+      minutes: "分钟",
+      home_at: "到家时间",
+    } as Record<string, string>,
+    minutes: (count: number) => `${count} 分钟`,
+    homeAt: (time: string) => `${time} 到家`,
     cleared: "已清除",
     none: "无",
     cardLabel: "提议的改动",
@@ -335,6 +359,14 @@ function usePlannerActionRefresh(task: string | null) {
       void queryClient.invalidateQueries({ queryKey: ["memos"] });
       return;
     }
+    if (action.kind === "memory_change") {
+      void queryClient.invalidateQueries({ queryKey: ["memories"] });
+      return;
+    }
+    if (action.kind === "health_change") {
+      void queryClient.invalidateQueries({ queryKey: ["health"] });
+      return;
+    }
     const taskId =
       action.task_id ?? (action.kind === "task_new" ? action.landed_id : task);
     if (taskId) {
@@ -427,6 +459,18 @@ function PlannerProposalBody({
     case "entry_link":
       heading = change.remove ? copy.proposal.unlink : copy.proposal.link;
       break;
+    case "memory_change":
+      heading =
+        change.action === "forget"
+          ? copy.proposal.memoryForget
+          : copy.proposal.memoryCorrect;
+      break;
+    case "health_change":
+      heading =
+        change.action === "add"
+          ? copy.proposal.healthAdd
+          : copy.proposal.healthFix;
+      break;
     case "entry_state":
       heading =
         typeof change.archived === "boolean"
@@ -445,7 +489,11 @@ function PlannerProposalBody({
       ? taskTitle
       : action.kind === "entry_state"
         ? preview
-        : null;
+        : action.kind === "memory_change" && change.action === "forget"
+          ? asString(change.label)
+          : action.kind === "health_change"
+            ? asString(change.label)
+            : null;
   const shortField =
     action.kind === "task_change" &&
     action.field &&
@@ -503,6 +551,43 @@ function PlannerProposalBody({
           {asString(change.related_preview) ?? ""}
         </p>
       )}
+      {action.kind === "memory_change" && change.action === "correct" && (
+        <p className="font-medium [overflow-wrap:anywhere]">
+          {isRecord(change.was) ? (asString(change.was.content) ?? "") : ""} →{" "}
+          {asString(change.content) ?? ""}
+        </p>
+      )}
+      {action.kind === "health_change" && change.action === "fix" && (
+        <ul className="flex flex-col gap-0.5 font-medium [overflow-wrap:anywhere]">
+          {Object.keys(copy.proposal.healthField)
+            .filter((field) => field in change)
+            .map((field) => (
+              <li key={field}>
+                {copy.proposal.healthField[field]}:{" "}
+                {healthValue(
+                  isRecord(change.was) ? change.was[field] : null,
+                  copy,
+                )}{" "}
+                → {healthValue(change[field], copy)}
+              </li>
+            ))}
+        </ul>
+      )}
+      {action.kind === "health_change" && change.action === "add" && (
+        <p className="font-medium [overflow-wrap:anywhere]">
+          {[
+            asString(change.variant),
+            typeof change.minutes === "number"
+              ? copy.proposal.minutes(change.minutes)
+              : null,
+            asString(change.home_at)
+              ? copy.proposal.homeAt(asString(change.home_at) ?? "")
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
       {action.kind === "task_new" && (
         <div className="flex flex-col gap-1 [overflow-wrap:anywhere]">
           <p className="font-medium">{asString(change.title) ?? ""}</p>
@@ -556,6 +641,14 @@ function PlannerProposalBody({
       )}
     </div>
   );
+}
+
+/** A health row's field as a short value: minutes with their unit, a gap as "none". */
+function healthValue(raw: unknown, copy: PlannerAskCopy) {
+  if (raw === null || raw === undefined || raw === "") {
+    return copy.proposal.none;
+  }
+  return typeof raw === "number" ? copy.proposal.minutes(raw) : String(raw);
 }
 
 function verdictOf(action: PlannerAgentActionDto, copy: PlannerAskCopy) {

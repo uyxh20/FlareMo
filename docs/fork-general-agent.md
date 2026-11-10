@@ -143,7 +143,18 @@ Since November 2026 (the control panel, design option B) it can also propose:
   `was: { column, board_rank }`; the card reads "To To Do, above <task>");
 - `propose_entry_link`, linking two entries (or `remove: true` to unlink): a
   `reference` relation from `entry_id` to `related_entry_id`, with `was` the
-  entry's sorted reference ids.
+  entry's sorted reference ids;
+- `propose_memory_change`, correcting a memory (`action: correct`, with the
+  new `content`) or forgetting it (`action: forget`), by the id `read_memories`
+  lists, only for an active memory the owner has ruled on (not a proposal
+  waiting on the Memory page). Stored as kind `memory_change` with
+  `was: { content, status }`. The review-only `propose_memory` is unchanged;
+- `propose_health_change`, fixing a health row the diary misread
+  (`action: fix`, `entry_id` from `read_health`, any of `day`, `variant`,
+  `minutes`, `home_at`; `was` holds the values of just those fields) or adding
+  one it missed (`action: add`, `day` and `kind`, with `variant`, `minutes` or
+  `home_at`). Stored as kind `health_change`. `read_health` now prints each
+  row's id.
 
 Since November 2026 it also reads links the owner gives it (`read_link`) and
 proposes a summary entry (`propose_entry` with `link`), saved as a link
@@ -213,7 +224,24 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
   `board_rank` is written back (no event; only if the task is back in its old
   column; a same-column place has no History line, only the rank);
 - an entry link: only the one link the accept wrote is removed (or the removed
-  one added back), refused when it is not there to take away.
+  one added back), refused when it is not there to take away;
+- a memory correction or forget: the accept is the owner's own click, with the
+  user actor of `memory-api.ts`: `updateMemory` for a correction, `archiveMemory`
+  for a forget (never `hardDeleteMemory`); a clash with another memory (same
+  words, same fact key) refuses the accept with that message. Undo writes the
+  old words back through `updateMemory` (refused if the words changed since) or
+  `restoreMemory` (refused if the memory is no longer archived). `updateMemory`
+  reads the owner's hand as a confirmation, so a corrected memory reads as
+  confirmed by you after the accept, and Undo restores the words but not
+  necessarily the old confidence level (there is no function that lowers it);
+- a health row fix: accepted through `healthPatchEntry` (the row becomes
+  `edited`, so the nightly re-read keeps it), the full row snapshot kept as
+  `before`; Undo (`healthRevertEntry`) writes that snapshot back as a
+  `restore` event, `edited` included, so a row the diary had read is read again
+  by the next re-read; refused if the row differs from what the accept left;
+- a health row add: `healthCreateEntry` makes a `manual` row with no memo; Undo
+  soft-deletes it (`deleted_at` and a `delete` event, never removed); refused
+  if the row was fixed since.
 
 The route syncs the task archive before and after, so the lines upstream wrote
 for the accept are there to revert and History shows the revert at once.

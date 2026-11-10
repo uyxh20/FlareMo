@@ -4,8 +4,13 @@ import type {
 } from "@flaremo/contracts";
 import {
   healthAddDays,
+  healthBreathVariants,
+  healthIsBuiltinKind,
   healthLocalDayStart,
   healthLocalMoment,
+  healthNightUnitsFor,
+  healthParseDay,
+  healthTrainingVariants,
   listMemosQuerySchema,
   PLANNER_FLYWHEEL_MIN_SAMPLE,
   type PlannerAgentToolInput,
@@ -25,6 +30,7 @@ import {
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoRelations, memos, memoTags } from "@flaremo/db";
+import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
   plannerAgentChat,
   plannerAgentProposal,
@@ -33,9 +39,14 @@ import {
 } from "@flaremo/db/src/schema/planner";
 import { and, asc, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
 import { healthReadWeek, healthToday } from "../health/read";
+import { healthFindEntry } from "../health/write";
 import { parseResourceName } from "../ids";
 import { createMemory, isRejectedRecently, listMemories } from "../memory";
-import { computeFingerprint } from "../memory/shared";
+import {
+  computeFingerprint,
+  normalizeMemoryContent,
+  requireMemory,
+} from "../memory/shared";
 import { getMemoById, listMemos } from "../memos-read";
 import {
   plannerAgentTaskFieldNow,
@@ -1062,7 +1073,7 @@ const handlers: Handlers = {
           .filter((entry) => plannerBeforeAsOf(context.asOf)(entry.day))
           .map(
             (entry) =>
-              `- ${entry.day} ${entry.kind}${entry.variant ? ` (${entry.variant})` : ""}${entry.minutes ? `, ${entry.minutes} min` : ""}${entry.units !== null ? `, ${entry.units} units` : ""}${entry.home_at ? `, home ${entry.home_at}` : ""}${entry.bender ? ", bender" : ""}${entry.feel ? `, felt: ${oneLine(entry.feel, 120)}` : ""}`,
+              `- ${entry.id} | ${entry.day} ${entry.kind}${entry.variant ? ` (${entry.variant})` : ""}${entry.minutes ? `, ${entry.minutes} min` : ""}${entry.units !== null ? `, ${entry.units} units` : ""}${entry.home_at ? `, home ${entry.home_at}` : ""}${entry.bender ? ", bender" : ""}${entry.feel ? `, felt: ${oneLine(entry.feel, 120)}` : ""}`,
           ),
       );
     }
@@ -1462,6 +1473,177 @@ const handlers: Handlers = {
       why: input.why,
     });
     return `Proposed ${input.remove ? "unlinking" : "linking"} entry ${memo.id} and entry ${other.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
+  },
+
+  async propose_memory_change(context, input) {
+    const memory = await requireMemory(
+      context.db,
+      context.user,
+      input.memory_id,
+    ).catch(() => null);
+    if (!memory || memory.deletedAt) {
+      throw new PlannerAgentToolError(
+        "No memory of the owner's has that id. Use an id from read_memories.",
+      );
+    }
+    if (memory.status !== "active") {
+      throw new PlannerAgentToolError(
+        `That memory is ${memory.status}, not active, so it cannot be corrected or forgotten.`,
+      );
+    }
+    if (memory.needsReview) {
+      throw new PlannerAgentToolError(
+        "That memory is a proposal waiting on the Memory page; the owner rules on it there.",
+      );
+    }
+    if (
+      input.action === "correct" &&
+      normalizeMemoryContent(input.content ?? "") === memory.content
+    ) {
+      throw new PlannerAgentToolError(
+        "The memory already reads like that. Nothing was proposed.",
+      );
+    }
+    const action = await fileAction(context, {
+      kind: "memory_change",
+      taskId: null,
+      field: null,
+      change: {
+        memory_id: memory.id,
+        action: input.action,
+        ...(input.action === "correct" ? { content: input.content } : {}),
+        was: { content: memory.content, status: memory.status },
+        label: entryPreview(memory.content),
+      },
+      why: input.why,
+    });
+    return `Proposed ${input.action === "correct" ? "correcting" : "forgetting"} memory ${memory.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
+  },
+
+  async propose_health_change(context, input) {
+    const variantsOf = (kind: string): readonly string[] | null =>
+      kind === "training"
+        ? healthTrainingVariants
+        : kind === "breath"
+          ? healthBreathVariants
+          : null;
+    const checkFields = (kind: string) => {
+      const allowed = variantsOf(kind);
+      if (input.variant !== undefined) {
+        if (!allowed) {
+          throw new PlannerAgentToolError("A night out has no variant.");
+        }
+        if (!allowed.includes(input.variant)) {
+          throw new PlannerAgentToolError(
+            `variant must be one of: ${allowed.join(", ")}.`,
+          );
+        }
+      }
+      if (input.minutes !== undefined && kind === "night_out") {
+        throw new PlannerAgentToolError("A night out has no minutes.");
+      }
+      if (input.home_at !== undefined) {
+        if (kind !== "night_out") {
+          throw new PlannerAgentToolError("Only a night out has a home time.");
+        }
+        if (!healthNightUnitsFor(input.home_at)) {
+          throw new PlannerAgentToolError("home_at must be HH:MM.");
+        }
+      }
+    };
+    if (input.action === "fix") {
+      const row = await healthFindEntry(context.db, {
+        userId: context.user.id,
+        entryId: input.entry_id as string,
+      });
+      if (!row) {
+        throw new PlannerAgentToolError(
+          "No health row of the owner's has that id. Use an id from read_health.",
+        );
+      }
+      if (!healthIsBuiltinKind(row.kind) || row.dismissed) {
+        throw new PlannerAgentToolError(
+          "That health row cannot be fixed: it is dismissed or belongs to a tracker.",
+        );
+      }
+      checkFields(row.kind);
+      const now = {
+        day: row.day,
+        variant: row.variant,
+        minutes: row.minutes,
+        home_at: row.homeAt,
+      };
+      const patch: Partial<typeof now> = {};
+      for (const field of ["day", "variant", "minutes", "home_at"] as const) {
+        const value = input[field];
+        if (value !== undefined && value !== now[field]) {
+          (patch as Record<string, unknown>)[field] = value;
+        }
+      }
+      const fields = Object.keys(patch) as Array<keyof typeof now>;
+      if (fields.length === 0) {
+        throw new PlannerAgentToolError(
+          "The row already holds those values. Nothing was proposed.",
+        );
+      }
+      const was = Object.fromEntries(
+        fields.map((field) => [field, now[field]]),
+      );
+      const action = await fileAction(context, {
+        kind: "health_change",
+        taskId: null,
+        field: null,
+        change: {
+          action: "fix",
+          health_id: row.id,
+          ...patch,
+          was,
+          label: `${row.day} ${row.kind.replace("_", " ")}`,
+        },
+        why: input.why,
+      });
+      return `Proposed fixing health row ${row.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
+    }
+    const kind = input.kind as string;
+    const day = input.day as string;
+    if (!healthParseDay(day)) {
+      throw new PlannerAgentToolError("day must be a real YYYY-MM-DD date.");
+    }
+    checkFields(kind);
+    const same = await context.db
+      .select({ id: healthEntry.id, variant: healthEntry.variant })
+      .from(healthEntry)
+      .where(
+        and(
+          eq(healthEntry.userId, context.user.id),
+          eq(healthEntry.day, day),
+          eq(healthEntry.kind, kind as "training"),
+          isNull(healthEntry.deletedAt),
+          eq(healthEntry.dismissed, false),
+        ),
+      )
+      .all();
+    if (same.some((row) => row.variant === (input.variant ?? null))) {
+      throw new PlannerAgentToolError(
+        `${day} already has that ${kind.replace("_", " ")} row. Nothing was proposed.`,
+      );
+    }
+    const action = await fileAction(context, {
+      kind: "health_change",
+      taskId: null,
+      field: null,
+      change: {
+        action: "add",
+        day,
+        kind,
+        ...(input.variant !== undefined ? { variant: input.variant } : {}),
+        ...(input.minutes !== undefined ? { minutes: input.minutes } : {}),
+        ...(input.home_at !== undefined ? { home_at: input.home_at } : {}),
+        label: `${day} ${kind.replace("_", " ")}`,
+      },
+      why: input.why,
+    });
+    return `Proposed adding a ${kind.replace("_", " ")} row on ${day} (${action.id}). It shows in this answer's card; nothing is added before the owner accepts it.`;
   },
 
   async propose_add_task(context, input) {

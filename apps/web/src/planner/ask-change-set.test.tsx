@@ -301,4 +301,67 @@ describe("one card per answer", () => {
       "Slept badly. #sleep → Skipped the gym.",
     );
   });
+  it("shows a memory correction, a forgotten memory and health rows", async () => {
+    const base = { task_id: null, field: null, entry_id: null } as const;
+    const container = show([
+      action("m", {
+        ...base,
+        kind: "memory_change",
+        change: {
+          memory_id: "memories/m",
+          action: "correct",
+          content: "Lives in Leeds.",
+          was: { content: "Lives in Hull.", status: "active" },
+          label: "Lives in Hull.",
+        },
+      }),
+      action("f", {
+        ...base,
+        kind: "memory_change",
+        change: {
+          memory_id: "memories/f",
+          action: "forget",
+          was: { content: "Hates mornings.", status: "active" },
+          label: "Hates mornings.",
+        },
+      }),
+      action("h", {
+        ...base,
+        kind: "health_change",
+        change: {
+          action: "fix",
+          health_id: "h1",
+          minutes: 45,
+          day: "2026-11-03",
+          was: { minutes: 30, day: "2026-11-02" },
+          label: "2026-11-02 training",
+        },
+      }),
+      action("a", {
+        ...base,
+        kind: "health_change",
+        change: {
+          action: "add",
+          day: "2026-11-01",
+          kind: "night_out",
+          home_at: "02:30",
+          label: "2026-11-01 night out",
+        },
+      }),
+    ]);
+    await settle();
+    const text =
+      container.querySelector('[data-testid="planner-change-set"]')
+        ?.textContent ?? "";
+    expect(text).toContain("Correct memory");
+    expect(text).toContain("Lives in Hull. → Lives in Leeds.");
+    expect(text).toContain("Forget memory");
+    expect(text).toContain("Hates mornings.");
+    expect(text).toContain("Fix health row");
+    expect(text).toContain("minutes: 30 min → 45 min");
+    expect(text).toContain("day: 2026-11-02 → 2026-11-03");
+    expect(text).toContain("Add health row");
+    expect(text).toContain("2026-11-01 night out");
+    expect(text).toContain("home 02:30");
+  });
 });

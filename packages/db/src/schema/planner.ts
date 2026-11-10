@@ -566,6 +566,8 @@ export const plannerAgentAction = sqliteTable(
         "entry_edit",
         "entry_state",
         "entry_link",
+        "memory_change",
+        "health_change",
       ],
     }).notNull(),
     // Upstream tasks.id by value, with no foreign key.

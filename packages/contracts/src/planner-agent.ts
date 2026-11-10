@@ -413,6 +413,102 @@ export const plannerAgentToolInputs = {
       .max(500)
       .describe("One sentence: what the owner asked for."),
   }),
+  propose_memory_change: z
+    .strictObject({
+      memory_id: idSchema.describe(
+        "The memory to correct or forget, by id, as read_memories lists it.",
+      ),
+      action: z
+        .enum(["correct", "forget"])
+        .describe(
+          "correct puts new words on the memory; forget archives it (it can be brought back, never deleted).",
+        ),
+      content: z
+        .string()
+        .trim()
+        .min(1)
+        .max(600)
+        .optional()
+        .describe(
+          "Only with correct: the memory as it should read, one or two plain sentences.",
+        ),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe("One sentence: what the owner asked for."),
+    })
+    .refine((value) => (value.action === "correct") === !!value.content, {
+      message: "content goes with correct, and only with correct.",
+      path: ["content"],
+    }),
+  propose_health_change: z
+    .strictObject({
+      action: z
+        .enum(["fix", "add"])
+        .describe(
+          "fix changes a row the diary read wrongly; add makes a row the diary missed.",
+        ),
+      entry_id: idSchema
+        .optional()
+        .describe(
+          "Only with fix: the health row's id, as read_health lists it.",
+        ),
+      day: daySchema
+        .optional()
+        .describe(
+          "fix: the corrected day. add: the day of the session or night (the evening it started).",
+        ),
+      kind: z
+        .enum(["training", "breath", "night_out"])
+        .optional()
+        .describe("Only with add."),
+      variant: z
+        .string()
+        .trim()
+        .min(1)
+        .max(32)
+        .optional()
+        .describe(
+          "Training: crossfit, push, pull, back, chest, legs, upper, cardio or gym. Breathwork: wim_hof or meditation. Not for a night out.",
+        ),
+      minutes: z
+        .number()
+        .int()
+        .min(1)
+        .max(600)
+        .optional()
+        .describe("Training or breathwork only."),
+      home_at: z
+        .string()
+        .regex(/^\d{2}:\d{2}$/)
+        .optional()
+        .describe("Night out only: when the owner got home, HH:MM."),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe("One sentence: what the owner asked for."),
+    })
+    .refine(
+      (value) =>
+        value.action === "fix"
+          ? !!value.entry_id &&
+            value.kind === undefined &&
+            [value.day, value.variant, value.minutes, value.home_at].some(
+              (field) => field !== undefined,
+            )
+          : value.entry_id === undefined &&
+            value.day !== undefined &&
+            value.kind !== undefined,
+      {
+        message:
+          "fix takes entry_id and at least one of day, variant, minutes, home_at (no kind); add takes day and kind (no entry_id).",
+        path: ["action"],
+      },
+    ),
   read_link: z.strictObject({
     url: z
       .string()
@@ -508,6 +604,10 @@ export const plannerAgentToolDescriptions: Record<
     "Propose linking two diary entries (or taking a link away with remove). The link goes on entry_id and points at related_entry_id; it shows in the answer's card and can be undone. Only in an Ask chat, only when the owner asks for it.",
   propose_entry_state:
     "Propose archiving an entry (or bringing it back), or pinning it (or unpinning). Never deletes. Only in an Ask chat.",
+  propose_memory_change:
+    "Propose correcting a memory the ledger holds (new words) or forgetting it (archived, never deleted), only when the owner asks. Take the id from read_memories. It shows in the answer's card and can be undone; a corrected memory reads as confirmed by the owner once accepted. Only in an Ask chat. Not for a new memory (that is propose_memory, in a review).",
+  propose_health_change:
+    "Propose fixing a health row the diary read wrongly (its day, variant, minutes or home time; take the id from read_health) or adding one the diary missed (day and kind, with variant, minutes or home_at), only when the owner asks. It shows in the answer's card and can be undone. Only in an Ask chat.",
 };
 
 /** The tools that write a review proposal: off in every session but a review's. */
@@ -526,6 +626,8 @@ export const plannerAgentActionTools = [
   "propose_entry_edit",
   "propose_entry_state",
   "propose_entry_link",
+  "propose_memory_change",
+  "propose_health_change",
 ] as const satisfies readonly PlannerAgentToolName[];
 
 /** Every tool, in listing order, with its JSON Schema input. */
@@ -709,6 +811,12 @@ export const plannerAgentActionKinds = [
   // Two entries linked (or unlinked): `{ entry_id, related_entry_id, remove?,
   // was: [reference ids of entry_id] }`.
   "entry_link",
+  // A memory corrected or forgotten: `{ memory_id, action, content?, was: {
+  // content, status }, label }`.
+  "memory_change",
+  // A health row fixed or added: `{ action, entry_id?, day, kind, ..., was?,
+  // label }`.
+  "health_change",
 ] as const;
 export const plannerAgentActionStates = [
   "open",

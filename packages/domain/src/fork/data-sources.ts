@@ -348,7 +348,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: yes("the memory layer's own store"),
       mcp: yes("recall, remember, compile, forget"),
       agent: yes(
-        "read_memories (active memories) and the week's memories in review_week; propose_memory adds proposals",
+        "read_memories (active memories) and the week's memories in review_week; propose_memory adds proposals in a review, and propose_memory_change in Ask corrects or forgets one only when the owner accepts it",
       ),
       userExport: yes("every memory"),
       backup: IN_BACKUP,
@@ -967,7 +967,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       mcp: gap("agents cannot read health entries over MCP"),
       agent: yes(
-        "read_health (any span up to 26 weeks) and the week's rows in review_week",
+        "read_health (any span up to 26 weeks, with row ids) and the week's rows in review_week; propose_health_change in Ask fixes or adds a row only when the owner accepts it",
       ),
       userExport: FORK_EXPORT,
       backup: IN_BACKUP,
