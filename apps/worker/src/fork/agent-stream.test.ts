@@ -167,7 +167,7 @@ describe("plannerAgentPreviewResponse", () => {
     );
     expect(response.headers.get("content-type")).toContain("ndjson");
     expect(await response.text()).toBe(
-      '{"r":true}\n{"d":"Hi"}\n{"idle":true}\n',
+      '{"ready":true}\n{"r":true}\n{"d":"Hi"}\n{"idle":true}\n',
     );
   });
 

@@ -6,6 +6,7 @@ import type { PlannerAgentPreviewLine } from "@flaremo/contracts";
 // the words while they come. The Worker opens the session's event stream with
 // live previews of agent.message on, and turns it into short NDJSON lines:
 //
+// - `{"ready":true}`: the stream to Anthropic is open (first line);
 // - `{"r":true}`: a new message starts; the page clears what it shows;
 // - `{"d":"…"}`: more text of that message, with the coach's control line
 //   ("@@…") held back;
@@ -185,6 +186,13 @@ export async function plannerAgentPreviewResponse(
     await lines.return(undefined).catch(() => undefined);
   };
   const body = new ReadableStream<Uint8Array>({
+    // The stream to Anthropic is open: the page may send the step now, and
+    // the reply's live text will reach this connection.
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(`${JSON.stringify({ ready: true })}\n`),
+      );
+    },
     async pull(controller) {
       try {
         const next = await lines.next();

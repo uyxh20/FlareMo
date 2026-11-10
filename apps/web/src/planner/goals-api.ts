@@ -422,24 +422,45 @@ export async function plannerReadAiStream(
   }
 }
 
-/** One coach reply, streamed; or, from the review agent, shown whole. */
+/** How long the page waits for the live stream to open before sending anyway. */
+const AGENT_READY_MS = 3_000;
+
+/**
+ * One coach reply, streamed; or, from the review agent, shown as it is
+ * written. With a session already open, the live stream is opened first and
+ * the step sent once it is: Anthropic previews a reply only to a stream that
+ * was open when the agent began writing it.
+ */
 export async function plannerStreamCoach(
   week: string,
   input: PlannerAiCoachInput,
   options: { signal?: AbortSignal; onText?: (text: string) => void },
 ): Promise<PlannerStreamResult> {
+  let watch: PlannerAgentWatch | null =
+    input.session && options.onText
+      ? plannerStartAgentWatch(
+          agentStreamPath(week, input.session, input.today, input.mode),
+          options.onText,
+          options.signal,
+        )
+      : null;
+  if (watch) await settleWithin(watch.ready, AGENT_READY_MS);
   const result = await plannerReadAiStream(
     reviewPath(week, "ai/coach"),
     input,
     options,
   );
+  if (!result.agent || result.agent !== input.session) {
+    watch?.stop();
+    watch = null;
+  }
   if (!result.agent) return result;
   const answer = await plannerWaitForAgent(week, result.agent, {
     today: input.today,
     step: "coach",
     mode: input.mode,
     signal: options.signal,
-    onPreview: options.onText,
+    ...(watch ? { watch } : { onPreview: options.onText }),
   });
   if (options.signal?.aborted) return { status: "aborted", text: "" };
   if (answer?.step !== "coach" || !answer.text) {
@@ -450,6 +471,78 @@ export async function plannerStreamCoach(
     status: "done",
     text: answer.text,
     ...(answer.advance === null ? {} : { advance: answer.advance }),
+  };
+}
+
+const agentStreamPath = (
+  week: string,
+  session: string,
+  today: string,
+  mode?: PlannerAiCoachInput["mode"],
+) =>
+  `${reviewPath(week, `ai/agent/${encodeURIComponent(session)}/stream`)}?${new URLSearchParams(
+    { today, ...(mode ? { mode } : {}) },
+  )}`;
+
+/** Resolves when `promise` does or after `ms`, whichever comes first. */
+function settleWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    void promise.finally(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+/** The agent's live reply, watched while the page asks for the answer. */
+export type PlannerAgentWatch = {
+  /** Settles once the stream is open, or has failed. */
+  ready: Promise<void>;
+  /** The agent is done with the step (sticky: true once it happened). */
+  readonly idle: boolean;
+  /** Called when the agent is done, if it was not already. */
+  onIdle: (callback: () => void) => void;
+  stop: () => void;
+};
+
+/** Opens the live reply of a session; see plannerWatchAgent. Never throws. */
+export function plannerStartAgentWatch(
+  path: string,
+  onText: (text: string) => void,
+  signal?: AbortSignal,
+): PlannerAgentWatch {
+  const controller = new AbortController();
+  const stop = () => controller.abort();
+  if (signal?.aborted) stop();
+  else signal?.addEventListener("abort", stop, { once: true });
+  let idle = false;
+  let callback: (() => void) | null = null;
+  let markReady = () => {};
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+  void plannerWatchAgent(path, {
+    signal: controller.signal,
+    onText,
+    onReady: markReady,
+    onIdle: () => {
+      idle = true;
+      callback?.();
+    },
+  }).finally(markReady);
+  return {
+    ready,
+    get idle() {
+      return idle;
+    },
+    onIdle: (next) => {
+      callback = next;
+    },
+    stop: () => {
+      stop();
+      signal?.removeEventListener("abort", stop);
+    },
   };
 }
 
@@ -476,6 +569,8 @@ export async function plannerWaitForAgent(
      * nothing but how soon the words show.
      */
     onPreview?: (text: string) => void;
+    /** A live reply opened before the step was sent; this wait ends it. */
+    watch?: PlannerAgentWatch;
   },
 ): Promise<Extract<PlannerAgentResponse, { status: "done" }> | null> {
   const query = new URLSearchParams({
@@ -486,27 +581,23 @@ export async function plannerWaitForAgent(
   const base = reviewPath(week, `ai/agent/${encodeURIComponent(session)}`);
   const path = `${base}?${query}`;
   const deadline = Date.now() + AGENT_WAIT_MS;
-  // The preview's "done" cuts the current wait short.
-  // Sticky: an idle that lands while an ask is out still cuts the next wait.
+  const watch =
+    options.watch ??
+    (options.onPreview
+      ? plannerStartAgentWatch(
+          agentStreamPath(week, session, options.today, options.mode),
+          options.onPreview,
+          options.signal,
+        )
+      : null);
+  // The agent being done cuts the current wait short. Sticky: an idle that
+  // lands while an ask is out cuts the next wait instead.
   let wake: (() => void) | null = null;
-  let woken = false;
-  const watching = new AbortController();
-  const stopWatching = () => watching.abort();
-  options.signal?.addEventListener("abort", stopWatching, { once: true });
-  if (options.onPreview) {
-    const preview = new URLSearchParams({
-      today: options.today,
-      ...(options.mode ? { mode: options.mode } : {}),
-    });
-    void plannerWatchAgent(`${base}/stream?${preview}`, {
-      signal: watching.signal,
-      onText: options.onPreview,
-      onIdle: () => {
-        woken = true;
-        wake?.();
-      },
-    });
-  }
+  let woken = watch?.idle ?? false;
+  watch?.onIdle(() => {
+    woken = true;
+    wake?.();
+  });
   const wait = () =>
     new Promise<void>((resolve) => {
       if (woken) {
@@ -528,8 +619,7 @@ export async function plannerWaitForAgent(
   try {
     return await pollAgent(path, deadline, wait, options.signal);
   } finally {
-    stopWatching();
-    options.signal?.removeEventListener("abort", stopWatching);
+    watch?.stop();
   }
 }
 
@@ -577,6 +667,8 @@ export async function plannerWatchAgent(
     signal: AbortSignal;
     onText: (text: string) => void;
     onIdle: () => void;
+    /** The stream is open: the step can be sent. */
+    onReady?: () => void;
   },
 ): Promise<void> {
   let response: Response;
@@ -599,7 +691,9 @@ export async function plannerWatchAgent(
   const read = (line: string): boolean => {
     const parsed = parseLine(line.trim()) as Record<string, unknown> | null;
     if (!parsed) return false;
-    if (parsed.r === true) {
+    if (parsed.ready === true) {
+      options.onReady?.();
+    } else if (parsed.r === true) {
       text = "";
       options.onText(text);
     } else if (typeof parsed.d === "string") {

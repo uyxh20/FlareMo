@@ -732,6 +732,80 @@ describe("the review agent", () => {
     }
   });
 
+  it("opens the live reply before sending the step when the session is open", async () => {
+    vi.useFakeTimers();
+    try {
+      const order: string[] = [];
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.endsWith("/ai/coach")) {
+            order.push("coach");
+            release();
+            return new Response(line({ agent: "sesn_1" }), { status: 200 });
+          }
+          if (url.includes("/stream?")) {
+            order.push("stream");
+            const encoder = new TextEncoder();
+            let step = 0;
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                async pull(controller) {
+                  step += 1;
+                  if (step === 1) {
+                    controller.enqueue(encoder.encode(line({ ready: true })));
+                    return;
+                  }
+                  // The reply comes only after the step was sent.
+                  await held;
+                  controller.enqueue(
+                    encoder.encode(
+                      [
+                        line({ r: true }),
+                        line({ d: "Word " }),
+                        line({ d: "by word." }),
+                        line({ idle: true }),
+                      ].join(""),
+                    ),
+                  );
+                  controller.close();
+                },
+              }),
+              { status: 200 },
+            );
+          }
+          order.push("ask");
+          return Response.json({
+            status: "done",
+            step: "coach",
+            text: "Word by word.",
+            advance: true,
+          });
+        }),
+      );
+      const shown: string[] = [];
+      const reply = plannerStreamCoach(
+        WEEK,
+        { ...coachInput, session: "sesn_1" },
+        { onText: (text) => shown.push(text) },
+      );
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await reply).toEqual({
+        status: "done",
+        text: "Word by word.",
+        advance: true,
+      });
+      expect(order).toEqual(["stream", "coach", "ask"]);
+      expect(shown).toEqual(["", "Word ", "Word by word.", "Word by word."]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("still gets the answer when the live reply is not there", async () => {
     vi.useFakeTimers();
     try {
