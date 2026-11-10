@@ -128,6 +128,20 @@ const en = {
     memoryForget: "Forget memory",
     healthFix: "Fix health row",
     healthAdd: "Add health row",
+    goalAdd: "New weekly goal",
+    goalEdit: "Edit weekly goal",
+    goalField: {
+      title: "title",
+      lines: "lines",
+      note: "note",
+      pillar: "objective",
+    } as Record<string, string>,
+    pillar: {
+      of: "OF",
+      work: "Work",
+      ai: "AI",
+      health: "Health",
+    } as Record<string, string>,
     healthField: {
       day: "day",
       variant: "variant",
@@ -221,6 +235,20 @@ const zhCN: PlannerAskCopy = {
     memoryForget: "忘掉记忆",
     healthFix: "修正健康记录",
     healthAdd: "添加健康记录",
+    goalAdd: "新周目标",
+    goalEdit: "修改周目标",
+    goalField: {
+      title: "标题",
+      lines: "条目",
+      note: "备注",
+      pillar: "目标方向",
+    } as Record<string, string>,
+    pillar: {
+      of: "OF",
+      work: "工作",
+      ai: "AI",
+      health: "健康",
+    } as Record<string, string>,
     healthField: {
       day: "日期",
       variant: "类型",
@@ -367,6 +395,12 @@ function usePlannerActionRefresh(task: string | null) {
       void queryClient.invalidateQueries({ queryKey: ["health"] });
       return;
     }
+    if (action.kind === "goal_change") {
+      void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.goals });
+      void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.boards });
+      void queryClient.invalidateQueries({ queryKey: ["planner", "review"] });
+      return;
+    }
     const taskId =
       action.task_id ?? (action.kind === "task_new" ? action.landed_id : task);
     if (taskId) {
@@ -465,6 +499,12 @@ function PlannerProposalBody({
           ? copy.proposal.memoryForget
           : copy.proposal.memoryCorrect;
       break;
+    case "goal_change":
+      heading =
+        change.action === "add"
+          ? copy.proposal.goalAdd
+          : copy.proposal.goalEdit;
+      break;
     case "health_change":
       heading =
         change.action === "add"
@@ -493,7 +533,16 @@ function PlannerProposalBody({
           ? asString(change.label)
           : action.kind === "health_change"
             ? asString(change.label)
-            : null;
+            : action.kind === "goal_change"
+              ? [
+                  asString(change.week),
+                  change.action === "add"
+                    ? asString(change.title)
+                    : asString(change.goal_title),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : null;
   const shortField =
     action.kind === "task_change" &&
     action.field &&
@@ -573,6 +622,34 @@ function PlannerProposalBody({
             ))}
         </ul>
       )}
+      {action.kind === "goal_change" && change.action === "add" && (
+        <div className="flex flex-col gap-0.5 [overflow-wrap:anywhere]">
+          <p className="text-xs text-muted-foreground">
+            {copy.proposal.pillar[String(change.pillar)] ??
+              String(change.pillar ?? "")}
+          </p>
+          {goalLines(change.lines).length > 0 && (
+            <p className="font-medium">{goalLines(change.lines).join(" · ")}</p>
+          )}
+        </div>
+      )}
+      {action.kind === "goal_change" && change.action === "edit" && (
+        <ul className="flex flex-col gap-0.5 font-medium [overflow-wrap:anywhere]">
+          {Object.keys(copy.proposal.goalField)
+            .filter((field) => field in change)
+            .map((field) => (
+              <li key={field}>
+                {copy.proposal.goalField[field]}:{" "}
+                {goalValue(
+                  field,
+                  isRecord(change.was) ? change.was[field] : null,
+                  copy,
+                )}{" "}
+                → {goalValue(field, change[field], copy)}
+              </li>
+            ))}
+        </ul>
+      )}
       {action.kind === "health_change" && change.action === "add" && (
         <p className="font-medium [overflow-wrap:anywhere]">
           {[
@@ -641,6 +718,29 @@ function PlannerProposalBody({
       )}
     </div>
   );
+}
+
+/** A goal's lines as plain text; a struck line keeps its text. */
+function goalLines(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? raw.flatMap((line) =>
+        isRecord(line) && typeof line.text === "string" ? [line.text] : [],
+      )
+    : [];
+}
+
+/** A weekly goal's field as a short value: lines joined, a gap as "none". */
+function goalValue(field: string, raw: unknown, copy: PlannerAskCopy) {
+  if (field === "lines") {
+    const lines = goalLines(raw);
+    return lines.length ? lines.join(" · ") : copy.proposal.none;
+  }
+  if (raw === null || raw === undefined || raw === "") {
+    return copy.proposal.none;
+  }
+  return field === "pillar"
+    ? (copy.proposal.pillar[String(raw)] ?? String(raw))
+    : String(raw);
 }
 
 /** A health row's field as a short value: minutes with their unit, a gap as "none". */

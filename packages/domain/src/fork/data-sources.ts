@@ -694,6 +694,27 @@ export const forkDataSources: readonly ForkDataSource[] = [
     },
   },
   {
+    id: "planner_goal_version",
+    table: "planner_goal_version",
+    module: "goals",
+    kind: "history",
+    owner: "fork",
+    holds:
+      "The goal change log: the words of a goal before and after every write, with who made it (the owner, a review, or an accepted agent proposal). Append-only, kept after a goal is removed",
+    uses: {
+      lookBack: no("a log of changes, not part of the week's story"),
+      lookForward: no("a log of changes, not part of the plan"),
+      search: no("old wordings are not searchable"),
+      memory: no("the memory layer reads entries, not goals"),
+      mcp: no("not exposed to agents over MCP"),
+      agent: yes(
+        "Undo of an agent goal change reads it to see whether the goal was edited since the owner accepted the proposal",
+      ),
+      userExport: FORK_EXPORT,
+      backup: IN_BACKUP,
+    },
+  },
+  {
     id: "planner_week",
     table: "planner_week",
     module: "goals",

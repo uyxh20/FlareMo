@@ -107,6 +107,28 @@ Additive, with no foreign key to an upstream table and no triggers (G10 to G13).
 
 All four tables are in `RESTORE_TABLES` (`scripts/persistence-manifest.mjs`).
 
+### The goal change log: `migrations/9018_planner_goal_version.sql`
+
+`planner_event` (9017, `docs/fork-flywheel.md`) keeps codes and sizes only, so a
+rewritten goal left no trace of its old words. `planner_goal_version` keeps them:
+one row per write to a goal, with `action` (`create`, `update`, `delete`,
+`restore`), `actor` (`user` by default, `review` for Look back results, Check
+goals rewrites, Save week and the period review, `proposal:<id>` for an
+accepted agent proposal), `before_json` (null on a create), `after_json` (null
+on a delete) and `created_at`; index on `(user_id, goal_id, created_at)`. The
+snapshot is the goal row without its id and stamps: title, lines, note, status,
+result, pillar, level, `period_start`, `sort_order`, `deleted_at`.
+
+The row is written in the same batch as the goal write, in `plannerCreateGoal`,
+`plannerUpdateGoal`, `plannerDeleteGoal` (each takes an optional `actor`),
+`plannerSaveLookBack`, `settleFlags` and `writePlanGoals` (review.ts) and
+`plannerSavePeriodReview`. A save that changes nothing, and a retried create,
+write no version. The log is append-only: no code updates or deletes a row, and
+nothing purges goals (a delete is soft), so a goal's words outlive it. It is in
+the data-sources registry, the fork export and the weekly backup. Nothing in the
+app shows it yet; the agent's Undo of a goal proposal reads it (see
+`docs/fork-general-agent.md`).
+
 ## API, under `/api/app/planner`
 
 The full list, with each response type, is the comment block in `packages/contracts/src/planner-goals.ts`. The routes are in `apps/worker/src/routes/planner-goals-api.ts`, and `planner-api.ts` mounts them, so they share its lazy mount, authentication and JSON 404. The domain work is in `packages/domain/src/planner/goals.ts` and `review.ts`.

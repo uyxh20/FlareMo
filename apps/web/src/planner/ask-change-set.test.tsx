@@ -364,4 +364,52 @@ describe("one card per answer", () => {
     expect(text).toContain("2026-11-01 night out");
     expect(text).toContain("home 02:30");
   });
+  it("shows a new weekly goal and a rewritten one", async () => {
+    const base = { task_id: null, field: null, entry_id: null } as const;
+    const container = show([
+      action("g", {
+        ...base,
+        kind: "goal_change",
+        change: {
+          action: "add",
+          period_start: "2026-11-09",
+          pillar: "work",
+          title: "Ship the invoice flow",
+          lines: [{ text: "Draft" }, { text: "Send to Dana" }],
+          goal_title: "Ship the invoice flow",
+          week: "2026-11-09",
+          label: "Ship the invoice flow",
+        },
+      }),
+      action("e", {
+        ...base,
+        kind: "goal_change",
+        change: {
+          action: "edit",
+          goal_id: "goal-1",
+          lines: [{ text: "Draft" }, { text: "Review", note: "with Dana" }],
+          title: "Ship invoices",
+          was: {
+            title: "Ship the invoice flow",
+            lines: [{ text: "Draft" }],
+            note: null,
+            pillar: "work",
+          },
+          goal_title: "Ship the invoice flow",
+          week: "2026-11-09",
+          label: "Ship invoices",
+        },
+      }),
+    ]);
+    await settle();
+    const text =
+      container.querySelector('[data-testid="planner-change-set"]')
+        ?.textContent ?? "";
+    expect(text).toContain("New weekly goal");
+    expect(text).toContain("2026-11-09 · Ship the invoice flow");
+    expect(text).toContain("Draft · Send to Dana");
+    expect(text).toContain("Edit weekly goal");
+    expect(text).toContain("title: Ship the invoice flow → Ship invoices");
+    expect(text).toContain("lines: Draft → Draft · Review");
+  });
 });

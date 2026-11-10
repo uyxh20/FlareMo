@@ -51,6 +51,7 @@ const RESET_TABLES = [
   "planner_agent_chat",
   "planner_agent_action",
   "planner_event",
+  "planner_goal_version",
   "planner_metric_week",
   "planner_tuning",
   "task_activity",

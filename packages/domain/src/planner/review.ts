@@ -46,6 +46,13 @@ import {
   plannerRecordEvents,
 } from "./flywheel";
 import {
+  PLANNER_GOAL_ACTOR_REVIEW,
+  plannerGoalDtoSnapshot,
+  plannerGoalSnapshot,
+  plannerGoalVersionStatement,
+  plannerSameSnapshot,
+} from "./goal-version";
+import {
   plannerReadWeek,
   plannerReadWeekGoals,
   plannerRequireMonday,
@@ -551,11 +558,14 @@ export async function plannerSaveLookBack(
   const known = new Set(goals.map((goal) => goal.id));
   const nowIso = plannerNow(input.now).toISOString();
   const draft = memoDraftOf(await readReviewRow(db, user.id, weekStart));
+  const goalById = new Map(goals.map((goal) => [goal.id, goal]));
   await plannerRunBatch(db, [
     ...body.goal_results
       .filter((entry) => known.has(entry.goal_id))
-      .map((entry) =>
-        db
+      .flatMap((entry) => {
+        const goal = goalById.get(entry.goal_id);
+        const before = goal ? plannerGoalDtoSnapshot(goal) : null;
+        const update = db
           .update(plannerGoal)
           .set({ result: entry.result, updatedAt: nowIso })
           .where(
@@ -563,8 +573,23 @@ export async function plannerSaveLookBack(
               eq(plannerGoal.id, entry.goal_id),
               eq(plannerGoal.userId, user.id),
             ),
-          ),
-      ),
+          );
+        const after = before ? { ...before, result: entry.result } : null;
+        return before && after && !plannerSameSnapshot(before, after)
+          ? [
+              update,
+              plannerGoalVersionStatement(db, {
+                userId: user.id,
+                goalId: entry.goal_id,
+                action: "update",
+                actor: PLANNER_GOAL_ACTOR_REVIEW,
+                before,
+                after,
+                at: nowIso,
+              }),
+            ]
+          : [update];
+      }),
     plannerWeekUpsertStatement(db, {
       userId: user.id,
       weekStart,
@@ -755,6 +780,8 @@ async function settleFlags(
               },
             ]
           : goal.lines;
+      const before = plannerGoalSnapshot(goal);
+      const after = { ...before, title, lines, status: "active" as const };
       statements.push(
         db
           .update(plannerGoal)
@@ -766,6 +793,15 @@ async function settleFlags(
               isNull(plannerGoal.deletedAt),
             ),
           ),
+        plannerGoalVersionStatement(db, {
+          userId: input.userId,
+          goalId: goal.id,
+          action: "update",
+          actor: PLANNER_GOAL_ACTOR_REVIEW,
+          before,
+          after,
+          at: input.nowIso,
+        }),
       );
     }
   }
@@ -811,7 +847,7 @@ async function writePlanGoals(
   }
   const knownById = new Map(known.map((row) => [row.id, row]));
   const current = await db
-    .select({ id: plannerGoal.id })
+    .select()
     .from(plannerGoal)
     .where(
       and(
@@ -824,42 +860,93 @@ async function writePlanGoals(
     .all();
   const keep = new Set(ids);
 
-  const statements: unknown[] = input.goals.map((goal, index) => {
-    const title = goal.title.trim();
-    const existing = knownById.get(goal.id);
-    if (existing) {
-      return db
-        .update(plannerGoal)
-        .set({
+  const statements: unknown[] = input.goals.flatMap(
+    (goal, index): unknown[] => {
+      const title = goal.title.trim();
+      const existing = knownById.get(goal.id);
+      if (existing) {
+        const before = plannerGoalSnapshot(existing);
+        const after = {
+          ...before,
           pillar: goal.pillar,
           title,
+          sort_order: index,
+          ...(existing.deletedAt
+            ? { deleted_at: null, status: "active" as const }
+            : {}),
+        };
+        return [
+          db
+            .update(plannerGoal)
+            .set({
+              pillar: goal.pillar,
+              title,
+              sortOrder: index,
+              ...(existing.deletedAt
+                ? { deletedAt: null, status: "active" }
+                : {}),
+              updatedAt: input.nowIso,
+            })
+            .where(
+              and(
+                eq(plannerGoal.id, goal.id),
+                eq(plannerGoal.userId, input.userId),
+              ),
+            ),
+          ...(plannerSameSnapshot(before, after)
+            ? []
+            : [
+                plannerGoalVersionStatement(db, {
+                  userId: input.userId,
+                  goalId: goal.id,
+                  action: existing.deletedAt ? "restore" : "update",
+                  actor: PLANNER_GOAL_ACTOR_REVIEW,
+                  before,
+                  after,
+                  at: input.nowIso,
+                }),
+              ]),
+        ];
+      }
+      return [
+        db.insert(plannerGoal).values({
+          id: goal.id,
+          userId: input.userId,
+          level: "week",
+          periodStart: input.planWeek,
+          pillar: goal.pillar,
+          title,
+          lines: [],
+          status: "active",
+          note: null,
+          result: null,
           sortOrder: index,
-          ...(existing.deletedAt ? { deletedAt: null, status: "active" } : {}),
+          createdAt: input.nowIso,
           updatedAt: input.nowIso,
-        })
-        .where(
-          and(
-            eq(plannerGoal.id, goal.id),
-            eq(plannerGoal.userId, input.userId),
-          ),
-        );
-    }
-    return db.insert(plannerGoal).values({
-      id: goal.id,
-      userId: input.userId,
-      level: "week",
-      periodStart: input.planWeek,
-      pillar: goal.pillar,
-      title,
-      lines: [],
-      status: "active",
-      note: null,
-      result: null,
-      sortOrder: index,
-      createdAt: input.nowIso,
-      updatedAt: input.nowIso,
-    });
-  });
+        }),
+        plannerGoalVersionStatement(db, {
+          userId: input.userId,
+          goalId: goal.id,
+          action: "create",
+          actor: PLANNER_GOAL_ACTOR_REVIEW,
+          before: null,
+          after: plannerGoalSnapshot({
+            title,
+            lines: [],
+            note: null,
+            status: "active",
+            result: null,
+            pillar: goal.pillar,
+            level: "week",
+            periodStart: input.planWeek,
+            sortOrder: index,
+            deletedAt: null,
+          }),
+          at: input.nowIso,
+        }),
+      ];
+    },
+  );
   for (const row of current) {
     if (keep.has(row.id) || !input.knownIds.has(row.id)) continue;
     statements.push(
@@ -869,6 +956,15 @@ async function writePlanGoals(
         .where(
           and(eq(plannerGoal.id, row.id), eq(plannerGoal.userId, input.userId)),
         ),
+      plannerGoalVersionStatement(db, {
+        userId: input.userId,
+        goalId: row.id,
+        action: "delete",
+        actor: PLANNER_GOAL_ACTOR_REVIEW,
+        before: plannerGoalSnapshot(row),
+        after: null,
+        at: input.nowIso,
+      }),
     );
   }
   await plannerRunBatch(db, statements);

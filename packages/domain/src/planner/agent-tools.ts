@@ -16,6 +16,7 @@ import {
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
   type PlannerGoalDto,
+  type PlannerGoalLine,
   type PlannerPillar,
   plannerAddDays,
   plannerAgentInputFields,
@@ -64,7 +65,13 @@ import {
   plannerFlywheelWeekOf,
   plannerReadScorecard,
 } from "./flywheel";
-import { plannerReadGoalsYear, plannerRequireWeeklyGoal } from "./goals";
+import {
+  plannerGoalToDto,
+  plannerLoadLiveGoal,
+  plannerReadGoalsYear,
+  plannerReadWeekGoals,
+  plannerRequireWeeklyGoal,
+} from "./goals";
 import { plannerReadTaskHistory } from "./history-read";
 import { plannerSyncHistory } from "./history-sync";
 import { plannerPeriodChatContextBlock } from "./period-review-chat";
@@ -1644,6 +1651,129 @@ const handlers: Handlers = {
       why: input.why,
     });
     return `Proposed adding a ${kind.replace("_", " ")} row on ${day} (${action.id}). It shows in this answer's card; nothing is added before the owner accepts it.`;
+  },
+
+  async propose_goal_change(context, input) {
+    const today = healthToday(context.now);
+    const current = plannerWeekStartOf(today);
+    const lineObjects = (
+      lines: readonly string[],
+      existing: readonly PlannerGoalLine[] = [],
+    ): PlannerGoalLine[] => {
+      // A line that stays word for word keeps its note and its strike.
+      const left = [...existing];
+      return lines.map((text) => {
+        const at = left.findIndex((line) => line.text === text);
+        if (at < 0) return { text };
+        return left.splice(at, 1)[0] as PlannerGoalLine;
+      });
+    };
+    if (input.action === "add") {
+      const week = input.period_start as string;
+      const title = input.title as string;
+      if (
+        week < plannerAddDays(current, -56) ||
+        week > plannerAddDays(current, 182)
+      ) {
+        throw new PlannerAgentToolError(
+          "period_start is too far from today: a weekly goal is for a week within about two months back and six months ahead.",
+        );
+      }
+      const goals = await plannerReadWeekGoals(context.db, {
+        userId: context.user.id,
+        weekStart: week,
+      });
+      if (
+        goals.some(
+          (goal) =>
+            goal.pillar === input.pillar &&
+            goal.title.trim().toLowerCase() === title.toLowerCase(),
+        )
+      ) {
+        throw new PlannerAgentToolError(
+          `The week of ${week} already has a goal with that title under that objective. Nothing was proposed.`,
+        );
+      }
+      const lines = lineObjects(input.lines ?? []);
+      const action = await fileAction(context, {
+        kind: "goal_change",
+        taskId: null,
+        field: null,
+        change: {
+          action: "add",
+          period_start: week,
+          pillar: input.pillar,
+          title,
+          ...(lines.length ? { lines } : {}),
+          ...(input.note ? { note: input.note } : {}),
+          goal_title: title,
+          week,
+          label: title,
+        },
+        why: input.why,
+      });
+      return `Proposed a new weekly goal for the week of ${week} (${action.id}). It shows in this answer's card; nothing is added before the owner accepts it.`;
+    }
+    const goalId = input.goal_id as string;
+    try {
+      await plannerRequireWeeklyGoal(context.db, context.user.id, goalId);
+    } catch {
+      throw new PlannerAgentToolError(
+        "No weekly goal of the owner's has that id. Use the id of a week-level goal from read_goals.",
+      );
+    }
+    const row = await plannerLoadLiveGoal(context.db, context.user.id, goalId);
+    const goal = plannerGoalToDto(row);
+    const was = {
+      title: goal.title,
+      lines: goal.lines,
+      note: goal.note,
+      pillar: goal.pillar,
+    };
+    const patch: Record<string, unknown> = {};
+    if (input.title !== undefined && input.title !== goal.title) {
+      patch.title = input.title;
+    }
+    if (input.lines !== undefined) {
+      const lines = lineObjects(input.lines, goal.lines);
+      if (JSON.stringify(lines) !== JSON.stringify(goal.lines)) {
+        patch.lines = lines;
+      }
+    }
+    if (input.note !== undefined && input.note !== (goal.note ?? "")) {
+      patch.note = input.note;
+    }
+    if (input.pillar !== undefined && input.pillar !== goal.pillar) {
+      patch.pillar = input.pillar;
+    }
+    if (Object.keys(patch).length === 0) {
+      throw new PlannerAgentToolError(
+        "The goal already reads like that. Nothing was proposed.",
+      );
+    }
+    const after = {
+      title: (patch.title as string | undefined) ?? goal.title,
+      lines: (patch.lines as PlannerGoalLine[] | undefined) ?? goal.lines,
+    };
+    if (!after.title.trim() && after.lines.length === 0) {
+      throw new PlannerAgentToolError("A goal needs a title or a line.");
+    }
+    const action = await fileAction(context, {
+      kind: "goal_change",
+      taskId: null,
+      field: null,
+      change: {
+        action: "edit",
+        goal_id: goal.id,
+        ...patch,
+        was,
+        goal_title: goal.title || goal.lines[0]?.text || "Goal",
+        week: goal.period_start,
+        label: after.title || goal.title,
+      },
+      why: input.why,
+    });
+    return `Proposed rewriting weekly goal ${goal.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
   },
 
   async propose_add_task(context, input) {

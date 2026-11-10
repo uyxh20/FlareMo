@@ -35,6 +35,12 @@ import {
   plannerRecordEvents,
 } from "./flywheel";
 import {
+  type PlannerGoalActor,
+  plannerGoalSnapshot,
+  plannerGoalVersionStatement,
+  plannerSameSnapshot,
+} from "./goal-version";
+import {
   type PlannerActor,
   plannerEventStatement,
   plannerLoadLiveTask,
@@ -176,6 +182,9 @@ async function loadGoal(
   return row;
 }
 
+/** One of the caller's live goals as its row, or a 404. */
+export const plannerLoadLiveGoal = loadGoal;
+
 export type PlannerGoalInput = {
   id?: string;
   level: PlannerGoalLevel;
@@ -196,7 +205,13 @@ export type PlannerGoalInput = {
  */
 export async function plannerCreateGoal(
   db: FlareMoDb,
-  input: { userId: string; goal: PlannerGoalInput; now?: Date },
+  input: {
+    userId: string;
+    goal: PlannerGoalInput;
+    /** Who made it, for the change log: "user" (default), "review", "proposal:<id>". */
+    actor?: PlannerGoalActor;
+    now?: Date;
+  },
 ): Promise<PlannerGoalDto> {
   const { goal } = input;
   const title = (goal.title ?? "").trim();
@@ -207,25 +222,42 @@ export async function plannerCreateGoal(
   const periodStart = plannerGoalPeriodStart(goal.level, goal.periodStart);
   const id = goal.id ?? crypto.randomUUID();
   const nowIso = plannerNow(input.now).toISOString();
+  const values = {
+    id,
+    userId: input.userId,
+    level: goal.level,
+    periodStart,
+    pillar: goal.pillar ?? null,
+    title,
+    lines,
+    status: (goal.status ?? "active") as PlannerGoalStatus,
+    note: goal.note?.trim() || null,
+    result: goal.result ?? null,
+    sortOrder: goal.sortOrder ?? 0,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+  // A retried create finds the goal already there: it gets no second version.
+  const already = await db
+    .select({ id: plannerGoal.id })
+    .from(plannerGoal)
+    .where(eq(plannerGoal.id, id))
+    .get();
   await plannerRunBatch(db, [
-    db
-      .insert(plannerGoal)
-      .values({
-        id,
-        userId: input.userId,
-        level: goal.level,
-        periodStart,
-        pillar: goal.pillar ?? null,
-        title,
-        lines,
-        status: goal.status ?? "active",
-        note: goal.note?.trim() || null,
-        result: goal.result ?? null,
-        sortOrder: goal.sortOrder ?? 0,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      })
-      .onConflictDoNothing(),
+    db.insert(plannerGoal).values(values).onConflictDoNothing(),
+    ...(already
+      ? []
+      : [
+          plannerGoalVersionStatement(db, {
+            userId: input.userId,
+            goalId: id,
+            action: "create",
+            actor: input.actor,
+            before: null,
+            after: plannerGoalSnapshot({ ...values, deletedAt: null }),
+            at: nowIso,
+          }),
+        ]),
   ]);
   const row = await db
     .select()
@@ -281,6 +313,10 @@ export async function plannerUpdateGoal(
     userId: string;
     goalId: string;
     patch: PlannerGoalPatch;
+    /** Who made it, for the change log: "user" (default), "review", "proposal:<id>". */
+    actor?: PlannerGoalActor;
+    /** The change puts back an earlier version: logged as a `restore`. */
+    restore?: boolean;
     now?: Date;
   },
 ): Promise<PlannerGoalDto> {
@@ -295,29 +331,41 @@ export async function plannerUpdateGoal(
     throw new ValidationError("A goal needs a title or a line.");
   }
   const nowIso = plannerNow(input.now).toISOString();
+  const set = {
+    ...(patch.pillar !== undefined ? { pillar: patch.pillar } : {}),
+    title,
+    lines,
+    ...(patch.status !== undefined ? { status: patch.status } : {}),
+    ...(patch.note !== undefined ? { note: patch.note?.trim() || null } : {}),
+    ...(patch.result !== undefined ? { result: patch.result } : {}),
+    ...(patch.sortOrder !== undefined ? { sortOrder: patch.sortOrder } : {}),
+  };
+  const before = plannerGoalSnapshot(existing);
+  const after = plannerGoalSnapshot({ ...existing, ...set });
   await plannerRunBatch(db, [
     db
       .update(plannerGoal)
-      .set({
-        ...(patch.pillar !== undefined ? { pillar: patch.pillar } : {}),
-        title,
-        lines,
-        ...(patch.status !== undefined ? { status: patch.status } : {}),
-        ...(patch.note !== undefined
-          ? { note: patch.note?.trim() || null }
-          : {}),
-        ...(patch.result !== undefined ? { result: patch.result } : {}),
-        ...(patch.sortOrder !== undefined
-          ? { sortOrder: patch.sortOrder }
-          : {}),
-        updatedAt: nowIso,
-      })
+      .set({ ...set, updatedAt: nowIso })
       .where(
         and(
           eq(plannerGoal.id, existing.id),
           eq(plannerGoal.userId, input.userId),
         ),
       ),
+    // A save that changes nothing leaves no version.
+    ...(plannerSameSnapshot(before, after)
+      ? []
+      : [
+          plannerGoalVersionStatement(db, {
+            userId: input.userId,
+            goalId: existing.id,
+            action: input.restore ? "restore" : "update",
+            actor: input.actor,
+            before,
+            after,
+            at: nowIso,
+          }),
+        ]),
   ]);
   const updated = await loadGoal(db, input.userId, existing.id);
   await plannerRecordEvents(
@@ -388,7 +436,13 @@ export function plannerGoalChangeEvents(
 /** Removes a goal (soft delete). Tasks and flags that name it keep the id. */
 export async function plannerDeleteGoal(
   db: FlareMoDb,
-  input: { userId: string; goalId: string; now?: Date },
+  input: {
+    userId: string;
+    goalId: string;
+    /** Who made it, for the change log: "user" (default), "review", "proposal:<id>". */
+    actor?: PlannerGoalActor;
+    now?: Date;
+  },
 ): Promise<void> {
   const existing = await loadGoal(db, input.userId, input.goalId);
   const nowIso = plannerNow(input.now).toISOString();
@@ -402,6 +456,15 @@ export async function plannerDeleteGoal(
           eq(plannerGoal.userId, input.userId),
         ),
       ),
+    plannerGoalVersionStatement(db, {
+      userId: input.userId,
+      goalId: existing.id,
+      action: "delete",
+      actor: input.actor,
+      before: plannerGoalSnapshot(existing),
+      after: null,
+      at: nowIso,
+    }),
   ]);
   await plannerRecordEvents(
     db,

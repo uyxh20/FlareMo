@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import type { TaskActor } from "../tasks";
 import { plannerReadBoard } from "./board";
+import { plannerReadGoalVersions } from "./goal-version";
 import {
   plannerCreateGoal,
   plannerDeleteGoal,
@@ -146,6 +147,80 @@ describe("goals", () => {
         patch: { title: "", lines: [] },
       }),
     ).rejects.toThrow(ValidationError);
+  });
+
+  it("logs the words of a goal before and after every write, and keeps them after a delete", async () => {
+    const goal = await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        level: "week",
+        periodStart: "2026-10-05",
+        pillar: "work",
+        title: "Ship it",
+        lines: [{ text: "Draft" }],
+      },
+      now: NOW,
+    });
+    // A retried create writes no second version.
+    await plannerCreateGoal(rt.db, {
+      userId: rt.user.id,
+      goal: {
+        id: goal.id,
+        level: "week",
+        periodStart: "2026-10-05",
+        title: "x",
+      },
+      now: NOW,
+    });
+    await plannerUpdateGoal(rt.db, {
+      userId: rt.user.id,
+      goalId: goal.id,
+      patch: { title: "Ship it Friday", note: "Dana waits" },
+      actor: "proposal:p1",
+      now: new Date(NOW.getTime() + 60_000),
+    });
+    // A save that changes nothing leaves no version.
+    await plannerUpdateGoal(rt.db, {
+      userId: rt.user.id,
+      goalId: goal.id,
+      patch: { title: "Ship it Friday" },
+      now: new Date(NOW.getTime() + 90_000),
+    });
+    await plannerDeleteGoal(rt.db, {
+      userId: rt.user.id,
+      goalId: goal.id,
+      now: new Date(NOW.getTime() + 120_000),
+    });
+    const versions = await plannerReadGoalVersions(rt.db, {
+      userId: rt.user.id,
+      goalId: goal.id,
+    });
+    expect(versions.map((v) => [v.action, v.actor])).toEqual([
+      ["create", "user"],
+      ["update", "proposal:p1"],
+      ["delete", "user"],
+    ]);
+    const [created, updated, deleted] = versions;
+    expect(created?.beforeJson).toBeNull();
+    expect(created?.afterJson).toEqual({
+      title: "Ship it",
+      lines: [{ text: "Draft" }],
+      note: null,
+      status: "active",
+      result: null,
+      pillar: "work",
+      level: "week",
+      period_start: "2026-10-05",
+      sort_order: 0,
+      deleted_at: null,
+    });
+    expect(updated?.beforeJson).toMatchObject({ title: "Ship it", note: null });
+    expect(updated?.afterJson).toMatchObject({
+      title: "Ship it Friday",
+      note: "Dana waits",
+    });
+    expect(deleted?.beforeJson).toMatchObject({ title: "Ship it Friday" });
+    expect(deleted?.afterJson).toBeNull();
   });
 
   it("reads one ISO year for the Goals page, without removed goals", async () => {

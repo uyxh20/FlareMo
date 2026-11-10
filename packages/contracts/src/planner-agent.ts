@@ -509,6 +509,67 @@ export const plannerAgentToolInputs = {
         path: ["action"],
       },
     ),
+  propose_goal_change: z
+    .strictObject({
+      action: z
+        .enum(["add", "edit"])
+        .describe(
+          "add makes a weekly goal for a week; edit rewrites one the owner already has. Weekly goals only, never a delete, and never a goal's status, result or score: those are the owner's own verdicts.",
+        ),
+      goal_id: idSchema
+        .optional()
+        .describe(
+          "Only with edit: the weekly goal's id, as read_goals lists it.",
+        ),
+      period_start: mondaySchema
+        .optional()
+        .describe("Only with add: the Monday of the week the goal is for."),
+      pillar: plannerPillarSchema
+        .optional()
+        .describe(
+          "add: the objective the goal belongs under (needed). edit: moves it to another objective.",
+        ),
+      title: z.string().trim().min(1).max(300).optional(),
+      lines: z
+        .array(z.string().trim().min(1).max(300))
+        .max(6)
+        .optional()
+        .describe(
+          "The lines under the title, as they should read afterwards (edit: they replace the goal's lines; a line that stays word for word keeps its note and strike).",
+        ),
+      note: z
+        .string()
+        .trim()
+        .max(2000)
+        .optional()
+        .describe(
+          "The goal's note as it should read afterwards; an empty string clears it.",
+        ),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe("One sentence: what the owner asked for."),
+    })
+    .refine(
+      (value) =>
+        value.action === "add"
+          ? value.goal_id === undefined &&
+            value.period_start !== undefined &&
+            value.pillar !== undefined &&
+            value.title !== undefined
+          : !!value.goal_id &&
+            value.period_start === undefined &&
+            [value.pillar, value.title, value.lines, value.note].some(
+              (field) => field !== undefined,
+            ),
+      {
+        message:
+          "add takes period_start (a Monday), pillar and title (no goal_id); edit takes goal_id and at least one of pillar, title, lines, note (no period_start).",
+        path: ["action"],
+      },
+    ),
   read_link: z.strictObject({
     url: z
       .string()
@@ -606,6 +667,8 @@ export const plannerAgentToolDescriptions: Record<
     "Propose archiving an entry (or bringing it back), or pinning it (or unpinning). Never deletes. Only in an Ask chat.",
   propose_memory_change:
     "Propose correcting a memory the ledger holds (new words) or forgetting it (archived, never deleted), only when the owner asks. Take the id from read_memories. It shows in the answer's card and can be undone; a corrected memory reads as confirmed by the owner once accepted. Only in an Ask chat. Not for a new memory (that is propose_memory, in a review).",
+  propose_goal_change:
+    "Propose adding a weekly goal for a week (action add: period_start a Monday, pillar, title, optional lines and note) or rewriting one the owner already has (action edit: goal_id from read_goals, with the title, lines, note or pillar as they should read), only when the owner asks. Weekly goals only: no delete, and no status, result or score, which are the owner's own verdicts. It shows in the answer's card and can be undone; the change log keeps the old words. Only in an Ask chat.",
   propose_health_change:
     "Propose fixing a health row the diary read wrongly (its day, variant, minutes or home time; take the id from read_health) or adding one the diary missed (day and kind, with variant, minutes or home_at), only when the owner asks. It shows in the answer's card and can be undone. Only in an Ask chat.",
 };
@@ -628,6 +691,7 @@ export const plannerAgentActionTools = [
   "propose_entry_link",
   "propose_memory_change",
   "propose_health_change",
+  "propose_goal_change",
 ] as const satisfies readonly PlannerAgentToolName[];
 
 /** Every tool, in listing order, with its JSON Schema input. */
@@ -817,6 +881,10 @@ export const plannerAgentActionKinds = [
   // A health row fixed or added: `{ action, entry_id?, day, kind, ..., was?,
   // label }`.
   "health_change",
+  // A weekly goal added or rewritten: `{ action, goal_id?, period_start?, pillar?,
+  // title?, lines?, note?, was?: { title, lines, note, pillar }, goal_title,
+  // week, label }`.
+  "goal_change",
 ] as const;
 export const plannerAgentActionStates = [
   "open",

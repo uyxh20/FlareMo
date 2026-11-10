@@ -915,8 +915,8 @@ describe("planner and upstream flows", () => {
         // 9013 the period reviews and their receipts (planner_evidence), and
         // 9014 the general agent's runs, proposals and chat, 9015 its actions,
         // 9016 the task attachments, and 9017 the flywheel's log, scorecard
-        // and tuning.
-        expect(await tableNames(withPlanner)).toBe(20);
+        // and tuning, and 9018 the goal change log.
+        expect(await tableNames(withPlanner)).toBe(21);
       } finally {
         await without.runtime.dispose();
         await withPlanner.runtime.dispose();

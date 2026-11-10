@@ -84,6 +84,9 @@ export const RESTORE_TABLES = [
   // (migrations/9017_planner_flywheel.sql), and the weekly scorecard, which the
   // nightly sweep rebuilds for recent weeks but keeps for older ones.
   "planner_event",
+  // The goal change log (migrations/9018_planner_goal_version.sql): the words of
+  // a goal before and after every write, append-only.
+  "planner_goal_version",
   "planner_metric_week",
   "planner_tuning",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo

@@ -73,6 +73,7 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
 | `planner_sync_state` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
 | `planner_goal` | goals | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
+| `planner_goal_version` | goals | history | – | – | – | – | – | yes | yes | yes |
 | `planner_week` | goals | content | yes | – | – | – | **gap** | yes | yes | yes |
 | `planner_review` | goals | content | – | – | – | – | – | – | yes | yes |
 | `planner_goal_flag` | goals | content | yes | yes | – | – | – | yes | yes | yes |

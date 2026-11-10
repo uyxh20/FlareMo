@@ -8,6 +8,7 @@ import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import { plannerReadBoard } from "./board";
+import { plannerReadGoalVersions } from "./goal-version";
 import {
   plannerCreateGoal,
   plannerReadWeek,
@@ -901,6 +902,33 @@ describe("the weekly review", () => {
         status: "active",
         note: "A 6 Oct note says join Acme",
       });
+
+      // The change log keeps the words the rewrite replaced, as the review.
+      const yearVersions = await plannerReadGoalVersions(rt.db, {
+        userId: rt.user.id,
+        goalId: yearWork.id,
+      });
+      expect(yearVersions.map((v) => [v.action, v.actor])).toEqual([
+        ["create", "user"],
+        ["update", "review"],
+      ]);
+      expect(yearVersions[1]?.beforeJson).toMatchObject({
+        title: "Stay on better terms",
+        status: "contested",
+      });
+      expect(yearVersions[1]?.afterJson).toMatchObject({
+        title: "Join Acme from 1 January on a written deal",
+        status: "active",
+      });
+      // The plan's own new goal is logged as created by the review.
+      expect(
+        (
+          await plannerReadGoalVersions(rt.db, {
+            userId: rt.user.id,
+            goalId: G2,
+          })
+        ).map((v) => [v.action, v.actor]),
+      ).toEqual(expect.arrayContaining([["create", "review"]]));
 
       // Saving the same plan again does not stack another struck line.
       await commit(

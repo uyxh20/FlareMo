@@ -367,7 +367,8 @@ plannerAgentApi.post(
         action.kind !== "entry_state" &&
         action.kind !== "entry_link" &&
         action.kind !== "memory_change" &&
-        action.kind !== "health_change"
+        action.kind !== "health_change" &&
+        action.kind !== "goal_change"
       ) {
         // The accept wrote a task: the archive takes the new line now, past
         // the sync's debounce, so History shows it (with Revert) at once.

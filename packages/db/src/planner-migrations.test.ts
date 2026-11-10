@@ -21,6 +21,7 @@ import {
   plannerEvidence,
   plannerGoal,
   plannerGoalFlag,
+  plannerGoalVersion,
   plannerMetricWeek,
   plannerPeriodReview,
   plannerProjectNode,
@@ -191,6 +192,14 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
       columns: ["user_id", "occurred_at"],
     },
   ],
+  planner_goal_version: [
+    {
+      name: "planner_goal_version_user_goal_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "goal_id", "created_at"],
+    },
+  ],
   planner_metric_week: [],
   planner_tuning: [
     {
@@ -237,6 +246,7 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_agent_action: plannerAgentAction,
   planner_task_attachment: plannerTaskAttachment,
   planner_event: plannerEvent,
+  planner_goal_version: plannerGoalVersion,
   planner_metric_week: plannerMetricWeek,
   planner_tuning: plannerTuning,
 };
@@ -413,6 +423,7 @@ describe("planner migrations", () => {
         planner_evidence: [],
         planner_goal: [],
         planner_goal_flag: [],
+        planner_goal_version: [],
         planner_metric_week: [],
         planner_period_review: [],
         planner_project_node: ["planner_project_node"],
@@ -1035,6 +1046,25 @@ describe("planner migrations", () => {
         content_type: null,
         etag: null,
         removed_at: null,
+      });
+    });
+  });
+
+  describe("9018 goal change log", () => {
+    it("keeps the words of a goal before and after, NULL on the side that has none", async () => {
+      await run(
+        `INSERT INTO planner_goal_version (id, user_id, goal_id, action, before_json, after_json, created_at)
+         VALUES ('v1', 'u1', 'g1', 'create', NULL, '{"title":"A"}', ?)`,
+        NOW,
+      );
+      const [row] = await rows<Record<string, unknown>>(
+        "SELECT action, actor, before_json, after_json FROM planner_goal_version WHERE id = 'v1'",
+      );
+      expect(row).toEqual({
+        action: "create",
+        actor: "user",
+        before_json: null,
+        after_json: '{"title":"A"}',
       });
     });
   });

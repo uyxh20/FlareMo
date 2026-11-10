@@ -1,6 +1,8 @@
 import {
   type CreateMemoInput,
   type PlannerAgentActionDto,
+  type PlannerGoalLine,
+  type PlannerPillar,
   plannerAgentActionFields,
   plannerAgentLinkSchema,
   plannerColumns,
@@ -10,7 +12,10 @@ import {
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoRelations } from "@flaremo/db";
-import { plannerTaskEvent } from "@flaremo/db/src/schema/planner";
+import {
+  plannerTaskEvent,
+  plannerTaskPlan,
+} from "@flaremo/db/src/schema/planner";
 import { and, desc, eq } from "drizzle-orm";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { healthSnapshot, healthToDto } from "../health/rows";
@@ -43,6 +48,20 @@ import {
 import { plannerRestoreBoardRank } from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
+import {
+  plannerGoalSnapshot,
+  plannerLatestGoalVersion,
+  plannerProposalActor,
+  plannerSameSnapshot,
+} from "./goal-version";
+import {
+  type PlannerGoalPatch,
+  plannerCreateGoal,
+  plannerDeleteGoal,
+  plannerGoalToDto,
+  plannerLoadLiveGoal,
+  plannerUpdateGoal,
+} from "./goals";
 import { plannerEventToDto } from "./history-read";
 import { plannerRevertEvent } from "./history-revert";
 import { plannerDropTask } from "./plans";
@@ -211,6 +230,37 @@ async function memoryWrite<T>(write: Promise<T>): Promise<T> {
   } catch (error) {
     if (error instanceof ConflictError) {
       throw new ValidationError(error.message);
+    }
+    throw error;
+  }
+}
+
+/** The fields of a weekly goal an edit changes, and the card's `was` holds. */
+const GOAL_EDIT_FIELDS = ["title", "lines", "note", "pillar"] as const;
+
+/** A weekly goal's words as the proposal records them. */
+function goalWords(goal: {
+  title: string;
+  lines: unknown;
+  note: string | null;
+  pillar: string | null;
+}): Record<string, unknown> {
+  return {
+    title: goal.title,
+    lines: goal.lines,
+    note: goal.note ?? null,
+    pillar: goal.pillar ?? null,
+  };
+}
+
+/** The live goal a goal action names, or a ValidationError. */
+async function goalOf(db: FlareMoDb, user: UserRow, goalId: string | null) {
+  if (!goalId) throw new ValidationError("This proposal names no goal.");
+  try {
+    return await plannerLoadLiveGoal(db, user.id, goalId);
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      throw new ValidationError("That goal is gone.");
     }
     throw error;
   }
@@ -524,6 +574,72 @@ export async function plannerAgentAcceptAction(
         landedId = entryId;
         break;
       }
+      case "goal_change": {
+        const proposalActor = plannerProposalActor(row.id);
+        if (row.change.action === "add") {
+          const title = asString(row.change.title)?.trim();
+          const week = asString(row.change.period_start);
+          const pillar = asString(row.change.pillar) as
+            | PlannerPillar
+            | undefined;
+          if (!title || !week || !pillar) {
+            throw new ValidationError("This proposal is missing its goal.");
+          }
+          const created = await plannerCreateGoal(db, {
+            userId: user.id,
+            actor: proposalActor,
+            now: input.now,
+            goal: {
+              level: "week",
+              periodStart: week,
+              pillar,
+              title,
+              lines: Array.isArray(row.change.lines)
+                ? (row.change.lines as PlannerGoalLine[])
+                : [],
+              note: asString(row.change.note) ?? null,
+            },
+          });
+          before = { created: true, goal: goalWords(created) };
+          landedId = created.id;
+          break;
+        }
+        const goal = await goalOf(
+          db,
+          user,
+          asString(row.change.goal_id) ?? null,
+        );
+        if (goal.level !== "week") {
+          throw new ValidationError("Only a weekly goal can be changed here.");
+        }
+        const now = goalWords({ ...goal, lines: plannerGoalToDto(goal).lines });
+        if ("was" in row.change && !same(row.change.was, now)) {
+          throw new ValidationError(PLANNER_AGENT_STALE);
+        }
+        const patch: PlannerGoalPatch = {};
+        if (typeof row.change.title === "string")
+          patch.title = row.change.title;
+        if (Array.isArray(row.change.lines)) {
+          patch.lines = row.change.lines as PlannerGoalLine[];
+        }
+        if (typeof row.change.note === "string") patch.note = row.change.note;
+        if (typeof row.change.pillar === "string") {
+          patch.pillar = row.change.pillar as PlannerPillar;
+        }
+        if (Object.keys(patch).length === 0) {
+          throw new ValidationError("This proposal changes nothing.");
+        }
+        before = now;
+        await plannerUpdateGoal(db, {
+          userId: user.id,
+          goalId: goal.id,
+          actor: proposalActor,
+          patch,
+          now: input.now,
+        });
+        landedId = goal.id;
+        break;
+      }
       default:
         throw new ValidationError("Unknown proposal kind.");
     }
@@ -746,6 +862,73 @@ export async function plannerAgentRevertAction(
         before: created === true ? null : snapshot,
         accepted: accepted as Record<string, unknown>,
       });
+      await settle();
+      break;
+    }
+    case "goal_change": {
+      const proposalActor = plannerProposalActor(row.id);
+      const goalId = row.landedId;
+      if (!goalId) throw new ValidationError("No goal was written.");
+      const goal = await goalOf(db, user, goalId);
+      // Untouched since the accept: the goal's last write is the one the accept
+      // made, and the goal still says what that write left.
+      const last = await plannerLatestGoalVersion(db, {
+        userId: user.id,
+        goalId,
+      });
+      const untouched =
+        last !== null &&
+        last.actor === proposalActor &&
+        plannerSameSnapshot(last.afterJson, plannerGoalSnapshot(goal));
+      if (!untouched) {
+        throw new ValidationError(
+          "The goal changed since, so this cannot be put back.",
+        );
+      }
+      const was = row.before ?? {};
+      if (row.change.action === "add") {
+        const linked = await db
+          .select({ taskId: plannerTaskPlan.taskId })
+          .from(plannerTaskPlan)
+          .where(
+            and(
+              eq(plannerTaskPlan.userId, user.id),
+              eq(plannerTaskPlan.goalId, goalId),
+            ),
+          )
+          .limit(1)
+          .get();
+        if (linked) {
+          throw new ValidationError(
+            "Tasks were linked to this goal since, so it cannot be removed.",
+          );
+        }
+        await plannerDeleteGoal(db, {
+          userId: user.id,
+          goalId,
+          actor: proposalActor,
+        });
+      } else {
+        const patch: PlannerGoalPatch = {};
+        for (const field of GOAL_EDIT_FIELDS) {
+          if (!(field in was)) {
+            throw new ValidationError("The old words were not kept.");
+          }
+        }
+        patch.title = asString(was.title) ?? "";
+        patch.lines = Array.isArray(was.lines)
+          ? (was.lines as PlannerGoalLine[])
+          : [];
+        patch.note = asString(was.note) ?? null;
+        patch.pillar = (asString(was.pillar) ?? null) as PlannerPillar | null;
+        await plannerUpdateGoal(db, {
+          userId: user.id,
+          goalId,
+          actor: proposalActor,
+          patch,
+          restore: true,
+        });
+      }
       await settle();
       break;
     }

@@ -154,7 +154,18 @@ Since November 2026 (the control panel, design option B) it can also propose:
   `minutes`, `home_at`; `was` holds the values of just those fields) or adding
   one it missed (`action: add`, `day` and `kind`, with `variant`, `minutes` or
   `home_at`). Stored as kind `health_change`. `read_health` now prints each
-  row's id.
+  row's id;
+- `propose_goal_change`, adding a weekly goal (`action: add`, `period_start`
+  a Monday within about two months back and six ahead, `pillar`, `title`,
+  optional `lines` and `note`) or rewriting one the owner has (`action: edit`,
+  `goal_id` from `read_goals`, any of `title`, `lines`, `note`, `pillar`).
+  Weekly goals only, never a delete, and never a goal's status, result or
+  score: those are the owner's own verdicts, and the tool refuses them (its
+  input has no such fields). Stored as kind `goal_change`; an edit keeps `was`
+  (the goal's title, lines, note and pillar) and the card shows the goal's
+  title and week. On an edit, a line that stays word for word keeps its note
+  and strike. The old words are kept by the goal change log
+  (`planner_goal_version`, migration 9018).
 
 Since November 2026 it also reads links the owner gives it (`read_link`) and
 proposes a summary entry (`propose_entry` with `link`), saved as a link
@@ -163,8 +174,9 @@ summary that the rest of the diary never reads as the owner's words; see
 fetches the link.
 
 Nothing it proposes deletes: dropping a task and archiving an entry are as far
-as it goes. Weekly goals themselves (adding or rewriting a goal) stay off until
-goals keep a change log of their own; only the task's link to a goal is open.
+as it goes. A weekly goal can be added or rewritten (never deleted, and its
+status, result and scores are the owner's): every write is logged in the goal
+change log with the actor `proposal:<id>`, which is what Undo reads.
 
 Each proposal records what the field or entry held when it was proposed
 (`change.was`, plus `task_title`, `goal_title` or the entry's first words for
@@ -242,6 +254,14 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
 - a health row add: `healthCreateEntry` makes a `manual` row with no memo; Undo
   soft-deletes it (`deleted_at` and a `delete` event, never removed); refused
   if the row was fixed since.
+- a weekly goal add: `plannerCreateGoal` as `proposal:<id>` (version `create`);
+  Undo soft-deletes it through `plannerDeleteGoal` (version `delete`, never
+  removed); refused if the goal's last version is not the accept's or the goal
+  differs from what that version left, or if a task was linked to it since;
+- a weekly goal edit: `plannerUpdateGoal` as `proposal:<id>` (version
+  `update`, `before` the title, lines, note and pillar it held); Undo writes
+  those back through the same path (version `restore`); refused if the goal
+  changed since the accept, judged against the version row the accept wrote.
 
 The route syncs the task archive before and after, so the lines upstream wrote
 for the accept are there to revert and History shows the revert at once.

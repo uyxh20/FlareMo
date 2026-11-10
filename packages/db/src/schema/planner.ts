@@ -568,6 +568,7 @@ export const plannerAgentAction = sqliteTable(
         "entry_link",
         "memory_change",
         "health_change",
+        "goal_change",
       ],
     }).notNull(),
     // Upstream tasks.id by value, with no foreign key.
@@ -696,6 +697,52 @@ export const plannerTuning = sqliteTable(
   ],
 );
 
+// The words of a goal at one moment (migration 9018): the whole row but its
+// ids and timestamps, in snake_case like the JSON the app sends.
+export type PlannerGoalSnapshot = {
+  title: string;
+  lines: PlannerGoalLine[];
+  note: string | null;
+  status: "active" | "draft" | "contested" | "closed";
+  result: "met" | "partial" | "missed" | null;
+  pillar: "of" | "work" | "ai" | "health" | null;
+  level: "north_star" | "year" | "quarter" | "month" | "week";
+  period_start: string | null;
+  sort_order: number;
+  deleted_at: string | null;
+};
+
+// The goal change log (migration 9018): one row per write to a goal, with the
+// goal before and after. Append-only: no code updates or deletes a row.
+export const plannerGoalVersion = sqliteTable(
+  "planner_goal_version",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    // planner_goal.id by value.
+    goalId: text("goal_id").notNull(),
+    action: text("action", {
+      enum: ["create", "update", "delete", "restore"],
+    }).notNull(),
+    // "user", "review", or "proposal:<id>".
+    actor: text("actor").notNull().default("user"),
+    beforeJson: text("before_json", {
+      mode: "json",
+    }).$type<PlannerGoalSnapshot>(),
+    afterJson: text("after_json", {
+      mode: "json",
+    }).$type<PlannerGoalSnapshot>(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("planner_goal_version_user_goal_idx").on(
+      table.userId,
+      table.goalId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
 export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
@@ -715,3 +762,4 @@ export type PlannerAgentActionRow = typeof plannerAgentAction.$inferSelect;
 export type PlannerEventRow = typeof plannerEvent.$inferSelect;
 export type PlannerMetricWeekRow = typeof plannerMetricWeek.$inferSelect;
 export type PlannerTuningRow = typeof plannerTuning.$inferSelect;
+export type PlannerGoalVersionRow = typeof plannerGoalVersion.$inferSelect;

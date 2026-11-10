@@ -34,6 +34,12 @@ import type { QuotaScope } from "../quotas";
 import type { TeamViewer } from "../team-permissions";
 import { plannerRecordEvents } from "./flywheel";
 import {
+  PLANNER_GOAL_ACTOR_REVIEW,
+  plannerGoalSnapshot,
+  plannerGoalVersionStatement,
+  plannerSameSnapshot,
+} from "./goal-version";
+import {
   type PlannerPeriodContext,
   plannerEvidenceToDto,
   plannerReadPeriodContext,
@@ -449,11 +455,29 @@ export async function plannerSavePeriodReview(
       context.weeks.some((week) => week.week_start === monday),
     ),
   );
+  const judgedIds = body.goal_results
+    .map((entry) => entry.goal_id)
+    .filter((id) => known.has(id));
+  const goalById = new Map(
+    (judgedIds.length > 0
+      ? await db
+          .select()
+          .from(plannerGoal)
+          .where(
+            and(
+              eq(plannerGoal.userId, user.id),
+              inArray(plannerGoal.id, judgedIds),
+            ),
+          )
+          .all()
+      : []
+    ).map((goal) => [goal.id, goal]),
+  );
   await plannerRunBatch(db, [
     ...body.goal_results
       .filter((entry) => known.has(entry.goal_id))
-      .map((entry) =>
-        db
+      .flatMap((entry) => {
+        const update = db
           .update(plannerGoal)
           .set({
             result: entry.result ?? null,
@@ -466,8 +490,31 @@ export async function plannerSavePeriodReview(
               eq(plannerGoal.id, entry.goal_id),
               eq(plannerGoal.userId, user.id),
             ),
-          ),
-      ),
+          );
+        const goal = goalById.get(entry.goal_id);
+        if (!goal) return [update];
+        const before = plannerGoalSnapshot(goal);
+        const after = {
+          ...before,
+          result: entry.result ?? null,
+          ...(entry.note !== undefined ? { note: entry.note } : {}),
+          ...(entry.decision === "kill" ? { status: "closed" as const } : {}),
+        };
+        return plannerSameSnapshot(before, after)
+          ? [update]
+          : [
+              update,
+              plannerGoalVersionStatement(db, {
+                userId: user.id,
+                goalId: entry.goal_id,
+                action: "update",
+                actor: PLANNER_GOAL_ACTOR_REVIEW,
+                before,
+                after,
+                at: nowIso,
+              }),
+            ];
+      }),
     db
       .delete(plannerEvidence)
       .where(
