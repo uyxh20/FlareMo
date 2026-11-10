@@ -1,5 +1,5 @@
 import { plannerCoachStreamFilter } from "@flaremo/domain/src/planner";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   plannerAgentPreview,
   plannerAgentPreviewResponse,
@@ -169,5 +169,38 @@ describe("plannerAgentPreviewResponse", () => {
     expect(await response.text()).toBe(
       '{"r":true}\n{"d":"Hi"}\n{"idle":true}\n',
     );
+  });
+
+  it("logs once, with counts only, when the agent spoke but no live text came", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const whole = await plannerAgentPreviewResponse(
+        new Request("https://example.test/"),
+        async () => sse([message("sevt_1", "Private words."), idle]),
+        () => plannerCoachStreamFilter("free"),
+      );
+      await whole.text();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(String(warn.mock.calls[0]?.[0])).toBe(
+        '{"event":"planner_agent_stream_no_deltas","messages":1}',
+      );
+
+      warn.mockClear();
+      const live = await plannerAgentPreviewResponse(
+        new Request("https://example.test/"),
+        async () =>
+          sse([
+            start("sevt_1"),
+            delta("sevt_1", "Hi"),
+            message("sevt_1", "Hi"),
+            idle,
+          ]),
+        () => plannerCoachStreamFilter("free"),
+      );
+      await live.text();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

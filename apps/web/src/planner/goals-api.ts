@@ -487,7 +487,9 @@ export async function plannerWaitForAgent(
   const path = `${base}?${query}`;
   const deadline = Date.now() + AGENT_WAIT_MS;
   // The preview's "done" cuts the current wait short.
+  // Sticky: an idle that lands while an ask is out still cuts the next wait.
   let wake: (() => void) | null = null;
+  let woken = false;
   const watching = new AbortController();
   const stopWatching = () => watching.abort();
   options.signal?.addEventListener("abort", stopWatching, { once: true });
@@ -499,15 +501,25 @@ export async function plannerWaitForAgent(
     void plannerWatchAgent(`${base}/stream?${preview}`, {
       signal: watching.signal,
       onText: options.onPreview,
-      onIdle: () => wake?.(),
+      onIdle: () => {
+        woken = true;
+        wake?.();
+      },
     });
   }
   const wait = () =>
     new Promise<void>((resolve) => {
+      if (woken) {
+        woken = false;
+        resolve();
+        return;
+      }
       const timer = setTimeout(done, AGENT_POLL_MS);
       function done() {
         clearTimeout(timer);
         wake = null;
+        woken = false;
+        options.signal?.removeEventListener("abort", done);
         resolve();
       }
       wake = done;

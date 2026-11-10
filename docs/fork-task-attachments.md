@@ -219,8 +219,10 @@ The coach request (`POST /review/:week/ai/coach`, and the period chat's
 message gets each file's text after the chat, marked as the file's own words
 (`plannerAgentQuestionWithFiles(…, "answer")`); the session keeps it, so the
 scores and the memo can use it too. Without the agent, the fallback model gets
-the files on the latest answer for that one reply
-(`plannerReviewChatWithFiles`). The chat shows and the review keeps only the
+the files on the latest answer for that one reply only
+(`plannerReviewChatWithFiles`): the chat keeps just the names, so later
+replies, the scores and the memo never see the text. Keeping it would put the
+file's text in the saved review state, which the review avoids. The chat shows and the review keeps only the
 answer and the files' names ("📎 run.pdf", `plannerAnswerWithFiles`), so the
 saved answers never hold a file's text.
 
