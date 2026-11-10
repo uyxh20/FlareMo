@@ -18,6 +18,9 @@ import {
 import { asc, eq, inArray } from "drizzle-orm";
 import { type ForkExportSection, forkExportSection } from "../fork/export"; // fork: fork tables in the export
 
+// fork: D1 caps one query at 100 bound values; upstream's 500 fails past 100 entries.
+export const RELATION_ID_CHUNK = 90;
+
 /**
  * The export half of import-export.ts, moved verbatim: dumps every
  * user-owned table (including recycle-bin rows) into a versioned
@@ -71,8 +74,12 @@ export async function exportData(
   const memoIds = new Set(memoRows.map((memo) => memo.id));
   const relationRows: Array<typeof memoRelations.$inferSelect> = [];
   const memoIdList = Array.from(memoIds);
-  for (let offset = 0; offset < memoIdList.length; offset += 500) {
-    const memoIdChunk = memoIdList.slice(offset, offset + 500);
+  for (
+    let offset = 0;
+    offset < memoIdList.length;
+    offset += RELATION_ID_CHUNK
+  ) {
+    const memoIdChunk = memoIdList.slice(offset, offset + RELATION_ID_CHUNK); // fork: D1 allows 100 bound values per query
     if (memoIdChunk.length === 0) continue;
     relationRows.push(
       ...(await db

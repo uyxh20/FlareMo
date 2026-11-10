@@ -16,6 +16,7 @@ import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { NotFoundError } from "./errors";
 import { forkExportChunk } from "./fork/export"; // fork: fork tables in the export
 import { importData } from "./import-export";
+import { RELATION_ID_CHUNK } from "./import-export/export-data"; // fork: shared D1 bind limit
 
 export type DataTaskKind = "export" | "import";
 export type DataTaskStatus =
@@ -349,8 +350,12 @@ export async function streamExportData(
   // Relations restricted to memos owned by the user.
   const relationRecords: string[] = [];
   const memoIdList = Array.from(allMemoIds);
-  for (let offset = 0; offset < memoIdList.length; offset += pageSize) {
-    const memoIdChunk = memoIdList.slice(offset, offset + pageSize);
+  for (
+    let offset = 0;
+    offset < memoIdList.length;
+    offset += RELATION_ID_CHUNK
+  ) {
+    const memoIdChunk = memoIdList.slice(offset, offset + RELATION_ID_CHUNK); // fork: D1 allows 100 bound values per query
     const relationRows = await db
       .select()
       .from(memoRelations)
