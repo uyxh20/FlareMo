@@ -65,28 +65,28 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `tasks.notes` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
 | `projects` | cockpit | structure | – | – | – | – | – | yes | yes | yes |
 | `task_activity` | cockpit | history | – | – | – | – | – | – | yes | yes |
-| `planner_task_event` | cockpit | history | yes | yes | – | – | yes | yes | **gap** | yes |
-| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | yes | yes | **gap** | yes |
-| `planner_task_attachment` | cockpit | content | – | – | **gap** | – | – | – | **gap** | yes |
-| `planner_task_plan` | cockpit | structure | yes | – | – | – | yes | yes | **gap** | yes |
-| `planner_project_node` | cockpit | structure | – | – | – | – | – | – | **gap** | yes |
+| `planner_task_event` | cockpit | history | yes | yes | – | – | yes | yes | yes | yes |
+| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
+| `planner_task_attachment` | cockpit | content | – | – | **gap** | – | – | – | yes | yes |
+| `planner_task_plan` | cockpit | structure | yes | – | – | – | yes | yes | yes | yes |
+| `planner_project_node` | cockpit | structure | – | – | – | – | – | – | yes | yes |
 | `planner_task_seen` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
 | `planner_sync_state` | cockpit | bookkeeping | – | – | – | – | – | – | – | yes |
-| `planner_goal` | goals | content | yes | yes | **gap** | – | **gap** | yes | **gap** | yes |
-| `planner_week` | goals | content | yes | – | – | – | **gap** | yes | **gap** | yes |
-| `planner_review` | goals | content | – | – | – | – | – | – | **gap** | yes |
-| `planner_goal_flag` | goals | content | yes | yes | – | – | – | yes | **gap** | yes |
-| `planner_period_review` | goals | content | – | – | – | – | – | – | **gap** | yes |
-| `planner_evidence` | goals | content | – | – | – | – | – | – | **gap** | yes |
-| `planner_agent_proposal` | agent | content | – | – | – | – | – | – | **gap** | yes |
-| `planner_agent_chat` | agent | content | – | – | – | – | – | – | **gap** | yes |
-| `planner_agent_action` | agent | content | – | – | – | – | – | – | **gap** | yes |
+| `planner_goal` | goals | content | yes | yes | **gap** | – | **gap** | yes | yes | yes |
+| `planner_week` | goals | content | yes | – | – | – | **gap** | yes | yes | yes |
+| `planner_review` | goals | content | – | – | – | – | – | – | yes | yes |
+| `planner_goal_flag` | goals | content | yes | yes | – | – | – | yes | yes | yes |
+| `planner_period_review` | goals | content | – | – | – | – | – | – | yes | yes |
+| `planner_evidence` | goals | content | – | – | – | – | – | – | yes | yes |
+| `planner_agent_proposal` | agent | content | – | – | – | – | – | – | yes | yes |
+| `planner_agent_chat` | agent | content | – | – | – | – | – | – | yes | yes |
+| `planner_agent_action` | agent | content | – | – | – | – | – | – | yes | yes |
 | `planner_agent_run` | agent | bookkeeping | – | – | – | – | – | – | – | yes |
-| `planner_event` | agent | history | – | – | – | – | – | – | **gap** | yes |
-| `planner_metric_week` | agent | derived | – | – | – | – | – | yes | **gap** | yes |
-| `planner_tuning` | agent | content | – | – | – | – | – | yes | **gap** | yes |
-| `health_entry` | health | content | yes | – | – | – | **gap** | yes | **gap** | yes |
-| `health_entry_event` | health | history | – | – | – | – | – | – | **gap** | yes |
+| `planner_event` | agent | history | – | – | – | – | – | – | yes | yes |
+| `planner_metric_week` | agent | derived | – | – | – | – | – | yes | yes | yes |
+| `planner_tuning` | agent | content | – | – | – | – | – | yes | yes | yes |
+| `health_entry` | health | content | yes | – | – | – | **gap** | yes | yes | yes |
+| `health_entry_event` | health | history | – | – | – | – | – | – | yes | yes |
 | `health_target` | health | bookkeeping | – | – | – | – | – | – | – | yes |
 | `health_sync_state` | health | bookkeeping | – | – | – | – | – | – | – | yes |
 | `health_tracker` | health | bookkeeping | – | – | – | – | – | – | – | yes |
@@ -103,31 +103,12 @@ Gaps (left out, and probably should not be):
 - `tasks` → search: tasks are not in keyword or semantic search.
 - `tasks:backlog` → search: tasks are not in keyword or semantic search.
 - `tasks.notes` → search: tasks are not in keyword or semantic search.
-- `planner_task_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_task_comment` → search: task comments are not searchable.
-- `planner_task_comment` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_task_attachment` → search: task files are not searchable.
-- `planner_task_attachment` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_task_plan` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_project_node` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_goal` → search: goals are not searchable.
 - `planner_goal` → mcp: agents cannot read goals over MCP.
-- `planner_goal` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `planner_week` → mcp: agents cannot read week scores over MCP.
-- `planner_week` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_goal_flag` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_period_review` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_evidence` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_agent_proposal` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_agent_chat` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_agent_action` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_metric_week` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `planner_tuning` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 - `health_entry` → mcp: agents cannot read health entries over MCP.
-- `health_entry` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
-- `health_entry_event` → userExport: fork tables are not in the personal export yet (only in the D1 backup).
 
 <!-- data-sources:end -->
 

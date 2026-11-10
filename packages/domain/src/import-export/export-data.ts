@@ -16,6 +16,7 @@ import {
   tasks,
 } from "@flaremo/db";
 import { asc, eq, inArray } from "drizzle-orm";
+import { type ForkExportSection, forkExportSection } from "../fork/export"; // fork: fork tables in the export
 
 /**
  * The export half of import-export.ts, moved verbatim: dumps every
@@ -25,7 +26,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 export async function exportData(
   db: FlareMoDb,
   user: UserRow,
-): Promise<ImportBundle> {
+): Promise<ImportBundle & { fork: ForkExportSection }> {
   const [
     memoRows,
     attachmentRows,
@@ -240,5 +241,6 @@ export async function exportData(
       changes: activity.changes,
       created_at: activity.createdAt,
     })),
+    fork: await forkExportSection(db, user), // fork: fork tables in the export
   };
 }

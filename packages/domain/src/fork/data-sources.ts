@@ -126,8 +126,8 @@ const UPSTREAM_SYSTEM = (
   uses: plumbing("account plumbing, not owner content"),
 });
 
-const FORK_EXPORT_GAP = gap(
-  "fork tables are not in the personal export yet (only in the D1 backup)",
+const FORK_EXPORT = yes(
+  "every row, in the export's fork section (fork/export.ts); import skips it",
 );
 
 export const forkDataSources: readonly ForkDataSource[] = [
@@ -563,7 +563,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "the week's events of each task in review_week's task details",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -585,7 +585,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "the live comments of the tasks in review_week's task details",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -606,7 +606,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: no("the memory layer reads entries, not tasks"),
       mcp: no("not exposed to agents yet (phase 3 of the plan lists them)"),
       agent: no("not exposed to agents yet (phase 3 of the plan lists them)"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: yes(
         "the index rows are restored verbatim; the bytes live in the R2 bucket, outside the D1 backup",
       ),
@@ -633,7 +633,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "each task's planned week or month and goal link on read_tasks",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -646,7 +646,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "The old project tree (level and period of each project)",
     uses: {
       ...plumbing("project tree; goals replaced it"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
     },
   },
   {
@@ -689,7 +689,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "every goal of a year (read_goals) and the cascade in review_week and review_period",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -709,7 +709,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "every recorded week of a year (read_goals) and eight weeks of scores in review_week",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -731,7 +731,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "each step's message carries the evening's answers; the saved copy is for resuming",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -751,7 +751,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: REVIEW_SKIPS,
       mcp: no("not exposed to agents"),
       agent: yes("open clashes, in review_week"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -775,7 +775,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "review_period reads the period's weeks; a period memo is a diary entry the agent reads as one",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -794,7 +794,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: REVIEW_SKIPS,
       mcp: no("not exposed to agents"),
       agent: no("receipts are checked by the server, not read back"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -823,7 +823,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "the agent writes them and gets their ids back; no tool reads them",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -843,7 +843,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "each conversation lives in its own session; no tool reads old chats",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -866,7 +866,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "the agent writes them and gets their ids back; no tool reads them",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -899,7 +899,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: no(
         "the scorecard built from it is read with read_scorecard; the rows are not",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -920,7 +920,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: no("numbers only"),
       mcp: no("not exposed to agents"),
       agent: yes("read_scorecard returns the recent weeks"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -941,7 +941,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "the active version rides on each session's first message and read_scorecard repeats it",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -969,7 +969,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       agent: yes(
         "read_health (any span up to 26 weeks) and the week's rows in review_week",
       ),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -987,7 +987,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: NOT_CONTENT,
       mcp: no("not exposed to agents"),
       agent: no("not exposed to agents"),
-      userExport: FORK_EXPORT_GAP,
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
