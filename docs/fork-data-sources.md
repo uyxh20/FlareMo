@@ -135,7 +135,7 @@ Gaps (left out, and probably should not be):
 
 Data gets into the app by more than one path: typing an entry, editing it, importing a bundle, an agent writing over MCP. Each path has to reach the same consumers. `search-reach.test.ts` writes an entry through each path and checks it lands in both search indexes. Known gaps are written as `it.fails`: the test says what should happen and is expected to fail until someone fixes it, at which point it passes and vitest asks for `it.fails` to become `it`.
 
-- Known gap: **imported entries never reach semantic search.** `importData` (`packages/domain/src/import-export/import-data.ts`) inserts memos without queueing an embedding task, and nothing sweeps `not_indexed` rows later. They are found by keyword search only, until the admin "rebuild embeddings" action runs. Imported memories have the same problem (`embeddingStatus: "not_indexed"`, no task).
+- Imported entries reach semantic search through the **search catch-up** (`packages/domain/src/fork/search-catchup.ts`, 10 Nov 2026). `importData` still inserts memos and memories without queueing an embedding task; every 10 minutes the catch-up indexes a few `not_indexed` rows (4 per run, within the Free plan's 50 D1 queries). Until a row's turn comes it is found by keyword search only. See `docs/fork-customizations.md`, section 8.
 
 ## Adding a new data source (for example health activity)
 
@@ -152,7 +152,7 @@ Data gets into the app by more than one path: typing an entry, editing it, impor
 |---|---|
 | Every module | `pnpm persistence:check` (backup manifest, schema files only, not in `pnpm test`); the registry contract in `data-sources.test.ts` (every table classified for every consumer, backup and memory checked against the code, migrations on a tested track) |
 | diary | Upstream's memo, tag, attachment and import suites; probes for entries, earlier weeks and attachments |
-| search | `embedding-outbox.test.ts`, `semantic-search.test.ts`, and `search-reach.test.ts` (every way in reaches both indexes; the import gap is pinned as `it.fails`) |
+| search | `embedding-outbox.test.ts`, `semantic-search.test.ts`, and `search-reach.test.ts` (every way in reaches both indexes; imports through the search catch-up), `search-catchup.test.ts` (batch size, query cap, a failing entry does not block the rest) |
 | memory | `memory*.test.ts`; memory reads exactly the tables marked for it |
 | cockpit | The `planner-api`, `history-sync`, `board`, `plans` and migrations suites; the archive is never deleted or rewritten; the nightly-sync and API mount hook-ins |
 | goals and review | `review.test.ts`, `review-prompts.test.ts` (including the month, quarter and year boundaries of the look forward check), probes for goals, weeks, flags, reviews, task notes and comments, and a snapshot of exactly what the model sees (`__snapshots__/`) |

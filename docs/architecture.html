@@ -558,19 +558,19 @@
       </figure>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 120" role="img" aria-label="Only 80 of 610 diary entries and 73 of 124 memories are in the semantic index.">
-            <text x="20" y="22" class="t-s t-m">IN THE SEMANTIC INDEX · 2026-11-05</text>
+          <svg viewBox="0 0 900 120" role="img" aria-label="Only 120 of 608 diary entries and 73 of 124 memories are in the semantic index.">
+            <text x="20" y="22" class="t-s t-m">IN THE SEMANTIC INDEX · 2026-11-10</text>
             <text x="20" y="58">Diary entries</text>
             <rect x="170" y="44" width="600" height="20" rx="4" class="f-track" />
-            <rect x="170" y="44" width="78.7" height="20" rx="4" class="f-warn" />
-            <text x="780" y="59" class="t-b">80 / 610</text>
+            <rect x="170" y="44" width="118.4" height="20" rx="4" class="f-warn" />
+            <text x="780" y="59" class="t-b">120 / 608</text>
             <text x="20" y="98">Memories</text>
             <rect x="170" y="84" width="600" height="20" rx="4" class="f-track" />
             <rect x="170" y="84" width="353.2" height="20" rx="4" class="f-vec" />
             <text x="780" y="99" class="t-b">73 / 124</text>
           </svg>
         </div>
-        <figcaption><b>Known gap.</b> Importing data (<code>import-export/import-data.ts</code>) saves entries as "not indexed" without queueing them, and nothing catches them later. Keyword search is unaffected. The admin action <code>POST /api/app/admin/embeddings/rebuild</code> fills the index.</figcaption>
+        <figcaption><b>Gap and its fix.</b> Importing data (<code>import-export/import-data.ts</code>) saves entries as "not indexed" without queueing them; 486 of the 506 imported entries are missing. Keyword search is unaffected. The <b>search catch-up</b> (<code>fork/search-catchup.ts</code>, branch <code>fix/search-catchup</code>, not live yet) indexes 4 of them every 10 minutes, within the free plan's 50 database queries per run, so the backlog clears in about 20 hours after it ships. The admin "rebuild" action is not used: it tries everything in one run and would stop after about 15 entries.</figcaption>
       </figure>
     </section>
 

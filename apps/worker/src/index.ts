@@ -26,6 +26,7 @@ import { createEmbeddingProvider, createVectorIndex } from "./embedding";
 import type { FlareMoEnv } from "./env";
 import { forkAgentScheduled } from "./fork/agent-schedule";
 import { forkIsQueueMessage, forkRunQueue } from "./fork/queue";
+import { forkSearchCatchupScheduled } from "./fork/search-catchup";
 import { jsonError } from "./http";
 import { resolveOauthIntegration } from "./integrations/config";
 import { betterAuthRateLimitBucket, rateLimitGuard } from "./rate-limit";
@@ -497,6 +498,8 @@ export function createFlareMoWorker(
     async scheduled(controller, env) {
       // fork: the general agent's Sunday prep (fork/agent-schedule.ts)
       if (await forkAgentScheduled(controller, env)) return;
+      // fork: search catch-up every 10 minutes (fork/search-catchup.ts)
+      if (await forkSearchCatchupScheduled(controller, env)) return;
       await runScheduledMaintenance(
         env,
         controller.scheduledTime,
