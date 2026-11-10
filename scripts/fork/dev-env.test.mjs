@@ -705,7 +705,9 @@ describe("buildDevConfig", () => {
     );
     assert.equal(DEV_CONFIG.vars.FLAREMO_PUBLIC_URL, DEV.publicUrl);
     assert.equal(DEV_CONFIG.vars.FLAREMO_TRUSTED_ORIGINS, DEV.publicUrl);
-    assert.deepEqual(DEV_CONFIG.triggers, { crons: ["17 3 * * *"] });
+    assert.deepEqual(DEV_CONFIG.triggers, {
+      crons: ["17 3 * * *", "*/10 * * * *"],
+    });
   });
 
   test("keeps the binding keys and everything else from the example", () => {

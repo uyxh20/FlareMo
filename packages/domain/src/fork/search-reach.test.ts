@@ -14,6 +14,7 @@ import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos";
 import type { TeamViewer } from "../team-permissions";
 import { ensureTeamOwner } from "../test-support";
+import { runSearchCatchup } from "./search-catchup";
 
 // Every way an entry or a memory gets into the app must also get it into
 // search (fork-owned; docs/fork-data-sources.md, "Ways in").
@@ -157,13 +158,13 @@ describe("every way in reaches search", () => {
     ]);
   });
 
-  // Known gap: importData inserts memos without queueing an embedding task
-  // (packages/domain/src/import-export/import-data.ts), and nothing sweeps
-  // `not_indexed` rows later, so imported entries stay out of semantic search
-  // until someone runs the admin "rebuild embeddings" action.
-  it.fails("an imported entry reaches the semantic index", async () => {
+  // importData inserts memos without queueing an embedding task
+  // (packages/domain/src/import-export/import-data.ts). The fork's search
+  // catch-up (./search-catchup.ts) sweeps those `not_indexed` rows on a timer.
+  it("an imported entry reaches the semantic index", async () => {
     await importOne({ name: "memos/imported-sem", content: "Snorkeling trip" });
     await runOutbox();
+    await runSearchCatchup(db, { provider, memosIndex, memoriesIndex });
     expect(memosIndex.resources("memo_id")).toEqual(["memos/imported-sem"]);
   });
 
