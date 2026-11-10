@@ -108,6 +108,9 @@ function show(actions: PlannerAgentActionDto[]) {
   return mounted.container;
 }
 
+const rows = (container: Element) =>
+  Array.from(container.querySelectorAll('[data-testid="planner-proposal"]'));
+
 const button = (container: Element, text: string) =>
   Array.from(container.querySelectorAll("button")).find((each) =>
     each.textContent?.includes(text),
@@ -265,7 +268,7 @@ describe("one card per answer", () => {
     });
   });
 
-  it("shows an entry edit as the lines it removes and adds", async () => {
+  it("shows an accepted entry edit as the lines it removes and adds", async () => {
     expect(
       plannerLineDiff(
         "Went to the gym.\nFelt slow.",
@@ -282,8 +285,10 @@ describe("one card per answer", () => {
         task_id: null,
         field: null,
         entry_id: "memos/e",
+        state: "accepted",
         change: {
           entry_id: "memos/e",
+          flag: "Felt slow, but the log says a PR",
           content: "Went to the gym.\nFelt strong.",
           was: "Went to the gym.\nFelt slow.",
         },
@@ -412,7 +417,7 @@ describe("one card per answer", () => {
     expect(text).toContain("2026-11-01 night out");
     expect(text).toContain("home 02:30");
   });
-  it("shows a new weekly goal and a rewritten one", async () => {
+  it("shows a flagged new weekly goal and a flagged one, and settled goals with the owner's words", async () => {
     const base = { task_id: null, field: null, entry_id: null } as const;
     const container = show([
       action("g", {
@@ -421,12 +426,10 @@ describe("one card per answer", () => {
         change: {
           action: "add",
           period_start: "2026-11-09",
-          pillar: "work",
-          title: "Ship the invoice flow",
-          lines: [{ text: "Draft" }, { text: "Send to Dana" }],
-          goal_title: "Ship the invoice flow",
+          pillar: "health",
+          flag: "You wrote you'd train three times",
           week: "2026-11-09",
-          label: "Ship the invoice flow",
+          label: "You wrote you'd train three times",
         },
       }),
       action("e", {
@@ -435,7 +438,25 @@ describe("one card per answer", () => {
         change: {
           action: "edit",
           goal_id: "goal-1",
-          lines: [{ text: "Draft" }, { text: "Review", note: "with Dana" }],
+          flag: "Dana reviews it; you don't send it",
+          was: {
+            title: "Ship the invoice flow",
+            lines: [{ text: "Draft" }, { text: "Send" }],
+            note: null,
+            pillar: "work",
+          },
+          goal_title: "Ship the invoice flow",
+          week: "2026-11-09",
+          label: "Ship the invoice flow",
+        },
+      }),
+      action("d", {
+        ...base,
+        kind: "goal_change",
+        state: "accepted",
+        change: {
+          action: "edit",
+          goal_id: "goal-1",
           title: "Ship invoices",
           was: {
             title: "Ship the invoice flow",
@@ -445,20 +466,32 @@ describe("one card per answer", () => {
           },
           goal_title: "Ship the invoice flow",
           week: "2026-11-09",
-          label: "Ship invoices",
         },
       }),
     ]);
     await settle();
-    const text =
-      container.querySelector('[data-testid="planner-change-set"]')
-        ?.textContent ?? "";
-    expect(text).toContain("New weekly goal");
-    expect(text).toContain("2026-11-09 · Ship the invoice flow");
-    expect(text).toContain("Draft · Send to Dana");
-    expect(text).toContain("Edit weekly goal");
-    expect(text).toContain("title: Ship the invoice flow → Ship invoices");
-    expect(text).toContain("lines: Draft → Draft · Review");
+    const [add, edit, done] = rows(container);
+    expect(add?.textContent).toContain("New weekly goal");
+    expect(add?.textContent).toContain("You wrote you'd train three times");
+    const title = add?.querySelector<HTMLInputElement>(
+      'input[aria-label="title"]',
+    );
+    expect(title?.value).toBe("");
+    expect(title?.placeholder).toBe("Write the goal's title");
+    expect(add?.textContent).toContain("Write a title to accept it");
+    expect(edit?.textContent).toContain("Dana reviews it; you don't send it");
+    expect(
+      edit?.querySelector<HTMLInputElement>('input[aria-label="title"]')?.value,
+    ).toBe("Ship the invoice flow");
+    expect(
+      edit?.querySelector<HTMLTextAreaElement>('textarea[aria-label="lines"]')
+        ?.value,
+    ).toBe("Draft\nSend");
+    expect(done?.textContent).toContain(
+      "title: Ship the invoice flow → Ship invoices",
+    );
+    // Both open rows wait on the owner's words: nothing to accept yet.
+    expect(button(container, "Accept 0")?.disabled).toBe(true);
   });
 });
 
@@ -478,8 +511,6 @@ describe("editing a card before Accept", () => {
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
   }
-  const rows = (container: Element) =>
-    Array.from(container.querySelectorAll('[data-testid="planner-proposal"]'));
   const newTask = (id: string, title: string) =>
     action(id, {
       kind: "task_new",
@@ -660,7 +691,7 @@ describe("editing a card before Accept", () => {
     });
   });
 
-  it("offers a health add as kind, minutes and day, and no field for words", async () => {
+  it("offers a health add as kind, minutes and day, and an old entry edit as the owner's to rewrite", async () => {
     const health = action("h", {
       kind: "health_change",
       task_id: null,
@@ -697,14 +728,18 @@ describe("editing a card before Accept", () => {
       ) as HTMLInputElement,
       "15",
     );
-    // The diary entry's words are not a field.
+    // The heading follows the kind and day picked on the card.
+    expect(rows(container)[0]?.textContent).toContain("2026-11-08 breath");
+    expect(rows(container)[0]?.textContent).not.toContain("training");
+    // An entry edit from before the flags: the field starts from the entry's
+    // own text, never the agent's, and waits on the owner's rewrite.
     expect(
-      entryRow?.querySelectorAll(
-        "input:not([type=checkbox]), select, textarea",
-      ),
-    ).toHaveLength(0);
+      entryRow?.querySelector<HTMLTextAreaElement>("textarea")?.value,
+    ).toBe("Old text");
+    expect(entryRow?.textContent).not.toContain("New text");
+    expect(entryRow?.textContent).toContain("Rewrite the entry to accept it");
     await act(async () => {
-      button(container, "Accept 2")?.click();
+      button(container, "Accept 1")?.click();
     });
     await settle();
     expect(settleAction.mock.calls[0]).toEqual([
@@ -715,6 +750,97 @@ describe("editing a card before Accept", () => {
         edit: { kind: "breath", variant: "wim_hof", minutes: 15 },
       },
     ]);
+  });
+
+  it("a flagged entry starts from its own text, and Accept waits for the owner's rewrite, then sends it", async () => {
+    const flagged = action("f", {
+      kind: "entry_edit",
+      task_id: null,
+      field: null,
+      entry_id: "memos/f",
+      change: {
+        entry_id: "memos/f",
+        flag: "Line 1 says Tuesday but the gym was Monday",
+        quote: "Gym on Tuesday",
+        was: "Gym on Tuesday.\nFelt slow.",
+        preview: "Gym on Tuesday.",
+      },
+    });
+    settleAction.mockResolvedValue({
+      action: { ...flagged, state: "accepted" },
+    });
+    const container = show([flagged]);
+    await settle();
+    const card = container.querySelector('[data-testid="planner-proposal"]');
+    expect(card?.textContent).toContain("Entry to fix");
+    expect(card?.textContent).toContain(
+      "Line 1 says Tuesday but the gym was Monday",
+    );
+    expect(card?.textContent).toContain("“Gym on Tuesday”");
+    const area = () =>
+      container.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="The entry, as you want it to read"]',
+      ) as HTMLTextAreaElement;
+    expect(area().value).toBe("Gym on Tuesday.\nFelt slow.");
+    const accept = () => button(container, "Accept") as HTMLButtonElement;
+    expect(accept().disabled).toBe(true);
+    plannerTestType(area(), "Gym on Monday.\nFelt slow.");
+    expect(accept().disabled).toBe(false);
+    // Typing it back to what it was is no rewrite.
+    plannerTestType(area(), "Gym on Tuesday.\nFelt slow.");
+    expect(accept().disabled).toBe(true);
+    plannerTestType(area(), "Gym on Monday.\nFelt slow.");
+    await act(async () => {
+      accept().click();
+    });
+    await settle();
+    expect(settleAction).toHaveBeenCalledWith("f", {
+      state: "accepted",
+      today: expect.any(String),
+      edit: { text: "Gym on Monday.\nFelt slow." },
+    });
+  });
+
+  it("sends the owner's title and lines for a flagged new goal", async () => {
+    const goal = action("g", {
+      kind: "goal_change",
+      task_id: null,
+      field: null,
+      change: {
+        action: "add",
+        period_start: "2026-11-09",
+        pillar: "health",
+        flag: "You wrote you'd train three times",
+        week: "2026-11-09",
+      },
+    });
+    settleAction.mockResolvedValue({ action: { ...goal, state: "accepted" } });
+    const container = show([goal]);
+    await settle();
+    const accept = () => button(container, "Accept") as HTMLButtonElement;
+    expect(accept().disabled).toBe(true);
+    plannerTestType(
+      container.querySelector<HTMLInputElement>(
+        'input[aria-label="title"]',
+      ) as HTMLInputElement,
+      "Train three times",
+    );
+    plannerTestType(
+      container.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="lines"]',
+      ) as HTMLTextAreaElement,
+      "Mon\n\nWed \nFri",
+    );
+    expect(accept().disabled).toBe(false);
+    await act(async () => {
+      accept().click();
+    });
+    await settle();
+    expect(settleAction).toHaveBeenCalledWith("g", {
+      state: "accepted",
+      today: expect.any(String),
+      edit: { title: "Train three times", lines: ["Mon", "Wed", "Fri"] },
+    });
   });
 
   it("marks an accepted row Edited from what the server kept, with no controls", async () => {

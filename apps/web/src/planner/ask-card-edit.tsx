@@ -11,6 +11,7 @@ import { XIcon } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { healthStrings } from "@/health/strings";
 import { cn } from "@/lib/utils";
 import {
@@ -158,7 +159,47 @@ export function PlannerCardField({
     (copy.proposal.field as Record<string, string>)[key] ?? key;
 
   switch (name) {
+    case "text":
+      // A flagged entry: its own text, which the owner rewrites.
+      return (
+        <Textarea
+          aria-label={copy.proposal.entryText}
+          className="min-h-24 bg-background text-[13px] leading-relaxed"
+          maxLength={20_000}
+          rows={Math.min(10, Math.max(3, text.split("\n").length + 1))}
+          value={text}
+          onChange={(event) => set({ text: event.target.value })}
+        />
+      );
+    case "lines": {
+      const lines = Array.isArray(value) ? (value as string[]) : [];
+      return (
+        <Textarea
+          aria-label={copy.proposal.goalField.lines}
+          className="min-h-16 bg-background text-[13px]"
+          placeholder={copy.proposal.goalLinesPlaceholder}
+          rows={Math.min(8, Math.max(2, lines.length + 1))}
+          value={lines.join("\n")}
+          onChange={(event) => set({ lines: event.target.value.split("\n") })}
+        />
+      );
+    }
+    case "note":
+      return null;
     case "title":
+      if (action.kind === "goal_change") {
+        // The goal's title is the owner's words: empty for a new goal.
+        return (
+          <Input
+            aria-label={copy.proposal.goalField.title}
+            className="font-medium"
+            maxLength={1000}
+            placeholder={copy.proposal.goalTitlePlaceholder}
+            value={text}
+            onChange={(event) => set({ title: event.target.value })}
+          />
+        );
+      }
       return (
         <Input
           aria-label={label("title")}

@@ -4,9 +4,12 @@ import {
   healthTrainingVariants,
   type PlannerAgentEdit,
   type PlannerAgentEditKey,
+  type PlannerGoalLine,
   plannerAddDays,
   plannerAgentEditableKeys,
+  plannerAgentEditBaseline,
   plannerAgentEditSchema,
+  plannerGoalTitleMax,
   plannerWeekStartOf,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -73,17 +76,49 @@ async function weeklyGoalTitle(
   return goal?.title ?? null;
 }
 
-/** What the proposal holds for one editable key, in the form `edit` sends it. */
-function proposedValue(
-  row: PlannerAgentActionRow,
-  key: PlannerAgentEditKey,
-): unknown {
-  const { change } = row;
-  if (key === "spot") return "anchor";
-  if (key === "column" && row.kind === "task_new") {
-    return change.column ?? "backlog";
+/** What the card's field starts at for one key, in the form `edit` sends it. */
+const proposedValue = (row: PlannerAgentActionRow, key: PlannerAgentEditKey) =>
+  plannerAgentEditBaseline(row, key);
+
+/** Words only the owner writes (docs/fork-general-agent.md, "Whose words"). */
+const GOAL_WORDS = ["title", "lines", "note"] as const;
+
+/**
+ * The proposal's change without words the agent wrote: a flagged entry's
+ * `content` and a goal's title, lines and note. Proposals from before the
+ * "whose words" decision still hold the agent's; they are never written, and
+ * the owner's (from `edit`) take their place.
+ */
+export function plannerAgentWordless(
+  row: Pick<PlannerAgentActionRow, "kind" | "change">,
+): Record<string, unknown> {
+  const change: Record<string, unknown> = { ...row.change };
+  if (row.kind === "entry_edit" && !isRecord(change.tags)) {
+    delete change.content;
   }
-  return change[key] ?? null;
+  if (row.kind === "goal_change") {
+    for (const key of GOAL_WORDS) delete change[key];
+  }
+  return change;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * A goal's lines from the owner's texts: a line that stays word for word keeps
+ * its note and its strike.
+ */
+export function plannerAgentGoalLines(
+  texts: readonly string[],
+  existing: readonly PlannerGoalLine[] = [],
+): PlannerGoalLine[] {
+  const left = [...existing];
+  return texts.map((text) => {
+    const at = left.findIndex((line) => line.text === text);
+    if (at < 0) return { text };
+    return left.splice(at, 1)[0] as PlannerGoalLine;
+  });
 }
 
 /**
@@ -120,7 +155,7 @@ export async function plannerAgentApplyEdit(
   );
   if (changed.length === 0) return null;
 
-  const change: Record<string, unknown> = { ...row.change };
+  const change = plannerAgentWordless(row);
   switch (row.kind) {
     case "task_new": {
       if (edit.title !== undefined) put(change, "title", edit.title);
@@ -166,6 +201,9 @@ export async function plannerAgentApplyEdit(
       break;
     case "goal_change":
       await editGoal(db, { userId, row, edit, change, today });
+      break;
+    case "entry_edit":
+      if (edit.text !== undefined) change.content = edit.text;
       break;
     default:
       return refuse("This card cannot be edited.");
@@ -331,7 +369,11 @@ async function editHealth(
   }
 }
 
-/** A weekly goal's objective, and the week of a new one. */
+/**
+ * A weekly goal's objective, the week of a new one, and its words, which only
+ * the owner writes: a new goal needs the owner's title; an edit's lines keep
+ * the note and strike of a line that stays word for word.
+ */
 async function editGoal(
   db: FlareMoDb,
   input: {
@@ -344,7 +386,38 @@ async function editGoal(
 ) {
   const { row, edit, change } = input;
   if (edit.pillar !== undefined) change.pillar = edit.pillar;
-  if (row.change.action !== "add") return;
+  const add = row.change.action === "add";
+  const was = isRecord(row.change.was) ? row.change.was : {};
+  if (edit.title !== undefined) {
+    if (edit.title.length > plannerGoalTitleMax) {
+      refuse(`A goal's title is at most ${plannerGoalTitleMax} characters.`);
+    }
+    change.title = edit.title;
+  }
+  if (edit.lines !== undefined) {
+    const existing = Array.isArray(was.lines)
+      ? (was.lines as PlannerGoalLine[])
+      : [];
+    change.lines = plannerAgentGoalLines(edit.lines, add ? [] : existing);
+  }
+  if (edit.note !== undefined) change.note = edit.note;
+  if (!add) {
+    const title =
+      typeof change.title === "string"
+        ? change.title
+        : typeof was.title === "string"
+          ? was.title
+          : "";
+    const lines = Array.isArray(change.lines)
+      ? change.lines
+      : Array.isArray(was.lines)
+        ? was.lines
+        : [];
+    if (!title.trim() && lines.length === 0) {
+      refuse("A goal needs a title or a line.");
+    }
+    return;
+  }
   const week = edit.period_start ?? asString(change.period_start) ?? "";
   if (edit.period_start !== undefined) {
     const current = plannerWeekStartOf(input.today);
@@ -359,8 +432,11 @@ async function editGoal(
     change.period_start = week;
     change.week = week;
   }
-  // The same twin check as the tool's: one title once per objective and week.
-  const title = (asString(change.title) ?? "").trim().toLowerCase();
+  const title = (asString(change.title) ?? "").trim();
+  if (!title) refuse("Write the goal's title on the card first.");
+  change.goal_title = title;
+  change.label = title;
+  // The same twin check as the tool's was: one title once per objective and week.
   const goals = await plannerReadWeekGoals(db, {
     userId: input.userId,
     weekStart: week,
@@ -369,7 +445,7 @@ async function editGoal(
     goals.some(
       (goal) =>
         goal.pillar === change.pillar &&
-        goal.title.trim().toLowerCase() === title,
+        goal.title.trim().toLowerCase() === title.toLowerCase(),
     )
   ) {
     refuse(

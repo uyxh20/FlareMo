@@ -1,3 +1,4 @@
+import { plannerAgentEditBaseline } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createMemo, updateMemo } from "../memos-write";
 import { listMemoRelations } from "../relations";
@@ -8,6 +9,7 @@ import {
   plannerAgentRevertAction,
 } from "./agent-apply";
 import {
+  plannerAgentAddAction,
   plannerAgentAddChat,
   plannerAgentCreateRun,
   plannerAgentListActions,
@@ -66,8 +68,8 @@ const actions = () =>
     now: NOW,
   });
 
-const accept = (id: string) =>
-  plannerAgentAcceptAction(rt.db, { user: rt.user, id, today: TODAY });
+const accept = (id: string, edit?: unknown) =>
+  plannerAgentAcceptAction(rt.db, { user: rt.user, id, today: TODAY, edit });
 
 const sync = () =>
   plannerSyncHistory(rt.db, { userId: rt.user.id, now: NOW, force: true });
@@ -278,47 +280,188 @@ describe("the agent as a control panel", () => {
     expect(detail.task.title).toBe("Tax return");
   });
 
-  it("edits an entry on accept, keeps the old version, refuses a stale edit, and puts it back on undo", async () => {
-    const memo = await entry("Went to the gym.\nFelt slow. #gym");
+  it("flags an entry, writes the owner's own text on accept, refuses a stale one, and puts it back on undo", async () => {
+    const memo = await entry("Went to the gym on Tuesday.\nFelt slow. #gym");
     await asking();
     await expect(
       call("propose_entry_edit", {
         entry_id: "memos/nope",
-        content: "x",
+        flag: "x",
         why: "x",
       }),
     ).rejects.toThrow(/No diary entry/);
+    // The agent writes no text any more.
+    await expect(
+      call("propose_entry_edit", {
+        entry_id: memo.id,
+        content: "Went to the gym on Monday.",
+        why: "x",
+      }),
+    ).rejects.toThrow(/flag|Unrecognized key/);
+    // A quote must be the entry's own words, word for word.
+    await expect(
+      call("propose_entry_edit", {
+        entry_id: memo.id,
+        flag: "Says Tuesday, but the gym was Monday",
+        quote: "Went to the gym on Wednesday",
+        why: "x",
+      }),
+    ).rejects.toThrow(/not found word for word/);
     await call("propose_entry_edit", {
       entry_id: memo.id,
-      content: "Went to the gym.\nFelt strong. #gym #crossfit",
-      why: "Fix the word and add the tag, as asked.",
+      flag: "Says Tuesday, but the gym was Monday",
+      quote: "Went to the gym on Tuesday",
+      why: "The owner asked me to check the gym days.",
     });
-    const [edit] = await actions();
-    expect(edit).toMatchObject({ kind: "entry_edit", entry_id: memo.id });
-    expect(edit?.change.was).toBe("Went to the gym.\nFelt slow. #gym");
-    await accept(edit?.id ?? "");
+    const [flag] = await actions();
+    expect(flag).toMatchObject({ kind: "entry_edit", entry_id: memo.id });
+    expect(flag?.change).toMatchObject({
+      flag: "Says Tuesday, but the gym was Monday",
+      quote: "Went to the gym on Tuesday",
+      was: "Went to the gym on Tuesday.\nFelt slow. #gym",
+    });
+    expect(flag?.change.content).toBeUndefined();
+
+    // Accept needs the owner's text, and a text that changes something.
+    await expect(accept(flag?.id ?? "")).rejects.toThrow(/Rewrite the entry/);
+    await expect(
+      accept(flag?.id ?? "", {
+        text: "Went to the gym on Tuesday.\nFelt slow. #gym",
+      }),
+    ).rejects.toThrow(/Rewrite the entry/);
+    expect((await actions())[0]?.state).toBe("open");
+    const accepted = await accept(flag?.id ?? "", {
+      text: "Went to the gym on Monday.\nFelt slow. #gym",
+    });
+    expect(accepted.change).toMatchObject({
+      content: "Went to the gym on Monday.\nFelt slow. #gym",
+      edited: { text: "Went to the gym on Monday.\nFelt slow. #gym" },
+    });
     expect((await memoRow(memo.id))?.content).toBe(
-      "Went to the gym.\nFelt strong. #gym #crossfit",
+      "Went to the gym on Monday.\nFelt slow. #gym",
     );
     const revisions = await plannerTestRows<{ id: string }>(
       rt.database,
       `SELECT id FROM memo_revisions WHERE memo_id = '${memo.id}'`,
     );
     expect(revisions.length).toBeGreaterThan(0);
-    await undo(edit?.id ?? "");
+    // The learning log: the owner wrote the words, by field name only.
+    const log = await plannerTestRows<{ kind: string; data: string }>(
+      rt.database,
+      "SELECT kind, data FROM planner_event WHERE kind = 'proposal.accepted_edited'",
+    );
+    expect(log).toHaveLength(1);
+    expect(JSON.parse(log[0]?.data ?? "{}")).toMatchObject({
+      action_kind: "entry_edit",
+      fields: "text",
+    });
+    expect(log[0]?.data).not.toContain("gym");
+    await undo(flag?.id ?? "");
     expect((await memoRow(memo.id))?.content).toBe(
-      "Went to the gym.\nFelt slow. #gym",
+      "Went to the gym on Tuesday.\nFelt slow. #gym",
     );
 
-    // An edit proposed against text that changed since is refused.
+    // A flag on text that changed since refuses the owner's rewrite.
     await call("propose_entry_edit", {
       entry_id: memo.id,
-      content: "Went to the gym. Great.",
+      flag: "Felt slow, but the log says a PR",
       why: "Asked.",
     });
     const stale = (await actions()).find((action) => action.state === "open");
     await updateMemo(rt.db, rt.user, memo.id, { content: "Rewritten by me." });
-    await expect(accept(stale?.id ?? "")).rejects.toThrow(PLANNER_AGENT_STALE);
+    await expect(
+      accept(stale?.id ?? "", { text: "Went to the gym. Great." }),
+    ).rejects.toThrow(PLANNER_AGENT_STALE);
+    expect((await memoRow(memo.id))?.content).toBe("Rewritten by me.");
+  });
+
+  it("an open entry edit from before the flags is accepted only with the owner's text, never the agent's", async () => {
+    const memo = await entry("Slept badly. #sleep");
+    const run = await asking();
+    // A row as the old tool filed it: the agent's whole new text in `content`.
+    await plannerAgentAddAction(rt.db, {
+      userId: rt.user.id,
+      runId: run.id,
+      conversationId: CONVERSATION,
+      kind: "entry_edit",
+      taskId: null,
+      field: null,
+      change: {
+        entry_id: memo.id,
+        content: "The agent's own rewrite. #sleep",
+        was: "Slept badly. #sleep",
+      },
+      why: "Old row.",
+      now: NOW,
+    });
+    const [old] = await actions();
+    await expect(accept(old?.id ?? "")).rejects.toThrow(/Rewrite the entry/);
+    expect((await memoRow(memo.id))?.content).toBe("Slept badly. #sleep");
+    // The card starts from the entry's own text, not the agent's.
+    expect(
+      plannerAgentEditBaseline(
+        { kind: "entry_edit", field: null, change: old?.change ?? {} },
+        "text",
+      ),
+    ).toBe("Slept badly. #sleep");
+    await accept(old?.id ?? "", { text: "Slept badly, woke at 4. #sleep" });
+    expect((await memoRow(memo.id))?.content).toBe(
+      "Slept badly, woke at 4. #sleep",
+    );
+    await undo(old?.id ?? "");
+    expect((await memoRow(memo.id))?.content).toBe("Slept badly. #sleep");
+  });
+
+  it("adds and removes #tags as values, and Undo puts the entry back", async () => {
+    const memo = await entry("Long run by the lake.\n#run #outside");
+    await asking();
+    await expect(
+      call("propose_entry_tags", { entry_id: memo.id, why: "x" }),
+    ).rejects.toThrow(/at least one tag/);
+    await expect(
+      call("propose_entry_tags", {
+        entry_id: memo.id,
+        add: ["run"],
+        why: "x",
+      }),
+    ).rejects.toThrow(/already has #run/);
+    await expect(
+      call("propose_entry_tags", {
+        entry_id: memo.id,
+        remove: ["gym"],
+        why: "x",
+      }),
+    ).rejects.toThrow(/has no #gym/);
+    await expect(
+      call("propose_entry_tags", {
+        entry_id: memo.id,
+        add: ["not a tag"],
+        why: "x",
+      }),
+    ).rejects.toThrow(/tag/);
+    await call("propose_entry_tags", {
+      entry_id: memo.id,
+      add: ["#Health/cardio"],
+      remove: ["outside"],
+      why: "Asked to retag.",
+    });
+    const [tags] = await actions();
+    expect(tags?.change).toMatchObject({
+      tags: { add: ["health/cardio"], remove: ["outside"] },
+      content: "Long run by the lake.\n#run #health/cardio",
+    });
+    // A tag change is a value: no words to write, and no edit taken.
+    await expect(accept(tags?.id ?? "", { text: "x" })).rejects.toThrow(
+      /cannot be changed/,
+    );
+    await accept(tags?.id ?? "");
+    expect((await memoRow(memo.id))?.content).toBe(
+      "Long run by the lake.\n#run #health/cardio",
+    );
+    await undo(tags?.id ?? "");
+    expect((await memoRow(memo.id))?.content).toBe(
+      "Long run by the lake.\n#run #outside",
+    );
   });
 
   it("archives and pins an entry on accept, and undoes each; never trashes", async () => {

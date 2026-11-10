@@ -425,7 +425,7 @@ describe("editing a card before Accept", () => {
       action: "add",
       period_start: "2026-11-02",
       pillar: "work",
-      title: "A goal",
+      flag: "A goal",
       why: "x",
     });
     await call("propose_entry", { content: "New entry", why: "x" });
@@ -495,16 +495,17 @@ describe("editing a card before Accept", () => {
       action: "add",
       period_start: "2026-11-02",
       pillar: "work",
-      title: "Twin",
+      flag: "You wrote about a twin",
       why: "x",
     });
     const [proposal] = await actions();
     await expect(
-      accept(proposal?.id ?? "", { period_start: WEEK }),
+      accept(proposal?.id ?? "", { period_start: WEEK, title: "Twin" }),
     ).rejects.toThrow(/already has a goal/);
     const accepted = await accept(proposal?.id ?? "", {
       pillar: "health",
       period_start: "2026-11-09",
+      title: "Twin",
     });
     expect(accepted.change).toMatchObject({
       pillar: "health",

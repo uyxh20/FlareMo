@@ -5,6 +5,8 @@ import {
   type PlannerAgentEdit,
   type PlannerAgentEditKey,
   plannerAgentEditableKeys,
+  plannerAgentEditBaseline,
+  plannerAgentNeedsWords,
 } from "@flaremo/contracts";
 
 // Edit before Accept, the card's side (fork-owned add-on,
@@ -26,16 +28,48 @@ export function plannerCardEditableKeys(
   return action.state === "open" ? plannerAgentEditableKeys(action) : [];
 }
 
-/** What the agent proposed for one key, in the form an edit holds it. */
+/**
+ * What a field starts at for one key, in the form an edit holds it: the agent's
+ * value, or for a flagged goal or entry the record's own words (never the
+ * agent's), the same baseline the Worker compares against.
+ */
 export function plannerCardProposed(
   action: PlannerAgentActionDto,
   key: PlannerAgentEditKey,
 ): unknown {
-  if (key === "spot") return "anchor";
-  if (key === "column" && action.kind === "task_new") {
-    return action.change.column ?? "backlog";
+  return plannerAgentEditBaseline(action, key);
+}
+
+/** A words field as the Worker takes it: trimmed, lines without blanks. */
+function cleaned(key: PlannerAgentEditKey, value: unknown): unknown {
+  if (key === "lines" && Array.isArray(value)) {
+    return value
+      .map((line) => (typeof line === "string" ? line.trim() : ""))
+      .filter((line) => line.length > 0);
   }
-  return action.change[key] ?? null;
+  if ((key === "text" || key === "note") && typeof value === "string") {
+    return value.trim();
+  }
+  if (key === "title" && typeof value === "string") {
+    // An emptied title is no edit (the Worker takes a title of one letter or more).
+    return value.trim() || undefined;
+  }
+  return value;
+}
+
+/**
+ * Whether the row still waits on the owner's words: a flagged entry not yet
+ * rewritten, a new goal without its title, a goal edit that changes nothing.
+ * Accept skips such a row.
+ */
+export function plannerCardNeedsWords(
+  action: PlannerAgentActionDto,
+  edit: PlannerCardEdit | undefined,
+): boolean {
+  return (
+    action.state === "open" &&
+    plannerAgentNeedsWords(action, plannerCardEditBody(action, edit))
+  );
 }
 
 /** The value a control shows: the owner's edit, else the proposal. */
@@ -83,7 +117,7 @@ export function plannerCardEditBody(
   const allowed = plannerCardEditableKeys(action);
   const out: Record<string, unknown> = {};
   for (const key of allowed) {
-    const value = edit[key];
+    const value = cleaned(key, edit[key]);
     if (value !== undefined && !same(value, plannerCardProposed(action, key))) {
       out[key] = value;
     }

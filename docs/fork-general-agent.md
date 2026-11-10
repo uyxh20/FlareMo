@@ -133,9 +133,16 @@ Since November 2026 (the control panel, design option B) it can also propose:
 - in `propose_task_change`, a task's weekly goal link (`goal_id`, or null to
   unlink) and dropping it off the board or putting it back (`dropped`);
 - `propose_task_comment`, a comment on a task;
-- `propose_entry_edit`, a new text for an existing entry, only when the owner
-  asks for that edit (a typo, a line, a #tag): the whole entry as it should
-  read, shown on the card as the lines it removes and adds;
+- `propose_entry_edit`, a flag on an existing entry that looks off, only when
+  the owner asks: `flag` (what looks off, "line 2 says Tuesday but the gym was
+  Monday") and an optional `quote` (the entry's own words, found word for word
+  or refused). The agent writes no text: the owner rewrites the entry on the
+  card (see "Whose words");
+- `propose_entry_tags`, #tags added to or taken from an entry (`add`,
+  `remove`: tag names, validated as upstream reads tags). The server writes
+  the new text (a new tag at the end of a last line of tags, else on its own
+  line; a removed one leaves the words around it), files it as an
+  `entry_edit` with `tags`, and the card shows the lines it changes;
 - `propose_entry_state`, archiving an entry or bringing it back, pinning or
   unpinning it;
 - in `propose_task_change`, `column` with `before_id` or `after_id`: the task
@@ -159,13 +166,15 @@ Since November 2026 (the control panel, design option B) it can also propose:
   was logged; `was` holds the row's day, kind, variant, minutes and home time).
   The agent cannot change a row's kind: that is remove plus add. Stored as kind
   `health_change`. `read_health` now prints each row's id;
-- `propose_goal_change`, adding a weekly goal (`action: add`, `period_start`
-  a Monday, this week or later (up to about six months ahead; a past week is
-  refused), `pillar`, `title`,
-  optional `lines` and `note`) or rewriting one the owner has (`action: edit`,
-  `goal_id` from `read_goals`, any of `title`, `lines`, `note`, `pillar`; only
-  a goal of this week or a later one, a past week's goal is refused; "today" is
-  the tool context's, so a replay's `asOf` day counts).
+- `propose_goal_change`, pointing at a weekly goal the owner seems to need
+  (`action: add`, `period_start` a Monday, this week or later (up to about six
+  months ahead; a past week is refused), `pillar` and a `flag`, "you wrote
+  you'd train three times") or at one of the owner's that looks off
+  (`action: edit`, `goal_id` from `read_goals`, a `flag`, and `pillar` only to
+  move it; only a goal of this week or a later one, a past week's goal is
+  refused; "today" is the tool context's, so a replay's `asOf` day counts).
+  No title, lines or note: the owner writes them on the card. An edit cannot
+  move a goal to another week (`plannerUpdateGoal` has no week).
   Weekly goals only, never a delete, and never a goal's status, result or
   score: those are the owner's own verdicts, and the tool refuses them (its
   input has no such fields). Stored as kind `goal_change`; an edit keeps `was`
@@ -215,12 +224,44 @@ hand, and it may say so. What is editable, by row:
 | Task change | its one value: title, column, due day, priority, effort, start day or goal; for a place, the column and top, bottom or the agent's own spot |
 | Health add | kind and variant, minutes, day |
 | Health fix | minutes, and variant (from the row's own kind) |
-| Weekly goal add | objective and week |
-| Weekly goal edit | objective, when the proposal moves it |
+| Weekly goal add | objective and week; the title (empty, the owner must write it) and lines |
+| Weekly goal edit | the title and lines, starting from the goal's own; the objective, when the proposal moves it |
+| Flagged entry | the entry's text, starting from its own |
 
-Goal titles and lines, diary entry text, comments and memory wording are not
-editable: whose words they are is still open. A row whose values differ from the
-proposal shows an **Edited** tag with a **Reset**; unticked rows stay skipped.
+Comments, new entries and memory wording are not editable. A row whose values
+differ from the proposal shows an **Edited** tag with a **Reset**; unticked rows
+stay skipped.
+
+### Whose words
+
+Since November 2026 (the owner's decision, mockup "Whose words") the agent
+fills in values everywhere but writes no words of a weekly goal or a diary
+entry: it points at one and says in a few words what looks off (`flag`), and
+the owner writes the words on the card. A flagged entry shows the flag, the
+quote if any, and the entry's text in a box that starts with that text;
+Accept stays off until the owner changed it (`text` in `edit`). A goal add
+shows an empty title field the owner must fill (`title`, optional `lines`); a
+goal edit shows the goal's title and lines to rewrite, and Accept needs a
+changed word or a moved objective. In a card of many rows, a row that still
+waits on words is skipped by **Accept N** and says what it needs. The checks
+are the same as before: the stale check on `was`, current and future weeks
+only, no twin goal (now checked on Accept, against the owner's title),
+weekly goals only. Tags, links, objectives, weeks, dates and health values
+stay agent-proposable. Memory corrections are not part of this decision.
+
+The words ride in `edit` (`text` for an entry; `title`, `lines`, `note` for a
+goal) and the accept writes them as before; the row keeps them as
+`change.content` or `change.title`/`lines` with `change.edited`, so Undo and
+the learning log work unchanged (`proposal.accepted_edited` with the field
+names, never the words). What a field starts at is `plannerAgentEditBaseline`
+(contracts), the same for the card and the Worker; whether a row still waits
+on words is `plannerAgentNeedsWords`.
+
+**Older rows.** An open proposal filed before this change may still hold the
+agent's words (`content`, `title`, `lines`). They are never written:
+`plannerAgentWordless` drops them before the accept, and the card shows the
+row as a flag, its field filled from the record (`was`), not from the agent's
+text, so the owner must write before Accept.
 
 `POST /agent/actions/:id` takes an optional `edit` with `state: "accepted"`: a
 flat object of only the keys the row offers (`plannerAgentEditableKeys`, one

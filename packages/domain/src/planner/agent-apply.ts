@@ -41,6 +41,7 @@ import { replaceMemoRelations } from "../relations";
 import {
   type PlannerAgentEditResult,
   plannerAgentApplyEdit,
+  plannerAgentWordless,
 } from "./agent-edit";
 import {
   PLANNER_AGENT_ACTION_ACTOR_PREFIX,
@@ -331,7 +332,9 @@ export async function plannerAgentAcceptAction(
   // The change to write: the proposal's, with the owner's edited values laid
   // over it. `was` stays the agent's, so the stale check is still against what
   // the record held when it proposed.
-  let change: Record<string, unknown> = row.change;
+  // A flagged entry or goal carries no words of the agent's: only the owner's,
+  // from `edit`, are written (older proposals may still hold the agent's).
+  let change: Record<string, unknown> = plannerAgentWordless(row);
   let edited: PlannerAgentEditResult | null = null;
   try {
     if (input.edit !== undefined) {
@@ -492,7 +495,11 @@ export async function plannerAgentAcceptAction(
       }
       case "entry_edit": {
         const content = asString(change.content)?.trim();
-        if (!content) throw new ValidationError("This proposal has no text.");
+        if (!content) {
+          throw new ValidationError(
+            "Rewrite the entry on the card first: the agent only flags what looks off.",
+          );
+        }
         const memo = await entryOf(db, user, change);
         if ("was" in change && !same(change.was, memo.content)) {
           throw new ValidationError(PLANNER_AGENT_STALE);
@@ -650,8 +657,13 @@ export async function plannerAgentAcceptAction(
           const title = asString(change.title)?.trim();
           const week = asString(change.period_start);
           const pillar = asString(change.pillar) as PlannerPillar | undefined;
-          if (!title || !week || !pillar) {
+          if (!week || !pillar) {
             throw new ValidationError("This proposal is missing its goal.");
+          }
+          if (!title) {
+            throw new ValidationError(
+              "Write the goal's title on the card first.",
+            );
           }
           const created = await plannerCreateGoal(db, {
             userId: user.id,
@@ -689,8 +701,11 @@ export async function plannerAgentAcceptAction(
         if (typeof change.pillar === "string") {
           patch.pillar = change.pillar as PlannerPillar;
         }
+        if (patch.pillar === goal.pillar) delete patch.pillar;
         if (Object.keys(patch).length === 0) {
-          throw new ValidationError("This proposal changes nothing.");
+          throw new ValidationError(
+            "Change the goal's words or objective on the card first.",
+          );
         }
         before = now;
         await plannerUpdateGoal(db, {

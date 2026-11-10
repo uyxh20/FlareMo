@@ -1,3 +1,4 @@
+import { plannerWeekStartOf } from "@flaremo/contracts";
 import { applyPlannerMigrations } from "@flaremo/db/src/planner-migrations";
 import type { Miniflare } from "miniflare";
 import {
@@ -581,6 +582,64 @@ describe("the general agent's Ask chat and schedule", () => {
         )
       ).task.due_at,
     ).toBeNull();
+
+    // Whose words: a flagged new goal is accepted only with the owner's title,
+    // which rides in `edit`; the agent's flag is never the goal's words.
+    const flagId = crypto.randomUUID();
+    const week = plannerWeekStartOf(TODAY);
+    await d1
+      .prepare(
+        `INSERT INTO planner_agent_action
+           (id, user_id, run_id, conversation_id, kind, task_id, field, change, why, state, created_at)
+         SELECT ?, user_id, NULL, ?, 'goal_change', NULL, NULL, ?, 'Asked.', 'open', ?
+           FROM planner_agent_chat LIMIT 1`,
+      )
+      .bind(
+        flagId,
+        conversation,
+        JSON.stringify({
+          action: "add",
+          period_start: week,
+          pillar: "health",
+          flag: "You wrote you'd train three times",
+          week,
+        }),
+        new Date().toISOString(),
+      )
+      .run();
+    const acceptFlag = (extra: Record<string, unknown>) =>
+      call(
+        "POST",
+        `/agent/actions/${flagId}`,
+        { state: "accepted", today: TODAY, ...extra },
+        agentEnv,
+      );
+    const refused = await body<{ error: { message: string } }>(
+      acceptFlag({}),
+      400,
+    );
+    expect(refused.error.message).toMatch(/title/);
+    // Words are not a value of another card: text belongs to an entry.
+    await body(acceptFlag({ edit: { text: "x" } }), 400);
+    const { action: written } = await body<{
+      action: { state: string; landed_id: string; change: unknown };
+    }>(
+      acceptFlag({
+        edit: { title: "Train three times", lines: ["Mon", "Wed", "Fri"] },
+      }),
+    );
+    expect(written).toMatchObject({
+      state: "accepted",
+      change: {
+        title: "Train three times",
+        edited: { title: "Train three times", lines: ["Mon", "Wed", "Fri"] },
+      },
+    });
+    const goal = await d1
+      .prepare("SELECT title, lines FROM planner_goal WHERE id = ?")
+      .bind(written.landed_id)
+      .first<{ title: string; lines: string }>();
+    expect(goal?.title).toBe("Train three times");
   });
 
   it("stops at the month's cap", async () => {
