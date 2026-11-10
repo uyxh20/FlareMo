@@ -985,6 +985,7 @@ describe("planner goals and weekly review API", () => {
     );
     expect(live.headers.get("content-type")).toContain("application/x-ndjson");
     expect(await lines(live)).toEqual([
+      { ready: true },
       { r: true },
       { d: "Which " },
       { d: "call? " },

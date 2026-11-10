@@ -891,14 +891,13 @@ export type PlannerAiStreamLine =
 
 /**
  * The review agent's reply as it is written, one NDJSON line each (fork,
- * `GET …/ai/agent/:session/stream`): `r` starts a new message, `d` adds text
+ * `GET …/ai/agent/:session/stream`): `ready` says it is open, `r` starts a new message, `d` adds text
  * to it, `idle` says the step is done and the answer can be asked for now.
  * Only for show: the answer the page keeps is still the one it asks for.
  */
 export type PlannerAgentPreviewLine =
-  | { r: true }
-  | { d: string }
-  | { idle: true };
+  /** First line: the stream is open, so the step can be sent now. */
+  { ready: true } | { r: true } | { d: string } | { idle: true };
 
 /**
  * The review agent's steps, each answered in its own shape. `propose` (the

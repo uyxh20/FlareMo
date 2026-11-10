@@ -110,15 +110,20 @@ instead of all at once when it is done. The page still asks the session for
 the answer every few seconds, and that answer is the one kept; the live text is
 only for show, so nothing is lost when it fails.
 
-- After a coach step is sent, the page also opens
+- Before a coach step is sent to an open session, the page opens
   `GET /review/:week/ai/agent/:session/stream?today&mode` (period chats:
-  `…/chat/ai/agent/:session/stream`). The Worker checks the session is the
-  owner's, then opens Anthropic's session event stream
+  `…/chat/ai/agent/:session/stream`), waits up to 3 seconds for its first
+  line, `{"ready":true}`, and only then sends the step. Anthropic sends live
+  text only to a stream that was already open when the agent began writing,
+  and a coach reply is one short model request: opened after the step (the
+  first version), dev showed the whole reply in one piece. The Worker checks
+  the session is the owner's, then opens Anthropic's session event stream
   (`/v1/sessions/:id/events/stream?event_deltas[]=agent.message`) and answers
-  NDJSON lines: `{"r":true}` when a new message starts, `{"d":"…"}` for more of
-  it, `{"idle":true}` when the step is done
-  (`apps/worker/src/fork/agent-stream.ts`). The coach's control line ("@@…")
-  is held back as in the model's own stream.
+  NDJSON lines: `{"ready":true}` once it is open, `{"r":true}` when a new
+  message starts, `{"d":"…"}` for more of it, `{"idle":true}` when the step is
+  done (`apps/worker/src/fork/agent-stream.ts`). The coach's control line
+  ("@@…") is held back as in the model's own stream. A step that starts a new
+  session opens the stream after it, as before.
 - Each new message starts the text over, because only the agent's last message
   is the reply (an earlier "let me read your week" is not). The finished
   `agent.message` that ends each preview carries the whole text, so a preview
