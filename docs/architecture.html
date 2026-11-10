@@ -281,7 +281,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-11-08 · describes main and live version #47 (shipped 2026-11-08), which turned on the <a href="#review">cascade ladder</a> in the weekly review and moved the <a href="#agent">diary agent</a> from high to medium effort. Version #46 added a Summarize button to the composer for link summaries. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
+      <p class="meta">Last updated 2026-11-10 · describes main and live version #48 (shipped 2026-11-10): the sidebar overdue link opens the cockpit, imported entries are caught up into semantic search every 10 minutes, the personal export carries the Schizo Diary tables with a weekly Sunday backup to R2, and two fixes (export on D1's 100-value limit, semantic search query option). Version #47 turned on the <a href="#review">cascade ladder</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
     </header>
 
     <!-- ============================================================ -->
@@ -1460,6 +1460,7 @@
         <table>
           <thead><tr><th>Live</th><th>Date</th><th>What changed</th><th>Migration</th><th>Live rows</th></tr></thead>
           <tbody>
+            <tr><td>#48</td><td class="num">2026-11-10</td><td>Sidebar overdue link counts cockpit tasks and opens the cockpit; search catch-up (4 imported entries into semantic search every 10 minutes); fork tables in the personal export plus a weekly backup to R2 (backups/weekly/); export lookups kept under D1's 100-value limit; semantic search query fixed (returnMetadata "none")</td><td class="num">none</td><td class="num">5,271 → ROWS_AFTER</td></tr>
             <tr><td>#47</td><td class="num">2026-11-08</td><td>Cascade ladder in the weekly review (Serves and Moved per objective, month and quarter goals with weeks left) and the diary agent on medium instead of high effort</td><td class="num">none</td><td class="num">5,137 → 5,137</td></tr>
             <tr><td>#46</td><td class="num">2026-11-08</td><td>Summarize button (✦) in the memo composer: opens Ask my diary with the summary request for the link you pasted; the draft stays</td><td class="num">none</td><td class="num">5,117 → 5,117</td></tr>
             <tr><td>#45</td><td class="num">2026-11-08</td><td>Link summaries: drop a web page, YouTube video or PDF link into Ask my diary or use Summarize link on an entry; the agent proposes a #link summary entry that reviews and memories never read as your words</td><td class="num">none</td><td class="num">5,099 → 5,099</td></tr>
