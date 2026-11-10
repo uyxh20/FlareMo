@@ -167,6 +167,12 @@ Upstream's export (Settings > Export) only knew upstream tables, so goals, week 
 - Weekly backup (`apps/worker/src/fork/weekly-backup.ts`): the Sunday cron fires at 10:00 and 11:00 UTC. The agent's prep takes the one that is noon in Copenhagen; the backup takes the other, in its own `try`, and saves the same export to R2 as `backups/weekly/<Copenhagen date>.json`. A copy already there makes a repeat firing a no-op. Nothing deletes these copies (the export-task cleanup only removes `exports/<task id>/`). It costs about 35 D1 queries, under the free plan's 50 per invocation.
 - Undo: drop the two `// fork:` lines in `export-data.ts` and `data-tasks.ts`, the backup block in `fork/agent-schedule.ts`, and set the registry rows back to `gap`.
 
+### 11. Two fixes found on dev (10 Nov 2026)
+
+- Export on the free plan's D1: upstream looked up entry relations 500 ids at a time, but D1 allows 100 bound values in one query, so both the inline export and the chunked export failed once the diary passed 100 entries. They now use 90 (`RELATION_ID_CHUNK` in `export-data.ts`, also used by `data-tasks.ts`).
+- Semantic search: the Vectorize query passed `returnMetadata: false`; the runtime now answers `VECTOR_QUERY_ERROR 40026` to a boolean, so every semantic search returned a server error. It now passes `"none"` (`apps/worker/src/embedding.ts`, one line).
+- Undo: put the old values back (500, `false`). Neither works on D1 / current Vectorize.
+
 ## Upstream files with a hook-in
 
 These are all the upstream files this fork changes, compared with the upstream commit `main` last merged (named on the first line of `packages/domain/src/fork/upstream-manifest.txt`). `packages/domain/src/fork/upstream-hookins.test.ts` fails when a changed upstream file has no row here, or a row names a file that is back to upstream, so the list cannot drift. Line counts: `git diff --numstat <that commit> -- <file>`.
@@ -212,6 +218,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `packages/contracts/src/memos.ts` | `created_at` (optional ISO instant) in `updateMemoSchema`. |
 | `packages/domain/src/branding.ts` | Imports `FORK_PRODUCT_NAME`; `DEFAULT_FLAREMO_PRODUCT_NAME` equals it. |
 | `packages/domain/src/memos-write.ts` | Health: imports `forkHealthSyncMemo` and awaits it at the end of `createMemo` and of `updateMemo`. Backdating: imports `forkApplyBackdate` from `./fork/memo-backdate`, calls it once after `nextPayload` is built, and uses its result in the edit-rights check, `nextMemo` and the patch (six lines). |
+| `apps/worker/src/embedding.ts` | One line in `CloudflareVectorIndex.query`: `returnMetadata: "none"` instead of `false` (section 11). |
 | `packages/domain/src/import-export/export-data.ts` | Export: imports `forkExportSection`; the bundle gets `fork: await forkExportSection(db, user)` and its return type adds `{ fork: ForkExportSection }` (section 10). |
 | `packages/domain/src/data-tasks.ts` | Export: imports `forkExportChunk`; `ExportChunk.kind` gains `"fork"` and `streamExportData` emits one `fork` chunk after shares (section 10). |
 
