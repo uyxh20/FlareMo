@@ -7,7 +7,10 @@ import {
   plannerScoreRubric,
   plannerVerdictKinds,
 } from "@flaremo/contracts";
+import { Loader2Icon, PaperclipIcon, XIcon } from "lucide-react";
 import {
+  type ClipboardEvent,
+  type DragEvent,
   type FormEvent,
   type ReactNode,
   useEffect,
@@ -32,6 +35,7 @@ import {
   type PlannerReviewEntry,
   plannerPastStage,
 } from "./review-model";
+import { usePlannerChatFiles } from "./use-chat-files";
 
 // Look back, the first part of the weekly review (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): a chat that walks through last week's
@@ -40,9 +44,12 @@ import {
 // has been answered so far. The page owns the state and the model calls; this
 // file only draws them.
 
+/** A file read for the coach, sent with the answer it was dropped on. */
+export type PlannerAnswerFile = { filename: string; text: string };
+
 export type PlannerBackActions = {
   start: () => void;
-  answer: (text: string) => void;
+  answer: (text: string, files?: PlannerAnswerFile[]) => void;
   next: () => void;
   goalResult: (goalId: string, result: PlannerGoalResult) => void;
   stepScore: (kind: "auth" | "ach", delta: number) => void;
@@ -477,17 +484,38 @@ function Thinking({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The answer box. With `attach` on (the coach replies to this answer), files
+ * can be dropped, pasted or picked: each is read at once into text, shown as
+ * a line above the box, and goes with the next answer (fork, "Files in the
+ * review", docs/fork-task-attachments.md). The files are not kept.
+ */
 function Composer({
   disabled,
+  attach,
   strings,
   onSend,
 }: {
   disabled: boolean;
+  attach: boolean;
   strings: PlannerGoalsStrings;
-  onSend: (text: string) => void;
+  onSend: (text: string, files: PlannerAnswerFile[]) => void;
 }) {
   const [text, setText] = useState("");
+  const [over, setOver] = useState(false);
   const area = useRef<HTMLTextAreaElement | null>(null);
+  const picker = useRef<HTMLInputElement | null>(null);
+  const copy = strings.review.files;
+  const files = usePlannerChatFiles({
+    tooLarge: copy.tooLarge,
+    tooMany: copy.tooMany,
+  });
+  const { clear } = files;
+
+  // Files wait for an answer the coach replies to; a step without one drops them.
+  useEffect(() => {
+    if (!attach) clear();
+  }, [attach, clear]);
 
   // Grows with what is written, up to a few lines.
   // biome-ignore lint/correctness/useExhaustiveDependencies: it measures the text
@@ -506,44 +534,144 @@ function Composer({
     area.current?.focus({ preventScroll: true });
   }, [disabled]);
 
+  const attached = attach ? files.ready : [];
+  const canSend =
+    !disabled &&
+    !files.reading &&
+    (text.trim().length > 0 || attached.length > 0);
+
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    if (disabled || !text.trim()) return;
-    onSend(text);
+    if (!canSend) return;
+    onSend(text, attached);
     setText("");
+    clear();
+  };
+
+  const add = (list: readonly File[]) => {
+    if (attach && list.length > 0) files.add(list);
+  };
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    if (!attach) return;
+    event.preventDefault();
+    setOver(false);
+    add(Array.from(event.dataTransfer?.files ?? []));
+  };
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const list = Array.from(event.clipboardData?.files ?? []);
+    if (!attach || list.length === 0) return;
+    event.preventDefault();
+    add(list);
   };
 
   return (
-    <form
-      className="flex items-end gap-2 border-t border-border p-2.5"
-      onSubmit={submit}
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target around the answer box; the box and the paperclip are the controls
+    <div
+      className="border-t border-border"
+      onDragLeave={() => setOver(false)}
+      onDragOver={(event) => {
+        if (!attach) return;
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDrop={onDrop}
     >
-      <textarea
-        aria-label={strings.review.answer}
-        className="max-h-40 min-h-10 flex-1 resize-none rounded-[10px] border border-border bg-background px-3 py-2 leading-snug outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:opacity-60"
-        data-testid="planner-review-composer"
-        disabled={disabled}
-        maxLength={4000}
-        placeholder={strings.review.answerPlaceholder}
-        ref={area}
-        rows={1}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !event.nativeEvent.isComposing
-          ) {
-            event.preventDefault();
-            submit();
-          }
-        }}
-      />
-      <Button disabled={disabled || !text.trim()} size="sm" type="submit">
-        {strings.review.send}
-      </Button>
-    </form>
+      {attach && (files.files.length > 0 || files.notice) && (
+        <ul
+          className="flex flex-col gap-1 px-3 pt-2 text-[13px] text-muted-foreground"
+          data-testid="planner-review-files"
+        >
+          {files.files.length > 0 && (
+            <li className="font-medium">{copy.withAnswer}</li>
+          )}
+          {files.files.map((entry) => (
+            <li className="flex items-center gap-1.5" key={entry.key}>
+              {entry.state === "reading" && (
+                <Loader2Icon className="size-3 shrink-0 animate-spin" />
+              )}
+              <span className="min-w-0 flex-1 truncate">
+                {entry.filename} ·{" "}
+                {entry.state === "reading"
+                  ? copy.reading
+                  : entry.state === "ready"
+                    ? copy.ready
+                    : copy.unreadable}
+              </span>
+              <Button
+                aria-label={copy.remove}
+                size="icon-xs"
+                title={copy.remove}
+                type="button"
+                variant="ghost"
+                onClick={() => files.remove(entry.key)}
+              >
+                <XIcon />
+              </Button>
+            </li>
+          ))}
+          {files.notice && <li className="text-destructive">{files.notice}</li>}
+        </ul>
+      )}
+      <form
+        className={cn("flex items-end gap-2 p-2.5", over && "bg-muted/60")}
+        onSubmit={submit}
+      >
+        <textarea
+          aria-label={strings.review.answer}
+          className="max-h-40 min-h-10 flex-1 resize-none rounded-[10px] border border-border bg-background px-3 py-2 leading-snug outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:opacity-60"
+          data-testid="planner-review-composer"
+          disabled={disabled}
+          maxLength={4000}
+          placeholder={over ? copy.drop : strings.review.answerPlaceholder}
+          ref={area}
+          rows={1}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onPaste={onPaste}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+        />
+        {attach && (
+          <>
+            <input
+              className="sr-only"
+              data-testid="planner-review-file-input"
+              multiple
+              ref={picker}
+              tabIndex={-1}
+              type="file"
+              onChange={(event) => {
+                const list = Array.from(event.currentTarget.files ?? []);
+                event.currentTarget.value = "";
+                add(list);
+              }}
+            />
+            <Button
+              aria-label={copy.attach}
+              disabled={disabled}
+              size="icon-sm"
+              title={copy.attach}
+              type="button"
+              variant="ghost"
+              onClick={() => picker.current?.click()}
+            >
+              <PaperclipIcon />
+            </Button>
+          </>
+        )}
+        <Button disabled={!canSend} size="sm" type="submit">
+          {strings.review.send}
+        </Button>
+      </form>
+    </div>
   );
 }
 
@@ -764,6 +892,13 @@ export function PlannerLookBack(props: Props) {
           )}
         </div>
         <Composer
+          attach={
+            coach &&
+            (stage === "lastq" ||
+              stage === "p" ||
+              stage === "scores" ||
+              stage === "done")
+          }
           disabled={composerOff}
           strings={strings}
           onSend={actions.answer}

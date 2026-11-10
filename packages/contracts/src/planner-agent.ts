@@ -24,6 +24,8 @@ import {
   plannerIsDay,
   plannerIsMonday,
   plannerPillarSchema,
+  plannerReviewFilesPerAnswer,
+  plannerReviewFileTextMax,
 } from "./planner-goals";
 import { plannerPeriodLevelSchema } from "./planner-period-review";
 import { taskPrioritySchema } from "./projects";
@@ -809,9 +811,9 @@ export const plannerAskQuerySchema = z.object({
 });
 
 /** The most text one read chat file carries (a whole file is under 5,000 plus its heading). */
-export const plannerChatFileTextMax = 5400;
+export const plannerChatFileTextMax = plannerReviewFileTextMax;
 /** How many files one question may carry. */
-export const plannerChatFilesPerQuestion = 3;
+export const plannerChatFilesPerQuestion = plannerReviewFilesPerAnswer;
 
 export const plannerAskSchema = z.strictObject({
   today: daySchema,

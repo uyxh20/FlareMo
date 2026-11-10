@@ -848,6 +848,30 @@ describe("planner goals and weekly review API", () => {
         answer(payload.events[0].content[0].text as string);
         return Response.json({});
       }
+      if (path.startsWith("/sessions/sesn_test/events/stream")) {
+        // The reply as it is written, then the step's end.
+        const frames = [
+          {
+            type: "event_start",
+            event: { type: "agent.message", id: "sevt_live" },
+          },
+          {
+            type: "event_delta",
+            event_id: "sevt_live",
+            delta: { content: { type: "text", text: "Which " } },
+          },
+          {
+            type: "agent.message",
+            id: "sevt_live",
+            content: text('Which call? @@ {"advance": false}'),
+          },
+          { type: "session.status_idle" },
+        ];
+        return new Response(
+          frames.map((frame) => `data: ${JSON.stringify(frame)}\n\n`).join(""),
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      }
       if (path.startsWith("/sessions/sesn_test/events")) {
         return Response.json({ data: events, next_page: null });
       }
@@ -950,6 +974,66 @@ describe("planner goals and weekly review API", () => {
       step: "coach",
       text: "Which call?",
       advance: false,
+    });
+
+    // The reply can be watched as it is written, its control line held back.
+    const live = await call(
+      "GET",
+      `/review/${REVIEW_WEEK}/ai/agent/sesn_test/stream?today=${TODAY}&mode=free`,
+      undefined,
+      { env: agentEnv },
+    );
+    expect(live.headers.get("content-type")).toContain("application/x-ndjson");
+    expect(await lines(live)).toEqual([
+      { r: true },
+      { d: "Which " },
+      { d: "call? " },
+      { idle: true },
+    ]);
+    expect(
+      sent.find((entry) => entry.url.includes("/events/stream"))?.url,
+    ).toContain("event_deltas%5B%5D=agent.message");
+    // Not someone else's session.
+    expect(
+      (
+        await call(
+          "GET",
+          `/review/${REVIEW_WEEK}/ai/agent/sesn_other/stream?today=${TODAY}&mode=free`,
+          undefined,
+          { env: agentEnv },
+        )
+      ).status,
+    ).toBe(404);
+
+    // A file dropped with an answer goes to the agent, read, with the answer.
+    await lines(
+      await call(
+        "POST",
+        `/review/${REVIEW_WEEK}/ai/coach`,
+        {
+          today: TODAY,
+          mode: "free",
+          messages: [{ role: "user", content: "My run.\n\n📎 run.pdf" }],
+          session: "sesn_test",
+          files: [{ filename: "run.pdf", text: "Text of run.pdf: 10 km." }],
+        },
+        { env: agentEnv },
+      ),
+    );
+    const withFile = String(
+      (
+        events.filter((event) => event.type === "user.message").at(-1)
+          ?.content as Array<{ text: string }> | undefined
+      )?.[0]?.text,
+    );
+    expect(withFile).toContain("My run.");
+    expect(withFile).toContain(
+      'The owner attached a file to this answer:\n\n--- File "run.pdf"',
+    );
+    expect(withFile).toContain("Text of run.pdf: 10 km.");
+    expect(await ask("coach", "&mode=free")).toMatchObject({
+      status: "done",
+      step: "coach",
     });
 
     // So do the scores.

@@ -169,6 +169,18 @@ export type PlannerGoalsStrings = {
     thinking: string;
     answer: string;
     answerPlaceholder: string;
+    /** Files dropped with an answer: read into it for the coach, not kept. */
+    files: {
+      attach: string;
+      drop: string;
+      withAnswer: string;
+      reading: string;
+      ready: string;
+      unreadable: string;
+      remove: string;
+      tooLarge: (name: string, max: string) => string;
+      tooMany: (max: number) => string;
+    };
     send: string;
     next: string;
     skip: string;
@@ -489,6 +501,17 @@ const en: PlannerGoalsStrings = {
     thinking: "Thinking",
     answer: "Your answer",
     answerPlaceholder: "Write your answer",
+    files: {
+      attach: "Attach a file",
+      drop: "Drop a file to read it into your answer",
+      withAnswer: "Goes with your answer",
+      reading: "reading…",
+      ready: "read",
+      unreadable: "couldn't read it",
+      remove: "Remove file",
+      tooLarge: (name: string, max: string) => `${name} is over ${max}`,
+      tooMany: (max: number) => `At most ${max} files an answer`,
+    },
     send: "Send",
     next: "Next ›",
     skip: "Skip ›",
@@ -794,6 +817,17 @@ const zhCN: PlannerGoalsStrings = {
     thinking: "思考中",
     answer: "你的回答",
     answerPlaceholder: "写下你的回答",
+    files: {
+      attach: "附加文件",
+      drop: "把文件拖到这里，读进你的回答",
+      withAnswer: "随回答一起发送",
+      reading: "正在读取…",
+      ready: "已读取",
+      unreadable: "无法读取",
+      remove: "移除文件",
+      tooLarge: (name: string, max: string) => `${name} 超过 ${max}`,
+      tooMany: (max: number) => `每个回答最多 ${max} 个文件`,
+    },
     send: "发送",
     next: "下一个 ›",
     skip: "跳过 ›",

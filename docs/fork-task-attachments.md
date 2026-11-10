@@ -201,7 +201,29 @@ on the task, as above. A chat file that was never read (the page closed
 mid-upload) is deleted by the nightly sweep after a day. Chat reads do not count
 toward the 200 task reads a month; the AI rate limit applies.
 
-## What the agent sees
+## Files in the review
+
+Since November 2026 the review's Look back chat takes files the same way, for
+the week and for the month, quarter and year chats: a drop on the answer box, a
+paste into it, or the paperclip beside it. The paperclip shows only where the
+coach replies to the answer (last week's question, the seven prompts, and the
+chat after the scores, with the coach on); the question for next Sunday and the
+verdict take no file. Each file goes through the same chat-file routes as Ask
+(upload, reading copy, read at once, file deleted), at most three an answer,
+and waits as a line above the box until the answer is sent. An answer can be
+just the files.
+
+The coach request (`POST /review/:week/ai/coach`, and the period chat's
+`…/chat/ai/coach`) carries them as `files`, each `{ filename, text }` up to
+5,400 characters (`plannerAiCoachSchema`). With the agent, the coach step's
+message gets each file's text after the chat, marked as the file's own words
+(`plannerAgentQuestionWithFiles(…, "answer")`); the session keeps it, so the
+scores and the memo can use it too. Without the agent, the fallback model gets
+the files on the latest answer for that one reply
+(`plannerReviewChatWithFiles`). The chat shows and the review keeps only the
+answer and the files' names ("📎 run.pdf", `plannerAnswerWithFiles`), so the
+saved answers never hold a file's text.
+
 
 `read_task` ends with a Files block: one line per file with its name, type,
 size, when it was added and its state in words. A read file whose card is still

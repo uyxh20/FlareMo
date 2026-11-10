@@ -38,6 +38,7 @@ import {
   plannerAgentPeriodMemoKickoff,
   plannerAgentPeriodMemoMessage,
   plannerAgentPeriodOpeningMessage,
+  plannerAgentQuestionWithFiles,
   plannerCoachStreamFilter,
   plannerMemoStreamFilter,
   plannerMergePeriodThemes,
@@ -57,6 +58,7 @@ import {
   plannerReadPeriodContext,
   plannerReadPeriodReview,
   plannerResolvePeriod,
+  plannerReviewChatWithFiles,
   plannerSavePeriodReview,
   plannerSavePeriodState,
   plannerStartPeriodOver,
@@ -70,6 +72,7 @@ import {
   type HonoBindings,
   type ReturnTypeOfRequestContext,
 } from "../context";
+import { plannerAgentPreviewResponse } from "../fork/agent-stream";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
@@ -79,6 +82,7 @@ import {
   plannerAgent,
   plannerEndAgent,
   plannerLogAgentError,
+  plannerOpenAgentStream,
   plannerPollAgent,
   plannerReadAgentMemo,
   plannerSendAgent,
@@ -718,7 +722,11 @@ plannerPeriodReviewApi.post(
       const { model, review } = setup;
       const mode: PlannerCoachMode = body.mode;
       const sent = await agentStep(setup, body.session, "coach", () =>
-        plannerAgentPeriodCoachMessage(review, mode, body.messages),
+        plannerAgentQuestionWithFiles(
+          plannerAgentPeriodCoachMessage(review, mode, body.messages),
+          body.files,
+          "answer",
+        ),
       );
       if (sent) {
         return ndjson(async function* () {
@@ -728,7 +736,7 @@ plannerPeriodReviewApi.post(
       const messages = plannerPeriodCoachChatMessages(
         review,
         mode,
-        body.messages,
+        plannerReviewChatWithFiles(body.messages, body.files),
       );
       return ndjson(async function* (signal) {
         if (!model) {
@@ -849,6 +857,45 @@ plannerPeriodReviewApi.post(
     }
   },
 );
+
+// The agent's coach reply as it is written, as for a week (fork,
+// docs/fork-general-agent.md, "Replies as they are written").
+plannerPeriodReviewApi.get(`${CHAT}/agent/:session/stream`, async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const agent = plannerAgent(c.env);
+    if (!agent) return c.json(AI_UNAVAILABLE, 503);
+    const today = c.req.query("today") ?? "";
+    plannerAssertToday(today, new Date());
+    const { level, periodStart } = plannerResolvePeriod(
+      today,
+      c.req.param("level"),
+      c.req.param("period"),
+    );
+    const mode = c.req.query("mode") ?? "free";
+    if (mode !== "free" && mode !== "force" && mode !== "chat") {
+      return c.json({ error: { message: "Unknown mode." } }, 400);
+    }
+    const owner = {
+      userId: context.user.id,
+      ownerKey: plannerPeriodAgentKey(level, periodStart),
+      sessionId: c.req.param("session"),
+    };
+    return await plannerAgentPreviewResponse(
+      c.req.raw,
+      (signal) =>
+        plannerOpenAgentStream(agent, context.db, owner, signal).catch(
+          (error: unknown) => {
+            plannerLogAgentError("stream", error);
+            return null;
+          },
+        ),
+      () => plannerCoachStreamFilter(mode),
+    );
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
 
 // The agent's answer to a step, asked for every few seconds, as for a week.
 // The memo is the last step (the period's memories are proposed in it): once

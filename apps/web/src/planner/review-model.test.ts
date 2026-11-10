@@ -33,6 +33,7 @@ import {
   plannerAdvance,
   plannerAfterCommit,
   plannerAnswersInput,
+  plannerAnswerWithFiles,
   plannerCheckFlags,
   plannerCheckInput,
   plannerCoachMessages,
@@ -2451,5 +2452,20 @@ describe("plannerShownGoals", () => {
     expect(
       plannerShownGoals({ goals, knownGoalIds: ["d"] }).map((goal) => goal.id),
     ).toEqual(["b", "c", "d"]);
+  });
+});
+
+describe("plannerAnswerWithFiles", () => {
+  it("names the files under the answer, or alone", () => {
+    expect(plannerAnswerWithFiles("My run.", [{ filename: "run.pdf" }])).toBe(
+      "My run.\n\n📎 run.pdf",
+    );
+    expect(
+      plannerAnswerWithFiles("  ", [
+        { filename: "a.png" },
+        { filename: "b.txt" },
+      ]),
+    ).toBe("📎 a.png, b.txt");
+    expect(plannerAnswerWithFiles("Plain.")).toBe("Plain.");
   });
 });

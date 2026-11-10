@@ -439,6 +439,7 @@ export async function plannerStreamCoach(
     step: "coach",
     mode: input.mode,
     signal: options.signal,
+    onPreview: options.onText,
   });
   if (options.signal?.aborted) return { status: "aborted", text: "" };
   if (answer?.step !== "coach" || !answer.text) {
@@ -469,6 +470,12 @@ export async function plannerWaitForAgent(
     step: PlannerAgentStep;
     mode?: PlannerAiCoachInput["mode"];
     signal?: AbortSignal;
+    /**
+     * Shows the reply as it is written (the coach's, which is prose). The
+     * answer kept is still the one asked for; a preview that fails changes
+     * nothing but how soon the words show.
+     */
+    onPreview?: (text: string) => void;
   },
 ): Promise<Extract<PlannerAgentResponse, { status: "done" }> | null> {
   const query = new URLSearchParams({
@@ -476,20 +483,51 @@ export async function plannerWaitForAgent(
     step: options.step,
     ...(options.mode ? { mode: options.mode } : {}),
   });
-  const path = `${reviewPath(week, `ai/agent/${encodeURIComponent(session)}`)}?${query}`;
+  const base = reviewPath(week, `ai/agent/${encodeURIComponent(session)}`);
+  const path = `${base}?${query}`;
   const deadline = Date.now() + AGENT_WAIT_MS;
+  // The preview's "done" cuts the current wait short.
+  let wake: (() => void) | null = null;
+  const watching = new AbortController();
+  const stopWatching = () => watching.abort();
+  options.signal?.addEventListener("abort", stopWatching, { once: true });
+  if (options.onPreview) {
+    const preview = new URLSearchParams({
+      today: options.today,
+      ...(options.mode ? { mode: options.mode } : {}),
+    });
+    void plannerWatchAgent(`${base}/stream?${preview}`, {
+      signal: watching.signal,
+      onText: options.onPreview,
+      onIdle: () => wake?.(),
+    });
+  }
   const wait = () =>
     new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, AGENT_POLL_MS);
-      options.signal?.addEventListener(
-        "abort",
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      const timer = setTimeout(done, AGENT_POLL_MS);
+      function done() {
+        clearTimeout(timer);
+        wake = null;
+        resolve();
+      }
+      wake = done;
+      options.signal?.addEventListener("abort", done, { once: true });
     });
+  try {
+    return await pollAgent(path, deadline, wait, options.signal);
+  } finally {
+    stopWatching();
+    options.signal?.removeEventListener("abort", stopWatching);
+  }
+}
+
+async function pollAgent(
+  path: string,
+  deadline: number,
+  wait: () => Promise<void>,
+  signal: AbortSignal | undefined,
+): Promise<Extract<PlannerAgentResponse, { status: "done" }> | null> {
+  const options = { signal };
   while (Date.now() < deadline) {
     await wait();
     if (options.signal?.aborted) return null;
@@ -513,6 +551,72 @@ export async function plannerWaitForAgent(
     if (state.status === "failed") return null;
   }
   return null;
+}
+
+/**
+ * Reads the agent's reply as it is written (`{"r"}`, `{"d"}`, `{"idle"}`
+ * lines, docs/fork-general-agent.md). `onText` gets the message so far; a new
+ * message starts it over. `onIdle` fires once the agent is done with the
+ * step. Never throws, and never retries: the asking goes on regardless.
+ */
+export async function plannerWatchAgent(
+  path: string,
+  options: {
+    signal: AbortSignal;
+    onText: (text: string) => void;
+    onIdle: () => void;
+  },
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      credentials: "same-origin",
+      signal: options.signal,
+    });
+  } catch {
+    return;
+  }
+  if (!response.ok || !response.body) {
+    await response.body?.cancel().catch(() => undefined);
+    return;
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  const read = (line: string): boolean => {
+    const parsed = parseLine(line.trim()) as Record<string, unknown> | null;
+    if (!parsed) return false;
+    if (parsed.r === true) {
+      text = "";
+      options.onText(text);
+    } else if (typeof parsed.d === "string") {
+      text += parsed.d;
+      options.onText(text);
+    } else if (parsed.idle === true) {
+      options.onIdle();
+      return true;
+    }
+    return false;
+  };
+  try {
+    while (!options.signal.aborted) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let end = buffer.indexOf("\n");
+      while (end >= 0) {
+        const stop = read(buffer.slice(0, end));
+        buffer = buffer.slice(end + 1);
+        if (stop) return;
+        end = buffer.indexOf("\n");
+      }
+    }
+  } catch {
+    // The stream broke: the page asks for the answer as before.
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
 }
 
 /**
