@@ -14,6 +14,7 @@ import {
 } from "@flaremo/db";
 import { and, asc, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import { NotFoundError } from "./errors";
+import { forkExportChunk } from "./fork/export"; // fork: fork tables in the export
 import { importData } from "./import-export";
 
 export type DataTaskKind = "export" | "import";
@@ -251,7 +252,7 @@ export async function deleteExpiredDataTasks(
 }
 
 export type ExportChunk = {
-  kind: "memos" | "attachments" | "relations" | "shares" | "settings";
+  kind: "memos" | "attachments" | "relations" | "shares" | "settings" | "fork"; // fork: fork tables
   /** The rendered JSON record batch as a string (one NDJSON record per line). */
   records: string;
 };
@@ -395,6 +396,8 @@ export async function streamExportData(
       )
       .join("\n"),
   });
+
+  await onChunk(await forkExportChunk(db, user)); // fork: fork tables in the export
 
   return {
     memoCount,

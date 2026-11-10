@@ -419,7 +419,7 @@
             <text x="676" y="54" class="t-h">R2 files</text>
             <text x="676" y="76" class="t-m">attachments/…</text>
             <text x="676" y="93" class="t-m">planner/… <tspan class="t-fork t-s">task files</tspan></text>
-            <text x="676" y="110" class="t-m">avatars/… exports/…</text>
+            <text x="676" y="110" class="t-m">avatars/… exports/… <tspan class="t-fork t-s">backups/</tspan></text>
             <text x="676" y="136" class="t-s">only the files themselves</text>
 
             <rect x="660" y="190" width="220" height="118" rx="10" class="n n-vec" />
@@ -1249,7 +1249,7 @@
     <!-- ============================================================ -->
     <section id="nightly">
       <h2>Nightly jobs</h2>
-      <p>One housekeeping pass at 03:17 UTC, in this order. One failing step doesn't stop the rest. A second timer fires on Sundays for the review prep.</p>
+      <p>One housekeeping pass at 03:17 UTC, in this order. One failing step doesn't stop the rest. A second timer fires on Sundays, twice an hour apart: the Copenhagen-noon run does the review prep, the other saves the <b>weekly backup</b>, your full personal export (diary, memories, tasks and every fork table: goals, reviews, task history, agent and health), to R2 as <code>backups/weekly/&lt;date&gt;.json</code>. Copies are kept for good; nothing deletes them (<code>apps/worker/src/fork/weekly-backup.ts</code>).</p>
       <figure>
         <div class="fig">
           <svg viewBox="0 0 900 250" role="img" aria-label="Twelve nightly steps in order: exports, webhooks, memory upkeep, dreaming (skipped while the agent is on) and the conflict check, index queue, orphan files, empty bin with the task history sync before and after, health re-read, agent sweep and scorecard, removed task files, old exports and heatmap, notifications.">

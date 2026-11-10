@@ -10,6 +10,7 @@ import type { FlareMoEnv } from "../env";
 /**
  * Sunday at 10:00 and 11:00 UTC: one of the two is noon in Copenhagen, summer
  * or winter, and the prep runs on that one (routes/planner-agent-schedule.ts).
+ * The weekly backup runs on the other one (fork/weekly-backup.ts).
  */
 export const FORK_AGENT_SUNDAY_CRON = "0 10,11 * * SUN";
 
@@ -35,6 +36,22 @@ export async function forkAgentScheduled(
       JSON.stringify({
         level: "error",
         message: "General agent Sunday prep failed",
+        error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
+      }),
+    );
+  }
+  // The weekly long-term backup takes the other Sunday firing
+  // (fork/weekly-backup.ts). Its own try: a failed prep never skips it, and a
+  // failed backup never touches the prep.
+  try {
+    const { forkWeeklyBackup } = await import("./weekly-backup");
+    const backup = await forkWeeklyBackup(env, controller.scheduledTime);
+    console.log(JSON.stringify({ message: "Weekly backup", backup }));
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        message: "Weekly backup failed",
         error: error instanceof Error ? error.message.slice(0, 300) : "unknown",
       }),
     );
