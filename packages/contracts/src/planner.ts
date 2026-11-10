@@ -49,6 +49,7 @@ export * from "./planner-review-memo";
 // (state-changing requests must carry FlareMo's Origin) or a `memos_pat_` PAT.
 //
 //   GET    /board?today&done_days&include_dropped  PlannerBoardResponse
+//   GET    /overdue?today                          PlannerOverdueResponse
 //   POST   /rollover                               PlannerRolloverResponse
 //   POST   /tasks                                  201 PlannerCreateTaskResponse
 //   GET    /tasks/:id                              PlannerTaskDetailResponse
@@ -110,6 +111,9 @@ export const plannerBoardQuerySchema = z.object({
   // stringbool, not coerce: coerce.boolean() maps the string "false" to true.
   include_dropped: z.stringbool().default(false),
 });
+
+/** The sidebar's overdue reminder: only the client's day. */
+export const plannerOverdueQuerySchema = z.object({ today: plannerDaySchema });
 
 export const plannerRolloverSchema = z.strictObject({
   today: plannerDaySchema,
@@ -467,6 +471,17 @@ export const plannerBoardResponseSchema = z.object({
   week: plannerCockpitWeekSchema.optional(),
 });
 
+/**
+ * The sidebar's overdue reminder (docs/fork-customizations.md): how many open
+ * cockpit tasks are past their due date, and how many are due today. Open
+ * means live, not done and not dropped, whatever the month.
+ */
+export const plannerOverdueResponseSchema = z.object({
+  today: z.string(),
+  overdue: z.number().int().nonnegative(),
+  due_today: z.number().int().nonnegative(),
+});
+
 export const plannerRolloverResponseSchema = z.object({
   history: plannerHistoryStatusSchema,
   // How many plans moved forward this run.
@@ -701,6 +716,9 @@ export type PlannerHistoryRangeQuery = z.output<
 export type PlannerPlanDto = z.infer<typeof plannerPlanDtoSchema>;
 export type PlannerBoardCard = z.infer<typeof plannerBoardCardSchema>;
 export type PlannerBoardResponse = z.infer<typeof plannerBoardResponseSchema>;
+export type PlannerOverdueResponse = z.infer<
+  typeof plannerOverdueResponseSchema
+>;
 export type PlannerRolloverResponse = z.infer<
   typeof plannerRolloverResponseSchema
 >;

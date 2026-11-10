@@ -5,6 +5,7 @@ import {
   type PlannerCreateTaskResponse,
   type PlannerDeleteCommentResponse,
   type PlannerHistoryRangeResponse,
+  type PlannerOverdueResponse,
   type PlannerRevertEventResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
@@ -13,6 +14,7 @@ import {
   plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
+  plannerOverdueQuerySchema,
   plannerRevertEventSchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
@@ -27,6 +29,7 @@ import {
   plannerReadBoard,
   plannerReadCockpitWeek,
   plannerReadHistoryRange,
+  plannerReadOverdue,
   plannerReadTaskDetail,
   plannerReadTaskHistory,
   plannerRevertEvent,
@@ -101,6 +104,28 @@ plannerApi.get(
         plannerReadCockpitWeek(db, { userId: user.id, today: query.today }),
       ]);
       const response: PlannerBoardResponse = { ...board, week };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// The sidebar's overdue reminder (docs/fork-customizations.md): open tasks past
+// due from any month, and those due today. Read-only on purpose: it loads with
+// every page, so unlike the board it never syncs the history archive.
+plannerApi.get(
+  "/overdue",
+  zValidator("query", plannerOverdueQuerySchema),
+  async (c) => {
+    try {
+      const { db, user } = await getRequestContext(c);
+      const query = c.req.valid("query");
+      plannerAssertToday(query.today, new Date());
+      const response: PlannerOverdueResponse = await plannerReadOverdue(db, {
+        userId: user.id,
+        today: query.today,
+      });
       return c.json(response);
     } catch (error) {
       return jsonError(c, error);

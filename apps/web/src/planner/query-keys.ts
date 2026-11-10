@@ -28,6 +28,8 @@ export const plannerQueryKeys = {
     ["planner", "goals", year, today] as const,
   /** The weekly review as the page reads it, for the day it is opened on. */
   review: (today: string) => ["planner", "review", today] as const,
+  /** How many open tasks are overdue or due today, for the sidebar's reminder. */
+  overdue: (today: string) => ["planner", "overdue", today] as const,
   /** Whether a review is due, for the sidebar's dot. */
   reviewStatus: (today: string) => ["planner", "review-status", today] as const,
   /** A month, quarter or year review (docs/planning-cockpit-period-review.md). */

@@ -985,6 +985,7 @@
         <figcaption>Fork fields sit beside upstream ones, so an upstream update can't break the cockpit. <b>Live since 2026-10-13:</b> the task's Goal field picks from this week's goals instead of projects. Project pickers are gone from the cockpit, but the old project links stay in the database. Code: <code>packages/domain/src/planner/</code>, page <code>apps/web/src/planner/cockpit-page.tsx</code>.</figcaption>
       </figure>
       <p class="note">A task can also carry <a href="#files">files</a>, and its Notes have an <b>Ask agent</b> button that opens the task's own <a href="#agent">agent chat</a>. Six cockpit tools are open to outside AI agents over <code>/mcp</code> (see <a href="#access">Login, apps and MCP</a>).</p>
+      <p class="note"><b>Sidebar reminders.</b> The red "N overdue" line and the "still open today" box above the time horizon count cockpit tasks that are open (not done, not dropped) and due before or on today, from any month, and both open the cockpit. The count is one read-only query (<code>GET /api/app/planner/overdue</code>, <code>packages/domain/src/planner/overdue.ts</code>) that never writes to D1. Upstream's version counted only this month's first 100 tasks and opened the hidden Projects page; the one-line swap is in <code>flaremo-explorer.tsx</code>.</p>
     </section>
 
     <!-- ============================================================ -->

@@ -6,6 +6,7 @@ import {
   type PlannerCommentResponse,
   type PlannerCreateTaskResponse,
   type PlannerHistoryRangeResponse,
+  type PlannerOverdueResponse,
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
@@ -17,6 +18,7 @@ import {
   plannerCreateTaskResponseSchema,
   plannerDeleteCommentResponseSchema,
   plannerHistoryRangeResponseSchema,
+  plannerOverdueResponseSchema,
   plannerPeriodStart,
   plannerTaskDetailResponseSchema,
   plannerTaskHistoryResponseSchema,
@@ -398,6 +400,7 @@ describe("planner API", () => {
     const range = `from=${TODAY}&to=${TODAY}`;
     return [
       { method: "GET", path: `/board?today=${TODAY}` },
+      { method: "GET", path: `/overdue?today=${TODAY}` },
       { method: "POST", path: "/rollover", body: { today: TODAY } },
       {
         method: "POST",
@@ -1078,6 +1081,56 @@ describe("planner API", () => {
         expect(result.history).toBe("paused");
         expect(titles(result.columns.backlog)).toEqual(["Board still loads"]);
       });
+    });
+  });
+
+  // ===========================================================================
+  // GET /overdue
+  // ===========================================================================
+
+  describe("GET /overdue", () => {
+    const overdue = (today = TODAY) =>
+      send("GET", `${API}/overdue?${new URLSearchParams({ today })}`);
+
+    it("counts open tasks past due from any month and those due today, and writes nothing", async () => {
+      await createTask("Yesterday", { due_at: shiftDay(TODAY, -1) });
+      await createUpstreamTask("Months ago in /projects", {
+        due_at: shiftDay(TODAY, -90),
+      });
+      await createTask("Due today", { due_at: TODAY });
+      await createTask("Tomorrow", { due_at: shiftDay(TODAY, 1) });
+      const done = await createTask("Done late", {
+        due_at: shiftDay(TODAY, -2),
+      });
+      await patchTaskOk(done.id, { column: "done" });
+      const dropped = await createTask("Dropped late", {
+        due_at: shiftDay(TODAY, -3),
+      });
+      await patchTaskOk(dropped.id, { dropped: true });
+      const events = await count("planner_task_event");
+
+      const result = onTheWire(
+        plannerOverdueResponseSchema,
+        await body<PlannerOverdueResponse>(overdue()),
+      );
+      expect(result).toEqual({ today: TODAY, overdue: 2, due_today: 1 });
+      // Unlike the board it does not sync the history archive.
+      expect(await count("planner_task_event")).toBe(events);
+    });
+
+    it("never counts another member's tasks", async () => {
+      await createTask("Mine", { due_at: shiftDay(TODAY, -1) });
+      const { asMember } = await createMember();
+      const result = await body<PlannerOverdueResponse>(
+        asMember("GET", `${API}/overdue?today=${TODAY}`),
+      );
+      expect(result).toEqual({ today: TODAY, overdue: 0, due_today: 0 });
+    });
+
+    it("takes today only within one day of the server's date", async () => {
+      await domainError(overdue(shiftDay(TODAY, 2)), 400, "within one day");
+      expect((await overdue("2026-02-30")).status).toBe(400);
+      expect((await send("GET", `${API}/overdue`)).status).toBe(400);
     });
   });
 

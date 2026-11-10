@@ -37,6 +37,9 @@ const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
     mustContain: [
       /import \{ PlannerNavLink \} from "@\/planner\/nav-link"/,
       /<PlannerNavLink onNavigate=\{onNavigate\} \/>/,
+      // The task reminders open the cockpit, not the hidden /projects page.
+      /import \{ PlannerOverdueReminders \} from "@\/planner\/overdue-reminders"/,
+      /<PlannerOverdueReminders \/>/,
     ],
   },
   {
@@ -86,6 +89,14 @@ describe("the planner's hook-ins in upstream files", () => {
       }
     });
   }
+
+  it("the sidebar shows the cockpit's task reminders instead of upstream's", () => {
+    // Upstream's MiniCalendarReminders links to the hidden /projects page and
+    // counts only this month. After an upstream sync it must not come back.
+    const text = read("../components/flaremo-explorer.tsx");
+    expect(text).not.toMatch(/<MiniCalendarReminders\b/);
+    expect(read("./overdue-reminders.tsx")).not.toContain('to="/projects"');
+  });
 
   it("routes.tsx registers exactly the planner pages and the old review addresses", () => {
     const text = read("./routes.tsx");

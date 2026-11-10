@@ -28,7 +28,6 @@ import {
   type TagHierarchyNode,
 } from "@/api";
 import { authClient } from "@/auth-client";
-import { MiniCalendarReminders } from "@/components/flaremo-mini-calendar-panel";
 import { FlareMoTimeHorizon } from "@/components/flaremo-time-horizon";
 import {
   AlertDialog,
@@ -48,6 +47,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
 import { PlannerNavLink } from "@/planner/nav-link";
+import { PlannerOverdueReminders } from "@/planner/overdue-reminders"; // fork: overdue opens the cockpit
 
 export type ExplorerView = "all" | "archived" | "trashed";
 
@@ -125,7 +125,7 @@ export const FlareMoExplorer = memo(function FlareMoExplorer({
       </section>
 
       <section className="mb-2 px-1 motion-safe:animate-fade">
-        <MiniCalendarReminders />
+        <PlannerOverdueReminders /> {/* fork: overdue opens the cockpit */}
         <FlareMoTimeHorizon
           hoveredDate={hoveredDate}
           space={space}
