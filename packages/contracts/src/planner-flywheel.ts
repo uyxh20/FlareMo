@@ -43,6 +43,11 @@ export const plannerFlywheelMetrics = {
     unit: "share",
     origins: ["ai"],
   },
+  proposals_redone: {
+    label: "Sent back with a redo",
+    unit: "share",
+    origins: ["ai"],
+  },
   entries_edited_7d: {
     label: "Entries edited within 7 days",
     unit: "share",

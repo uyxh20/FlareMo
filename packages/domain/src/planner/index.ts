@@ -12,6 +12,7 @@
 export * from "./agent-apply";
 export * from "./agent-definition";
 export * from "./agent-prompts";
+export * from "./agent-redo";
 export * from "./agent-store";
 export * from "./agent-tools";
 export * from "./attachment-text";

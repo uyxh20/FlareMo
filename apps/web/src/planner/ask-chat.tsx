@@ -9,6 +9,7 @@ import {
   FlagIcon,
   Loader2Icon,
   PaperclipIcon,
+  RotateCcwIcon,
   Undo2Icon,
   XIcon,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
 } from "react";
 import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useI18n } from "@/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -212,6 +214,8 @@ const en = {
     needsText: "Rewrite the entry to accept it",
     needsTitle: "Write a title to accept it",
     needsChange: "Change the words to accept it",
+    redoPlaceholder: "Tell it what to change",
+    redo: "Redo",
   },
 };
 
@@ -346,6 +350,8 @@ const zhCN: PlannerAskCopy = {
     needsText: "改写日记后才能接受",
     needsTitle: "写下标题后才能接受",
     needsChange: "改动文字后才能接受",
+    redoPlaceholder: "告诉它要改什么",
+    redo: "重做",
   },
 };
 
@@ -1026,6 +1032,64 @@ function verdictOf(action: PlannerAgentActionDto, copy: PlannerAskCopy) {
   }
 }
 
+/** What a card's Redo sends: its open rows and the owner's note. */
+export type PlannerRedo = (actionIds: string[], note: string) => void;
+
+/**
+ * The one-line redo (design option B, "tell it what to change"): a note and
+ * Redo. The card's open rows are dismissed as `redo` and the agent redraws
+ * them as a new card in the same conversation.
+ */
+function PlannerRedoLine({
+  open,
+  copy,
+  disabled,
+  onRedo,
+}: {
+  open: PlannerAgentActionDto[];
+  copy: PlannerAskCopy;
+  disabled: boolean;
+  onRedo: PlannerRedo;
+}) {
+  const [note, setNote] = useState("");
+  const send = (event?: FormEvent) => {
+    event?.preventDefault();
+    const text = note.trim();
+    if (!text || disabled) return;
+    onRedo(
+      open.map((action) => action.id),
+      text,
+    );
+    setNote("");
+  };
+  return (
+    <form
+      className="flex items-center gap-1.5 border-t border-border pt-2"
+      data-testid="planner-redo"
+      onSubmit={send}
+    >
+      <Input
+        aria-label={copy.proposal.redoPlaceholder}
+        className="h-8 min-w-0 flex-1"
+        disabled={disabled}
+        maxLength={1000}
+        placeholder={copy.proposal.redoPlaceholder}
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+      />
+      <Button
+        disabled={disabled || !note.trim()}
+        size="sm"
+        type="submit"
+        variant="outline"
+      >
+        <RotateCcwIcon data-icon="inline-start" />
+        {copy.proposal.redo}
+      </Button>
+    </form>
+  );
+}
+
 /**
  * One proposed action, as a card: what it would change, why, and the verdict,
  * with Accept and Dismiss while open and Undo once accepted. Also used under a
@@ -1037,12 +1101,17 @@ export function PlannerProposalCard({
   today,
   copy,
   onSettled,
+  onRedo,
+  redoBusy = false,
 }: {
   action: PlannerAgentActionDto;
   task: string | null;
   today: string;
   copy: PlannerAskCopy;
   onSettled: (action: PlannerAgentActionDto) => void;
+  /** The one-line redo; only in a chat, where a new turn can be asked. */
+  onRedo?: PlannerRedo;
+  redoBusy?: boolean;
 }) {
   const refresh = usePlannerActionRefresh(task);
   const [error, setError] = useState<string | null>(null);
@@ -1135,6 +1204,14 @@ export function PlannerProposalCard({
           </Button>
         </div>
       )}
+      {open && onRedo && (
+        <PlannerRedoLine
+          copy={copy}
+          disabled={redoBusy || settle.isPending}
+          open={[action]}
+          onRedo={onRedo}
+        />
+      )}
       {action.state === "accepted" && (
         <div className="flex items-center gap-1.5">
           <Button
@@ -1166,12 +1243,17 @@ export function PlannerChangeSet({
   today,
   copy,
   onSettled,
+  onRedo,
+  redoBusy = false,
 }: {
   actions: PlannerAgentActionDto[];
   task: string | null;
   today: string;
   copy: PlannerAskCopy;
   onSettled: (action: PlannerAgentActionDto) => void;
+  /** The one-line redo of the card's open rows. */
+  onRedo?: PlannerRedo;
+  redoBusy?: boolean;
 }) {
   const refresh = usePlannerActionRefresh(task);
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
@@ -1192,8 +1274,10 @@ export function PlannerChangeSet({
       <PlannerProposalCard
         action={actions[0]}
         copy={copy}
+        redoBusy={redoBusy}
         task={task}
         today={today}
+        onRedo={onRedo}
         onSettled={onSettled}
       />
     );
@@ -1344,6 +1428,14 @@ export function PlannerChangeSet({
           );
         })}
       </ul>
+      {open.length > 0 && onRedo && (
+        <PlannerRedoLine
+          copy={copy}
+          disabled={busy || redoBusy}
+          open={open}
+          onRedo={onRedo}
+        />
+      )}
       {open.length > 0 && (
         <div className="flex items-center gap-1.5">
           <Button
@@ -1457,16 +1549,26 @@ export function PlannerAskChat({
     mutationFn: (input: {
       question: string;
       files: Array<{ filename: string; text: string }>;
+      redo?: { action_ids: string[]; note: string };
     }) =>
       plannerAskRequest({
         today,
-        text: input.question,
-        ...(input.files.length > 0 ? { files: input.files } : {}),
+        ...(input.redo
+          ? { redo: input.redo }
+          : {
+              text: input.question,
+              ...(input.files.length > 0 ? { files: input.files } : {}),
+            }),
         ...(conversation ? { conversation } : {}),
         ...(task && !conversation ? { task } : {}),
       }),
-    onSuccess: (response) => {
+    onSuccess: (response, input) => {
       remember(response);
+      if (input.redo) {
+        // A redo leaves the question box and its files as they were.
+        setError(null);
+        return;
+      }
       chatFiles.clear();
       onChange({
         conversation: response.conversation,
@@ -1614,8 +1716,19 @@ export function PlannerAskChat({
             actions={group}
             copy={copy}
             key={group[0].id}
+            redoBusy={busy}
             task={task}
             today={today}
+            onRedo={
+              conversation
+                ? (ids, note) =>
+                    send.mutate({
+                      question: "",
+                      files: [],
+                      redo: { action_ids: ids, note },
+                    })
+                : undefined
+            }
             onSettled={settled}
           />
         ))}

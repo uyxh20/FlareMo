@@ -263,6 +263,24 @@ agent's words (`content`, `title`, `lines`). They are never written:
 row as a flag, its field filled from the record (`was`), not from the agent's
 text, so the owner must write before Accept.
 
+### Redo
+
+Under the open rows of a card sits one line, "Tell it what to change", and
+**Redo** (mockup option B): for a card that is wrong as a whole. Redo sends
+`POST /ask` with `redo: { action_ids, note }` (no `text`; the conversation is
+required). The Worker dismisses the card's open rows that belong to the
+conversation, marking each `change.settled_reason: "redo"` (never deleted, so
+the flywheel sees them; dismissed before the turn, so the new proposals are
+not taken for repeats of open ones), and sends the agent a new turn in the
+same session: the note and a compact list of the dismissed rows (id, kind,
+field, values; old values and long text cut). The chat shows the owner's
+line as "Redo: <note>", and the agent's new proposals come after it, so they
+form a new card. If the turn cannot be sent, the rows open again. The usual
+limits apply (25 an answer, 100 a day), and a redo while the last question is
+still being answered is refused like any question. The flywheel logs
+`proposal.redo` (counts and kinds, never words) and the scorecard counts
+`proposals_redone` (`agent-redo.ts`).
+
 `POST /agent/actions/:id` takes an optional `edit` with `state: "accepted"`: a
 flat object of only the keys the row offers (`plannerAgentEditableKeys`, one
 list for the card and the Worker), for example `{ "due_at": "2026-11-09" }` or
@@ -302,7 +320,8 @@ agent is told when they are used up. A proposal left open for seven days is
 expired by the nightly sweep. A task chat and the global chat each list only
 their own conversations (`planner_agent_chat.task_id`).
 
-Routes: `GET/POST /ask` take `task` for a task's chat and return `actions`;
+Routes: `GET/POST /ask` take `task` for a task's chat and return `actions`
+(`POST /ask` takes `redo` instead of `text` for a redo);
 `POST /agent/actions/:id` with `{ state: "accepted" | "dismissed", today, edit? }`;
 `POST /agent/actions/:id/revert` with `{ today }` (Undo).
 

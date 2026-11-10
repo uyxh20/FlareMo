@@ -640,6 +640,95 @@ describe("the general agent's Ask chat and schedule", () => {
       .bind(written.landed_id)
       .first<{ title: string; lines: string }>();
     expect(goal?.title).toBe("Train three times");
+
+    // The one-line redo: the card's open rows are dismissed as redo (kept),
+    // and the agent gets a new turn with the note and the rows to redraw.
+    const redoIds = [crypto.randomUUID(), crypto.randomUUID()];
+    for (const [index, id] of redoIds.entries()) {
+      await d1
+        .prepare(
+          `INSERT INTO planner_agent_action
+             (id, user_id, run_id, conversation_id, kind, task_id, field, change, why, state, created_at)
+           SELECT ?, user_id, NULL, ?, 'task_new', NULL, NULL, ?, 'Asked.', 'open', ?
+             FROM planner_agent_chat LIMIT 1`,
+        )
+        .bind(
+          id,
+          conversation,
+          JSON.stringify({ title: `Redo task ${index}`, column: "todo" }),
+          new Date().toISOString(),
+        )
+        .run();
+    }
+    await read(`&conversation=${conversation}`);
+    const redo = (extra: Record<string, unknown>) =>
+      call("POST", "/ask", { today: TODAY, ...extra }, agentEnv);
+    // A redo needs its conversation, and is not sent with a question.
+    await body(
+      redo({ redo: { action_ids: redoIds, note: "all Thursday" } }),
+      400,
+    );
+    await body(
+      redo({
+        conversation,
+        text: "x",
+        redo: { action_ids: redoIds, note: "all Thursday" },
+      }),
+      400,
+    );
+    const redone = await body<
+      Ask & {
+        actions: Array<{
+          id: string;
+          state: string;
+          change: Record<string, unknown>;
+        }>;
+      }
+    >(
+      redo({
+        conversation,
+        redo: { action_ids: redoIds, note: "only the work ones, all Thursday" },
+      }),
+    );
+    expect(redone.messages.at(-1)).toMatchObject({
+      role: "owner",
+      text: "Redo: only the work ones, all Thursday",
+    });
+    for (const id of redoIds) {
+      expect(redone.actions.find((action) => action.id === id)).toMatchObject({
+        state: "dismissed",
+        change: { settled_reason: "redo" },
+      });
+    }
+    const turn = [...api.sessions.values()]
+      .flatMap((each) => each.events)
+      .filter((event) => event.type === "user.message")
+      .map(
+        (event) =>
+          (event.content as Array<{ text: string }> | undefined)?.[0]?.text ??
+          "",
+      )
+      .at(-1);
+    expect(turn).toContain('"only the work ones, all Thursday"');
+    for (const id of redoIds) expect(turn).toContain(`${id} task_new`);
+    expect(turn).toContain('"title":"Redo task 0"');
+    const redoLog = await d1
+      .prepare("SELECT data FROM planner_event WHERE kind = 'proposal.redo'")
+      .all<{ data: string }>();
+    expect(redoLog.results).toHaveLength(1);
+    expect(JSON.parse(redoLog.results[0]?.data ?? "{}")).toEqual({
+      count: 2,
+      kinds: "task_new",
+    });
+    // Nothing open is left to redo.
+    await read(`&conversation=${conversation}`);
+    await body(
+      redo({
+        conversation,
+        redo: { action_ids: redoIds, note: "again" },
+      }),
+      400,
+    );
   });
 
   it("stops at the month's cap", async () => {

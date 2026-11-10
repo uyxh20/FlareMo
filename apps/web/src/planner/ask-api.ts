@@ -39,9 +39,15 @@ export function plannerAskRequest(input: {
   today: string;
   conversation?: string;
   task?: string;
-  text: string;
+  /** The question; left out for a redo. */
+  text?: string;
   /** Files dropped in the chat, already read: their names and text. */
   files?: Array<{ filename: string; text: string }>;
+  /**
+   * The one-line redo: the card's open rows, dismissed as `redo`, and what to
+   * change; the agent redraws them as a new card.
+   */
+  redo?: { action_ids: string[]; note: string };
 }) {
   return apiRequest<PlannerAskResponse>(ASK, {
     method: "POST",

@@ -283,6 +283,15 @@ export async function plannerFlywheelRollup(
     den: created.length,
   });
   const settled = created.filter((row) => row.state !== "open");
+  // Sent back with the one-line redo (change.settled_reason): a card wrong as
+  // a whole, which a dismiss alone does not tell apart.
+  put(tally, "proposals_redone", "ai", {
+    num: settled.filter(
+      (row) =>
+        row.state === "dismissed" && row.change.settled_reason === "redo",
+    ).length,
+    den: settled.length,
+  });
   put(tally, "proposals_accepted", "ai", {
     num: settled.filter(
       (row) => row.state === "accepted" || row.state === "reverted",

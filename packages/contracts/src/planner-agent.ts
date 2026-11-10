@@ -849,33 +849,63 @@ export const plannerAskQuerySchema = z.object({
   task: taskIdSchema.optional(),
 });
 
+/** The rows of one card a redo can send back: one answer's cap. */
+const PLANNER_AGENT_ACTIONS_PER_ANSWER_MAX = 25;
+
 /** The most text one read chat file carries (a whole file is under 5,000 plus its heading). */
 export const plannerChatFileTextMax = 5400;
 /** How many files one question may carry. */
 export const plannerChatFilesPerQuestion = 3;
 
-export const plannerAskSchema = z.strictObject({
-  today: daySchema,
-  /** The conversation to go on with; a new one starts without it. */
-  conversation: z.uuid().optional(),
-  /** The task a new conversation is about (a task's own chat). */
-  task: taskIdSchema.optional(),
-  text: z.string().trim().min(1).max(4000),
-  /**
-   * Files dropped in the chat, each already read (`POST /chat-files/:id/read`):
-   * its name and its text with the reader's heading. They go to the agent with
-   * the question; the files themselves are not kept.
-   */
-  files: z
-    .array(
-      z.strictObject({
-        filename: z.string().trim().min(1).max(200),
-        text: z.string().trim().min(1).max(plannerChatFileTextMax),
-      }),
-    )
-    .max(plannerChatFilesPerQuestion)
-    .optional(),
-});
+export const plannerAskSchema = z
+  .strictObject({
+    today: daySchema,
+    /** The conversation to go on with; a new one starts without it. */
+    conversation: z.uuid().optional(),
+    /** The task a new conversation is about (a task's own chat). */
+    task: taskIdSchema.optional(),
+    /** The question; left out for a redo, whose note is the question. */
+    text: z.string().trim().min(1).max(4000).optional(),
+    /**
+     * The one-line redo ("tell it what to change"): the card's open rows, which
+     * the Worker dismisses with the reason `redo`, and the owner's note. The
+     * agent gets the note and the dismissed rows as a new turn and redraws them.
+     */
+    redo: z
+      .strictObject({
+        action_ids: z
+          .array(idSchema)
+          .min(1)
+          .max(PLANNER_AGENT_ACTIONS_PER_ANSWER_MAX),
+        note: z.string().trim().min(1).max(1000),
+      })
+      .optional(),
+    /**
+     * Files dropped in the chat, each already read (`POST /chat-files/:id/read`):
+     * its name and its text with the reader's heading. They go to the agent with
+     * the question; the files themselves are not kept.
+     */
+    files: z
+      .array(
+        z.strictObject({
+          filename: z.string().trim().min(1).max(200),
+          text: z.string().trim().min(1).max(plannerChatFileTextMax),
+        }),
+      )
+      .max(plannerChatFilesPerQuestion)
+      .optional(),
+  })
+  .refine(
+    (value) => (value.text === undefined) !== (value.redo === undefined),
+    {
+      message: "Send a question (text) or a redo, one of them.",
+      path: ["text"],
+    },
+  )
+  .refine((value) => value.redo === undefined || value.conversation, {
+    message: "A redo goes on in its conversation.",
+    path: ["conversation"],
+  });
 
 /** A file dropped in a chat, stored until it is read (then deleted). */
 export const plannerChatFileSchema = z.object({

@@ -7,6 +7,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  plannerAskRequest,
   plannerFetchAsk,
   plannerRevertActionRequest,
   plannerSettleActionRequest,
@@ -35,6 +36,7 @@ vi.mock("sonner", () => ({
 vi.mock("./ask-api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./ask-api")>()),
   plannerFetchAsk: vi.fn(),
+  plannerAskRequest: vi.fn(),
   plannerSettleActionRequest: vi.fn(),
   plannerRevertActionRequest: vi.fn(),
 }));
@@ -46,6 +48,7 @@ vi.mock("./goals-api", async (importOriginal) => ({
 
 const fetchGoals = vi.mocked(plannerFetchGoalsYear);
 const fetchAsk = vi.mocked(plannerFetchAsk);
+const askRequest = vi.mocked(plannerAskRequest);
 const settleAction = vi.mocked(plannerSettleActionRequest);
 const revertAction = vi.mocked(plannerRevertActionRequest);
 
@@ -864,5 +867,63 @@ describe("editing a card before Accept", () => {
     expect(container.querySelectorAll("select, input[type=date]")).toHaveLength(
       0,
     );
+  });
+});
+
+// The one-line redo (docs/fork-general-agent.md, "Redo"): the card's note and
+// Redo send its open rows' ids and the note as a redo turn of the conversation.
+describe("the one-line redo", () => {
+  it("sends the note and the open rows' ids, and leaves settled rows out", async () => {
+    const rowsIn = [
+      action("a", {}),
+      action("b", {}),
+      action("c", { state: "accepted" }),
+    ];
+    askRequest.mockResolvedValue({
+      enabled: true,
+      conversation: CONVERSATION,
+      task: null,
+      messages: [QUESTION],
+      actions: rowsIn,
+      status: "running",
+    });
+    const container = show(rowsIn);
+    await settle();
+    const line = container.querySelector('[data-testid="planner-redo"]');
+    expect(line).not.toBeNull();
+    const redoButton = () =>
+      Array.from(line?.querySelectorAll("button") ?? []).find(
+        (each) => each.textContent === "Redo",
+      ) as HTMLButtonElement;
+    expect(redoButton().disabled).toBe(true);
+    plannerTestType(
+      line?.querySelector<HTMLInputElement>(
+        'input[aria-label="Tell it what to change"]',
+      ) as HTMLInputElement,
+      "only the work ones, all Thursday",
+    );
+    expect(redoButton().disabled).toBe(false);
+    await act(async () => {
+      redoButton().click();
+    });
+    await settle();
+    expect(askRequest).toHaveBeenCalledWith({
+      today: expect.any(String),
+      conversation: CONVERSATION,
+      redo: {
+        action_ids: ["a", "b"],
+        note: "only the work ones, all Thursday",
+      },
+    });
+    expect(settleAction).not.toHaveBeenCalled();
+  });
+
+  it("shows no redo line once nothing on the card is open", async () => {
+    const container = show([
+      action("a", { state: "accepted" }),
+      action("b", { state: "dismissed" }),
+    ]);
+    await settle();
+    expect(container.querySelector('[data-testid="planner-redo"]')).toBeNull();
   });
 });
