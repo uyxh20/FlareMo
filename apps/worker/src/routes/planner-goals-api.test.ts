@@ -1239,8 +1239,8 @@ describe("planner goals and weekly review API", () => {
     expect(
       String(
         (
-          events.filter((event) => event.type === "user.message").at(-1)
-            ?.content as Array<{ text: string }>
+          (events.filter((event) => event.type === "user.message").at(-1)
+            ?.content ?? []) as Array<{ text: string }>
         )[0]?.text,
       ),
     ).toMatch(/^Propose step, asked again/);
@@ -1269,8 +1269,8 @@ describe("planner goals and weekly review API", () => {
     ).toMatchObject({ pending: true, agent: true, drafting: "tasks" });
     const taskStep = String(
       (
-        events.filter((event) => event.type === "user.message").at(-1)
-          ?.content as Array<{ text: string }>
+        (events.filter((event) => event.type === "user.message").at(-1)
+          ?.content ?? []) as Array<{ text: string }>
       )[0]?.text,
     );
     expect(taskStep).toMatch(/^Task step/);
