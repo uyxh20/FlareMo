@@ -120,6 +120,7 @@ The full list, with each response type, is the comment block in `packages/contra
 | `POST /review/:week/look-forward`                                | Save week. The eight steps are listed at `plannerCommitPlan`. Safe to send again.               |
 | `POST /review/:week/ai/opening`, `/ai/close`, `/ai/check`        | The opening drafts, the score and trajectory drafts, and the conflict check. JSON in, JSON out. |
 | `POST /review/:week/ai/coach`, `/ai/memo`                        | The coach and the memo, streamed as NDJSON: `{"d"}` lines, then `{"done"}` or `{"error"}`.      |
+| `GET /review/:week/ai/agent/:session/stream`                     | With the agent: its coach reply as it is written, NDJSON `{"r"}`, `{"d"}`, `{"idle"}` lines (fork-general-agent.md, "Replies as they are written"). The coach takes `files` too (fork-task-attachments.md, "Files in the review"). |
 
 - `GET /board` also returns the cockpit's week and its goals.
 - `PATCH /tasks/:id` takes `goal_id` (a goal's id, or `null` to unlink), written through `plannerSetTaskGoal` with a `goal_changed` history event, as Save week does. An unknown goal is a 404.

@@ -1308,3 +1308,17 @@ export function plannerRestoreReviewState(
       }
     : state;
 }
+
+/**
+ * An answer as the chat shows and keeps it when files went with it: the files
+ * named, not their text (fork, "Files in the review"). The text goes to the
+ * coach with the answer and is not kept.
+ */
+export function plannerAnswerWithFiles(
+  raw: string,
+  files: ReadonlyArray<{ filename: string }> = [],
+): string {
+  if (files.length === 0) return raw;
+  const names = `📎 ${files.map((file) => file.filename).join(", ")}`;
+  return raw.trim() ? `${raw.trim()}\n\n${names}` : names;
+}

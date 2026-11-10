@@ -84,7 +84,7 @@ import {
   usePlannerPeriodStrings,
 } from "./period-strings";
 import { plannerQueryKeys } from "./query-keys";
-import { PlannerLookBack } from "./review-back";
+import { type PlannerAnswerFile, PlannerLookBack } from "./review-back";
 import { type PlannerCheck, PlannerLookForward } from "./review-forward";
 import {
   type PlannerBackState,
@@ -98,6 +98,7 @@ import {
   plannerAdvance,
   plannerAfterCommit,
   plannerAnswersInput,
+  plannerAnswerWithFiles,
   plannerCheckFlags,
   plannerCheckInput,
   plannerCoachMessages,
@@ -888,6 +889,7 @@ function ReviewSession({
   /** One coach reply, streamed into the chat. Null when it did not answer. */
   const coach = async (
     mode: "free" | "force" | "chat",
+    files: PlannerAnswerFile[] = [],
   ): Promise<{ advance: boolean } | null> => {
     const controller = new AbortController();
     coachAbort.current = controller;
@@ -901,6 +903,7 @@ function ReviewSession({
         mode,
         messages: plannerCoachMessages(stateRef.current.back),
         ...agentSession(stateRef.current.back),
+        ...(files.length > 0 ? { files } : {}),
       },
       {
         signal: controller.signal,
@@ -937,12 +940,12 @@ function ReviewSession({
     return null;
   };
 
-  const answer = async (raw: string) => {
+  const answer = async (raw: string, files: PlannerAnswerFile[] = []) => {
     if (busyRef.current) return;
     const { back: next, reply: after } = plannerAddAnswer(
       stateRef.current.back,
       review,
-      raw,
+      plannerAnswerWithFiles(raw, files),
     );
     if (after === "none") return;
     setBack(() => next);
@@ -955,12 +958,12 @@ function ReviewSession({
       return;
     }
     if (after === "chat") {
-      await coach("chat");
+      await coach("chat", files);
       return;
     }
     const { stage, pi } = next;
     const mode = plannerCoachMode(next);
-    const reply = await coach(mode);
+    const reply = await coach(mode, files);
     const now = stateRef.current.back;
     if (!alive.current || now.stage !== stage || now.pi !== pi) return;
     if (!reply || mode === "force" || reply.advance) advance();

@@ -578,11 +578,31 @@ export const plannerReviewChatMessageSchema = z.strictObject({
  * One coach reply. `free` may ask one probing question, `force` must not (it
  * acknowledges and moves on), `chat` answers after the prompts are done.
  */
+/** How many files one review answer may carry (as one Ask question). */
+export const plannerReviewFilesPerAnswer = 3;
+/** A read file's text as the answer carries it (as Ask's chat files). */
+export const plannerReviewFileTextMax = 5400;
+
 export const plannerAiCoachSchema = z.strictObject({
   today: daySchema,
   mode: z.enum(["free", "force", "chat"]),
   messages: z.array(plannerReviewChatMessageSchema).min(1).max(60),
   ...agentSessionShape,
+  /**
+   * Files dropped with the latest answer (fork, docs/fork-task-attachments.md,
+   * "Files in the review"), each already read through the chat-file routes:
+   * its name and text. They go to the coach with the answer; the files
+   * themselves are not kept.
+   */
+  files: z
+    .array(
+      z.strictObject({
+        filename: z.string().trim().min(1).max(200),
+        text: z.string().trim().min(1).max(plannerReviewFileTextMax),
+      }),
+    )
+    .max(plannerReviewFilesPerAnswer)
+    .optional(),
 });
 
 export const plannerAiMemoSchema = z.strictObject({
@@ -868,6 +888,17 @@ export type PlannerAiStreamLine =
   | { error: "limited" | "failed" }
   /** The review agent has the step: ask its session for the answer. */
   | { agent: string };
+
+/**
+ * The review agent's reply as it is written, one NDJSON line each (fork,
+ * `GET …/ai/agent/:session/stream`): `r` starts a new message, `d` adds text
+ * to it, `idle` says the step is done and the answer can be asked for now.
+ * Only for show: the answer the page keeps is still the one it asks for.
+ */
+export type PlannerAgentPreviewLine =
+  | { r: true }
+  | { d: string }
+  | { idle: true };
 
 /**
  * The review agent's steps, each answered in its own shape. `propose` (the

@@ -673,6 +673,94 @@ describe("the review agent", () => {
     }
   });
 
+  it("shows the coach's reply as it is written, and asks for the answer as soon as the agent is done", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          calls.push(url);
+          if (url.endsWith("/ai/coach")) {
+            return new Response(line({ agent: "sesn_1" }), { status: 200 });
+          }
+          if (url.includes("/stream?")) {
+            return new Response(
+              [
+                line({ r: true }),
+                line({ d: "Let me look." }),
+                line({ r: true }),
+                line({ d: "Three gym " }),
+                line({ d: "days." }),
+                line({ idle: true }),
+              ].join(""),
+              { status: 200 },
+            );
+          }
+          return Response.json({
+            status: "done",
+            step: "coach",
+            text: "Three gym days.",
+            advance: true,
+          });
+        }),
+      );
+      const shown: string[] = [];
+      const reply = plannerStreamCoach(WEEK, coachInput, {
+        onText: (text) => shown.push(text),
+      });
+      // Well before the first 4-second ask: the idle line asked at once.
+      await vi.advanceTimersByTimeAsync(100);
+      expect(await reply).toEqual({
+        status: "done",
+        text: "Three gym days.",
+        advance: true,
+      });
+      expect(shown).toEqual([
+        "",
+        "Let me look.",
+        "",
+        "Three gym ",
+        "Three gym days.",
+        "Three gym days.",
+      ]);
+      expect(calls).toContain(
+        `${REVIEW}/ai/agent/sesn_1/stream?today=${TODAY}&mode=free`,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still gets the answer when the live reply is not there", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.endsWith("/ai/coach")) {
+            return new Response(line({ agent: "sesn_1" }), { status: 200 });
+          }
+          if (url.includes("/stream?"))
+            return new Response("", { status: 404 });
+          return Response.json({
+            status: "done",
+            step: "coach",
+            text: "Fine.",
+            advance: null,
+          });
+        }),
+      );
+      const onText = vi.fn();
+      const reply = plannerStreamCoach(WEEK, coachInput, { onText });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await reply).toEqual({ status: "done", text: "Fine." });
+      expect(onText).toHaveBeenCalledWith("Fine.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("fails when the agent failed or its session is gone, and stops when the page does", async () => {
     vi.useFakeTimers();
     try {

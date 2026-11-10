@@ -636,6 +636,34 @@ export async function plannerPollAgent(
     : { status: "failed" };
 }
 
+/**
+ * Opens the session's live event stream with previews of the agent's messages
+ * (fork, "Replies as they are written"). Null when the session is not this
+ * user's and job's, has ended, or the stream does not open. One status read
+ * and one stream: two calls out, however long the reply.
+ */
+export async function plannerOpenAgentStream(
+  agent: PlannerAgent,
+  db: FlareMoDb,
+  input: { userId: string; ownerKey: string; sessionId: string },
+  signal: AbortSignal,
+): Promise<ReadableStream<Uint8Array> | null> {
+  const owned = await ownedSession(agent, db, input);
+  if (!owned || owned.session.status === "terminated") return null;
+  const response = await fetch(
+    `${API}/sessions/${input.sessionId}/events/stream?event_deltas%5B%5D=agent.message`,
+    {
+      headers: { ...headers(agent), accept: "text/event-stream" },
+      signal,
+    },
+  );
+  if (!response.ok || !response.body) {
+    await response.body?.cancel();
+    throw new PlannerAgentApiError("stream", response.status);
+  }
+  return response.body;
+}
+
 /** The newest memo.md the agent wrote in the session, or null. */
 export async function plannerReadAgentMemo(
   agent: PlannerAgent,

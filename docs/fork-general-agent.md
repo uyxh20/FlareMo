@@ -102,7 +102,38 @@ default) changes nothing, and live never sets it: a live review has nothing
 after its Sunday to hide. Set it on dev for both arms of a replay, with
 `FLAREMO_DEV_REVIEW_AS_OF=review-week` before `deploy`.
 
-## Standing instructions
+## Replies as they are written
+
+Since November 2026 the coach's replies in Look back (the week's, and the
+month, quarter and year chats) show word by word while the agent writes them,
+instead of all at once when it is done. The page still asks the session for
+the answer every few seconds, and that answer is the one kept; the live text is
+only for show, so nothing is lost when it fails.
+
+- After a coach step is sent, the page also opens
+  `GET /review/:week/ai/agent/:session/stream?today&mode` (period chats:
+  `…/chat/ai/agent/:session/stream`). The Worker checks the session is the
+  owner's, then opens Anthropic's session event stream
+  (`/v1/sessions/:id/events/stream?event_deltas[]=agent.message`) and answers
+  NDJSON lines: `{"r":true}` when a new message starts, `{"d":"…"}` for more of
+  it, `{"idle":true}` when the step is done
+  (`apps/worker/src/fork/agent-stream.ts`). The coach's control line ("@@…")
+  is held back as in the model's own stream.
+- Each new message starts the text over, because only the agent's last message
+  is the reply (an earlier "let me read your week" is not). The finished
+  `agent.message` that ends each preview carries the whole text, so a preview
+  that Anthropic thinned out, or one that began before the stream opened,
+  still shows in full.
+- `{"idle":true}` makes the page ask for the answer at once rather than at the
+  next 4-second tick. The stream is not retried; a 404 or a broken stream just
+  leaves the page asking as before (`plannerWatchAgent` in `goals-api.ts`).
+- Cost: no model cost. Each reply is one status read and one long-lived
+  stream from the Worker (two of the free plan's 50 calls a request), held at
+  most 15 minutes. Parsing the stream takes a few milliseconds of CPU.
+- Only the coach streams. The opening, the scores and the goal check are JSON
+  read whole, and the memo is a file the agent writes, so they show as before.
+  Ask my diary still asks every 3 seconds.
+
 
 The owner's active tuning version (`docs/fork-flywheel.md`) is added to the
 first message of every agent session, and the run records which version it

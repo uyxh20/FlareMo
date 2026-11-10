@@ -55,6 +55,7 @@ import {
   plannerAgentProposeMessage,
   plannerAgentProposeTasksKickoff,
   plannerAgentProposeTasksMessage,
+  plannerAgentQuestionWithFiles,
   plannerAgentSettleProposal,
   plannerAgentWeekKey,
   plannerCascadeStyleOf,
@@ -76,6 +77,7 @@ import {
   plannerReadReview,
   plannerReadReviewContext,
   plannerResolveReviewWeek,
+  plannerReviewChatWithFiles,
   plannerReviewStatus,
   plannerSaveLookBack,
   plannerSaveReviewState,
@@ -90,6 +92,7 @@ import {
   type HonoBindings,
   type ReturnTypeOfRequestContext,
 } from "../context";
+import { plannerAgentPreviewResponse } from "../fork/agent-stream";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
 import {
@@ -99,6 +102,7 @@ import {
   plannerAgentFailure,
   plannerEndAgent,
   plannerLogAgentError,
+  plannerOpenAgentStream,
   plannerPollAgent,
   plannerReadAgentMemo,
   plannerSendAgent,
@@ -663,6 +667,42 @@ const AGENT_STEPS = [
 /** The steps a run can be at once its memo was read. */
 const MEMO_DONE_STEPS: readonly string[] = ["propose", "check"];
 
+// The agent's coach reply as it is written (fork, docs/fork-general-agent.md,
+// "Replies as they are written"). Only for show: the page keeps asking the
+// route below for the answer, and goes on asking if this stream fails.
+plannerGoalsApi.get("/review/:week/ai/agent/:session/stream", async (c) => {
+  try {
+    const context = await getRequestContext(c);
+    const agent = plannerAgent(c.env);
+    if (!agent) return c.json(AI_UNAVAILABLE, 503);
+    const today = c.req.query("today") ?? "";
+    plannerAssertToday(today, new Date());
+    const weekStart = plannerResolveReviewWeek(today, c.req.param("week"));
+    const mode = c.req.query("mode") ?? "free";
+    if (mode !== "free" && mode !== "force" && mode !== "chat") {
+      return c.json({ error: { message: "Unknown mode." } }, 400);
+    }
+    const owner = {
+      userId: context.user.id,
+      ownerKey: plannerAgentWeekKey(weekStart),
+      sessionId: c.req.param("session"),
+    };
+    return await plannerAgentPreviewResponse(
+      c.req.raw,
+      (signal) =>
+        plannerOpenAgentStream(agent, context.db, owner, signal).catch(
+          (error: unknown) => {
+            plannerLogAgentError("stream", error);
+            return null;
+          },
+        ),
+      () => plannerCoachStreamFilter(mode),
+    );
+  } catch (error) {
+    return jsonError(c, error);
+  }
+});
+
 // The agent's answer to the step it was given, asked for every few seconds.
 // Not rate limited: each ask is a status read until the answer is there. Once
 // the memo is read the session goes on to the proposals for next week, which
@@ -1109,14 +1149,22 @@ plannerGoalsApi.post(
       const { model, review } = setup;
       const mode: PlannerCoachMode = body.mode;
       const sent = await agentStep(setup, body.session, "coach", () =>
-        plannerAgentCoachMessage(review, mode, body.messages),
+        plannerAgentQuestionWithFiles(
+          plannerAgentCoachMessage(review, mode, body.messages),
+          body.files,
+          "answer",
+        ),
       );
       if (sent) {
         return ndjson(async function* () {
           yield { agent: sent };
         }, c.req.raw);
       }
-      const messages = plannerCoachMessages(review, mode, body.messages);
+      const messages = plannerCoachMessages(
+        review,
+        mode,
+        plannerReviewChatWithFiles(body.messages, body.files),
+      );
       return ndjson(async function* (signal) {
         if (!model) {
           yield { error: "failed" };
