@@ -43,16 +43,10 @@ const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
     ],
   },
   {
-    file: "apps/web/src/components/workspace/workspace-layout.tsx",
-    path: "../components/workspace/workspace-layout.tsx",
-    mustContain: [
-      /import \{ PlannerAskBubble \} from "@\/planner\/ask-bubble"/,
-      /<PlannerAskBubble \/>/,
-    ],
-  },
-  {
-    file: "apps/web/src/App.tsx",
-    path: "../App.tsx",
+    // Every page beside the sidebar shares one persistent shell, so the Ask
+    // bubble is mounted there once.
+    file: "apps/web/src/components/workspace/workspace-shell.tsx",
+    path: "../components/workspace/workspace-shell.tsx",
     mustContain: [
       /import \{ PlannerAskBubble \} from "@\/planner\/ask-bubble"/,
       /<PlannerAskBubble \/>/,

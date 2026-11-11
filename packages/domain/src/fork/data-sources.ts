@@ -1101,6 +1101,26 @@ export const forkDataSources: readonly ForkDataSource[] = [
     "In-app notifications",
   ),
   UPSTREAM_SYSTEM("data_tasks", "ops", "Export and import jobs"),
+  {
+    id: "import_task_rows",
+    table: "import_task_rows",
+    module: "ops",
+    kind: "bookkeeping",
+    owner: "upstream",
+    holds:
+      "Which rows each import wrote, so a failed import can be rolled back (upstream v0.26)",
+    uses: plumbing("import bookkeeping, not owner content"),
+  },
+  {
+    id: "memo_review_marks",
+    table: "memo_review_marks",
+    module: "diary",
+    kind: "bookkeeping",
+    owner: "upstream",
+    holds:
+      "When each entry was last shown in upstream's daily look back (On this day, hidden here), and whether it is muted there (upstream v0.26)",
+    uses: plumbing("reading progress for a hidden page, not owner content"),
+  },
   UPSTREAM_SYSTEM("member_removal_jobs", "ops", "Team member removal jobs"),
   {
     id: "articles",

@@ -272,8 +272,7 @@ export function PlannerReviewPage() {
 
   return (
     <WorkspaceLayout
-      maxWidthClass="max-w-[1320px]"
-      outerMaxWidthClass="max-w-[1600px]"
+      contentMaxWidth={1320}
       header={({
         sidebarCollapsed,
         toggleSidebarCollapsed,
@@ -286,7 +285,6 @@ export function PlannerReviewPage() {
           icon={
             <CalendarCheck2Icon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
           }
-          maxWidthClass="max-w-[1320px]"
           mobileSheetOpen={mobileSheetOpen}
           setMobileSheetOpen={setMobileSheetOpen}
           sidebarCollapsed={sidebarCollapsed}
@@ -558,7 +556,7 @@ function ReviewSession({
   const cockpit = usePlannerStrings();
   const queryClient = useQueryClient();
   const navigate = useNavigate({ from: "/review" });
-  const search = useSearch({ from: "/review" });
+  const search = useSearch({ from: "/workspace/review" });
   const week = review.review_week;
 
   // --- The chapters: the week, and the periods closing with it -------------

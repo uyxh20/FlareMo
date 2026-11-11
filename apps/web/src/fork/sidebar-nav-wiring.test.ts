@@ -26,9 +26,15 @@ describe("the sidebar hook-in in flaremo-explorer.tsx", () => {
     expect(explorer).toContain("</ForkSidebarNav>");
   });
 
-  it("no longer renders a bare <nav>", () => {
-    expect(explorer).not.toMatch(/<nav[\s>]/);
-    expect(explorer).not.toContain("</nav>");
+  it("renders the main navigation through ForkSidebarNav, not a bare <nav>", () => {
+    // Upstream's second <nav> (Archive and Bin at the bottom) has no hidden
+    // links and stays as it is.
+    expect(explorer).toMatch(
+      /<ForkSidebarNav\s+aria-label=\{t\("sidebar\.navigation"\)\}/,
+    );
+    expect(explorer).not.toMatch(
+      /<nav\s+aria-label=\{t\("sidebar\.navigation"\)\}/,
+    );
   });
 
   it("still has a link for every hidden route, spelled the way the filter matches", () => {

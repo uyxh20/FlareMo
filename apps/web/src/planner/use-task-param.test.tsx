@@ -59,14 +59,19 @@ async function show(entry: string) {
     return <p data-testid="task">{seen.current.taskId ?? "none"}</p>;
   }
   const rootRoute = createRootRoute();
-  const cockpit = createRoute({
+  // The app's pages sit under the pathless "workspace" shell route.
+  const workspace = createRoute({
     getParentRoute: () => rootRoute,
+    id: "workspace",
+  });
+  const cockpit = createRoute({
+    getParentRoute: () => workspace,
     path: "/cockpit",
     validateSearch: plannerCockpitSearch,
     component: Probe,
   });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([cockpit]),
+    routeTree: rootRoute.addChildren([workspace.addChildren([cockpit])]),
     history: createMemoryHistory({ initialEntries: [entry] }),
   });
   await router.load();

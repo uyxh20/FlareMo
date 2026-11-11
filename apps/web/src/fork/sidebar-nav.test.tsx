@@ -16,13 +16,11 @@ function Custom() {
 const html = (nav: React.ReactElement) => renderToStaticMarkup(nav);
 
 describe("forkHiddenSidebarRoutes", () => {
-  it("names the five entries the owner does not use", () => {
+  it("names the three entries the owner does not use", () => {
     expect([...forkHiddenSidebarRoutes]).toEqual([
-      "/team-projects",
       "/projects",
       "/articles",
       "/review/daily",
-      "/review/walk",
     ]);
   });
 });
@@ -32,7 +30,6 @@ describe("ForkSidebarNav", () => {
     const markup = html(
       <ForkSidebarNav>
         <Item label="All memos" to="/" />
-        <Item label="Team projects" to="/team-projects" />
         <Item label="Projects" to="/projects" />
         <Item label="Articles" to="/articles" />
         <Item label="Memory" to="/memory" />
@@ -40,7 +37,6 @@ describe("ForkSidebarNav", () => {
     );
     expect(markup).toContain("All memos");
     expect(markup).toContain("Memory");
-    expect(markup).not.toContain("Team projects");
     expect(markup).not.toContain("Projects");
     expect(markup).not.toContain("Articles");
   });

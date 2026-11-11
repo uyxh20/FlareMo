@@ -182,8 +182,7 @@ export function PlannerCockpitPage() {
 
   return (
     <WorkspaceLayout
-      maxWidthClass="max-w-[1320px]"
-      outerMaxWidthClass="max-w-[1600px]"
+      contentMaxWidth={1320}
       header={({
         sidebarCollapsed,
         toggleSidebarCollapsed,
@@ -196,7 +195,6 @@ export function PlannerCockpitPage() {
           icon={
             <GaugeIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
           }
-          maxWidthClass="max-w-[1320px]"
           mobileSheetOpen={mobileSheetOpen}
           setMobileSheetOpen={setMobileSheetOpen}
           sidebarCollapsed={sidebarCollapsed}

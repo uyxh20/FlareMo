@@ -1,8 +1,7 @@
 import { createRoute, redirect } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
-import { AuthenticatedRoute } from "@/routes/authenticated-route";
-import { rootRoute } from "@/routes/root-route";
 import { RouteLoading } from "@/routes/route-loading";
+import { workspaceRoute } from "@/routes/workspace-route";
 import { plannerCockpitSearch } from "./cockpit-search";
 import { plannerGoalsSearch, plannerReviewSearch } from "./goals-search";
 
@@ -35,16 +34,14 @@ const ReviewPage = lazy(() =>
 
 function CockpitRoutePage() {
   return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <CockpitPage />
-      </Suspense>
-    </AuthenticatedRoute>
+    <Suspense fallback={<RouteLoading />}>
+      <CockpitPage />
+    </Suspense>
   );
 }
 
 const cockpitRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => workspaceRoute,
   path: "/cockpit",
   // `?task=<id>` opens that task's panel (see cockpit-search.ts).
   validateSearch: plannerCockpitSearch,
@@ -53,16 +50,14 @@ const cockpitRoute = createRoute({
 
 function GoalsRoutePage() {
   return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <GoalsPage />
-      </Suspense>
-    </AuthenticatedRoute>
+    <Suspense fallback={<RouteLoading />}>
+      <GoalsPage />
+    </Suspense>
   );
 }
 
 const goalsRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => workspaceRoute,
   path: "/goals",
   // The year, quarter, month or week shown (see goals-search.ts).
   validateSearch: plannerGoalsSearch,
@@ -71,16 +66,14 @@ const goalsRoute = createRoute({
 
 function ReviewRoutePage() {
   return (
-    <AuthenticatedRoute>
-      <Suspense fallback={<RouteLoading />}>
-        <ReviewPage />
-      </Suspense>
-    </AuthenticatedRoute>
+    <Suspense fallback={<RouteLoading />}>
+      <ReviewPage />
+    </Suspense>
   );
 }
 
 const reviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => workspaceRoute,
   path: "/review",
   // The chapter and Look forward's step (see goals-search.ts).
   validateSearch: plannerReviewSearch,
@@ -89,7 +82,7 @@ const reviewRoute = createRoute({
 
 /** The old weekly review address: its part and step carry over. */
 const weeklyReviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => workspaceRoute,
   path: "/weekly-review",
   validateSearch: plannerReviewSearch,
   beforeLoad: ({ search }) => {
@@ -99,7 +92,7 @@ const weeklyReviewRoute = createRoute({
 
 /** The old month, quarter and year review address: the date picks the chapter now. */
 const periodReviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => workspaceRoute,
   path: "/period-review",
   beforeLoad: () => {
     throw redirect({ to: "/review", search: {}, replace: true });

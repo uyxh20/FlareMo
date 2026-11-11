@@ -24,7 +24,8 @@ describe("the memo date and expanded-height hook-ins", () => {
 
   it("memo-card-body.tsx has no height cap once expanded", () => {
     const text = read("../components/memo-card/memo-card-body.tsx");
-    expect(text).toContain('collapsed ? "max-h-52" : "max-h-none"');
+    expect(text).toContain('"max-h-none"');
+    expect(text).not.toContain("max-h-[1600px]");
     expect(text).not.toContain("max-h-[1600px]");
   });
 

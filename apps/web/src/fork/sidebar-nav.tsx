@@ -1,7 +1,7 @@
 import { Children, type ComponentProps, isValidElement } from "react";
 
-// Fork-owned (docs/fork-customizations.md). The owner does not use Team
-// projects, Projects, Articles, On this day or Wander, so their sidebar links are hidden. The routes
+// Fork-owned (docs/fork-customizations.md). The owner does not use
+// Projects, Articles, On this day or Wander, so their sidebar links are hidden. The routes
 // keep working by URL; the search, the notification bell, the overdue link in
 // the mini calendar and the cockpit link are untouched.
 //
@@ -16,11 +16,9 @@ import { Children, type ComponentProps, isValidElement } from "react";
  * same way. The wiring test fails when they drift apart.)
  */
 export const forkHiddenSidebarRoutes = [
-  "/team-projects",
   "/projects",
   "/articles",
-  "/review/daily", // On this day
-  "/review/walk", // Wander
+  "/review/daily", // On this day and Wander (one sidebar entry since upstream v0.26)
 ] as const satisfies readonly string[];
 
 const hiddenRoutes: ReadonlySet<string> = new Set<string>(

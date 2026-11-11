@@ -124,7 +124,7 @@ type Edit = (target: PlannerGoalEditorTarget) => void;
 export function PlannerGoalsPage() {
   const strings = usePlannerGoalsStrings();
   const today = usePlannerToday();
-  const search = useSearch({ from: "/goals" });
+  const search = useSearch({ from: "/workspace/goals" });
   const place = placeOf(search, today);
   const [editing, setEditing] = useState<PlannerGoalEditorTarget | null>(null);
 
@@ -190,8 +190,7 @@ export function PlannerGoalsPage() {
 
   return (
     <WorkspaceLayout
-      maxWidthClass="max-w-[1080px]"
-      outerMaxWidthClass="max-w-[1400px]"
+      contentMaxWidth={1080}
       header={({
         sidebarCollapsed,
         toggleSidebarCollapsed,
@@ -204,7 +203,6 @@ export function PlannerGoalsPage() {
           icon={
             <TargetIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
           }
-          maxWidthClass="max-w-[1080px]"
           mobileSheetOpen={mobileSheetOpen}
           setMobileSheetOpen={setMobileSheetOpen}
           sidebarCollapsed={sidebarCollapsed}

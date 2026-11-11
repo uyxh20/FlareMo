@@ -20,7 +20,7 @@ describe("the link summary hook-ins", () => {
     const text = read("apps/web/src/components/composer/composer-toolbar.tsx");
     expect(text).toMatch(/from "@\/fork\/summarize-link"/);
     expect(text).toMatch(
-      /<ForkComposerSummarizeButton\s+content=\{draft\.content\}/,
+      /<ForkComposerSummarizeButton\s+content=\{forkDraftContent\}/,
     );
   });
 

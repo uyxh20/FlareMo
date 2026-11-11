@@ -456,8 +456,7 @@ export function HealthPage() {
   const year = Number(today.slice(0, 4));
   return (
     <WorkspaceLayout
-      maxWidthClass="max-w-[960px]"
-      outerMaxWidthClass="max-w-[1600px]"
+      contentMaxWidth={960}
       header={({
         sidebarCollapsed,
         toggleSidebarCollapsed,
@@ -470,7 +469,6 @@ export function HealthPage() {
           icon={
             <HeartPulseIcon className="size-4 shrink-0 text-brand-600 dark:text-brand-400" />
           }
-          maxWidthClass="max-w-[960px]"
           mobileSheetOpen={mobileSheetOpen}
           setMobileSheetOpen={setMobileSheetOpen}
           sidebarCollapsed={sidebarCollapsed}

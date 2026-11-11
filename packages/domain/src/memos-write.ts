@@ -1,17 +1,19 @@
 import type { CreateMemoInput, UpdateMemoInput } from "@flaremo/contracts";
 import type { FlareMoDb, MemoRow } from "@flaremo/db";
-import { memoRevisions, memos, memoTags } from "@flaremo/db";
-import { and, eq } from "drizzle-orm";
+import { memoRelations, memoRevisions, memos, memoTags } from "@flaremo/db";
+import { and, eq, inArray } from "drizzle-orm";
 import { insertEmbeddingTask } from "./embedding-outbox";
 import { ConflictError, ForbiddenError } from "./errors";
 import { forkApplyBackdate } from "./fork/memo-backdate"; // fork: backdating
 import { forkHealthSyncMemo } from "./health/after-memo-write"; // fork: health tracker
 import { createResourceId } from "./ids";
+import { isCommentMemo } from "./memo-comment-filter";
 import {
   adjustmentForMemoTransition,
   adjustmentForNewMemo,
   hourlyCountStatements,
 } from "./memo-hourly-counts";
+import { syncTasksFromMemoLines } from "./memo-task-sync";
 import {
   assertMemoContentSize,
   hasUncheckedTaskList,
@@ -281,6 +283,9 @@ export async function updateMemo(
           ? null
           : existing.deletedAt,
   };
+  // Comments never enter the activity counter (see createMemoComment), so
+  // their transitions must not move it either.
+  const existingIsComment = await isCommentMemo(db, existing.id);
   const webhookEventStatement = insertMemosWebhookEvent(db, {
     receiverId: existing.userId,
     activityType:
@@ -393,11 +398,13 @@ export async function updateMemo(
     // Empty unless the write actually moved a memo between status buckets,
     // authors, or UTC hours — a plain content edit produces no counter
     // statement at all, so the common case pays nothing and cannot drift.
-    ...hourlyCountStatements(
-      db,
-      adjustmentForMemoTransition(existing, nextMemo),
-      now,
-    ),
+    ...(existingIsComment
+      ? []
+      : hourlyCountStatements(
+          db,
+          adjustmentForMemoTransition(existing, nextMemo),
+          now,
+        )),
     ...notificationStatements,
   ];
   const runBatch = async (statements: unknown[]) => {
@@ -458,6 +465,41 @@ export async function updateMemo(
 
   void pruneMemoRevisions(db, id).catch(() => undefined);
   await forkHealthSyncMemo(db, id); // fork: health tracker, never throws
+
+  // A thread follows its memo: moving a memo between personal and team takes
+  // its comments with it, so they stay readable exactly where the memo is.
+  if (visibilityChanged) {
+    await db
+      .update(memos)
+      .set({ visibility: nextVisibility, teamId: nextTeamId, updatedAt: now })
+      .where(
+        inArray(
+          memos.id,
+          db
+            .select({ id: memoRelations.memoId })
+            .from(memoRelations)
+            .where(
+              and(
+                eq(memoRelations.relatedMemoId, existing.id),
+                eq(memoRelations.type, "comment"),
+              ),
+            ),
+        ),
+      )
+      .catch(() => undefined);
+  }
+
+  // Ticking a to-do line in the memo moves the task scheduled from it. The
+  // memo write already landed; a failed follow-up leaves the task as it was.
+  if (input.content !== undefined && input.content !== existing.content) {
+    await syncTasksFromMemoLines(db, {
+      userId: existing.userId,
+      memoId: existing.id,
+      previousContent: existing.content,
+      nextContent: input.content,
+      now,
+    }).catch(() => undefined);
+  }
 
   return getMemoById(db, user, id, { includeDeleted: true });
 }

@@ -1,7 +1,5 @@
-import {
-  createCurrentOpenApiDocument,
-  createOpenApiDocument,
-} from "@flaremo/contracts";
+import { createOpenApiDocument } from "@flaremo/contracts/openapi";
+import { createCurrentOpenApiDocument } from "@flaremo/contracts/openapi-current";
 import { createDb } from "@flaremo/db";
 import {
   dispatchEmbeddingOutbox,
@@ -14,6 +12,7 @@ import {
 } from "@flaremo/domain";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { getTrustedOrigins } from "./auth-env";
 import {
   assertTrustedCookieMutation,
@@ -95,12 +94,42 @@ function resolveFlareMoOptions(
   };
 }
 
+// The documents are pure data built from literals; caching them keeps
+// /openapi.json from re-allocating a few thousand objects per request.
+let legacyOpenApiDocument: ReturnType<typeof createOpenApiDocument> | undefined;
+let currentOpenApiDocument:
+  | ReturnType<typeof createCurrentOpenApiDocument>
+  | undefined;
+
+function getLegacyOpenApiDocument() {
+  legacyOpenApiDocument ??= createOpenApiDocument();
+  return legacyOpenApiDocument;
+}
+
+function getCurrentOpenApiDocument() {
+  currentOpenApiDocument ??= createCurrentOpenApiDocument();
+  return currentOpenApiDocument;
+}
+
 export function createFlareMoApp(
   options: FlareMoAppOptions = {},
 ): Hono<HonoBindings> {
   const { resolvePlanLimits, resolveUserPlanLimits } =
     resolveFlareMoOptions(options);
   const app = new Hono<HonoBindings>();
+
+  // Last-resort handler: routes that forgot a try/catch (or middleware that
+  // throws) must still answer JSON, not Hono's text/plain default. HTTPException
+  // keeps its own status; everything else goes through the shared error shape.
+  app.onError((error, c) => {
+    if (error instanceof HTTPException) {
+      return c.json(
+        { error: { message: error.message || "Request failed" } },
+        error.status,
+      );
+    }
+    return jsonError(c, error);
+  });
 
   app.use("*", async (c, next) => {
     c.set("planLimits", await resolvePlanLimits(c.env));
@@ -339,8 +368,8 @@ export function createFlareMoApp(
   app.get("/openapi.json", (c) =>
     c.json(
       isLegacyWireRequest(c)
-        ? createOpenApiDocument()
-        : createCurrentOpenApiDocument(),
+        ? getLegacyOpenApiDocument()
+        : getCurrentOpenApiDocument(),
     ),
   );
   app.get("/api/v1/openapi.json", async (c) => {
@@ -348,8 +377,8 @@ export function createFlareMoApp(
       await getRequestContext(c);
       return c.json(
         isLegacyWireRequest(c)
-          ? createOpenApiDocument()
-          : createCurrentOpenApiDocument(),
+          ? getLegacyOpenApiDocument()
+          : getCurrentOpenApiDocument(),
       );
     } catch (error) {
       return jsonError(c, error);
@@ -360,7 +389,36 @@ export function createFlareMoApp(
     if (c.req.path.startsWith("/api/")) {
       return c.json({ error: { message: "Not found" } }, 404);
     }
-    return c.env.ASSETS.fetch(c.req.raw).then((response) => {
+    return c.env.ASSETS.fetch(c.req.raw).then(async (response) => {
+      // `not_found_handling: "none"` (the default config since v0.23):
+      // navigations that match no asset file reach this handler and the
+      // ASSETS binding answers 404 with no body. Serve the SPA shell here —
+      // 200 for known frontend routes, 404 for everything else — so unknown
+      // URLs stop being soft-404s. Configs still on
+      // "single-page-application" never get here for navigations and keep
+      // the old behavior. Paths with a file extension stay plain 404s: a
+      // missing script or image must not come back as HTML.
+      if (
+        response.status === 404 &&
+        (c.req.method === "GET" || c.req.method === "HEAD") &&
+        !/\.[A-Za-z0-9]+$/.test(c.req.path)
+      ) {
+        // Conditional headers would let ASSETS answer 304 for the shell,
+        // which cannot carry the 404 status this path needs.
+        const headers = new Headers(c.req.raw.headers);
+        headers.delete("if-none-match");
+        headers.delete("if-modified-since");
+        const shell = await c.env.ASSETS.fetch(
+          new Request(new URL("/", c.req.url), { headers }),
+        );
+        if (shell.ok) {
+          return new Response(shell.body, {
+            status: isKnownFrontendPath(c.req.path) ? 200 : 404,
+            statusText: isKnownFrontendPath(c.req.path) ? "OK" : "Not Found",
+            headers: shell.headers,
+          });
+        }
+      }
       // Vite asset filenames contain a content hash. They are safe to cache
       // for a year; HTML and application routes remain revalidated normally.
       if (/^\/assets\/[A-Za-z0-9._-]+-[A-Za-z0-9]{8,}\./.test(c.req.path)) {

@@ -27,14 +27,12 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/account",
   "/memory",
   "/projects",
-  "/team-projects",
   "/cockpit",
   "/goals",
   "/review", // fork: the Sunday review (week, month, quarter, year)
   "/weekly-review", // fork: old address, goes to /review
   "/period-review", // fork: old address, goes to /review
   "/health", // fork: health tracker
-  "/capture",
   "/articles",
   "/review/daily",
   "/review/walk",

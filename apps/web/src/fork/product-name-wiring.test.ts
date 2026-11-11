@@ -89,7 +89,7 @@ describe("the product name in static files and worker copy", () => {
     it(`${path.replace(/^(\.\.\/)+/, "")} uses FORK_PRODUCT_NAME`, () => {
       const text = read(path);
       expect(text).toMatch(
-        /import \{ FORK_PRODUCT_NAME \} from "@flaremo\/contracts"/,
+        /import \{[^}]*\bFORK_PRODUCT_NAME\b[^}]*\} from "@flaremo\/contracts"/,
       );
       // the import plus each use
       expect(

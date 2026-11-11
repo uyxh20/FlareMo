@@ -19,7 +19,7 @@ export function usePlannerTaskParam(): {
   open: (taskId: string) => void;
   close: () => void;
 } {
-  const search = useSearch({ from: "/cockpit" });
+  const search = useSearch({ from: "/workspace/cockpit" });
   const navigate = useNavigate({ from: "/cockpit" });
   const router = useRouter();
   // Whether the current entry was added by `open` in this page.

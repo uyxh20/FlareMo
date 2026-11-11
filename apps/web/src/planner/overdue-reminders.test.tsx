@@ -40,10 +40,13 @@ describe("PlannerOverdueReminders", () => {
       defaultOptions: { queries: { retry: false } },
     });
     mount = plannerTestMount(<PlannerOverdueReminders />, { queryClient });
-    // Let the query resolve and React render its result.
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
+    // Let the query resolve and React render its result. A few turns of the
+    // event loop, not one: under a busy parallel test run one was not enough.
+    for (let turn = 0; turn < 5; turn += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
     return mount.container;
   };
 
