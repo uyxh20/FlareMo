@@ -604,9 +604,12 @@ describe("the review agent", () => {
       expect(await result).toEqual({ status: "done", text: "# Week 41" });
       expect(onAgent).toHaveBeenCalledOnce();
       expect(onText).toHaveBeenCalledWith("# Week 41");
-      expect(calls.slice(1)).toEqual(
-        Array(3).fill(`${REVIEW}/ai/agent/sesn_1?today=${TODAY}&step=memo`),
-      );
+      // The memo is shown as it is written (the stream is tried first); the
+      // polls stay the source of truth.
+      expect(calls.slice(1)).toEqual([
+        `${REVIEW}/ai/agent/sesn_1/stream?today=${TODAY}&step=memo`,
+        ...Array(2).fill(`${REVIEW}/ai/agent/sesn_1?today=${TODAY}&step=memo`),
+      ]);
     } finally {
       vi.useRealTimers();
     }
