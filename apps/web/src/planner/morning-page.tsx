@@ -7,7 +7,7 @@ import type {
 import { plannerCardColumn } from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,10 +26,10 @@ import {
   type PlannerMorningTask,
   plannerMorningDateLabel,
   plannerMorningDue,
+  plannerMorningDueWindow,
   plannerMorningGoals,
   plannerMorningGoalsHeading,
   plannerMorningLateLabel,
-  plannerMorningMeterSteps,
 } from "./morning-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
@@ -41,7 +41,7 @@ import "./goals.css";
 // rest of the day and lands on the diary. It shows the date, the day's idea
 // line with "Another", the tasks due today or overdue (a tick marks one done
 // through the cockpit's own route, so the history archive records it) and the
-// week's goals with a five-step meter of their tasks done.
+// week's goals (names only, Anon's call of 11 Nov).
 //
 // The line is written on the first open of the day and saved, so a reload shows
 // the same one. When no model is set up, or it declines, the slot is hidden.
@@ -214,6 +214,9 @@ function MorningPanels({
   const tickedIds = useMemo(() => new Set(ticked.keys()), [ticked]);
   const due = plannerMorningDue(board, today, tickedIds);
   const goals = plannerMorningGoals(board);
+  // More than three: three at a time, with up and down arrows.
+  const [start, setStart] = useState(0);
+  const view = plannerMorningDueWindow(due.length, start);
 
   const toggle = async (task: PlannerMorningTask) => {
     const card = findCard(board, task.id);
@@ -248,15 +251,52 @@ function MorningPanels({
   return (
     <div className="grid w-full max-w-[620px] gap-3.5 text-left sm:grid-cols-2">
       <section className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border bg-card p-3.5">
-        <h2 className="text-sm font-normal text-muted-foreground">Due today</h2>
+        <div className="flex min-h-7 items-center justify-between gap-2">
+          <h2 className="text-sm font-normal text-muted-foreground">
+            Due today
+            {view.paged ? (
+              <span className="ml-1.5 tabular-nums">
+                ·{" "}
+                {view.to - view.from === 1
+                  ? view.to
+                  : `${view.from + 1}–${view.to}`}{" "}
+                of {due.length}
+              </span>
+            ) : null}
+          </h2>
+          {view.paged ? (
+            <div className="flex gap-0.5">
+              <Button
+                aria-label="Earlier tasks"
+                disabled={!view.canUp}
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setStart(view.upStart)}
+              >
+                <ChevronUpIcon />
+              </Button>
+              <Button
+                aria-label="More tasks"
+                disabled={!view.canDown}
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setStart(view.downStart)}
+              >
+                <ChevronDownIcon />
+              </Button>
+            </div>
+          ) : null}
+        </div>
         {due.length ? (
-          due.map((task) => (
-            <DueRow
-              key={task.id}
-              task={task}
-              onToggle={() => void toggle(task)}
-            />
-          ))
+          due
+            .slice(view.from, view.to)
+            .map((task) => (
+              <DueRow
+                key={task.id}
+                task={task}
+                onToggle={() => void toggle(task)}
+              />
+            ))
         ) : (
           <p className="text-[15px] text-muted-foreground">
             Nothing due. A clear day.
@@ -333,7 +373,7 @@ function GoalRow({ goal }: { goal: PlannerMorningGoal }) {
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2.5 text-[15px]",
+        "grid min-w-0 grid-cols-[auto_1fr] items-center gap-2.5 text-[15px]",
         plannerPillarClass(goal.pillar),
       )}
     >
@@ -342,25 +382,6 @@ function GoalRow({ goal }: { goal: PlannerMorningGoal }) {
         className={cn("planner-dot", !goal.pillar && "bg-muted-foreground")}
       />
       <span className="min-w-0 truncate">{goal.title}</span>
-      <span
-        aria-label={`${goal.done} of ${goal.total} tasks done`}
-        className="flex gap-[3px]"
-        role="img"
-        title={`${goal.done} of ${goal.total} tasks done`}
-      >
-        {Array.from({ length: plannerMorningMeterSteps }, (_, step) => (
-          <i
-            className={cn(
-              "block size-3 rounded-[3px] border",
-              step < goal.filled
-                ? "border-foreground bg-foreground"
-                : "border-border bg-muted",
-            )}
-            // biome-ignore lint/suspicious/noArrayIndexKey: fixed five steps
-            key={step}
-          />
-        ))}
-      </span>
     </div>
   );
 }
