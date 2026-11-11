@@ -41,7 +41,8 @@ failure is logged and swallowed: the log never blocks a save. Kinds so far:
 | `review.look_back_saved` | Look back is saved: scores, summary length, how much of the drafted summary the owner rewrote, goals judged. |
 | `review.look_forward_saved` | The plan is committed: goals, how many came from proposals, tasks, flags settled. |
 | `review.start_over`, `review.period_saved` | The review is started again; a month, quarter or year review is saved. |
-| `proposal.accepted_edited` | An agent proposal was accepted after the owner changed values on its card. `subject` is `proposal`, `subject_id` and `proposal_id` the action; `data` holds the row kind, the task field, the edited field names (comma list) and how many. The values themselves stay on the action row (`change.proposed`, `change.edited`). |
+| `proposal.accepted_edited` | An agent proposal was accepted after the owner changed values on its card. `subject` is `proposal`, `subject_id` and `proposal_id` the action; `data` holds the row kind, the task field, the edited field names (comma list) and how many, `from_diary` (a to-do found in an entry) and, when the title was rewritten, `title_chars` (characters changed, never the words). The values themselves stay on the action row (`change.proposed`, `change.edited`). |
+| `proposal.skipped` | A row left unticked when the rest of its card was accepted (`change.settled_reason` is `skipped`). `subject` is `proposal`; `data` holds the row kind, the task field and `from_diary` (a to-do found in an entry). |
 | `proposal.redo` | The owner sent a card back with the one-line redo. `subject` is `proposal`, `subject_id` the conversation; `data` holds how many open rows were dismissed and their kinds (comma list). The note is in the chat, never in the log. |
 | `review.tuning_note`, `review.tuning_skipped` | The owner answers or skips "What should the agent do differently?". |
 | `tuning.proposed`, `tuning.accepted`, `tuning.dismissed`, `tuning.kept`, `tuning.rolled_back` | The tuning lifecycle. A proposal replaced by a newer one is logged as dismissed. |
@@ -69,6 +70,8 @@ Each metric is stored per origin: `ai` (an accepted agent proposal started it),
 | `kept_7d` | Accepted actions with no owner edit in the seven days after. |
 | `proposals_edited` | Accepted actions the owner changed on the card before accepting (`change.edited` is set), of those accepted in the week. |
 | `proposals_redone` | Actions dismissed by a redo (`change.settled_reason` is `redo`), of those settled in the week: a card wrong as a whole. |
+| `proposals_skipped` | Actions left unticked on an accepted card (`settled_reason` `skipped`), of those settled in the week: a row judged wrong on its own. |
+| `todos_accepted`, `todos_edited` | Diary to-dos (a new task with `change.source`): accepted of those settled, and edited on the card of those accepted. |
 | `entries_edited_7d`, `entry_edit_chars` | Diary entries edited within seven days, and the typical edit size. |
 | `tasks_done_by_due` | Tasks due in the week that were done by their due day. |
 | `tasks_carried` | Tasks planned into the week that were carried over. |

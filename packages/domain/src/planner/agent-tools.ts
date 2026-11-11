@@ -13,6 +13,7 @@ import {
   healthTrainingVariants,
   listMemosQuerySchema,
   PLANNER_FLYWHEEL_MIN_SAMPLE,
+  PLANNER_TODO_DAYS_DEFAULT,
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
   type PlannerGoalDto,
@@ -32,6 +33,7 @@ import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoRelations, memos, memoTags } from "@flaremo/db";
 import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
+  plannerAgentAction,
   plannerAgentChat,
   plannerAgentProposal,
   plannerAgentRun,
@@ -52,6 +54,7 @@ import {
   plannerAgentTaskFieldNow,
   plannerEntryReferences,
 } from "./agent-apply";
+import { PLANNER_AGENT_REDO_REASON } from "./agent-redo";
 import {
   plannerAgentAddAction,
   plannerAgentAddProposal,
@@ -59,6 +62,13 @@ import {
   plannerAgentFindQuote,
 } from "./agent-store";
 import { plannerBoardDoneDaysMax, plannerReadBoard } from "./board";
+import {
+  PLANNER_TODO_LINES_MAX,
+  plannerDiaryTodoLines,
+  plannerTodoMatch,
+  plannerTodoQuoteIn,
+  plannerTodoSourceKey,
+} from "./diary-todos";
 import { plannerEntryRetag } from "./entry-tags";
 import {
   plannerCurrentTuning,
@@ -620,6 +630,48 @@ async function fileAction(
   });
 }
 
+/**
+ * The diary to-dos the agent offered before, by entry and words
+ * (`change.source` of a new-task proposal), with how each was settled: one
+ * the owner saw is not offered again, whatever they did with it.
+ */
+async function offeredTodos(
+  context: PlannerAgentToolContext,
+): Promise<Map<string, string>> {
+  const rows = await context.db
+    .select({
+      change: plannerAgentAction.change,
+      state: plannerAgentAction.state,
+    })
+    .from(plannerAgentAction)
+    .where(
+      and(
+        eq(plannerAgentAction.userId, context.user.id),
+        eq(plannerAgentAction.kind, "task_new"),
+      ),
+    )
+    .all();
+  const offered = new Map<string, string>();
+  for (const row of rows) {
+    const source = row.change.source;
+    if (!source || typeof source !== "object") continue;
+    const { entry_id: entryId, quote } = source as Record<string, unknown>;
+    if (typeof entryId !== "string" || typeof quote !== "string") continue;
+    const reason = row.change.settled_reason;
+    // A row sent back with a redo is redrawn, so it may be offered again.
+    if (row.state === "dismissed" && reason === PLANNER_AGENT_REDO_REASON) {
+      continue;
+    }
+    offered.set(
+      plannerTodoSourceKey(entryId, quote),
+      typeof reason === "string" && row.state === "dismissed"
+        ? reason
+        : row.state,
+    );
+  }
+  return offered;
+}
+
 type Handlers = {
   [N in PlannerAgentToolName]: (
     context: PlannerAgentToolContext,
@@ -1115,6 +1167,77 @@ const handlers: Handlers = {
                 : "noted by an agent"
           } | ${oneLine(memory.content, 400)}`,
       ),
+    ].join("\n");
+  },
+
+  async find_todos(context, input) {
+    const { db, user } = context;
+    const today = toolToday(context);
+    const days = input.days ?? PLANNER_TODO_DAYS_DEFAULT;
+    const from = plannerAddDays(today, -(days - 1));
+    const entries = (
+      await readEntries(
+        db,
+        user.id,
+        {
+          from: healthLocalDayStart(from),
+          to: healthLocalDayStart(plannerAddDays(today, 1)),
+        },
+        ENTRY_INDEX_MAX,
+        context.asOf,
+      )
+    ).filter(
+      // The owner's own words only: no review memo, no link summary.
+      (entry) => !entry.summary && entry.source !== plannerLinkSummarySource,
+    );
+    const board = await plannerReadBoard(db, {
+      userId: user.id,
+      today,
+      doneDays: days + 30,
+      includeDropped: true,
+    });
+    const tasks = [
+      ...board.columns.backlog.map((card) => ({ ...card, where: "Backlog" })),
+      ...board.columns.todo.map((card) => ({ ...card, where: "To Do" })),
+      ...board.columns.doing.map((card) => ({ ...card, where: "Doing" })),
+      ...board.columns.done.map((card) => ({ ...card, where: "Done" })),
+      ...board.columns.other.map((card) => ({
+        ...card,
+        where: "on the board",
+      })),
+      ...(board.columns.dropped ?? []).map((card) => ({
+        ...card,
+        where: "dropped",
+      })),
+    ];
+    const offered = await offeredTodos(context);
+    const lines: string[] = [];
+    let total = 0;
+    // Newest entries first: a to-do written yesterday matters more.
+    for (const entry of [...entries].reverse()) {
+      for (const todo of plannerDiaryTodoLines(entry.content)) {
+        total += 1;
+        if (lines.length >= PLANNER_TODO_LINES_MAX) continue;
+        const match = plannerTodoMatch(todo.quote, tasks);
+        const before = offered.get(plannerTodoSourceKey(entry.id, todo.quote));
+        const status = before
+          ? `offered before (${before}): do not offer again`
+          : match
+            ? `maybe on the board: [${match.id}] "${oneLine(match.title, 120)}" (${match.where})`
+            : "not on the board";
+        lines.push(
+          `- entry ${entry.id} | ${local(entry.at)}${todo.checkbox ? " | open box" : ""} | ${JSON.stringify(todo.quote)} | ${status}`,
+        );
+      }
+    }
+    return [
+      `Lines that read like to-dos in the owner's entries ${from} to ${today}, newest first (entry | written | words | board):`,
+      ...(lines.length ? lines : ["(none)"]),
+      ...(total > lines.length
+        ? [`${total - lines.length} more not listed: ask for fewer days.`]
+        : []),
+      "",
+      "These come from fixed word rules: many are plans already done, wishes or thoughts, not tasks. Read the entry with read_entries when unsure. A 'maybe on the board' match is loose: check the title. For each real, still-open to-do with no task, call propose_add_task with from_entry_id and from_quote copied exactly from the words above, a short task title in the owner's language, and a due day only when the entry names one. Offer at most 12, the clearest first.",
     ].join("\n");
   },
 
@@ -1804,15 +1927,41 @@ const handlers: Handlers = {
   },
 
   async propose_add_task(context, input) {
-    const { why, ...change } = input;
+    const { why, from_entry_id: entryId, from_quote: quote, ...change } = input;
+    let source: Record<string, string> | null = null;
+    if (entryId && quote) {
+      // A to-do from the diary: its words must be that entry's own, and one
+      // the owner was offered before is not offered again.
+      const memo = await proposedEntry(context, entryId);
+      if (!plannerTodoQuoteIn(quote, memo.content)) {
+        throw new PlannerAgentToolError(
+          `Those words are not in entry ${memo.id} word for word. Copy them exactly as find_todos gave them.`,
+        );
+      }
+      const words = quote.replace(/\s+/g, " ").trim();
+      const before = (await offeredTodos(context)).get(
+        plannerTodoSourceKey(memo.id, words),
+      );
+      if (before) {
+        throw new PlannerAgentToolError(
+          `That to-do was offered before (${before}). Nothing was proposed.`,
+        );
+      }
+      source = {
+        entry_id: memo.id,
+        quote: words,
+        day: healthLocalMoment(memo.createdAt).day,
+        preview: entryPreview(memo.content),
+      };
+    }
     const action = await fileAction(context, {
       kind: "task_new",
       taskId: null,
       field: null,
-      change,
+      change: source ? { ...change, source } : change,
       why,
     });
-    return `Proposed new task ${action.id}. It shows as a card; the owner accepts or dismisses it.`;
+    return `Proposed new task ${action.id}${source ? ` from entry ${source.entry_id}` : ""}. It shows as a card; the owner accepts or dismisses it.`;
   },
 
   async propose_entry(context, input) {

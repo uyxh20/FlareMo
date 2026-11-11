@@ -1,4 +1,5 @@
 import {
+  PLANNER_AGENT_SKIP_REASON,
   type PlannerAgentActionResponse,
   type PlannerAskResponse,
   type PlannerOkResponse,
@@ -23,6 +24,7 @@ import {
   plannerAgentFindOpenRun,
   plannerAgentLatestConversation,
   plannerAgentListActions,
+  plannerAgentMarkSkipped,
   plannerAgentOwnerTextWithFiles,
   plannerAgentQuestionWithFiles,
   plannerAgentReadChat,
@@ -404,7 +406,16 @@ plannerAgentApi.post(
               userId: user.id,
               id,
               state: "dismissed",
-            });
+            }).then((dismissed) =>
+              // Left unticked while the rest of the card was accepted: the
+              // learning log's skip signal (docs/fork-flywheel.md).
+              dismissed && body.reason === PLANNER_AGENT_SKIP_REASON
+                ? plannerAgentMarkSkipped(db, {
+                    userId: user.id,
+                    action: dismissed,
+                  })
+                : dismissed,
+            );
       if (!action) throw new NotFoundError("Proposal not found.");
       if (
         body.state === "accepted" &&

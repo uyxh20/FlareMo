@@ -198,26 +198,23 @@ describe("one card per answer", () => {
     await act(async () => {
       boxes?.[1]?.click();
     });
-    expect(button(container, "Accept 2")).toBeDefined();
+    // The unticked row is skipped with the accept: dismissed as `skipped`.
+    expect(button(container, "Accept 2, skip 1")).toBeDefined();
     await act(async () => {
-      button(container, "Accept 2")?.click();
+      button(container, "Accept 2, skip 1")?.click();
     });
     await settle();
     expect(
-      settleAction.mock.calls.map(([id, input]) => [id, input.state]),
+      settleAction.mock.calls.map(([id, input]) => [
+        id,
+        input.state,
+        input.reason,
+      ]),
     ).toEqual([
-      ["a", "accepted"],
-      ["c", "accepted"],
+      ["a", "accepted", undefined],
+      ["c", "accepted", undefined],
+      ["b", "dismissed", "skipped"],
     ]);
-
-    await act(async () => {
-      button(container, "Dismiss the open one")?.click();
-    });
-    await settle();
-    expect(settleAction).toHaveBeenLastCalledWith("b", {
-      state: "dismissed",
-      today: expect.any(String),
-    });
 
     await act(async () => {
       button(container, "Undo all 2")?.click();
@@ -647,10 +644,48 @@ describe("editing a card before Accept", () => {
         ?.click();
     });
     await act(async () => {
-      button(container, "Accept 1")?.click();
+      button(container, "Accept 1, skip 1")?.click();
     });
     await settle();
-    expect(settleAction.mock.calls.map(([id]) => id)).toEqual(["b"]);
+    // The edited but unticked row is skipped, never written with its edit.
+    expect(settleAction.mock.calls).toEqual([
+      ["b", { state: "accepted", today: expect.any(String) }],
+      [
+        "a",
+        { state: "dismissed", today: expect.any(String), reason: "skipped" },
+      ],
+    ]);
+  });
+
+  it("shows a diary to-do's entry and words, and a skipped row as Skipped", async () => {
+    const todo = {
+      ...newTask("t", "Renew passport"),
+      change: {
+        title: "Renew passport",
+        source: {
+          entry_id: "memo-1",
+          quote: "I need to renew the passport",
+          day: "2026-11-10",
+          preview: "Slept badly. I need to renew the passport",
+        },
+      },
+    };
+    const skipped = {
+      ...newTask("s", "Fix bike"),
+      state: "dismissed" as const,
+      change: { title: "Fix bike", settled_reason: "skipped" },
+    };
+    const container = show([todo, skipped]);
+    await settle();
+    const source = container.querySelector(
+      '[data-testid="planner-todo-source"]',
+    );
+    expect(source?.textContent).toContain("From your entry of");
+    expect(source?.textContent).toContain("“I need to renew the passport”");
+    expect(source?.querySelector("a")?.getAttribute("href")).toBe(
+      "/memo/memo-1",
+    );
+    expect(rows(container)[1]?.textContent).toContain("Skipped");
   });
 
   it("a lone card edits too, and sends the place as column and spot", async () => {

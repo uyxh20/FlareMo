@@ -63,6 +63,8 @@ export function plannerSettleActionRequest(
     today: string;
     /** Only with accepted: the values the owner changed on the card. */
     edit?: PlannerAgentEdit;
+    /** Only with dismissed: left unticked while the rest of the card was accepted. */
+    reason?: "skipped";
   },
 ) {
   return apiRequest<PlannerAgentActionResponse>(

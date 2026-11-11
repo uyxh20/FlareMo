@@ -153,7 +153,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       mcp: yes("list, get, create, update, search"),
       agent: yes(
-        "every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search; a link summary reads as one, and a comment names its entry",
+        "every live entry: the reviewed week whole (review_week), any week whole (week_diary), the index, full entries by id and full-text search; a link summary reads as one, and a comment names its entry; find_todos lists the to-do lines of recent entries (fixed word rules)",
       ),
       userExport: yes("every entry, including archived and trashed"),
       backup: IN_BACKUP,
@@ -842,7 +842,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: no("the memory layer reads entries, not proposals"),
       mcp: no("not exposed to agents"),
       agent: no(
-        "the agent writes them and gets their ids back; no tool reads them",
+        "the agent writes them and gets their ids back; find_todos reads only which diary to-dos were offered before (change.source and state), never the rest",
       ),
       userExport: FORK_EXPORT,
       backup: IN_BACKUP,
@@ -885,7 +885,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       memory: no("the memory layer reads entries, not proposals"),
       mcp: no("not exposed to agents"),
       agent: no(
-        "the agent writes them and gets their ids back; no tool reads them",
+        "the agent writes them and gets their ids back; find_todos only marks a diary to-do as offered before (from change.source and state), and no tool shows a proposal's content",
       ),
       userExport: FORK_EXPORT,
       backup: IN_BACKUP,

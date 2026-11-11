@@ -12,11 +12,12 @@ import {
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoRelations } from "@flaremo/db";
+import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
   plannerTaskEvent,
   plannerTaskPlan,
 } from "@flaremo/db/src/schema/planner";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
 import { healthSnapshot, healthToDto } from "../health/rows";
 import {
@@ -58,7 +59,8 @@ import {
 } from "./board-rank";
 import { type PlannerColumn, plannerColumnFor } from "./columns";
 import { plannerAddComment } from "./comments";
-import { plannerRecordEvents } from "./flywheel";
+import { plannerAgentFromDiary } from "./diary-todos";
+import { plannerEditChars, plannerRecordEvents } from "./flywheel";
 import {
   plannerGoalSnapshot,
   plannerLatestGoalVersion,
@@ -290,6 +292,37 @@ async function entryOf(
     throw new ValidationError("That diary entry is gone.");
   }
   return memo;
+}
+
+/**
+ * A live row the diary reader made for the same day and kind (and a variant
+ * that fits), which a proposed add would count twice: the newest one, or null.
+ */
+async function healthReaderTwin(
+  db: FlareMoDb,
+  input: { userId: string; day: string; kind: string; variant?: string | null },
+) {
+  const rows = await db
+    .select({ id: healthEntry.id, variant: healthEntry.variant })
+    .from(healthEntry)
+    .where(
+      and(
+        eq(healthEntry.userId, input.userId),
+        eq(healthEntry.day, input.day),
+        eq(healthEntry.kind, input.kind as "training"),
+        eq(healthEntry.source, "memo"),
+        eq(healthEntry.dismissed, false),
+        isNull(healthEntry.deletedAt),
+      ),
+    )
+    .orderBy(desc(healthEntry.createdAt))
+    .all();
+  const fits = rows.find(
+    (row) => !input.variant || !row.variant || row.variant === input.variant,
+  );
+  return fits
+    ? healthFindEntry(db, { userId: input.userId, entryId: fits.id })
+    : null;
 }
 
 /**
@@ -582,6 +615,40 @@ export async function plannerAgentAcceptAction(
       }
       case "health_change": {
         if (change.action === "add") {
+          // The diary reader may have made this row since the proposal (an
+          // accepted #wimhof tag on the same card makes one): the add then
+          // fixes that row instead of logging the session twice.
+          const twin = await healthReaderTwin(db, {
+            userId: user.id,
+            day: asString(change.day) ?? "",
+            kind: asString(change.kind) ?? "",
+            variant: asString(change.variant),
+          });
+          if (twin) {
+            const patch: Record<string, unknown> = {};
+            if (asString(change.variant)) patch.variant = change.variant;
+            if (typeof change.minutes === "number") {
+              patch.minutes = change.minutes;
+            }
+            if (asString(change.home_at)) patch.home_at = change.home_at;
+            await healthPatchEntry(db, {
+              userId: user.id,
+              entryId: twin.id,
+              patch,
+              now: input.now,
+            });
+            const merged = await healthFindEntry(db, {
+              userId: user.id,
+              entryId: twin.id,
+            });
+            before = {
+              ...JSON.parse(healthSnapshot(twin)),
+              merged: true,
+              accepted: merged ? JSON.parse(healthSnapshot(merged)) : null,
+            };
+            landedId = twin.id;
+            break;
+          }
           const made = await healthCreateEntry(db, {
             userId: user.id,
             day: asString(change.day) ?? "",
@@ -751,6 +818,18 @@ export async function plannerAgentAcceptAction(
             field: row.field,
             fields: Object.keys(edited.edited).join(","),
             count: Object.keys(edited.edited).length,
+            // Learning log step 2: a diary to-do's card, and how much of a
+            // title the owner rewrote (characters, never the words).
+            from_diary: plannerAgentFromDiary(row.change),
+            ...(typeof edited.proposed.title === "string" &&
+            typeof edited.edited.title === "string"
+              ? {
+                  title_chars: plannerEditChars(
+                    edited.proposed.title,
+                    edited.edited.title,
+                  ),
+                }
+              : {}),
           },
         },
       ],
@@ -967,7 +1046,12 @@ export async function plannerAgentRevertAction(
     case "health_change": {
       if (!row.landedId)
         throw new ValidationError("No health row was written.");
-      const { accepted, created, ...snapshot } = row.before ?? {};
+      const {
+        accepted,
+        created,
+        merged: _merged,
+        ...snapshot
+      } = row.before ?? {};
       if (!accepted || typeof accepted !== "object") {
         throw new ValidationError("What the row held was not kept.");
       }

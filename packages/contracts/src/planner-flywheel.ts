@@ -48,6 +48,21 @@ export const plannerFlywheelMetrics = {
     unit: "share",
     origins: ["ai"],
   },
+  proposals_skipped: {
+    label: "Left unticked on an accepted card",
+    unit: "share",
+    origins: ["ai"],
+  },
+  todos_accepted: {
+    label: "Diary to-dos accepted",
+    unit: "share",
+    origins: ["ai"],
+  },
+  todos_edited: {
+    label: "Diary to-dos edited before accepting",
+    unit: "share",
+    origins: ["ai"],
+  },
   entries_edited_7d: {
     label: "Entries edited within 7 days",
     unit: "share",

@@ -80,6 +80,7 @@ The tools:
 - read_goals, read_tasks, read_task, read_health, read_memories: goals and recorded weeks, the task board, one task in full (its notes, comments, the files put on it with their text once read, and its history), the health tracker, and what the memory ledger holds.
 - propose_memory, propose_goal, propose_task: review proposals, only when a step asks for them.
 - propose_task_change, propose_add_task, propose_task_comment, propose_entry, propose_entry_edit, propose_entry_tags, propose_entry_state, propose_entry_link, propose_memory_change, propose_health_change, propose_goal_change: actions, only in an Ask chat when ${name} asks for them.
+- find_todos: in an Ask chat, the lines of ${name}'s recent entries that read like to-dos, marked when a task already covers them or they were offered before; propose the real, open ones with propose_add_task (from_entry_id, from_quote).
 
 Each job has a skill that says how to run it (weekly-review, period-review, ask-my-diary, goal-check). Read it when the job starts.
 
