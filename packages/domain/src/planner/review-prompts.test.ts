@@ -29,6 +29,8 @@ import {
   plannerParseOpening,
   plannerReviewContextBlock,
   plannerWeekRangeText,
+  plannerAgentMemoOf,
+  plannerAgentMemoStreamFilter,
 } from "./review-prompts";
 
 // The weekly review's prompts and parsers (review-prompts.ts). Pure functions.
@@ -618,8 +620,32 @@ describe("the general agent's review steps", () => {
     expect(memo).toContain(
       "Scores Anon set: Authenticity 4.0, Achievement 3.0, Gap 1.0.",
     );
-    expect(memo).toContain(`Write it to ${PLANNER_AGENT_MEMO_FILE}.`);
+    // The memo is the reply, shown as it is written; not a file.
+    expect(memo).toContain("reply with the memo itself");
+    expect(memo).not.toContain(`Write it to ${PLANNER_AGENT_MEMO_FILE}`);
+    expect(memo).not.toContain("Reply with the single word: done");
     expect(memo).not.toContain(block);
+  });
+
+  it("finds the agent's memo in its replies, and streams it from its title", () => {
+    const memo = `# Week 45: the week of 2 November\n\n## Executive Summary\n${"A line of the memo. ".repeat(15)}`;
+    expect(plannerAgentMemoOf(["Let me read the week.", memo])).toBe(
+      memo.trim(),
+    );
+    // A preamble and a closing fence go; "done" after the memo is not it.
+    expect(plannerAgentMemoOf([`Here it is:\n\n${memo}\n\`\`\``, "done"])).toBe(
+      memo.trim(),
+    );
+    // An agent on the old instructions wrote a file and said "done".
+    expect(plannerAgentMemoOf(["done"])).toBeNull();
+    expect(plannerAgentMemoOf(["# Short"])).toBeNull();
+
+    const filter = plannerAgentMemoStreamFilter();
+    expect(filter.push("Let me check ")).toBe("");
+    expect(filter.push("the week.\n# Wee")).toBe("# Wee");
+    expect(filter.push("k 45")).toBe("k 45");
+    const quiet = plannerAgentMemoStreamFilter();
+    expect(quiet.push("done")).toBe("");
   });
 
   it("proposes for the week being planned, then checks the plan", () => {

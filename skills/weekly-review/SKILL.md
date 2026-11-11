@@ -41,7 +41,7 @@ The memo step carries the skeleton, its rules and the evening's material. Fill t
 - When the owner changed a drafted score, write that score's basis afresh from the evidence and keep nothing from the draft that contradicts it.
 - Plain and direct. No praise, no encouragement, no motivational tone. Address the owner as "you" only where the skeleton's own sections speak to them.
 
-Before you write the file, check every concrete claim (a day, a number, a name, a quote, an event) against what you read once more, and remove any you cannot find. Then write the memo where the step says, update your memory store as it says, and reply `done`.
+Before you give the memo, check every concrete claim (a day, a number, a name, a quote, an event) against what you read once more, and remove any you cannot find. Then do what the step says, in its order: update your memory store, and give the memo as your reply (the owner watches it appear as you write it, so write it once, in its final form, and say nothing after it).
 
 ## Proposals
 

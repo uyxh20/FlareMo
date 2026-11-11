@@ -44,8 +44,20 @@ function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || "the owner";
 }
 
-/** The file a memo step writes, which the Worker reads back. */
+/**
+ * Where a memo step used to put the memo. The memo is now the step's reply,
+ * shown as it is written; the Worker still reads this file when a reply has
+ * no memo in it (an agent on the old instructions).
+ */
 export const PLANNER_AGENT_MEMO_FILE = "/mnt/session/outputs/memo.md";
+
+/**
+ * The memo step's last instruction: the memo is the reply itself, so the
+ * owner watches it being written (docs/fork-general-agent.md, "Replies as
+ * they are written"). Last, so nothing is said after it.
+ */
+const MEMO_REPLY = (name: string) =>
+  `Then reply with the memo itself, whole, in Markdown from its title line on: no preamble, no code fence, nothing after it. ${name} watches it appear as you write it, so write it once, in its final form, as your last message of this step. Don't write it to a file.`;
 
 /**
  * The agent's system prompt, the same for every job. It says who it works
@@ -163,7 +175,7 @@ ${weekStep(context, plannerCloseMessages(context, answers))}`;
 
 /**
  * The memo step: the evening's answers, the memo's skeleton and its rules,
- * all in the message. The memo goes to a file the Worker reads back.
+ * all in the message. The memo is the step's reply.
  */
 export function plannerAgentMemoMessage(
   context: PlannerReviewContext,
@@ -182,9 +194,8 @@ The evening's material: ${name}'s answers, the scores they set and the drafts.
 ${parts.material}
 
 When the memo is checked:
-1. Write it to ${PLANNER_AGENT_MEMO_FILE}.
-2. Update your memory store: a few short lines for next week. Open threads, what ${name} said they would do, patterns to re-check, and anything you got wrong before. Notes, not a copy of the memo or the diary.
-3. Reply with the single word: done.`;
+1. Update your memory store: a few short lines for next week. Open threads, what ${name} said they would do, patterns to re-check, and anything you got wrong before. Notes, not a copy of the memo or the diary.
+2. ${MEMO_REPLY(name)}`;
 }
 
 /**
@@ -409,10 +420,9 @@ ${plannerPeriodHappenedLines(happened)}
 ${parts.material}
 
 When the memo is checked:
-1. Write it to ${PLANNER_AGENT_MEMO_FILE}.
-2. Update your memory store: a few short lines about this ${word} for the next reviews. Notes, not a copy of the memo or the diary.
-3. Propose at most three memories this ${word} showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory; call read_memories first and skip what the ledger holds). The propose tools are on for this step.
-4. Reply with the single word: done.`;
+1. Update your memory store: a few short lines about this ${word} for the next reviews. Notes, not a copy of the memo or the diary.
+2. Propose at most three memories this ${word} showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory; call read_memories first and skip what the ledger holds). The propose tools are on for this step.
+3. ${MEMO_REPLY(name)}`;
 }
 
 // ---------------------------------------------------------------------------

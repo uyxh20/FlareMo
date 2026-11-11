@@ -955,6 +955,55 @@ export function plannerMemoStreamFilter(): {
   };
 }
 
+/** A title line ("# Week 45 …", "# October 2026 …"): where a memo starts. */
+const MEMO_TITLE = /^#[^\S\n]/m;
+/** Shorter than this is a word like "done", not a memo. */
+const AGENT_MEMO_MIN_CHARS = 200;
+
+/**
+ * The memo the review agent gave as its reply (fork, docs/fork-general-agent.md,
+ * "Replies as they are written"): the last of the step's messages that has a
+ * title line and is long enough to be a memo, from the title on. Null when
+ * none is, for instance an agent that still wrote the memo to a file and
+ * replied "done"; the Worker then reads the file.
+ */
+export function plannerAgentMemoOf(texts: readonly string[]): string | null {
+  for (const text of [...texts].reverse()) {
+    const title = text.search(MEMO_TITLE);
+    if (title < 0) continue;
+    const memo = text
+      .slice(title)
+      .replace(/\n```\s*$/, "")
+      .trim();
+    if (memo.length >= AGENT_MEMO_MIN_CHARS) return memo;
+  }
+  return null;
+}
+
+/**
+ * The review agent's memo as it is written. Unlike the model's own stream,
+ * a message with no title line shows nothing (the agent saying "let me check
+ * the week" or "done" is not the memo), so the page keeps what it showed.
+ */
+export function plannerAgentMemoStreamFilter(): {
+  push(piece: string): string;
+} {
+  let started = false;
+  let held = "";
+  return {
+    push(piece) {
+      if (started) return piece;
+      held += piece;
+      const title = held.search(MEMO_TITLE);
+      if (title < 0) return "";
+      started = true;
+      const out = held.slice(title);
+      held = "";
+      return out;
+    },
+  };
+}
+
 /**
  * The coach's streamed reply without its control line. Text goes on as it
  * arrives; from "@@" on it is held back and read at the end for whether the
