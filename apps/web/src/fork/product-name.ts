@@ -9,9 +9,11 @@ import { FORK_PRODUCT_NAME, UPSTREAM_PRODUCT_NAME } from "@flaremo/contracts";
  * project path "FlareMo" stays: someone typing their own repo name needs that
  * example to match the folder they have.
  */
-export const PRODUCT_NAME_EXCLUDED_KEYS: ReadonlySet<string> = new Set([
-  "memory.composerCustomProjectPrompt",
-]);
+export const PRODUCT_NAME_EXCLUDED_KEYS: ReadonlySet<string> = new Set<string>(
+  // Empty since the upstream v0.32.1 sync: the only one,
+  // "memory.composerCustomProjectPrompt", went with the Memory page.
+  [],
+);
 
 /**
  * Keys that describe the stock brand itself ("Default: FlareMo"). They always

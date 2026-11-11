@@ -192,7 +192,7 @@ function GoalPicker({
   const today = healthLocalMoment(new Date()).day;
   const year = Number(today.slice(0, 4));
   const goals = useQuery({
-    queryKey: ["health", "goals", year],
+    queryKey: healthQueryKeys.goals(year),
     queryFn: () => plannerFetchGoalsYear({ year, today }),
     staleTime: 5 * 60_000,
     retry: false,

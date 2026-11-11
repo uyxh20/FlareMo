@@ -168,7 +168,7 @@ export function PlannerPeriodChat({
       dirty.current = false;
       const saving = stateRef.current as unknown as Record<string, unknown>;
       queryClient.setQueriesData<PlannerPeriodReviewResponse>(
-        { queryKey: ["planner", "period-review", today] },
+        { queryKey: plannerQueryKeys.periodReviewsOn(today) },
         (cached) =>
           cached?.level === level && cached.period_start === periodStart
             ? { ...cached, state: saving }

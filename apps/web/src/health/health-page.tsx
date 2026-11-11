@@ -185,7 +185,7 @@ function NeedsCheck({
         queryKey: healthQueryKeys.year(year),
       });
       void queryClient.invalidateQueries({ queryKey: healthQueryKeys.weekAll });
-      void queryClient.invalidateQueries({ queryKey: ["health", "memo"] });
+      void queryClient.invalidateQueries({ queryKey: healthQueryKeys.memoAll });
     },
     onError: () => toast.error(healthStrings.chip.failed),
   });

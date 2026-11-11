@@ -13,6 +13,12 @@ export const healthQueryKeys = {
   week: (start: string) => ["health", "week", start] as const,
   weekAll: ["health", "week"] as const,
   year: (year: number) => ["health", "year", year] as const,
+  /** Every cached year, whatever the year. */
+  yearAll: ["health", "year"] as const,
+  /** Every cached memo label. */
+  memoAll: ["health", "memo"] as const,
+  /** A year's tracker goals. */
+  goals: (year: number) => ["health", "goals", year] as const,
   trackers: ["health", "trackers"] as const,
   /** Tracker counts over each linked goal's period, for the goal cards. */
   goalProgress: ["health", "goal-progress"] as const,

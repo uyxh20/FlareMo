@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { plannerFetchAskStarters } from "./ask-api";
 import type { PlannerAskCopy } from "./ask-chat";
+import { plannerQueryKeys } from "./query-keys";
 
 // Ask my diary's starter buttons (fork-owned add-on, docs/fork-general-agent.md,
 // "The starter buttons"): one-tap questions in an empty global chat. Replan my
@@ -70,7 +71,7 @@ export function PlannerAskStarterButtons({
   onAsk: (question: string) => void;
 }) {
   const counts = useQuery({
-    queryKey: ["planner", "ask", "starters", today],
+    queryKey: plannerQueryKeys.askStarters(today),
     queryFn: () => plannerFetchAskStarters(today),
     staleTime: 0,
   });

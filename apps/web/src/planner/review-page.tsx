@@ -246,7 +246,7 @@ export function PlannerReviewPage() {
       await Promise.all([
         query.refetch(),
         queryClient.invalidateQueries({
-          queryKey: ["planner", "period-review", today],
+          queryKey: plannerQueryKeys.periodReviewsOn(today),
         }),
       ]);
       setRun((current) => current + 1);

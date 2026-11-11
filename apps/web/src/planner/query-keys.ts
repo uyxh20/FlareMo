@@ -44,6 +44,18 @@ export const plannerQueryKeys = {
   proposals: (week: string) => ["planner", "proposals", week] as const,
   /** The weekly review's scorecard card for a reviewed week (docs/fork-flywheel.md). */
   flywheel: (week: string) => ["planner", "flywheel", week] as const,
+  /** Every cached Ask starter count, whatever its day. */
+  askStartersAll: ["planner", "ask", "starters"] as const,
+  /** The Ask starter buttons' counts for a day. */
+  askStarters: (today: string) =>
+    ["planner", "ask", "starters", today] as const,
+  /** Every cached weekly review, whatever its day. */
+  reviews: ["planner", "review"] as const,
+  /** Every cached period review of a day, whatever its level and period. */
+  periodReviewsOn: (today: string) =>
+    ["planner", "period-review", today] as const,
+  /** The cockpit's server-side task search. */
+  taskSearch: (needle: string) => ["planner", "task-search", needle] as const,
   /** Every cached agent chat, global or a task's, for refreshing their cards. */
   asks: ["planner", "ask"] as const,
   /**

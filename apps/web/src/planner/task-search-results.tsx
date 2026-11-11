@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { plannerSearchTasksRequest } from "./api";
 import { plannerTaskParamFromId } from "./panel-model";
+import { plannerQueryKeys } from "./query-keys";
 
 // The diary search's task hits (fork-owned add-on, docs/fork-data-sources.md).
 // It replaces upstream's TaskSearchResults in App.tsx: the same box above the
@@ -34,7 +35,7 @@ export function PlannerTaskSearchResults({ query }: { query: string }) {
   const { t } = useI18n();
   const needle = query.replace(/\s+/g, " ").trim();
   const search = useQuery({
-    queryKey: ["planner", "task-search", needle],
+    queryKey: plannerQueryKeys.taskSearch(needle),
     queryFn: () => plannerSearchTasksRequest(needle),
     enabled: needle.length > 0,
     staleTime: 10_000,

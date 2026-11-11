@@ -25,6 +25,7 @@ import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { healthQueryKeys } from "@/health/query-keys";
 import { useI18n } from "@/i18n";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
@@ -489,7 +490,7 @@ function usePlannerActionRefresh(task: string | null) {
   return (action: PlannerAgentActionDto) => {
     // The starter buttons' counts follow the board.
     void queryClient.invalidateQueries({
-      queryKey: ["planner", "ask", "starters"],
+      queryKey: plannerQueryKeys.askStartersAll,
     });
     if (
       action.kind === "entry_new" ||
@@ -497,17 +498,19 @@ function usePlannerActionRefresh(task: string | null) {
       action.kind === "entry_state" ||
       action.kind === "entry_link"
     ) {
-      void queryClient.invalidateQueries({ queryKey: ["memos"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.memos.all });
       return;
     }
     if (action.kind === "health_change") {
-      void queryClient.invalidateQueries({ queryKey: ["health"] });
+      void queryClient.invalidateQueries({ queryKey: healthQueryKeys.all });
       return;
     }
     if (action.kind === "goal_change") {
       void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.goals });
       void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.boards });
-      void queryClient.invalidateQueries({ queryKey: ["planner", "review"] });
+      void queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.reviews,
+      });
       return;
     }
     const taskId =

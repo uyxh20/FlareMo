@@ -111,7 +111,7 @@ export type PlannerActions = {
 export function plannerInvalidateAll(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: plannerQueryKeys.all });
   void queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all });
-  void queryClient.invalidateQueries({ queryKey: ["projects"] });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
 }
 
 /**

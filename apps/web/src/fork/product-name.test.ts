@@ -58,11 +58,11 @@ describe("brandTemplate", () => {
   });
 
   it("keeps the upstream word on excluded keys", () => {
-    const key = "memory.composerCustomProjectPrompt";
-    expect(PRODUCT_NAME_EXCLUDED_KEYS.has(key)).toBe(true);
-    expect(brandTemplate(key, "e.g. FlareMo or /Users/...", "Acme")).toBe(
-      "e.g. FlareMo or /Users/...",
-    );
+    for (const key of PRODUCT_NAME_EXCLUDED_KEYS) {
+      expect(brandTemplate(key, "e.g. FlareMo or /Users/...", "Acme")).toBe(
+        "e.g. FlareMo or /Users/...",
+      );
+    }
   });
 
   it("shows the fork default on stock-brand keys, whatever the custom name", () => {
