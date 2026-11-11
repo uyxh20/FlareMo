@@ -172,3 +172,17 @@
 .health-diff-removed {
   background: color-mix(in oklab, var(--destructive) 70%, transparent);
 }
+
+/* --- Days since the last night out (since-strip.tsx) -------------------------- */
+/* Squares at least 10px wide (HEALTH_SINCE_MIN_PX) that wrap into new rows; the
+   grid column count is whatever fits. Neutral on purpose: no accent colour. */
+.health-since-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10px, 1fr));
+  gap: 2px;
+}
+.health-since-cell {
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--muted-foreground) 18%, transparent);
+}
