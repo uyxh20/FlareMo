@@ -988,7 +988,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
       ),
       mcp: gap("agents cannot read health entries over MCP"),
       agent: yes(
-        "read_health (any span up to 26 weeks, with row ids) and the week's rows in review_week; propose_health_change in Ask fixes or adds a row only when the owner accepts it",
+        "read_health (any span up to 26 weeks, with row ids), compare_health (rows next to the diary's mentions, Ask only) and the week's rows in review_week; propose_health_change in Ask fixes or adds a row only when the owner accepts it",
       ),
       userExport: FORK_EXPORT,
       backup: IN_BACKUP,

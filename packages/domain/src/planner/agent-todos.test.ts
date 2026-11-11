@@ -233,12 +233,14 @@ describe("diary to-dos into tasks", () => {
       fields: "title,due_at",
       count: 2,
       from_diary: true,
+      starter: null,
       title_chars: 17,
     });
     expect(JSON.parse(log[1]?.data ?? "{}")).toEqual({
       action_kind: "task_new",
       field: null,
       from_diary: true,
+      starter: null,
     });
     // Numbers and names only: no words of the entry or the titles.
     expect(log.map((row) => row.data).join(" ")).not.toMatch(/passport|bike/);

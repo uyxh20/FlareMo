@@ -13,6 +13,7 @@ import {
   healthTrainingVariants,
   listMemosQuerySchema,
   PLANNER_FLYWHEEL_MIN_SAMPLE,
+  PLANNER_STALE_BACKLOG_WEEKS,
   PLANNER_TODO_DAYS_DEFAULT,
   type PlannerAgentToolInput,
   type PlannerAgentToolName,
@@ -21,6 +22,7 @@ import {
   plannerAddDays,
   plannerAgentInputFields,
   plannerAgentToolInputs,
+  plannerAskStarterOf,
   plannerFlywheelMetrics,
   plannerLinkSummarySource,
   plannerPeriodStartOf,
@@ -39,7 +41,7 @@ import {
   plannerAgentRun,
   plannerGoal,
 } from "@flaremo/db/src/schema/planner";
-import { and, asc, desc, eq, gte, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 import { healthReadWeek, healthToday } from "../health/read";
 import { healthFindEntry } from "../health/write";
 import { parseResourceName } from "../ids";
@@ -61,6 +63,14 @@ import {
   plannerAgentAskKey,
   plannerAgentFindQuote,
 } from "./agent-store";
+import {
+  plannerAskAttention,
+  plannerEntrySentences,
+  plannerMentionsHealth,
+  plannerSentenceAboutTask,
+  plannerSoundsDone,
+  plannerSpanStart,
+} from "./ask-starters";
 import { plannerBoardDoneDaysMax, plannerReadBoard } from "./board";
 import {
   PLANNER_TODO_LINES_MAX,
@@ -616,11 +626,16 @@ async function fileAction(
   },
 ) {
   const asking = await askingRun(context);
+  // Proposals answering a starter button carry its id, for the learning log.
+  const starter = asking.conversationId
+    ? await askedStarter(context, asking.conversationId)
+    : null;
   return plannerAgentAddAction(context.db, {
     userId: context.user.id,
     runId: asking.runId,
     conversationId: asking.conversationId,
     ...input,
+    change: starter ? { ...input.change, starter } : input.change,
     now: context.now,
   }).catch((error: unknown) => {
     if (error instanceof RangeError) {
@@ -670,6 +685,72 @@ async function offeredTodos(
     );
   }
   return offered;
+}
+
+/** The starter button the owner's last question in this chat came from, if any. */
+async function askedStarter(
+  context: PlannerAgentToolContext,
+  conversationId: string,
+): Promise<string | null> {
+  const last = await context.db
+    .select({ text: plannerAgentChat.text })
+    .from(plannerAgentChat)
+    .where(
+      and(
+        eq(plannerAgentChat.userId, context.user.id),
+        eq(plannerAgentChat.conversationId, conversationId),
+        eq(plannerAgentChat.role, "owner"),
+      ),
+    )
+    .orderBy(desc(plannerAgentChat.createdAt))
+    .limit(1)
+    .get();
+  return last ? plannerAskStarterOf(last.text) : null;
+}
+
+/**
+ * The diary entry a proposal points to as its reason, checked: the owner's
+ * live entry, holding the words word for word. What the card shows.
+ */
+async function entrySource(
+  context: PlannerAgentToolContext,
+  entryId: string,
+  quote: string,
+): Promise<{ entry_id: string; quote: string; day: string; preview: string }> {
+  const memo = await proposedEntry(context, entryId);
+  if (!plannerTodoQuoteIn(quote, memo.content)) {
+    throw new PlannerAgentToolError(
+      `Those words are not in entry ${memo.id} word for word. Copy them exactly as the entry has them.`,
+    );
+  }
+  return {
+    entry_id: memo.id,
+    quote: quote.replace(/\s+/g, " ").trim(),
+    day: healthLocalMoment(memo.createdAt).day,
+    preview: entryPreview(memo.content),
+  };
+}
+
+/** The owner's own recent entries (no review memos, no link summaries), oldest first. */
+async function ownEntries(
+  context: PlannerAgentToolContext,
+  from: string,
+  today: string,
+) {
+  return (
+    await readEntries(
+      context.db,
+      context.user.id,
+      {
+        from: healthLocalDayStart(from),
+        to: healthLocalDayStart(plannerAddDays(today, 1)),
+      },
+      ENTRY_INDEX_MAX,
+      context.asOf,
+    )
+  ).filter(
+    (entry) => !entry.summary && entry.source !== plannerLinkSummarySource,
+  );
 }
 
 type Handlers = {
@@ -1241,6 +1322,144 @@ const handlers: Handlers = {
     ].join("\n");
   },
 
+  async find_done_tasks(context, input) {
+    const today = toolToday(context);
+    const days = input.days ?? PLANNER_TODO_DAYS_DEFAULT;
+    const from = plannerSpanStart(today, days);
+    const entries = await ownEntries(context, from, today);
+    const board = await plannerReadBoard(context.db, {
+      userId: context.user.id,
+      today,
+      doneDays: 0,
+    });
+    const open = (["doing", "todo", "backlog"] as const).flatMap((column) =>
+      board.columns[column].map((card) => ({ ...card, column })),
+    );
+    const out: string[] = [];
+    for (const task of open) {
+      const lines: string[] = [];
+      for (const entry of [...entries].reverse()) {
+        for (const sentence of plannerEntrySentences(entry.content)) {
+          if (!plannerSentenceAboutTask(sentence, task.title)) continue;
+          lines.push(
+            `    - entry ${entry.id} | ${local(entry.at)} | ${JSON.stringify(oneLine(sentence, 280))}${plannerSoundsDone(sentence) ? " | sounds done" : ""}`,
+          );
+          if (lines.length >= 4) break;
+        }
+        if (lines.length >= 4) break;
+      }
+      if (lines.length === 0) continue;
+      out.push(
+        `- [${task.id}] ${JSON.stringify(oneLine(task.title, 200))} (${task.column}${task.due_at ? `, due ${task.due_at.slice(0, 10)}` : ""})`,
+        ...lines,
+      );
+    }
+    return [
+      `Open tasks that the owner's entries ${from} to ${today} mention, newest lines first:`,
+      ...(out.length ? out : ["(none)"]),
+      "",
+      "Fixed word rules: a line can mention a task without finishing it ('need to send the invoice'). Propose only a task an entry shows is finished: propose_task_change with column 'done', from_entry_id and from_quote (the line's words, exactly). Say how many you left open and why in one line.",
+    ].join("\n");
+  },
+
+  async find_replan_tasks(context) {
+    const today = toolToday(context);
+    const { overdue, stuck } = await plannerAskAttention(context.db, {
+      userId: context.user.id,
+      today,
+    });
+    const line = (card: (typeof overdue)[number], why: string) =>
+      `- [${card.id}] ${JSON.stringify(oneLine(card.title, 200))} | ${why} | ${card.column}${card.due_at ? ` | due ${card.due_at.slice(0, 10)}` : ""} | untouched ${card.idle_days} days${card.carry_count ? ` | carried over ${card.carry_count}x` : ""}${card.goal_id ? ` | goal ${card.goal_id}` : ""}`;
+    return [
+      `Tasks to replan, today ${today} (the week runs to ${plannerAddDays(plannerWeekStartOf(today), 6)}):`,
+      ...overdue.map((card) => line(card, "overdue")),
+      ...stuck.map((card) => line(card, "stuck in Doing")),
+      ...(overdue.length + stuck.length ? [] : ["(none)"]),
+      "",
+      "One row per task, with propose_task_change: a new due_at (a realistic day; spread them, at most two or three a day), column 'backlog' when it is not for now, or dropped true when the record shows it no longer matters. Read the task first with read_task when unsure. Keep each why to one short line.",
+    ].join("\n");
+  },
+
+  async find_stale_backlog(context, input) {
+    const today = toolToday(context);
+    const weeks = input.weeks ?? PLANNER_STALE_BACKLOG_WEEKS;
+    const { stale } = await plannerAskAttention(context.db, {
+      userId: context.user.id,
+      today,
+      staleWeeks: weeks,
+    });
+    return [
+      `Backlog cards untouched for ${weeks} weeks or more, oldest first:`,
+      ...(stale.length
+        ? stale.map(
+            (card) =>
+              `- [${card.id}] ${JSON.stringify(oneLine(card.title, 200))} | untouched ${card.idle_days} days | made ${card.created_at.slice(0, 10)}${card.due_at ? ` | due ${card.due_at.slice(0, 10)}` : ""}${card.goal_id ? ` | goal ${card.goal_id}` : ""}`,
+          )
+        : ["(none)"]),
+      "",
+      "One row per card, at most 25, with propose_task_change: schedule it (a due_at, or column 'todo' when it belongs to this week) when the diary or a goal shows it still matters, otherwise drop it (dropped true; it can be put back). The owner unticks a row to keep the card as it is.",
+    ].join("\n");
+  },
+
+  async compare_health(context, input) {
+    const today = toolToday(context);
+    const days = input.days ?? PLANNER_TODO_DAYS_DEFAULT;
+    const from = plannerSpanStart(today, days);
+    const entries = await ownEntries(context, from, today);
+    const rows = await context.db
+      .select()
+      .from(healthEntry)
+      .where(
+        and(
+          eq(healthEntry.userId, context.user.id),
+          gte(healthEntry.day, from),
+          lte(healthEntry.day, today),
+          isNull(healthEntry.deletedAt),
+          eq(healthEntry.dismissed, false),
+        ),
+      )
+      .orderBy(asc(healthEntry.day))
+      .all();
+    const mentions = new Map<string, string[]>();
+    for (const entry of entries) {
+      const day = healthLocalMoment(entry.at).day;
+      for (const sentence of plannerEntrySentences(entry.content)) {
+        if (!plannerMentionsHealth(sentence)) continue;
+        const list = mentions.get(day) ?? [];
+        list.push(
+          `    - entry ${entry.id} | ${JSON.stringify(oneLine(sentence, 280))}`,
+        );
+        mentions.set(day, list);
+      }
+    }
+    const out: string[] = [];
+    for (let day = from; day <= today; day = plannerAddDays(day, 1)) {
+      const logged = rows.filter((row) => row.day === day);
+      const said = mentions.get(day) ?? [];
+      if (logged.length === 0 && said.length === 0) continue;
+      const mark =
+        logged.length === 0
+          ? " | entries mention it, no row"
+          : said.length === 0
+            ? " | rows, no entry mentions it"
+            : "";
+      out.push(
+        `## ${day}${mark}`,
+        ...logged.map(
+          (row) =>
+            `  - row ${row.id} | ${row.kind}${row.variant ? ` (${row.variant})` : ""}${row.minutes ? `, ${row.minutes} min` : ""}${row.homeAt ? `, home ${row.homeAt}` : ""} | ${row.source}${row.edited ? ", edited by the owner" : ""}`,
+        ),
+        ...said,
+      );
+    }
+    return [
+      `The health log next to the diary, ${from} to today ${today}. An entry's mention may be about another day ('yesterday'), a plan or a skip:`,
+      ...(out.length ? out : ["(nothing logged or mentioned)"]),
+      "",
+      "Propose with propose_health_change only what the diary clearly shows: add a missing row (day, kind, variant, minutes), fix a row's minutes, variant or day, or remove a row the diary contradicts ('skipped the gym'). Leave a row the owner edited unless the diary plainly says otherwise. Never add a row a tag or the reader already logged for that day and kind.",
+    ].join("\n");
+  },
+
   async read_scorecard(context, input) {
     const now = plannerNow(context.now);
     const weekStart = plannerFlywheelWeekOf(now);
@@ -1485,6 +1704,11 @@ const handlers: Handlers = {
         `The task's ${field} already holds that. Nothing was proposed.`,
       );
     }
+    // An entry that shows why (it says the task is done): shown on the card.
+    const source =
+      input.from_entry_id && input.from_quote
+        ? await entrySource(context, input.from_entry_id, input.from_quote)
+        : null;
     const action = await fileAction(context, {
       kind: "task_change",
       taskId,
@@ -1494,6 +1718,7 @@ const handlers: Handlers = {
         was,
         task_title: detail.task.title,
         ...(goalTitle ? { goal_title: goalTitle } : {}),
+        ...(source ? { source } : {}),
       },
       why: input.why,
     });
@@ -1932,27 +2157,16 @@ const handlers: Handlers = {
     if (entryId && quote) {
       // A to-do from the diary: its words must be that entry's own, and one
       // the owner was offered before is not offered again.
-      const memo = await proposedEntry(context, entryId);
-      if (!plannerTodoQuoteIn(quote, memo.content)) {
-        throw new PlannerAgentToolError(
-          `Those words are not in entry ${memo.id} word for word. Copy them exactly as find_todos gave them.`,
-        );
-      }
-      const words = quote.replace(/\s+/g, " ").trim();
+      const found = await entrySource(context, entryId, quote);
       const before = (await offeredTodos(context)).get(
-        plannerTodoSourceKey(memo.id, words),
+        plannerTodoSourceKey(found.entry_id, found.quote),
       );
       if (before) {
         throw new PlannerAgentToolError(
           `That to-do was offered before (${before}). Nothing was proposed.`,
         );
       }
-      source = {
-        entry_id: memo.id,
-        quote: words,
-        day: healthLocalMoment(memo.createdAt).day,
-        preview: entryPreview(memo.content),
-      };
+      source = found;
     }
     const action = await fileAction(context, {
       kind: "task_new",

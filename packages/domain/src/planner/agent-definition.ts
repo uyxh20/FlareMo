@@ -60,10 +60,18 @@ export function plannerAgentTools(options: { propose: boolean }) {
         enabled: true,
         permission_policy: { type: "always_allow" as const },
       },
-      // read_link (link summaries) and find_todos (diary to-dos) are an Ask
-      // chat's, like the action tools.
+      // read_link (link summaries) and the starter buttons' finders
+      // (find_todos and the rest) are an Ask chat's, like the action tools.
       configs: (options.propose
-        ? [...plannerAgentActionTools, "read_link", "find_todos"]
+        ? [
+            ...plannerAgentActionTools,
+            "read_link",
+            "find_todos",
+            "find_done_tasks",
+            "find_replan_tasks",
+            "find_stale_backlog",
+            "compare_health",
+          ]
         : plannerAgentProposeTools
       ).map((name) => ({ name, enabled: false })),
     },

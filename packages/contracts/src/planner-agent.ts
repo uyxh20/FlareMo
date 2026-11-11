@@ -33,6 +33,49 @@ import { taskPrioritySchema } from "./projects";
 /** How far back find_todos reads by default, and at most (diary to-dos). */
 export const PLANNER_TODO_DAYS_DEFAULT = 14;
 export const PLANNER_TODO_DAYS_MAX = 60;
+/** A Backlog card untouched this many weeks is stale (Tidy my backlog). */
+export const PLANNER_STALE_BACKLOG_WEEKS = 3;
+/** A Doing card untouched this many days is stuck (Replan my week). */
+export const PLANNER_STUCK_DOING_DAYS = 7;
+
+/**
+ * Ask my diary's one-tap starters (the buttons in an empty chat): each sends
+ * its question as the owner's message. The proposals it leads to are stamped
+ * with the starter's id (`change.starter`), so the learning log can tell the
+ * buttons apart. The question is English whatever the app's language; the
+ * agent answers in the owner's.
+ */
+export const plannerAskStarters = {
+  todos:
+    "Find the to-dos I wrote in my diary in the last two weeks that are not on the board yet, and offer them as tasks.",
+  done: "Mark what I already did: find my open tasks that my recent entries say are finished, and propose moving them to Done.",
+  replan:
+    "Replan my week: for every overdue task and every task stuck in Doing, propose a new due date, a move back to Backlog, or a drop.",
+  backlog:
+    "Tidy my backlog: for the Backlog cards I have not touched in weeks, propose scheduling or dropping each one.",
+  health:
+    "What did my health log miss? Compare my recent entries with the health log and propose missing rows, fixes, and removing wrong rows.",
+} as const;
+export type PlannerAskStarter = keyof typeof plannerAskStarters;
+
+/** The starter whose question this owner message is, or null. */
+export function plannerAskStarterOf(text: string): PlannerAskStarter | null {
+  const said = text.trim();
+  for (const [id, question] of Object.entries(plannerAskStarters)) {
+    if (question === said) return id as PlannerAskStarter;
+  }
+  return null;
+}
+
+/** What the starters' buttons show: the counts that need no AI. */
+export type PlannerAskStartersResponse = {
+  /** Open tasks past their due day. */
+  overdue: number;
+  /** Doing tasks untouched for PLANNER_STUCK_DOING_DAYS or more. */
+  stuck: number;
+  /** Backlog cards untouched for PLANNER_STALE_BACKLOG_WEEKS or more. */
+  stale_backlog: number;
+};
 
 // planner.ts re-exports this file and defines plannerColumnSchema, so the enum
 // is built here from the same list instead of importing it back.
@@ -211,6 +254,40 @@ export const plannerAgentToolInputs = {
         `How many days back from today; ${PLANNER_TODO_DAYS_DEFAULT} when left out.`,
       ),
   }),
+  find_done_tasks: z.strictObject({
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(PLANNER_TODO_DAYS_MAX)
+      .optional()
+      .describe(
+        `How many days of entries back from today; ${PLANNER_TODO_DAYS_DEFAULT} when left out.`,
+      ),
+  }),
+  find_replan_tasks: z.strictObject({}),
+  find_stale_backlog: z.strictObject({
+    weeks: z
+      .number()
+      .int()
+      .min(1)
+      .max(52)
+      .optional()
+      .describe(
+        `Untouched for at least this many weeks; ${PLANNER_STALE_BACKLOG_WEEKS} when left out.`,
+      ),
+  }),
+  compare_health: z.strictObject({
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(PLANNER_TODO_DAYS_MAX)
+      .optional()
+      .describe(
+        `How many days back from today; ${PLANNER_TODO_DAYS_DEFAULT} when left out.`,
+      ),
+  }),
   read_scorecard: z.strictObject({
     weeks: z
       .number()
@@ -322,6 +399,20 @@ export const plannerAgentToolInputs = {
         .describe(
           "true drops the task off the board (its history is kept and it can be put back); false brings a dropped task back.",
         ),
+      from_entry_id: idSchema
+        .optional()
+        .describe(
+          "When a diary entry is the reason (it says the task is done, or late): that entry's id. Goes with from_quote; the card shows it.",
+        ),
+      from_quote: z
+        .string()
+        .trim()
+        .min(3)
+        .max(600)
+        .optional()
+        .describe(
+          "The entry's own words that show it, copied exactly. The server finds them word for word or refuses.",
+        ),
       why: z
         .string()
         .trim()
@@ -339,6 +430,15 @@ export const plannerAgentToolInputs = {
         message:
           "Propose exactly one field per call: title, notes, priority, due_at, effort, start_date, column, goal_id or dropped.",
         path: ["task_id"],
+      },
+    )
+    .refine(
+      (value) =>
+        (value.from_entry_id === undefined) ===
+        (value.from_quote === undefined),
+      {
+        message: "from_entry_id and from_quote go together.",
+        path: ["from_quote"],
       },
     )
     .refine(
@@ -722,6 +822,14 @@ export const plannerAgentToolDescriptions: Record<
     "What the memory ledger already holds about the owner: each memory with its kind and whether the owner confirmed it or it waits as a proposal. Check here before proposing a memory.",
   find_todos:
     "The to-dos the owner wrote in recent diary entries: each line that reads like something still to do (an open '- [ ]' box, 'need to', 'should', 'don't forget', 'il faut'...), with its entry id, its day and its exact words, marked when a board task already covers it or when it was offered before. Fixed word rules, so some lines are not to-dos at all: judge each. Only in an Ask chat. For each real one not on the board and not offered before, call propose_add_task with from_entry_id and from_quote.",
+  find_done_tasks:
+    "The open tasks (Backlog, To Do, Doing) that recent diary entries mention, each with the entry lines that share its words, marked 'sounds done' when a line reads like it was finished ('sent', 'booked', 'done', 'fini'...). Fixed word rules: judge each. Only in an Ask chat. For a task an entry shows is finished, call propose_task_change with column 'done' and from_entry_id and from_quote.",
+  find_replan_tasks:
+    "The tasks that need replanning, counted by the app: every open task past its due day (overdue) and every task in Doing untouched for a week or more (stuck), with its due day, column, days since it was last touched, how often it was carried over and its goal. Only in an Ask chat. Propose one row per task with propose_task_change: a new due_at, column 'backlog', or dropped true.",
+  find_stale_backlog:
+    "The Backlog cards untouched for some weeks (3 unless you say), oldest first, with their age, due day and goal. Only in an Ask chat. Propose one row per card with propose_task_change: schedule it (a due_at, or column 'todo') or drop it (dropped true). The owner unticks a row to keep the card as it is.",
+  compare_health:
+    "The health log next to the diary, day by day: each health row (with its id, for propose_health_change) and each entry line that mentions training, breathwork or a night out (with its entry id), and a mark on days where one has no match in the other. Fixed word rules: judge each. Only in an Ask chat.",
   read_scorecard:
     "How your work has landed with the owner, week by week: how many of your proposals were seen, accepted and kept for seven days, how often the owner edited what you drafted against what they wrote themselves, tasks done by their due day and week goals met for your proposals against the owner's own, and your standing instructions from the owner. Numbers only. A share over fewer than 10 cases says too few.",
   propose_memory:
@@ -1286,3 +1394,8 @@ export const plannerAgentUnavailableCodes = [
   "ai_unavailable",
   "agent_month_cap",
 ] as const;
+
+/** GET /ask/starters: the owner's today, as every planner read takes it. */
+export const plannerAskStartersQuerySchema = z.strictObject({
+  today: daySchema,
+});

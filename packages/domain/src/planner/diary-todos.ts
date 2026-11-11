@@ -115,7 +115,7 @@ const STOP = new Set(
     "a an the to do of and or for in on at by with my me i im i'm it is be " +
     "need needs have has gotta got must should will ill i'll going plan " +
     "remember dont don't forget todo to-do tomorrow today this that next week " +
-    "some up get go also just still really then again maybe " +
+    "some up get go also just still really then again maybe about " +
     "le la les un une de des du et ou pour en au aux à je il faut que dois " +
     "faire penser ne pas oublier demain"
   ).split(" "),

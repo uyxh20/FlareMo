@@ -821,6 +821,10 @@ export async function plannerAgentAcceptAction(
             // Learning log step 2: a diary to-do's card, and how much of a
             // title the owner rewrote (characters, never the words).
             from_diary: plannerAgentFromDiary(row.change),
+            starter:
+              typeof row.change.starter === "string"
+                ? row.change.starter
+                : null,
             ...(typeof edited.proposed.title === "string" &&
             typeof edited.edited.title === "string"
               ? {

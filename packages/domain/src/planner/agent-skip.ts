@@ -55,6 +55,10 @@ export async function plannerAgentMarkSkipped(
           action_kind: action.kind,
           field: action.field,
           from_diary: plannerAgentFromDiary(action.change),
+          starter:
+            typeof action.change.starter === "string"
+              ? action.change.starter
+              : null,
         },
       },
     ],

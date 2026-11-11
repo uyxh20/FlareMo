@@ -277,6 +277,36 @@ The empty chat offers **Find to-dos in my diary** (or the owner asks in words):
   fields) with the source under the title: "From your entry of Nov 11", a link
   that opens the entry in a new tab, and the words in quotes.
 
+### The starter buttons
+
+Ask my diary's empty chat offers one-tap starters. Each sends a fixed question
+(`plannerAskStarters` in `packages/contracts/src/planner-agent.ts`) and the
+answer is the usual editable change card; none of them files a single new task.
+
+| Button | Read tool (Ask only) | What the card offers |
+| --- | --- | --- |
+| Find to-dos in my diary | `find_todos` | New tasks from to-do lines (above). |
+| Mark what I already did | `find_done_tasks` | Open tasks a recent entry says are finished, moved to Done. The row shows the entry and its words (`propose_task_change` takes `from_entry_id` and `from_quote`, checked word for word, stored as `change.source`). |
+| Replan my week | `find_replan_tasks` | Every overdue task and every card untouched in Doing for 7+ days: a new due date, back to Backlog, or drop. |
+| Tidy my backlog | `find_stale_backlog` | Backlog cards untouched 3+ weeks, oldest first: drop, schedule (column or date), or keep (untick). |
+| What did my health log miss | `compare_health` | The health log next to the entries' health lines, day by day: add a missing row, fix one, remove one the diary contradicts. A row a tag or the reader already logged is not added again. |
+
+Finished and health lines are found by fixed word rules
+(`packages/domain/src/planner/ask-starters.ts`: `plannerSoundsDone`,
+`plannerMentionsHealth`, `plannerSentenceAboutTask`); the agent judges them.
+
+The row: at most four buttons, in the order Replan, Find to-dos, Mark done,
+Tidy backlog, Health. Replan and Tidy show a count computed without a model
+(`GET /api/planner/agent/ask/starters?today=` returns `overdue`, `stuck`,
+`stale_backlog`) and hide at zero; the diary-reading buttons carry no count.
+Counts refresh after each Accept, Dismiss or Undo.
+
+Each proposal filed after a button records it in `change.starter` (`todos`,
+`done`, `replan`, `backlog`, `health`; null for a typed question), and the
+learning log's `proposal.accepted_edited` and `proposal.skipped` carry it.
+The usual limits apply: 25 rows a card, 100 a day, stale refusal, Undo, task
+history.
+
 ### Skipped rows
 
 On a card of several rows, **Accept N, skip M** accepts the ticked rows and
