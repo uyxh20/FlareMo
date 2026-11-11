@@ -485,6 +485,63 @@ describe("the weekly review", () => {
       ]);
     });
 
+    it("keeps a long task's comments from this week when its budget runs out", async () => {
+      await plannerTestInsertTask(rt.database, {
+        id: "tasks/long-1",
+        userId: rt.user.id,
+        title: "Long task",
+        status: "in_progress",
+      });
+      await plannerTestRun(
+        rt.database,
+        "UPDATE tasks SET notes = ? WHERE id = ?",
+        "Notes. ".repeat(200),
+        "tasks/long-1",
+      );
+      const at = (day: string) => `${day}T10:00:00.000Z`;
+      const rows: Array<[string, string, string]> = [
+        ["old-1", "Old update one. ".repeat(30), at("2026-09-20")],
+        ["old-2", "Old update two. ".repeat(60), at("2026-09-27")],
+        ["old-3", "Old update three.", at("2026-10-01")],
+        ["new-1", "This week: signed it.", at("2026-10-07")],
+        ["new-2", "This week: keys on Friday.", at("2026-10-08")],
+      ];
+      for (const [id, body, created] of rows) {
+        await plannerTestRun(
+          rt.database,
+          `INSERT INTO planner_task_comment (id, user_id, task_id, body, created_at, updated_at)
+           VALUES (?, ?, 'tasks/long-1', ?, ?, ?)`,
+          id,
+          rt.user.id,
+          body,
+          created,
+          created,
+        );
+      }
+      const context = await plannerReadReviewContext(rt.db, {
+        userId: rt.user.id,
+        ownerName: "Anon",
+        weekStart: W41,
+        today: SUNDAY,
+      });
+      const task = context.taskDetails?.find((t) => t.title === "Long task");
+      // The notes take at most their share of the 1,500 characters.
+      expect(task?.notes?.length).toBeLessThanOrEqual(601);
+      const texts = task?.comments.map((comment) => comment.text) ?? [];
+      // This week's comments are kept, then the newest older ones fit.
+      expect(texts).toContain("This week: signed it.");
+      expect(texts).toContain("This week: keys on Friday.");
+      expect(texts).toContain("Old update three.");
+      expect(texts.some((text) => text.startsWith("Old update one."))).toBe(
+        false,
+      );
+      // Shown oldest first, with what was left out counted.
+      expect(task?.comments.map((comment) => comment.at)).toEqual(
+        [...(task?.comments.map((comment) => comment.at) ?? [])].sort(),
+      );
+      expect(task?.commentsLeftOut).toBe(1);
+    });
+
     it("is due from Saturday to Monday until both parts are done", async () => {
       const status = (today: string) =>
         plannerReviewStatus(rt.db, { userId: rt.user.id, today });

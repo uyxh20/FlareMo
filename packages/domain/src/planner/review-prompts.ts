@@ -305,7 +305,11 @@ export function plannerTaskDetailLines(
             .map(
               (comment) => `[${diaryDay(comment.at)}] ${quote(comment.text)}`,
             )
-            .join("; ")}`,
+            .join("; ")}${
+            task.commentsLeftOut
+              ? ` (${task.commentsLeftOut} older comment${task.commentsLeftOut === 1 ? "" : "s"} left out)`
+              : ""
+          }`,
         );
       }
       if (task.history.length) {
