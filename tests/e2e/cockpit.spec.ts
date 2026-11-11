@@ -35,6 +35,9 @@ test("anonymous cockpit deep link keeps its destination through sign-in", async 
 test("the cockpit deep link opens the board and survives a refresh", async ({
   page,
 }) => {
+  // An empty board shows an empty-state, not the four columns, so give it a
+  // task first.
+  await seedBoard(page);
   await page.goto("/cockpit");
   await expect(
     page.getByRole("heading", { level: 1, name: /^(驾驶舱|Cockpit)$/ }),
@@ -52,6 +55,8 @@ test("the cockpit deep link opens the board and survives a refresh", async ({
 });
 
 test("the sidebar links to the cockpit", async ({ page }) => {
+  // The columns only show once the board has a task.
+  await seedBoard(page);
   await page.goto("/");
   await page
     .getByRole("link", { name: /^(驾驶舱|Cockpit)$/ })
@@ -95,18 +100,18 @@ test("a card moves to Doing from its menu and stays there", async ({
   const input = page.getByRole("textbox", { name: /^(新任务|New task)$/ });
   await input.fill(title);
   await input.press("Enter");
-  await expect(card(page, COLUMN.todo, title)).toBeVisible();
+  await expect(card(page, COLUMN.backlog, title)).toBeVisible();
 
   // The menu button fades in on hover; the touch-friendly one is always there.
-  await card(page, COLUMN.todo, title).hover();
-  await card(page, COLUMN.todo, title)
+  await card(page, COLUMN.backlog, title).hover();
+  await card(page, COLUMN.backlog, title)
     .getByRole("button", { name: /^(任务操作|Task actions)$/ })
     .click();
   await page.getByRole("menuitem", { name: /^(移动到|Move to)$/ }).click();
   await page.getByRole("menuitem", { name: COLUMN.doing }).click();
 
   await expect(card(page, COLUMN.doing, title)).toBeVisible();
-  await expect(card(page, COLUMN.todo, title)).toHaveCount(0);
+  await expect(card(page, COLUMN.backlog, title)).toHaveCount(0);
 
   await page.reload();
   await expect(card(page, COLUMN.doing, title)).toBeVisible();
@@ -137,8 +142,26 @@ const panel = (page: Page) => page.getByRole("dialog");
 const titleField = (page: Page) =>
   panel(page).getByRole("textbox", { name: /^(任务标题|Task title)$/ });
 
+let boardSeeded = false;
+
+/** Puts one task on the board through the top field, which works on an empty board too. */
+async function seedBoard(page: Page) {
+  const title = `Cockpit seed ${Date.now()}`;
+  await page.goto("/cockpit");
+  const input = page.getByRole("textbox", { name: /^(新任务|New task)$/ });
+  await input.fill(title);
+  await input.press("Enter");
+  await expect(card(page, COLUMN.backlog, title)).toBeVisible();
+}
+
 /** Adds a task straight into To Do with that column's "+", the way most cases need a card. */
 async function quickAdd(page: Page, title: string) {
+  // The column "+" only exists once the board holds a task, so a case run
+  // alone on a fresh database seeds one first.
+  if (!boardSeeded) {
+    await seedBoard(page);
+    boardSeeded = true;
+  }
   await page.goto("/cockpit");
   await page.getByRole("button", { name: ADD_BUTTON.todo }).click();
   const input = page.getByRole("textbox", { name: COMPOSER.todo });
@@ -275,8 +298,10 @@ test("a click on a card's own padding opens its panel too, but the status icon a
   await expect(panel(page)).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // The card's padding is part of the card: a click there opens it.
-  await card(page, COLUMN.todo, title).click({ position: { x: 4, y: 4 } });
+  // The card's padding is part of the card: a click there opens it. The
+  // corners are rounded, so click the left edge below the curve, not (4, 4),
+  // where the column behind the card gets the click.
+  await card(page, COLUMN.todo, title).click({ position: { x: 6, y: 20 } });
   await expect(panel(page)).toBeVisible();
   await expect(titleField(page)).toHaveValue(title);
 });
@@ -581,6 +606,8 @@ test("dropping a card between two cards of another column puts it there", async 
   expect(doing.indexOf(mover)).toBe(doing.indexOf(upper) + 1);
 
   await page.reload();
+  // allTextContents does not wait: let the board come back first.
+  await expect(card(page, COLUMN.doing, mover)).toBeVisible();
   const reloaded = await titlesIn(page, COLUMN.doing);
   expect(reloaded.indexOf(mover)).toBe(reloaded.indexOf(upper) + 1);
 });
@@ -589,10 +616,16 @@ test("a card can be lifted and moved with the keyboard", async ({ page }) => {
   const title = `Cockpit keys ${Date.now()}`;
   await quickAdd(page, title);
   const item = card(page, COLUMN.todo, title);
+  // A card the server has not answered for yet cannot be lifted: it only gets
+  // its tab stop once saved.
+  await expect(item).toHaveAttribute("tabindex", "0");
   await item.focus();
   await page.keyboard.press("Space");
+  // The lift is announced, and the live region moves on to the card's place
+  // ("<task> is in To Do, position 1 of 2") before a test can read "Picked
+  // up", so match the announcement by the task it names.
   await expect(
-    page.getByText(new RegExp(`(Picked up ${title}|已拿起“${title}”)`)),
+    page.getByRole("status").filter({ hasText: title }),
   ).toBeAttached();
   await page.keyboard.press("Escape");
   await expect(
