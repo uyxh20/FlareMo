@@ -232,6 +232,7 @@ describe("health read and write", () => {
         nights: 4,
         benders: 1,
         needs_check: 1,
+        last_day: "2026-10-11",
       });
       expect(year.totals).toEqual({ training: 2, breath_days: 1 });
       expect(year.needs_check_entries.map((entry) => entry.id)).toEqual(["n3"]);

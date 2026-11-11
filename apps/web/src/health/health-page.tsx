@@ -2,6 +2,7 @@ import {
   type HealthEntryDto,
   type HealthEntryKind,
   type HealthTrackerDto,
+  healthDaysBetween,
   healthLocalMoment,
 } from "@flaremo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -386,6 +387,11 @@ function YearSections({ year }: { year: number }) {
               </>
             )}
           </p>
+          {out.last_day && data.year === Number(data.today.slice(0, 4)) && (
+            <p className="text-sm font-medium" data-testid="health-since-last">
+              {s.sinceLast(healthDaysBetween(out.last_day, data.today))}
+            </p>
+          )}
         </div>
       </Section>
 

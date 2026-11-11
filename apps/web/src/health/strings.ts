@@ -144,6 +144,10 @@ export const healthStrings = {
     outNote: (units: string) =>
       `${units} ${units === "1" ? "unit" : "units"} this week`,
     budgetTitle: (year: number) => `Nights out ${year}`,
+    sinceLast: (days: number) =>
+      days === 0
+        ? "Last night out: today"
+        : `${days} ${days === 1 ? "day" : "days"} since your last night out`,
     unitsSoFar: "units so far this year",
     pace: (pace: string) => `At this rate the year ends at ${pace}.`,
     nightsLine: (nights: number, benders: number) =>

@@ -258,6 +258,12 @@ export async function healthReadYear(
       nights: nights.length,
       benders: nights.filter((row) => row.bender).length,
       needs_check: nights.filter((row) => row.needsCheck).length,
+      last_day:
+        nights
+          .map((row) => row.day)
+          .filter((d) => d <= today)
+          .sort()
+          .pop() ?? null,
     },
     totals: {
       training: rows.filter((row) => row.kind === "training").length,

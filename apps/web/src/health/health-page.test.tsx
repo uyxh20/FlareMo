@@ -114,6 +114,7 @@ const YEAR: HealthYearResponse = {
     nights: 9,
     benders: 2,
     needs_check: 1,
+    last_day: "2026-10-09",
   },
   totals: { training: 31, breath_days: 140 },
   trackers: [{ kind: "t:fast00000001", days: 9, minutes: 9000 }],
@@ -186,6 +187,7 @@ describe("the Health page", () => {
     expect(budget?.textContent).toContain("6units so far this year");
     expect(budget?.textContent).toContain("9 nights, 2 benders");
     expect(budget?.textContent).toContain("ends at 7.7");
+    expect(budget?.textContent).toContain("4 days since your last night out");
     expect(budget?.textContent).not.toContain("12");
     expect(budget?.textContent).not.toContain("budget");
   });
