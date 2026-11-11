@@ -566,6 +566,44 @@ describe("the agent correcting records", () => {
       );
       expect(events.map((event) => event.action)).toEqual(["create", "delete"]);
     });
+    it("fixes the row the diary read since, instead of counting the session twice", async () => {
+      // Proposed while the entry had no tag; then the owner accepted the tag
+      // on the same card and the reader made its own row (10 min).
+      await call("propose_health_change", {
+        action: "add",
+        day: "2026-10-27",
+        kind: "breath",
+        variant: "wim_hof",
+        minutes: 15,
+        why: "Wim Hof on Tuesday.",
+      });
+      await seedHealth("h-read", {
+        kind: "breath",
+        day: "2026-10-27",
+        variant: "wim_hof",
+        minutes: 10,
+        memo_id: "memo-wh",
+      });
+      const [proposal] = await actions();
+      const accepted = await accept(proposal?.id ?? "");
+      expect(accepted.landed_id).toBe("h-read");
+      const rows = await plannerTestRows<{ id: string; minutes: number }>(
+        rt.database,
+        "SELECT id, minutes FROM health_entry WHERE day = '2026-10-27' AND kind = 'breath' AND deleted_at IS NULL",
+      );
+      expect(rows).toEqual([{ id: "h-read", minutes: 15 }]);
+      expect(await healthRow("h-read")).toMatchObject({
+        source: "memo",
+        edited: 1,
+      });
+      // Undo puts the reader's row back as it was, not deleted.
+      await undo(proposal?.id ?? "");
+      expect(await healthRow("h-read")).toMatchObject({
+        minutes: 10,
+        edited: 0,
+        deleted_at: null,
+      });
+    });
   });
 
   describe("weekly goals", () => {

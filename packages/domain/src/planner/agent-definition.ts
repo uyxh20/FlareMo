@@ -60,9 +60,10 @@ export function plannerAgentTools(options: { propose: boolean }) {
         enabled: true,
         permission_policy: { type: "always_allow" as const },
       },
-      // read_link (link summaries) is an Ask chat's, like the action tools.
+      // read_link (link summaries) and find_todos (diary to-dos) are an Ask
+      // chat's, like the action tools.
       configs: (options.propose
-        ? [...plannerAgentActionTools, "read_link"]
+        ? [...plannerAgentActionTools, "read_link", "find_todos"]
         : plannerAgentProposeTools
       ).map((name) => ({ name, enabled: false })),
     },

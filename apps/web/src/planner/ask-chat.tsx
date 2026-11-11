@@ -7,6 +7,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   FlagIcon,
+  ListTodoIcon,
   Loader2Icon,
   PaperclipIcon,
   RotateCcwIcon,
@@ -89,6 +90,10 @@ const en = {
     "Ask about your diary, goals, tasks or health. The agent reads everything and writes only what you accept.",
   emptyTask:
     "Ask for notes, a title, a due date or a plan for this task. The agent proposes; you accept or dismiss.",
+  /** Ask my diary's starter: the to-dos written in recent entries. */
+  findTodos: "Find to-dos in my diary",
+  findTodosQuestion:
+    "Find the to-dos I wrote in my diary in the last two weeks that are not on the board yet, and offer them as tasks.",
   reading: "Reading your diary",
   noAnswer: "No answer came. Ask again.",
   placeholder: "Ask a question",
@@ -113,6 +118,9 @@ const en = {
   proposal: {
     change: (field: string) => `Proposed ${field}`,
     newTask: "Proposed task",
+    fromEntry: (day: string) => `From your entry of ${day}`,
+    openEntry: "Open the entry",
+    skipped: "Skipped",
     entry: "Proposed diary entry",
     comment: "Proposed comment",
     accept: "Accept",
@@ -183,6 +191,8 @@ const en = {
     tick: "Include this change",
     changes: (count: number) => `${count} changes`,
     acceptN: (count: number) => `Accept ${count}`,
+    acceptSkip: (count: number, skip: number) =>
+      `Accept ${count}, skip ${skip}`,
     dismissRest: (count: number) =>
       count === 1 ? "Dismiss the open one" : `Dismiss ${count} open`,
     undo: "Undo",
@@ -229,6 +239,9 @@ const zhCN: PlannerAskCopy = {
   close: "关闭",
   empty: "问问你的日记、目标、任务或健康记录。代理读一切，只写你接受的内容。",
   emptyTask: "为这项任务要备注、标题、截止日期或安排。代理提议，你接受或忽略。",
+  findTodos: "找出日记里的待办",
+  findTodosQuestion:
+    "找出我最近两周日记里写下、但还不在看板上的待办，作为任务提议给我。",
   reading: "正在读你的日记",
   noAnswer: "没有收到回答，请再问一次。",
   placeholder: "提一个问题",
@@ -251,6 +264,9 @@ const zhCN: PlannerAskCopy = {
   proposal: {
     change: (field: string) => `提议的${field}`,
     newTask: "提议的任务",
+    fromEntry: (day: string) => `来自你 ${day} 的日记`,
+    openEntry: "打开这篇日记",
+    skipped: "已跳过",
     entry: "提议的日记",
     comment: "提议的评论",
     accept: "接受",
@@ -320,6 +336,8 @@ const zhCN: PlannerAskCopy = {
     tick: "包含这项改动",
     changes: (count: number) => `${count} 项改动`,
     acceptN: (count: number) => `接受 ${count} 项`,
+    acceptSkip: (count: number, skip: number) =>
+      `接受 ${count} 项，跳过 ${skip} 项`,
     dismissRest: (count: number) => `忽略 ${count} 项`,
     undo: "撤销",
     undoAll: (count: number) => (count === 1 ? "撤销" : `全部撤销 ${count} 项`),
@@ -583,6 +601,18 @@ function PlannerProposalBody({
     </div>
   );
   const taskTitle = asString(change.task_title);
+  // A to-do the agent found in a diary entry: the entry and its words.
+  const source =
+    isRecord(change.source) &&
+    asString(change.source.entry_id) &&
+    asString(change.source.quote)
+      ? {
+          entryId: asString(change.source.entry_id) ?? "",
+          quote: asString(change.source.quote) ?? "",
+          day: asString(change.source.day),
+          preview: asString(change.source.preview),
+        }
+      : null;
   const preview = asString(change.preview);
   let heading: string;
   switch (action.kind) {
@@ -907,6 +937,29 @@ function PlannerProposalBody({
           {control("title") ?? (
             <p className="font-medium">{asString(change.title) ?? ""}</p>
           )}
+          {source && (
+            <div
+              className="flex flex-col gap-0.5 border-l-2 border-border pl-2"
+              data-testid="planner-todo-source"
+            >
+              <a
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                href={`/memo/${encodeURIComponent(source.entryId)}`}
+                rel="noreferrer"
+                target="_blank"
+                title={copy.proposal.openEntry}
+              >
+                {copy.proposal.fromEntry(
+                  source.day
+                    ? plannerDueLabel(source.day, today, strings)
+                    : (source.preview ?? ""),
+                )}
+              </a>
+              <p className="text-xs text-muted-foreground italic">
+                “{source.quote}”
+              </p>
+            </div>
+          )}
           {asString(change.notes) && (
             <PlannerMarkdown
               diaryLabel={copy.days}
@@ -1022,7 +1075,9 @@ function verdictOf(action: PlannerAgentActionDto, copy: PlannerAskCopy) {
     case "accepted":
       return copy.proposal.accepted;
     case "dismissed":
-      return copy.proposal.dismissed;
+      return action.change.settled_reason === "skipped"
+        ? copy.proposal.skipped
+        : copy.proposal.dismissed;
     case "expired":
       return copy.proposal.expired;
     case "reverted":
@@ -1316,16 +1371,22 @@ export function PlannerChangeSet({
     const edit = plannerCardEditBody(action, cardEdits.edits[action.id]);
     return edit ? { edit } : {};
   };
+  // Rows left unticked are skipped: dismissed with the reason `skipped`, the
+  // learning log's signal that the rest of the card was right and they were
+  // not (docs/fork-flywheel.md). A row ticked but still waiting on words stays
+  // open.
+  const skippedRows = open.filter((action) => unticked.has(action.id));
   const accept = () =>
     run(
-      ticked,
+      [...ticked, ...skippedRows],
       async (action) =>
         (
-          await plannerSettleActionRequest(action.id, {
-            state: "accepted",
-            today,
-            ...editOf(action),
-          })
+          await plannerSettleActionRequest(
+            action.id,
+            unticked.has(action.id)
+              ? { state: "dismissed", today, reason: "skipped" }
+              : { state: "accepted", today, ...editOf(action) },
+          )
         ).action,
       copy.proposal.failed,
     );
@@ -1445,7 +1506,9 @@ export function PlannerChangeSet({
             onClick={() => void accept()}
           >
             <CheckIcon data-icon="inline-start" />
-            {copy.proposal.acceptN(ticked.length)}
+            {skippedRows.length > 0
+              ? copy.proposal.acceptSkip(ticked.length, skippedRows.length)
+              : copy.proposal.acceptN(ticked.length)}
           </Button>
           <Button
             disabled={busy}
@@ -1688,6 +1751,21 @@ export function PlannerAskChat({
           <p className="text-sm text-muted-foreground">
             {task ? copy.emptyTask : copy.empty}
           </p>
+        )}
+        {count === 0 && !busy && !task && (
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() =>
+                send.mutate({ question: copy.findTodosQuestion, files: [] })
+              }
+            >
+              <ListTodoIcon data-icon="inline-start" />
+              {copy.findTodos}
+            </Button>
+          </div>
         )}
         {messages.map((message) =>
           message.role === "owner" ? (

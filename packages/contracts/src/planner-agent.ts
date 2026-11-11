@@ -30,6 +30,10 @@ import {
 import { plannerPeriodLevelSchema } from "./planner-period-review";
 import { taskPrioritySchema } from "./projects";
 
+/** How far back find_todos reads by default, and at most (diary to-dos). */
+export const PLANNER_TODO_DAYS_DEFAULT = 14;
+export const PLANNER_TODO_DAYS_MAX = 60;
+
 // planner.ts re-exports this file and defines plannerColumnSchema, so the enum
 // is built here from the same list instead of importing it back.
 const columnSchema = z.enum(plannerColumns);
@@ -196,6 +200,17 @@ export const plannerAgentToolInputs = {
       .optional()
       .describe("Words to find; every memory when left out."),
   }),
+  find_todos: z.strictObject({
+    days: z
+      .number()
+      .int()
+      .min(1)
+      .max(PLANNER_TODO_DAYS_MAX)
+      .optional()
+      .describe(
+        `How many days back from today; ${PLANNER_TODO_DAYS_DEFAULT} when left out.`,
+      ),
+  }),
   read_scorecard: z.strictObject({
     weeks: z
       .number()
@@ -337,21 +352,45 @@ export const plannerAgentToolInputs = {
         path: ["column"],
       },
     ),
-  propose_add_task: z.strictObject({
-    title: z.string().trim().min(1).max(2000),
-    notes: z.string().trim().min(1).max(20_000).optional(),
-    priority: taskPrioritySchema.optional(),
-    due_at: daySchema.optional().describe("The due day, YYYY-MM-DD."),
-    column: columnSchema
-      .optional()
-      .describe("backlog (the default), todo, doing or done."),
-    why: z
-      .string()
-      .trim()
-      .min(1)
-      .max(500)
-      .describe("One or two sentences: why this task, and why now."),
-  }),
+  propose_add_task: z
+    .strictObject({
+      title: z.string().trim().min(1).max(2000),
+      notes: z.string().trim().min(1).max(20_000).optional(),
+      priority: taskPrioritySchema.optional(),
+      due_at: daySchema.optional().describe("The due day, YYYY-MM-DD."),
+      column: columnSchema
+        .optional()
+        .describe("backlog (the default), todo, doing or done."),
+      from_entry_id: idSchema
+        .optional()
+        .describe(
+          "For a to-do the owner wrote in a diary entry (find_todos lists them): that entry's id. Goes with from_quote.",
+        ),
+      from_quote: z
+        .string()
+        .trim()
+        .min(3)
+        .max(600)
+        .optional()
+        .describe(
+          "The to-do's words in that entry, copied exactly (find_todos gives them). The server finds them word for word or refuses; the card shows them as the task's source.",
+        ),
+      why: z
+        .string()
+        .trim()
+        .min(1)
+        .max(500)
+        .describe("One or two sentences: why this task, and why now."),
+    })
+    .refine(
+      (value) =>
+        (value.from_entry_id === undefined) ===
+        (value.from_quote === undefined),
+      {
+        message: "from_entry_id and from_quote go together.",
+        path: ["from_quote"],
+      },
+    ),
   propose_task_comment: z.strictObject({
     task_id: idSchema.describe("The task to comment on, by id."),
     body: z.string().trim().min(1).max(4000).describe("The comment's text."),
@@ -681,6 +720,8 @@ export const plannerAgentToolDescriptions: Record<
     "The health tracker between two days: each training session, breathwork and night out by day, and each week's totals against the owner's targets.",
   read_memories:
     "What the memory ledger already holds about the owner: each memory with its kind and whether the owner confirmed it or it waits as a proposal. Check here before proposing a memory.",
+  find_todos:
+    "The to-dos the owner wrote in recent diary entries: each line that reads like something still to do (an open '- [ ]' box, 'need to', 'should', 'don't forget', 'il faut'...), with its entry id, its day and its exact words, marked when a board task already covers it or when it was offered before. Fixed word rules, so some lines are not to-dos at all: judge each. Only in an Ask chat. For each real one not on the board and not offered before, call propose_add_task with from_entry_id and from_quote.",
   read_scorecard:
     "How your work has landed with the owner, week by week: how many of your proposals were seen, accepted and kept for seven days, how often the owner edited what you drafted against what they wrote themselves, tasks done by their due day and week goals met for your proposals against the owner's own, and your standing instructions from the owner. Numbers only. A share over fewer than 10 cases says too few.",
   propose_memory:
@@ -692,7 +733,7 @@ export const plannerAgentToolDescriptions: Record<
   propose_task_change:
     "Propose one change to one task: new notes, a title, a priority, a due day, an effort, a start day, a column move, a weekly goal link, or dropping it off the board. One field per call; call it once per task and field when the owner asks for many. To put a task at an exact spot on the board, give column with before_id (directly above that task) or after_id (directly below it); the task may already be in that column. Every proposal of one answer shows in one card in the owner's chat, each with a tick box; the owner accepts the ticked ones (which writes them) or dismisses them. Only in an Ask chat.",
   propose_add_task:
-    "Propose a new task for the board. It shows in the answer's card; nothing is added before the owner accepts it. Only in an Ask chat.",
+    "Propose a new task for the board. It shows in the answer's card; nothing is added before the owner accepts it. Only in an Ask chat. For a to-do found in the diary, pass from_entry_id and from_quote (the card shows the entry it came from); one the owner was offered before is refused.",
   propose_task_comment:
     "Propose a comment on a task. It shows in the answer's card; nothing is added before the owner accepts it. Only in an Ask chat.",
   propose_entry:
@@ -1170,6 +1211,12 @@ export function plannerAgentNeedsWords(
   );
 }
 
+/**
+ * The reason a row left unticked when the rest of its card was accepted is
+ * dismissed with (`change.settled_reason`): skipped, not refused as a card.
+ */
+export const PLANNER_AGENT_SKIP_REASON = "skipped";
+
 /** Accept an action (which writes it) or dismiss it. */
 export const plannerAgentSettleActionSchema = z
   .strictObject({
@@ -1177,11 +1224,20 @@ export const plannerAgentSettleActionSchema = z
     today: daySchema,
     /** Only with accepted: the owner's own values for the keys the card lets them change. */
     edit: plannerAgentEditSchema.optional(),
+    /**
+     * Only with dismissed: `skipped` when the owner left the row unticked and
+     * accepted the rest of its card (the learning log's skip signal).
+     */
+    reason: z.enum([PLANNER_AGENT_SKIP_REASON]).optional(),
   })
   .refine((value) => value.edit === undefined || value.state === "accepted", {
     message: "edit goes only with accepted.",
     path: ["edit"],
-  });
+  })
+  .refine(
+    (value) => value.reason === undefined || value.state === "dismissed",
+    { message: "reason goes only with dismissed.", path: ["reason"] },
+  );
 
 /** Put back what an accepted action wrote. */
 export const plannerAgentRevertActionSchema = z.strictObject({

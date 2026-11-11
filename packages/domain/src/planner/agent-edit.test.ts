@@ -562,6 +562,8 @@ describe("editing a card before Accept", () => {
       field: null,
       fields: "title",
       count: 1,
+      from_diary: false,
+      title_chars: expect.any(Number),
     });
     expect(log[0]?.data).not.toContain("private");
 

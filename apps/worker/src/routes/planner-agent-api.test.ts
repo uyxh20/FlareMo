@@ -452,6 +452,43 @@ describe("the general agent's Ask chat and schedule", () => {
       ),
       404,
     );
+    // A skip is a dismiss with a reason, and the reason goes only with one.
+    await body(
+      call(
+        "POST",
+        `/agent/actions/${actionId}`,
+        { state: "accepted", today: TODAY, reason: "skipped" },
+        agentEnv,
+      ),
+      400,
+    );
+    const skipId = crypto.randomUUID();
+    await d1
+      .prepare(
+        "INSERT INTO planner_agent_action (id, user_id, conversation_id, kind, change, state, created_at) VALUES (?, (SELECT user_id FROM planner_agent_action WHERE id = ?), ?, 'task_new', ?, 'open', ?)",
+      )
+      .bind(
+        skipId,
+        actionId,
+        conversation,
+        JSON.stringify({ title: "Fix bike" }),
+        new Date().toISOString(),
+      )
+      .run();
+    const { action: skipped } = await body<{
+      action: { state: string; change: Record<string, unknown> };
+    }>(
+      call(
+        "POST",
+        `/agent/actions/${skipId}`,
+        { state: "dismissed", today: TODAY, reason: "skipped" },
+        agentEnv,
+      ),
+    );
+    expect(skipped).toMatchObject({
+      state: "dismissed",
+      change: { title: "Fix bike", settled_reason: "skipped" },
+    });
 
     // Undo on the card: puts back what an accept wrote, through the
     // task's History, and marks the proposal reverted.

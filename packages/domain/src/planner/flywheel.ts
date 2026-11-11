@@ -1,4 +1,5 @@
 import {
+  PLANNER_AGENT_SKIP_REASON,
   PLANNER_FLYWHEEL_PAUSE_MIN,
   PLANNER_FLYWHEEL_TUNING_DAYS,
   type PlannerFlywheelMetric,
@@ -45,6 +46,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "../errors";
+import { plannerAgentFromDiary } from "./diary-todos";
 import type { PlannerChatMessage } from "./review-prompts";
 import { plannerNow, plannerRunBatch } from "./shared";
 
@@ -297,6 +299,31 @@ export async function plannerFlywheelRollup(
       (row) => row.state === "accepted" || row.state === "reverted",
     ).length,
     den: settled.length,
+  });
+  // Left unticked while the rest of the card was accepted (settled_reason
+  // `skipped`): a row the owner judged on its own, which a dismiss hides.
+  put(tally, "proposals_skipped", "ai", {
+    num: settled.filter(
+      (row) =>
+        row.state === "dismissed" &&
+        row.change.settled_reason === PLANNER_AGENT_SKIP_REASON,
+    ).length,
+    den: settled.length,
+  });
+  // Diary to-dos (a new task with `change.source`): taken, and taken as is.
+  const todos = settled.filter(
+    (row) => row.kind === "task_new" && plannerAgentFromDiary(row.change),
+  );
+  const todosTaken = todos.filter(
+    (row) => row.state === "accepted" || row.state === "reverted",
+  );
+  put(tally, "todos_accepted", "ai", {
+    num: todosTaken.length,
+    den: todos.length,
+  });
+  put(tally, "todos_edited", "ai", {
+    num: todosTaken.filter((row) => isRecord(row.change.edited)).length,
+    den: todosTaken.length,
   });
 
   const landed = await db
