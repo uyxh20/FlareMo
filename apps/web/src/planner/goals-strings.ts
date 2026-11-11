@@ -182,6 +182,22 @@ export type PlannerGoalsStrings = {
       tooMany: (max: number) => string;
     };
     send: string;
+    /** Talk: the answer box as a voice bar (docs/fork-review-voice.md). */
+    voice: {
+      talk: string;
+      speaking: string;
+      listening: string;
+      hearing: string;
+      thinking: string;
+      waiting: string;
+      done: string;
+      skip: string;
+      type: string;
+      again: string;
+      noMic: string;
+      failed: string;
+      notHeard: string;
+    };
     next: string;
     skip: string;
     lastQuestion: string;
@@ -513,6 +529,21 @@ const en: PlannerGoalsStrings = {
       tooMany: (max: number) => `At most ${max} files an answer`,
     },
     send: "Send",
+    voice: {
+      talk: "Talk",
+      speaking: "Coach is speaking",
+      listening: "Listening · tap Done when you finish",
+      hearing: "Writing down what you said",
+      thinking: "Thinking",
+      waiting: "Pick an option above, or type",
+      done: "Done",
+      skip: "Skip",
+      type: "Type instead",
+      again: "Try again",
+      noMic: "The microphone is blocked. Allow it in the browser to talk.",
+      failed: "Voice didn't work just now.",
+      notHeard: "I didn't catch that. Say it again.",
+    },
     next: "Next ›",
     skip: "Skip ›",
     lastQuestion: "Last week's question",
@@ -829,6 +860,21 @@ const zhCN: PlannerGoalsStrings = {
       tooMany: (max: number) => `每个回答最多 ${max} 个文件`,
     },
     send: "发送",
+    voice: {
+      talk: "说话",
+      speaking: "教练正在说",
+      listening: "正在听 · 说完点“完成”",
+      hearing: "正在记下你说的话",
+      thinking: "思考中",
+      waiting: "选上面的一个选项，或者打字",
+      done: "完成",
+      skip: "跳过",
+      type: "改为打字",
+      again: "再试一次",
+      noMic: "麦克风被阻止了。请在浏览器里允许后再说话。",
+      failed: "语音刚才没有成功。",
+      notHeard: "没听清，请再说一遍。",
+    },
     next: "下一个 ›",
     skip: "跳过 ›",
     lastQuestion: "上周的问题",

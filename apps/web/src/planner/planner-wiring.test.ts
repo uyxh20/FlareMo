@@ -83,7 +83,7 @@ const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
     file: "playwright.config.ts",
     path: "../../../../playwright.config.ts",
     mustContain: [
-      /\|cockpit\|fork-ui\|goals-review\|task-search\)\\\.spec\\\.ts/,
+      /\|cockpit\|fork-ui\|goals-review\|review-voice\|task-search\)\\\.spec\\\.ts/,
     ],
   },
 ];

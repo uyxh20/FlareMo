@@ -249,6 +249,20 @@ a.planner-cell:hover {
 
 /* --- Waiting --------------------------------------------------------------- */
 
+/* Talk's voice bar: the coach's bars sway while it speaks (fork-review-voice.md). */
+.planner-voice-bar {
+  transform-origin: center;
+  animation: planner-voice-sway 0.9s ease-in-out infinite alternate;
+}
+@keyframes planner-voice-sway {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
 .planner-thinking::after {
   content: "";
   display: inline-block;
@@ -386,6 +400,7 @@ a.planner-cell:hover {
 @media (prefers-reduced-motion: reduce) {
   .planner-fresh,
   .planner-thinking::after,
+  .planner-voice-bar,
   .planner-md .planner-md-cursor::after {
     animation: none;
   }
