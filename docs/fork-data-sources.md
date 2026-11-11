@@ -60,13 +60,13 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `embedding_tasks` | search | derived | – | – | – | – | – | – | – | – |
 | `memos_fts` | search | derived | – | – | – | – | – | – | – | – |
 | `memory_fts` | search | derived | – | – | – | – | – | – | – | – |
-| `tasks` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
-| `tasks:backlog` | cockpit | content | – | – | **gap** | – | yes | yes | yes | yes |
-| `tasks.notes` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
+| `tasks` | cockpit | content | yes | yes | yes | yes | yes | yes | yes | yes |
+| `tasks:backlog` | cockpit | content | – | – | yes | – | yes | yes | yes | yes |
+| `tasks.notes` | cockpit | content | yes | yes | yes | – | yes | yes | yes | yes |
 | `projects` | cockpit | structure | – | – | – | – | – | yes | yes | yes |
 | `task_activity` | cockpit | history | – | – | – | – | – | – | yes | yes |
 | `planner_task_event` | cockpit | history | yes | yes | – | – | yes | yes | yes | yes |
-| `planner_task_comment` | cockpit | content | yes | yes | **gap** | – | yes | yes | yes | yes |
+| `planner_task_comment` | cockpit | content | yes | yes | yes | yes | yes | yes | yes | yes |
 | `planner_task_attachment` | cockpit | content | – | – | **gap** | – | – | – | yes | yes |
 | `planner_task_plan` | cockpit | structure | yes | – | – | – | yes | yes | yes | yes |
 | `planner_project_node` | cockpit | structure | – | – | – | – | – | – | yes | yes |
@@ -101,10 +101,6 @@ Gaps (left out, and probably should not be):
 - `attachments` → lookBack: the review is not told an entry had a photo or file, nor its name.
 - `attachments` → agent: the agent is not told an entry had a photo or file, nor its name.
 - `memory_items` → lookForward: the goal check does not read memories (preferences, constraints).
-- `tasks` → search: tasks are not in keyword or semantic search.
-- `tasks:backlog` → search: tasks are not in keyword or semantic search.
-- `tasks.notes` → search: tasks are not in keyword or semantic search.
-- `planner_task_comment` → search: task comments are not searchable.
 - `planner_task_attachment` → search: task files are not searchable.
 - `planner_goal` → search: goals are not searchable.
 - `planner_goal` → mcp: agents cannot read goals over MCP.

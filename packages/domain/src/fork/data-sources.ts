@@ -463,8 +463,12 @@ export const forkDataSources: readonly ForkDataSource[] = [
       lookForward: yes(
         "the goal check reads the week's task details too; the plan's own tasks come from the page",
       ),
-      search: gap("tasks are not in keyword or semantic search"),
-      memory: no("the memory layer reads entries, not tasks"),
+      search: yes(
+        "keyword only: the search box lists live tasks whose title matches (planner/task-search.ts); not in semantic search",
+      ),
+      memory: yes(
+        "the title of the task a new comment is on, for memory dreaming (planner/dreaming-sources.ts)",
+      ),
       mcp: yes(
         "task_read_board, task_get_task, task_create_task, task_update_task",
       ),
@@ -487,8 +491,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
         "only To Do tasks planned for a period are listed, unless touched this week (then in the task details)",
       ),
       lookForward: no("the page sends next week's goals and their tasks"),
-      search: gap("tasks are not in keyword or semantic search"),
-      memory: no("the memory layer reads entries, not tasks"),
+      search: yes("keyword only, like every live task"),
+      memory: no("only the titles of tasks with new comments"),
       mcp: yes("the Backlog column of task_read_board"),
       agent: yes("the Backlog column of read_tasks"),
       userExport: yes("every task"),
@@ -504,11 +508,15 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "A task's notes",
     uses: {
       lookBack: yes(
-        "for the tasks done, worked on or touched this week and Doing: 600 characters each",
+        "for the tasks done, worked on or touched this week and Doing: at most 600 of each task's 1,500 characters",
       ),
       lookForward: yes("with the task details the goal check reads"),
-      search: gap("tasks are not in keyword or semantic search"),
-      memory: no("the memory layer reads entries, not tasks"),
+      search: yes(
+        "keyword only: a match shows the words around it (planner/task-search.ts)",
+      ),
+      memory: no(
+        "notes are a standing description rewritten in place; dreaming reads comments",
+      ),
       mcp: yes(
         "whole, in task_get_task; set with task_create_task and task_update_task",
       ),
@@ -576,11 +584,15 @@ export const forkDataSources: readonly ForkDataSource[] = [
     holds: "Comments on tasks",
     uses: {
       lookBack: yes(
-        "the live comments of the tasks in the details, oldest first, within each task's budget",
+        "the live comments of the tasks in the details: the week's first, then older ones newest first, within each task's budget; shown oldest first",
       ),
       lookForward: yes("with the task details the goal check reads"),
-      search: gap("task comments are not searchable"),
-      memory: no("the memory layer reads entries, not tasks"),
+      search: yes(
+        "keyword only: the newest matching comment of a live task, with its date (planner/task-search.ts)",
+      ),
+      memory: yes(
+        "dreaming reads the live comments written since its last run, up to 10, with the task's title (planner/dreaming-sources.ts)",
+      ),
       mcp: yes("read in task_get_task, added with task_add_comment"),
       agent: yes(
         "the live comments of the tasks in review_week's task details",

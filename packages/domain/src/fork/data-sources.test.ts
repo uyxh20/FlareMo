@@ -211,13 +211,19 @@ describe("the search column matches the search index", () => {
     memory_items: { embedding: "memory", fts: "memory_fts" },
   };
 
-  it("says yes exactly for the tables with an index", () => {
+  // Tables only the cockpit's keyword task search reads (planner/task-search.ts):
+  // plain substring queries, no index and no embedding.
+  const TASK_SEARCH = ["tasks", "planner_task_comment"];
+
+  it("says yes exactly for the tables with an index or the task search", () => {
     const searched = forkDataSources
       .filter((source) => source.id === source.table)
       .filter((source) => forkUseVerdict(source.uses.search) === "yes")
       .map((source) => source.table)
       .sort();
-    expect(searched).toEqual(Object.keys(SEARCH_INDEX).sort());
+    expect(searched).toEqual(
+      [...Object.keys(SEARCH_INDEX), ...TASK_SEARCH].sort(),
+    );
   });
 
   it("has an embedding resource for each searched table and no other", () => {
@@ -243,6 +249,8 @@ describe("the memory column matches what the memory layer reads", () => {
       .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
       .map((name) => `packages/domain/src/memory/${name}`),
     "apps/worker/src/memory-dreaming.ts",
+    // fork: the task comments dreaming reads.
+    "packages/domain/src/planner/dreaming-sources.ts",
   ];
 
   it("reads only the tables marked for memory, and all of them", async () => {
