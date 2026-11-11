@@ -494,6 +494,10 @@ function EntryDiff({ before, after }: { before: string; after: string }) {
 function usePlannerActionRefresh(task: string | null) {
   const queryClient = useQueryClient();
   return (action: PlannerAgentActionDto) => {
+    // The starter buttons' counts follow the board.
+    void queryClient.invalidateQueries({
+      queryKey: ["planner", "ask", "starters"],
+    });
     if (
       action.kind === "entry_new" ||
       action.kind === "entry_edit" ||

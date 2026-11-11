@@ -12,6 +12,7 @@ import { plannerAgentCallTool } from "./agent-tools";
 import {
   plannerAskStarterCounts,
   plannerMentionsHealth,
+  plannerSentenceAboutTask,
   plannerSoundsDone,
 } from "./ask-starters";
 import { plannerAddTask } from "./task-change";
@@ -224,6 +225,21 @@ describe("Ask my diary's starter buttons", () => {
     expect(text).toMatch(
       /## 2026-11-10 \| entries mention it, no row\n {4}- entry [^\n]*"Did 15 min of Wim Hof before work\."/,
     );
+  });
+
+  it("ties a long diary line to a short task title", () => {
+    expect(
+      plannerSentenceAboutTask(
+        "Long call with Marta, we went through the outline line by line.",
+        "Call Marta about the outline",
+      ),
+    ).toBe(true);
+    expect(
+      plannerSentenceAboutTask(
+        "Called the bank back.",
+        "Call Marta about the outline",
+      ),
+    ).toBe(false);
   });
 
   it("reads finished and health lines by fixed rules", () => {

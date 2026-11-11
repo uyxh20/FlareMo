@@ -6,6 +6,7 @@ import {
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { type PlannerBoardCard, plannerReadBoard } from "./board";
+import { plannerTodoWords } from "./diary-todos";
 
 // Ask my diary's starters (fork-owned add-on, docs/fork-general-agent.md,
 // "The starter buttons"). Replan my week and Tidy my backlog work from lists
@@ -129,4 +130,28 @@ export function plannerMentionsHealth(sentence: string): boolean {
 /** The day `days` days before today, inclusive span start. */
 export function plannerSpanStart(today: string, days: number): string {
   return plannerAddDays(today, -(days - 1));
+}
+
+/** A word's rough stem, so "called" meets "call" and "invoices" meets "invoice". */
+function stem(word: string): string {
+  return word.replace(/(?:ing|ed|es|s)$/, "") || word;
+}
+
+/**
+ * Whether a sentence is about a task: most of the title's content words (60%,
+ * and two when the title has two or more) are in it, by rough stem. Measured
+ * against the title, not the sentence, since a diary line says much more.
+ */
+export function plannerSentenceAboutTask(
+  sentence: string,
+  title: string,
+): boolean {
+  const titleWords = [...plannerTodoWords(title)].map(stem);
+  if (titleWords.length === 0) return false;
+  const said = new Set([...plannerTodoWords(sentence)].map(stem));
+  const shared = titleWords.filter((word) => said.has(word)).length;
+  return (
+    shared >= Math.min(2, titleWords.length) &&
+    shared / titleWords.length >= 0.6
+  );
 }

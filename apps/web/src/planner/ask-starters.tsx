@@ -72,15 +72,14 @@ export function PlannerAskStarterButtons({
   const counts = useQuery({
     queryKey: ["planner", "ask", "starters", today],
     queryFn: () => plannerFetchAskStarters(today),
-    staleTime: 60_000,
+    staleTime: 0,
   });
   const buttons = plannerAskStarterButtons(counts.data ?? null, copy.starters);
   return (
-    <div
+    <fieldset
       aria-label={copy.starters.label}
-      className="flex flex-col items-start gap-1.5"
+      className="m-0 flex min-w-0 flex-col items-start gap-1.5 border-0 p-0"
       data-testid="planner-ask-starters"
-      role="group"
     >
       {buttons.map(({ id, label }) => {
         const Icon = ICONS[id];
@@ -98,6 +97,6 @@ export function PlannerAskStarterButtons({
           </Button>
         );
       })}
-    </div>
+    </fieldset>
   );
 }

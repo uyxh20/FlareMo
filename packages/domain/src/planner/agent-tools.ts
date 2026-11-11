@@ -67,6 +67,7 @@ import {
   plannerAskAttention,
   plannerEntrySentences,
   plannerMentionsHealth,
+  plannerSentenceAboutTask,
   plannerSoundsDone,
   plannerSpanStart,
 } from "./ask-starters";
@@ -1339,7 +1340,7 @@ const handlers: Handlers = {
       const lines: string[] = [];
       for (const entry of [...entries].reverse()) {
         for (const sentence of plannerEntrySentences(entry.content)) {
-          if (!plannerTodoMatch(sentence, [task])) continue;
+          if (!plannerSentenceAboutTask(sentence, task.title)) continue;
           lines.push(
             `    - entry ${entry.id} | ${local(entry.at)} | ${JSON.stringify(oneLine(sentence, 280))}${plannerSoundsDone(sentence) ? " | sounds done" : ""}`,
           );
