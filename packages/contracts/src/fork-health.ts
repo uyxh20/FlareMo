@@ -385,6 +385,8 @@ export const healthYearResponseSchema = z.object({
     nights: z.number().int(),
     benders: z.number().int(),
     needs_check: z.number().int(),
+    /** Latest night out this year that is not in the future; null when none. */
+    last_day: healthDaySchema.nullable(),
   }),
   totals: z.object({
     training: z.number().int(),

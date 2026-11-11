@@ -866,6 +866,37 @@ export const forkDataSources: readonly ForkDataSource[] = [
       backup: IN_BACKUP,
     },
   },
+  // --- Morning page ----------------------------------------------------------
+  {
+    id: "planner_morning_line",
+    table: "planner_morning_line",
+    module: "goals",
+    kind: "content",
+    owner: "fork",
+    holds:
+      "The morning page's idea lines, one row per line written (kept or replaced with Another), with the model, tokens and whether it was shown and kept. Written by a model from three weeks of entries, the week's goals, tasks and health counts",
+    uses: {
+      lookBack: no("a nudge for the morning, not part of the week's story"),
+      lookForward: no("a nudge for the morning, not part of the plan"),
+      search: no("written by a model, not diary content"),
+      mcp: no("not exposed to agents"),
+      agent: no(
+        "only the morning line's own prompt reads them, to avoid repeats",
+      ),
+      userExport: FORK_EXPORT,
+      backup: IN_BACKUP,
+    },
+  },
+  {
+    id: "planner_morning_day",
+    table: "planner_morning_day",
+    module: "goals",
+    kind: "bookkeeping",
+    owner: "fork",
+    holds:
+      "Each day the morning page was dismissed with Start the day, so the diary opens on it once a day",
+    uses: plumbing("whether the morning page was dismissed today"),
+  },
   // --- Health tracker ------------------------------------------------------
   {
     id: "health_entry",

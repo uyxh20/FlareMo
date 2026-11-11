@@ -49,6 +49,7 @@ import { plannerAgentMcpApi } from "./planner-agent-mcp";
 import { plannerAttachmentsApi } from "./planner-attachments-api";
 import { plannerFlywheelApi } from "./planner-flywheel-api";
 import { plannerGoalsApi } from "./planner-goals-api";
+import { plannerMorningApi } from "./planner-morning-api";
 import { plannerPeriodReviewApi } from "./planner-period-review-api";
 import {
   plannerAssertToday,
@@ -484,3 +485,6 @@ plannerApi.route("/", plannerAttachmentsApi);
 // The flywheel: the scorecard card and the tuning (planner-flywheel-api.ts,
 // docs/fork-flywheel.md).
 plannerApi.route("/", plannerFlywheelApi);
+// The morning page's idea line and "Start the day" (planner-morning-api.ts,
+// docs/fork-customizations.md "Morning page").
+plannerApi.route("/", plannerMorningApi);

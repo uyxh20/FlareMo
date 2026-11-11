@@ -23,6 +23,8 @@ import {
   plannerGoalFlag,
   plannerGoalVersion,
   plannerMetricWeek,
+  plannerMorningDay,
+  plannerMorningLine,
   plannerPeriodReview,
   plannerProjectNode,
   plannerReview,
@@ -201,6 +203,15 @@ const EXPECTED_INDEXES: Record<string, ExpectedIndex[]> = {
     },
   ],
   planner_metric_week: [],
+  planner_morning_day: [],
+  planner_morning_line: [
+    {
+      name: "planner_morning_line_user_day_idx",
+      unique: false,
+      partial: false,
+      columns: ["user_id", "day", "created_at"],
+    },
+  ],
   planner_tuning: [
     {
       name: "planner_tuning_user_state_idx",
@@ -249,6 +260,8 @@ const DRIZZLE_TABLES: Record<string, SQLiteTable> = {
   planner_goal_version: plannerGoalVersion,
   planner_metric_week: plannerMetricWeek,
   planner_tuning: plannerTuning,
+  planner_morning_line: plannerMorningLine,
+  planner_morning_day: plannerMorningDay,
 };
 
 let mf: Miniflare;
@@ -425,6 +438,8 @@ describe("planner migrations", () => {
         planner_goal_flag: [],
         planner_goal_version: [],
         planner_metric_week: [],
+        planner_morning_day: [],
+        planner_morning_line: [],
         planner_period_review: [],
         planner_project_node: ["planner_project_node"],
         planner_review: [],

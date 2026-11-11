@@ -6,6 +6,7 @@ import { SpotlightSearchTrigger } from "@/components/spotlight-search";
 import { WorkspacePageHeader } from "@/components/workspace/workspace-page-header";
 import type { WorkspaceSidebarContent } from "@/components/workspace/workspace-sidebar";
 import { useI18n } from "@/i18n";
+import { PlannerMorningEntry } from "@/planner/morning-entry"; // fork: morning page
 
 /**
  * The timeline top bar. The title names the page the sidebar opened (memos,
@@ -68,6 +69,7 @@ export function WorkspaceHeader({
             team={team}
             onSpaceChange={setSpace}
           />
+          <PlannerMorningEntry /> {/* fork: morning page */}
           {/* One search everywhere: the same palette behind a field on wide
               screens and an icon on narrow ones. */}
           <SpotlightSearchTrigger

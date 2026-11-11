@@ -694,9 +694,7 @@ describe("buildDevConfig", () => {
     );
     assert.deepEqual(
       DEV_CONFIG.vectorize.map((index) => [index.binding, index.index_name]),
-      [
-        ["VECTORIZE_MEMOS", "flaremo-dev-memos"],
-      ],
+      [["VECTORIZE_MEMOS", "flaremo-dev-memos"]],
     );
     assert.equal(DEV_CONFIG.ratelimits[0].namespace_id, "2001");
     assert.notEqual(

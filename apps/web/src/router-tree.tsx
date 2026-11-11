@@ -20,7 +20,7 @@ import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
 import { queryKeys } from "@/lib/query-keys";
 import { allTasksQuery, isTaskView, type TaskView } from "@/lib/task-views";
-import { plannerRoutes } from "@/planner/routes"; // fork: planning cockpit
+import { plannerRootRoutes, plannerRoutes } from "@/planner/routes"; // fork: planning cockpit
 import { AuthenticatedRoute } from "@/routes/authenticated-route";
 import { indexRoute } from "@/routes/index-route";
 import { rootRoute } from "@/routes/root-route";
@@ -465,6 +465,7 @@ const router = createRouter({
     ]),
     shareRoute,
     loginRoute,
+    ...plannerRootRoutes, // fork: the morning page, outside the shell
     registerRoute,
     verifyEmailRoute,
     forgotPasswordRoute,

@@ -1,5 +1,7 @@
 import { createRoute, redirect } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
+import { AuthenticatedRoute } from "@/routes/authenticated-route";
+import { rootRoute } from "@/routes/root-route";
 import { RouteLoading } from "@/routes/route-loading";
 import { workspaceRoute } from "@/routes/workspace-route";
 import { plannerCockpitSearch } from "./cockpit-search";
@@ -24,6 +26,11 @@ const CockpitPage = lazy(() =>
 const GoalsPage = lazy(() =>
   import("./goals-page").then((module) => ({
     default: module.PlannerGoalsPage,
+  })),
+);
+const MorningPage = lazy(() =>
+  import("./morning-page").then((module) => ({
+    default: module.PlannerMorningPage,
   })),
 );
 const ReviewPage = lazy(() =>
@@ -99,6 +106,23 @@ const periodReviewRoute = createRoute({
   },
 });
 
+function MorningRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <MorningPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+/** The morning page (docs/fork-customizations.md "Morning page"). */
+const morningRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/morning",
+  component: MorningRoutePage,
+});
+
 export const plannerRoutes = [
   cockpitRoute,
   goalsRoute,
@@ -106,3 +130,9 @@ export const plannerRoutes = [
   weeklyReviewRoute,
   periodReviewRoute,
 ] as const;
+
+/**
+ * Pages outside the workspace shell (no sidebar): the morning page is a full
+ * page of its own, so it hangs off the root route, beside the login page.
+ */
+export const plannerRootRoutes = [morningRoute] as const;

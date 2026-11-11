@@ -33,6 +33,7 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/weekly-review", // fork: old address, goes to /review
   "/period-review", // fork: old address, goes to /review
   "/health", // fork: health tracker
+  "/morning", // fork: the morning page
   "/articles",
   "/review/daily",
   "/review/walk",

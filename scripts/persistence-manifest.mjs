@@ -98,6 +98,10 @@ export const RESTORE_TABLES = [
   "planner_goal_version",
   "planner_metric_week",
   "planner_tuning",
+  // The morning page (migrations/9019_planner_morning.sql): every idea line,
+  // kept as flywheel data, and the days the page was dismissed.
+  "planner_morning_line",
+  "planner_morning_day",
   // Fork-owned health tracker tables (migrations/9010_planner_health.sql). Memo
   // ids by value, no foreign keys, so any order restores. The events table is
   // the append-only history and is restored like the rest.
