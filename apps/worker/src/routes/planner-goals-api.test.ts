@@ -764,6 +764,9 @@ describe("planner goals and weekly review API", () => {
     };
     const text = (value: string) => [{ type: "text", text: value }];
     // The agent's answer to each step, by what the step's message says.
+    // The memo is the agent's reply (shown as it is written); the memo.md
+    // below is an older agent's way, read only when the reply has no memo.
+    const AGENT_MEMO = `# Week 41: October\n\n## Executive Summary\n${"The agent's memo, as its reply. ".repeat(8).trim()}`;
     const reply = (message: string): string =>
       message.includes("Step 1, the opening")
         ? JSON.stringify({
@@ -791,7 +794,9 @@ describe("planner goals and weekly review API", () => {
               })
             : message.startsWith("Goal check step")
               ? '{"flags": []}'
-              : "done";
+              : message.startsWith("Memo step")
+                ? `Here it is:\n\n${AGENT_MEMO}`
+                : "done";
     const answer = (message: string) =>
       events.push(
         { type: "user.message", processed_at: at(), content: text(message) },
@@ -1083,7 +1088,7 @@ describe("planner goals and weekly review API", () => {
     expect(await ask("memo")).toEqual({
       status: "done",
       step: "memo",
-      memo: "# Week 41: October\n\nThe agent's memo.",
+      memo: AGENT_MEMO,
     });
     // Once the memo is read, the session goes on to next week's proposals.
     const steps = events
@@ -1097,7 +1102,7 @@ describe("planner goals and weekly review API", () => {
     expect(await ask("memo")).toEqual({
       status: "done",
       step: "memo",
-      memo: "# Week 41: October\n\nThe agent's memo.",
+      memo: AGENT_MEMO,
     });
     expect(
       events.filter(

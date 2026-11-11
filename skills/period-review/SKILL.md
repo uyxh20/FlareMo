@@ -21,6 +21,6 @@ The opening says what happened in the period claim by claim, each with the owner
 
 ## The memo
 
-Fill the skeleton the memo step carries, exactly, under its rules, with the same standard as the weekly memo: specific days and numbers, the owner's words quoted, a pattern only across named weeks, gaps stated not filled, plain and direct. Check every concrete claim against what you read before you write the file. Then write the memo where the step says, add a few lines about this period to your memory store, and make the memory proposals the step allows (at most three, `read_memories` first, each with the owner's words as the receipt). Reply `done`.
+Fill the skeleton the memo step carries, exactly, under its rules, with the same standard as the weekly memo: specific days and numbers, the owner's words quoted, a pattern only across named weeks, gaps stated not filled, plain and direct. Check every concrete claim against what you read before you give the memo. Then do what the step says, in its order: add a few lines about this period to your memory store, make the memory proposals the step allows (at most three, `read_memories` first, each with the owner's words as the receipt), and give the memo as your last reply (the owner watches it appear as you write it, so write it once, in its final form, and say nothing after it).
 
 A period review proposes no goals or tasks.

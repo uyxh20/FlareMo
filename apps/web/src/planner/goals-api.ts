@@ -479,9 +479,10 @@ const agentStreamPath = (
   session: string,
   today: string,
   mode?: PlannerAiCoachInput["mode"],
+  step?: "memo",
 ) =>
   `${reviewPath(week, `ai/agent/${encodeURIComponent(session)}/stream`)}?${new URLSearchParams(
-    { today, ...(mode ? { mode } : {}) },
+    { today, ...(mode ? { mode } : {}), ...(step ? { step } : {}) },
   )}`;
 
 /** Resolves when `promise` does or after `ms`, whichever comes first. */
@@ -726,8 +727,11 @@ export async function plannerWatchAgent(
 }
 
 /**
- * The summary memo, streamed; or, when the review agent writes it, asked for
- * every few seconds until the agent is done (a few minutes), then shown whole.
+ * The summary memo, streamed; or, when the review agent writes it, shown as
+ * the agent writes it while the page asks every few seconds for the memo kept
+ * (a few minutes). As for the coach, with a session already open the live
+ * stream is opened before the step is sent. The live text only grows: a
+ * message that is not the memo (the agent saying what it reads) shows nothing.
  */
 export async function plannerStreamMemo(
   week: string,
@@ -735,21 +739,59 @@ export async function plannerStreamMemo(
   options: {
     signal?: AbortSignal;
     onText?: (text: string) => void;
-    /** The agent has it: the memo comes whole, in a few minutes. */
+    /** The agent has it: the memo shows as it is written, or whole at the end. */
     onAgent?: () => void;
   },
 ): Promise<PlannerStreamResult> {
+  const onText = options.onText;
+  const live = onText
+    ? (text: string) => {
+        if (text) onText(text);
+      }
+    : null;
+  let watch: PlannerAgentWatch | null =
+    input.session && live
+      ? plannerStartAgentWatch(
+          agentStreamPath(week, input.session, input.today, undefined, "memo"),
+          live,
+          options.signal,
+        )
+      : null;
+  if (watch) await settleWithin(watch.ready, AGENT_READY_MS);
   const result = await plannerReadAiStream(
     reviewPath(week, "ai/memo"),
     input,
     options,
   );
+  if (!result.agent || result.agent !== input.session) {
+    watch?.stop();
+    watch = null;
+  }
   if (!result.agent) return result;
   options.onAgent?.();
+  // A session the memo step started opens its stream now: the memo is
+  // written minutes after the session starts, long after the stream is open.
   const answer = await plannerWaitForAgent(week, result.agent, {
     today: input.today,
     step: "memo",
     signal: options.signal,
+    ...(watch
+      ? { watch }
+      : live
+        ? {
+            watch: plannerStartAgentWatch(
+              agentStreamPath(
+                week,
+                result.agent,
+                input.today,
+                undefined,
+                "memo",
+              ),
+              live,
+              options.signal,
+            ),
+          }
+        : {}),
   });
   if (options.signal?.aborted) return { status: "aborted", text: "" };
   if (answer?.step !== "memo") return { status: "failed", text: "" };

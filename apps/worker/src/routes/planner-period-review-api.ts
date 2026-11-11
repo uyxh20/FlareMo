@@ -39,6 +39,8 @@ import {
   plannerAgentPeriodMemoMessage,
   plannerAgentPeriodOpeningMessage,
   plannerAgentQuestionWithFiles,
+  plannerAgentMemoOf,
+  plannerAgentMemoStreamFilter,
   plannerCoachStreamFilter,
   plannerMemoStreamFilter,
   plannerMergePeriodThemes,
@@ -84,7 +86,7 @@ import {
   plannerLogAgentError,
   plannerOpenAgentStream,
   plannerPollAgent,
-  plannerReadAgentMemo,
+  plannerReadAgentMemoFile,
   plannerSendAgent,
   plannerStartAgent,
 } from "./planner-agent";
@@ -876,6 +878,9 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session/stream`, async (c) => {
     if (mode !== "free" && mode !== "force" && mode !== "chat") {
       return c.json({ error: { message: "Unknown mode." } }, 400);
     }
+    // The memo is shown from its title on; a coach reply without its
+    // control line.
+    const memo = c.req.query("step") === "memo";
     const owner = {
       userId: context.user.id,
       ownerKey: plannerPeriodAgentKey(level, periodStart),
@@ -890,7 +895,8 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session/stream`, async (c) => {
             return null;
           },
         ),
-      () => plannerCoachStreamFilter(mode),
+      () =>
+        memo ? plannerAgentMemoStreamFilter() : plannerCoachStreamFilter(mode),
     );
   } catch (error) {
     return jsonError(c, error);
@@ -978,9 +984,11 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
         advance: advance ?? null,
       });
     }
-    let raw: string | null;
+    // The memo is the agent's reply (shown as it was written); an agent on
+    // the old instructions wrote it to a file and replied "done".
+    let raw: string | null = plannerAgentMemoOf(texts);
     try {
-      raw = await plannerReadAgentMemo(agent, owner.sessionId);
+      raw ??= await plannerReadAgentMemoFile(agent, owner.sessionId);
     } catch (error) {
       plannerLogAgentError("memo", error);
       return c.json<PlannerAgentResponse>({ status: "running" });

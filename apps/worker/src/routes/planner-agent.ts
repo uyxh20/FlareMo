@@ -12,6 +12,7 @@ import {
   plannerAgentBudget,
   plannerAgentCreateRun,
   plannerAgentEndRun,
+  plannerAgentMemoOf,
   plannerAgentIdleRuns,
   plannerAgentMcpServers,
   plannerAgentMonthSpend,
@@ -664,8 +665,37 @@ export async function plannerOpenAgentStream(
   return response.body;
 }
 
-/** The newest memo.md the agent wrote in the session, or null. */
+/**
+ * The memo step's memo when the step is already over (another request read it
+ * and moved the run on): the memo the agent gave as its reply to the newest
+ * memo step, else the newest memo.md it wrote (an agent on the old
+ * instructions). Null when there is neither.
+ */
 export async function plannerReadAgentMemo(
+  agent: PlannerAgent,
+  sessionId: string,
+): Promise<string | null> {
+  const events = await readEvents(agent, sessionId);
+  let step = -1;
+  events.forEach((event, index) => {
+    if (event.type === "user.message" && textOf(event).includes("Memo step:")) {
+      step = index;
+    }
+  });
+  if (step >= 0) {
+    const texts: string[] = [];
+    for (const event of events.slice(step + 1)) {
+      if (event.type === "user.message") break;
+      if (event.type === "agent.message") texts.push(textOf(event));
+    }
+    const memo = plannerAgentMemoOf(texts);
+    if (memo) return memo;
+  }
+  return plannerReadAgentMemoFile(agent, sessionId);
+}
+
+/** The newest memo.md the agent wrote in the session, or null. */
+export async function plannerReadAgentMemoFile(
   agent: PlannerAgent,
   sessionId: string,
 ): Promise<string | null> {
