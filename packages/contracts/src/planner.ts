@@ -675,6 +675,25 @@ export const plannerCommentListResponseSchema = z.object({
   comments: z.array(plannerCommentDtoSchema),
 });
 
+// The diary search box's task hits (fork-owned, planner/task-search.ts).
+export const plannerTaskSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(200),
+});
+
+export const plannerTaskSearchResponseSchema = z.object({
+  tasks: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      status: z.string(),
+      due_at: z.string().nullable(),
+      match: z.enum(["title", "notes", "comment"]),
+      snippet: z.string(),
+      comment_at: z.string().nullable(),
+    }),
+  ),
+});
+
 export const plannerCommentResponseSchema = z.object({
   comment: plannerCommentDtoSchema,
 });
@@ -758,6 +777,9 @@ export type PlannerTaskDetailResponse = z.infer<
 >;
 export type PlannerCommentListResponse = z.infer<
   typeof plannerCommentListResponseSchema
+>;
+export type PlannerTaskSearchResponse = z.infer<
+  typeof plannerTaskSearchResponseSchema
 >;
 export type PlannerCommentResponse = z.infer<
   typeof plannerCommentResponseSchema

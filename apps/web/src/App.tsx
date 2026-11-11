@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowUpIcon,
   CalendarDaysIcon,
@@ -13,7 +13,6 @@ import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 import { SpotlightSearch } from "@/components/spotlight-search";
 import { Button } from "@/components/ui/button";
 import { ShortcutsDialog } from "@/components/workspace/shortcuts-dialog";
-import { TaskSearchResults } from "@/components/workspace/task-search-results";
 import { WorkspaceFilterChips } from "@/components/workspace/workspace-filter-chips";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import {
@@ -31,6 +30,8 @@ import { useWorkspaceShortcuts } from "@/hooks/use-workspace-shortcuts";
 import { useI18n } from "@/i18n";
 import { focusComposerInput } from "@/lib/composer-focus";
 import { PlannerAskBubble } from "@/planner/ask-bubble"; // fork: Ask my diary
+import { plannerTaskParamFromId } from "@/planner/panel-model"; // fork: task search
+import { PlannerTaskSearchResults } from "@/planner/task-search-results"; // fork: task search
 import { AppRoutes } from "@/router-tree";
 import { indexRoute, registerWorkspaceComponent } from "@/routes/index-route";
 
@@ -52,6 +53,7 @@ registerWorkspaceComponent(FlareMoApp);
 
 export function FlareMoApp() {
   const { t } = useI18n();
+  const navigate = useNavigate(); // fork: a task hit opens the cockpit
   const search = indexRoute.useSearch();
   const {
     activeTag,
@@ -111,7 +113,6 @@ export function FlareMoApp() {
     isReader,
     isSemanticSearch,
     keywordSearch,
-    matchingTasks,
     memosQuery,
     onThisDayQuery,
     semanticEnabled,
@@ -332,8 +333,9 @@ export function FlareMoApp() {
                   {t("search.semanticDegraded")}
                 </p>
               ) : null}
-              {keywordSearch && matchingTasks.length > 0 && (
-                <TaskSearchResults tasks={matchingTasks} />
+              {/* fork: task search reads comments and opens the cockpit */}
+              {keywordSearch && (
+                <PlannerTaskSearchResults query={searchQuery} />
               )}
               {showOnThisDayBanner && (
                 <Link
@@ -475,6 +477,12 @@ export function FlareMoApp() {
         onQueryChange={setQuery}
         onNewMemo={focusComposerInput}
         tasks={taskSearchQuery.data?.tasks ?? []}
+        onSelectTask={(task) =>
+          void navigate({
+            to: "/cockpit",
+            search: { task: plannerTaskParamFromId(task.id) },
+          })
+        }
         memos={displayedMemos}
         semanticMode={semanticMode}
         onToggleSemantic={semanticEnabled ? toggleSemantic : undefined}

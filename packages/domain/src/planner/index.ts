@@ -49,3 +49,4 @@ export type {
 } from "./shared";
 export * from "./task-change";
 export * from "./task-detail";
+export * from "./task-search";
