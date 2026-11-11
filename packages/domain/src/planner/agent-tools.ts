@@ -66,10 +66,12 @@ import {
 import {
   plannerAskAttention,
   plannerEntrySentences,
+  plannerHealthKindOf,
   plannerMentionsHealth,
   plannerSentenceAboutTask,
   plannerSoundsDone,
   plannerSpanStart,
+  plannerTrainingVariantOf,
 } from "./ask-starters";
 import { plannerBoardDoneDaysMax, plannerReadBoard } from "./board";
 import {
@@ -1420,43 +1422,82 @@ const handlers: Handlers = {
       )
       .orderBy(asc(healthEntry.day))
       .all();
-    const mentions = new Map<string, string[]>();
+    type Mention = {
+      entry: string;
+      kind: "training" | "breath" | "night_out";
+      /** A cardio line meets only a cardio row: a gym row is another session. */
+      variant: string | null;
+      sentence: string;
+    };
+    const mentions = new Map<string, Mention[]>();
     for (const entry of entries) {
       const day = healthLocalMoment(entry.at).day;
       for (const sentence of plannerEntrySentences(entry.content)) {
         if (!plannerMentionsHealth(sentence)) continue;
+        const kind = plannerHealthKindOf(sentence);
         const list = mentions.get(day) ?? [];
-        list.push(
-          `    - entry ${entry.id} | ${JSON.stringify(oneLine(sentence, 280))}`,
-        );
+        list.push({
+          entry: entry.id,
+          kind,
+          variant:
+            kind === "training" ? plannerTrainingVariantOf(sentence) : null,
+          sentence,
+        });
         mentions.set(day, list);
       }
     }
+    const kindName = (kind: string) => kind.replace("_", " ");
     const out: string[] = [];
+    let missing = 0;
     for (let day = from; day <= today; day = plannerAddDays(day, 1)) {
       const logged = rows.filter((row) => row.day === day);
       const said = mentions.get(day) ?? [];
       if (logged.length === 0 && said.length === 0) continue;
+      const fits = (row: (typeof rows)[number], m: Mention) =>
+        row.kind === m.kind && (!m.variant || row.variant === m.variant);
+      const unmatched = said.filter(
+        (m) =>
+          !logged.some((row) => fits(row, m)) &&
+          !rows.some((row) => row.memoId === m.entry && fits(row, m)),
+      );
+      missing += unmatched.length;
       const mark =
         logged.length === 0
           ? " | entries mention it, no row"
           : said.length === 0
             ? " | rows, no entry mentions it"
-            : "";
+            : unmatched.length
+              ? " | an entry mentions a session with no row"
+              : "";
       out.push(
         `## ${day}${mark}`,
         ...logged.map(
           (row) =>
-            `  - row ${row.id} | ${row.kind}${row.variant ? ` (${row.variant})` : ""}${row.minutes ? `, ${row.minutes} min` : ""}${row.homeAt ? `, home ${row.homeAt}` : ""} | ${row.source}${row.edited ? ", edited by the owner" : ""}`,
+            `  - row ${row.id} | ${row.kind}${row.variant ? ` (${row.variant})` : ""}${row.minutes ? `, ${row.minutes} min` : ""}${row.homeAt ? `, home ${row.homeAt}` : ""} | ${row.source}${row.memoId ? ` from entry ${row.memoId}` : ""}${row.edited ? ", edited by the owner" : ""}`,
         ),
-        ...said,
+        ...said.map((m) => {
+          const name = `${kindName(m.kind)}${m.variant ? ` (${m.variant})` : ""}`;
+          const fromThis = rows.find(
+            (row) => row.memoId === m.entry && fits(row, m),
+          );
+          const same = logged.filter((row) => fits(row, m));
+          const other = logged.filter(
+            (row) => row.kind === m.kind && !fits(row, m),
+          );
+          const status = fromThis
+            ? `${name}: logged from this entry${fromThis.day === day ? "" : ` on ${fromThis.day}`}`
+            : same.length
+              ? `${name}: the day has a ${name} row; check it is this session`
+              : `${name}: NO ${name} row that day${other.length ? ` (it has ${other.map((row) => row.variant ?? kindName(row.kind)).join(", ")}, another session)` : ""}`;
+          return `    - entry ${m.entry} | ${JSON.stringify(oneLine(m.sentence, 280))} | ${status}`;
+        }),
       );
     }
     return [
-      `The health log next to the diary, ${from} to today ${today}. An entry's mention may be about another day ('yesterday'), a plan or a skip:`,
+      `The health log next to the diary, ${from} to today ${today}. Each entry line says whether the log has a row of its kind that day. ${missing} ${missing === 1 ? "line has" : "lines have"} none. An entry's mention may be about another day ('yesterday'), a plan or a skip, so read the line:`,
       ...(out.length ? out : ["(nothing logged or mentioned)"]),
       "",
-      "Propose with propose_health_change only what the diary clearly shows: add a missing row (day, kind, variant, minutes), fix a row's minutes, variant or day, or remove a row the diary contradicts ('skipped the gym'). Leave a row the owner edited unless the diary plainly says otherwise. Never add a row a tag or the reader already logged for that day and kind.",
+      `Propose with propose_health_change what the diary shows: add a row for a session or night the log lacks (action add, day, kind, and variant and minutes when the line gives them), fix a row's minutes, variant or day, or remove a row the diary contradicts ('skipped the gym'). A line marked NO ... row that describes a session that happened (a run, a gym session, breathwork, a night out) is the main thing to add. Training variants: ${healthTrainingVariants.join(", ")} (a run, ride, swim or zone 2 is cardio); breathwork: ${healthBreathVariants.join(", ")}. A day can hold two training sessions of different variants. Do not add a row the log already holds for that day, kind and variant, and leave a row the owner edited unless the diary plainly says otherwise.`,
     ].join("\n");
   },
 

@@ -289,9 +289,9 @@ answer is the usual editable change card; none of them files a single new task.
 | Mark what I already did | `find_done_tasks` | Open tasks a recent entry says are finished, moved to Done. The row shows the entry and its words (`propose_task_change` takes `from_entry_id` and `from_quote`, checked word for word, stored as `change.source`). |
 | Replan my week | `find_replan_tasks` | Every overdue task and every card untouched in Doing for 7+ days: a new due date, back to Backlog, or drop. |
 | Tidy my backlog | `find_stale_backlog` | Backlog cards untouched 3+ weeks, oldest first: drop, schedule (column or date), or keep (untick). |
-| What did my health log miss | `compare_health` | The health log next to the entries' health lines, day by day: add a missing row, fix one, remove one the diary contradicts. A row a tag or the reader already logged is not added again. |
+| What did my health log miss | `compare_health` | The health log next to the entries' health lines, day by day. Each line says whether the log covers it: "logged from this entry" (the diary reader's row, whatever its day), "the day has a … row", or "NO training (cardio) row that day". A run is a cardio session, so a gym row the same day does not cover it. The card adds a missing row, fixes one, or removes one the diary contradicts. A row the log already holds for that day, kind and variant is not added again. |
 
-Finished and health lines are found by fixed word rules
+Finished and health lines are found by fixed word rules (a past form meets the title's verb: "sent" meets "Send", "paid" meets "Pay"; half the title's words must be in the line)
 (`packages/domain/src/planner/ask-starters.ts`: `plannerSoundsDone`,
 `plannerMentionsHealth`, `plannerSentenceAboutTask`); the agent judges them.
 
