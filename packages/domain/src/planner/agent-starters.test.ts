@@ -96,9 +96,13 @@ describe("Ask my diary's starter buttons", () => {
   beforeEach(async () => {
     await rt.reset();
     await rt.database.batch(
-      ["memos", "memo_tags", "memo_revisions", "embedding_tasks"].map((table) =>
-        rt.database.prepare(`DELETE FROM ${table}`),
-      ),
+      [
+        "memos",
+        "memo_tags",
+        "memo_revisions",
+        "embedding_tasks",
+        "health_entry",
+      ].map((table) => rt.database.prepare(`DELETE FROM ${table}`)),
     );
   });
 
@@ -227,6 +231,47 @@ describe("Ask my diary's starter buttons", () => {
     );
   });
 
+  it("says per entry line whether the log has a row of its kind", async () => {
+    await plannerTestRows(
+      rt.database,
+      `INSERT INTO health_entry (id, user_id, kind, day, variant, minutes, bender, needs_check, source, memo_id, dismissed, edited, created_at, updated_at)
+       VALUES ('h-breath', ?, 'breath', '2026-11-10', 'wim_hof', 15, 0, 0, 'memo', NULL, 0, 0, ?, ?),
+              ('h-gym', ?, 'training', '2026-11-09', 'gym', 60, 0, 0, 'manual', NULL, 0, 0, ?, ?)`,
+      rt.user.id,
+      NOW.toISOString(),
+      NOW.toISOString(),
+      rt.user.id,
+      NOW.toISOString(),
+      NOW.toISOString(),
+    );
+    await entry(
+      "#wimhof 15 min. Went for a 30-minute run by the river.",
+      "2026-11-10T07:00:00.000Z",
+    );
+    await entry("Ran 5k after the gym.", "2026-11-09T18:00:00.000Z");
+    await entry("Skipped the gym, went for a run.", "2026-11-09T20:00:00.000Z");
+    const text = await call("compare_health", {});
+    expect(text).toMatch(
+      /## 2026-11-10 \| an entry mentions a session with no row\n/,
+    );
+    expect(text).toMatch(
+      /"Went for a 30-minute run by the river\." \| training \(cardio\): NO training \(cardio\) row that day/,
+    );
+    expect(text).toMatch(
+      /"Ran 5k after the gym\." \| training \(cardio\): logged from this entry on 2026-11-11/,
+    );
+    // A run on a day with only a gym row is another session.
+    expect(text).toMatch(
+      /"Skipped the gym, went for a run\." \| training \(cardio\): NO training \(cardio\) row that day \(it has gym, another session\)/,
+    );
+    // The diary reader's own row for the entry counts, whatever its day.
+    expect(text).toMatch(
+      /"#wimhof 15 min\." \| breath: logged from this entry/,
+    );
+    expect(text).toContain("2 lines have none");
+    expect(text).toContain("is cardio");
+  });
+
   it("ties a long diary line to a short task title", () => {
     expect(
       plannerSentenceAboutTask(
@@ -234,6 +279,15 @@ describe("Ask my diary's starter buttons", () => {
         "Call Marta about the outline",
       ),
     ).toBe(true);
+    for (const [line, title] of [
+      ["Finally sent the invoice to Acme.", "Send invoice to Acme"],
+      ["Paid the plumber this morning.", "Pay the plumber"],
+      ["Bought the present for Lea.", "Buy birthday present for Lea"],
+      ["Tidied the garage at last.", "Tidy garage"],
+      ["Wrote the cover letter.", "Write cover letter"],
+    ]) {
+      expect(plannerSentenceAboutTask(line ?? "", title ?? "")).toBe(true);
+    }
     expect(
       plannerSentenceAboutTask(
         "Called the bank back.",

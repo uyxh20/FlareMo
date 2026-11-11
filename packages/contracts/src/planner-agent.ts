@@ -659,7 +659,7 @@ export const plannerAgentToolInputs = {
         .max(32)
         .optional()
         .describe(
-          "Training: crossfit, push, pull, back, chest, legs, upper, cardio or gym. Breathwork: wim_hof or meditation. Not for a night out.",
+          "Training: crossfit, push, pull, back, chest, legs, upper, cardio or gym (a run, ride, swim or zone 2 is cardio). Breathwork: wim_hof or meditation. Not for a night out.",
         ),
       minutes: z
         .number()
@@ -829,7 +829,7 @@ export const plannerAgentToolDescriptions: Record<
   find_stale_backlog:
     "The Backlog cards untouched for some weeks (3 unless you say), oldest first, with their age, due day and goal. Only in an Ask chat. Propose one row per card with propose_task_change: schedule it (a due_at, or column 'todo') or drop it (dropped true). The owner unticks a row to keep the card as it is.",
   compare_health:
-    "The health log next to the diary, day by day: each health row (with its id, for propose_health_change) and each entry line that mentions training, breathwork or a night out (with its entry id), and a mark on days where one has no match in the other. Fixed word rules: judge each. Only in an Ask chat.",
+    "The health log next to the diary, day by day: each health row (with its id, for propose_health_change) and each entry line that mentions training, breathwork or a night out (with its entry id), each line saying whether the log has a row of its kind that day ('NO training row that day' is a session to add if it happened). Fixed word rules: judge each. Only in an Ask chat.",
   read_scorecard:
     "How your work has landed with the owner, week by week: how many of your proposals were seen, accepted and kept for seven days, how often the owner edited what you drafted against what they wrote themselves, tasks done by their due day and week goals met for your proposals against the owner's own, and your standing instructions from the owner. Numbers only. A share over fewer than 10 cases says too few.",
   propose_memory:

@@ -108,7 +108,7 @@ export function plannerEntrySentences(content: string): string[] {
 
 /** Words that tell of something finished, English and French. */
 const DONE =
-  /\b(?:done|did|finished|finally|completed|sent|submitted|booked|paid|called|rang|emailed|fixed|renewed|bought|returned|signed|cancelled|canceled|delivered|shipped|wrote|cleaned|sorted|handed in|got back|fait|fini|terminé|envoyé|payé|réservé|appelé|acheté)\b/i;
+  /\b(?:done|did|finished|finally|completed|sent|submitted|booked|paid|called|rang|emailed|fixed|renewed|bought|returned|signed|cancelled|canceled|delivered|shipped|wrote|cleaned|sorted|handed in|got back|went|met|bought|ordered|posted|replied|answered|applied|registered|uploaded|published|sold|moved|picked up|dropped off|tidied|repaired|replaced|returned|visited|fait|fini|terminé|envoyé|payé|réservé|appelé|acheté)\b/i;
 /** ...unless the same sentence says it is still to come. */
 const NOT_DONE =
   /\b(?:need to|have to|must|should|will|going to|gonna|tomorrow|not yet|still|didn't|did not|haven't|have not|forgot|todo|to do|il faut|je dois)\b/i;
@@ -127,19 +127,87 @@ export function plannerMentionsHealth(sentence: string): boolean {
   return HEALTH.test(sentence);
 }
 
+const BREATH =
+  /(?:#(?:wimhof|wh|meditat\w*)\b|\b(?:wim ?-?hof|breathwork|breath work|breathing|meditat\w*)\b)/i;
+const NIGHT =
+  /(?:#out\b|\b(?:went out|night out|drinks|bar|pub|club|party|got home|came home|home at|hangover|hungover)\b)/i;
+
+const CARDIO =
+  /\b(?:run|ran|running|jog|jogged|jogging|swim|swam|swimming|cycling|cycled|bike ride|zone ?2|cardio)\b/i;
+
+/** The training variant a line names, when it names a cardio session. */
+export function plannerTrainingVariantOf(sentence: string): string | null {
+  return CARDIO.test(sentence) ? "cardio" : null;
+}
+
+/** Which health kind a mention line is about, by fixed word rules. */
+export function plannerHealthKindOf(
+  sentence: string,
+): "training" | "breath" | "night_out" {
+  if (BREATH.test(sentence)) return "breath";
+  if (
+    NIGHT.test(sentence) &&
+    !/\b(?:gym|run|ran|workout|training)\b/i.test(sentence)
+  ) {
+    return "night_out";
+  }
+  return "training";
+}
+
 /** The day `days` days before today, inclusive span start. */
 export function plannerSpanStart(today: string, days: number): string {
   return plannerAddDays(today, -(days - 1));
 }
 
+/** Past forms a diary uses for a task's verb: "sent" meets "send". */
+const IRREGULAR: Record<string, string> = {
+  sent: "send",
+  paid: "pay",
+  bought: "buy",
+  wrote: "write",
+  written: "write",
+  rang: "call",
+  met: "meet",
+  did: "do",
+  done: "do",
+  took: "take",
+  taken: "take",
+  made: "make",
+  got: "get",
+  went: "go",
+  gave: "give",
+  given: "give",
+  sold: "sell",
+  told: "tell",
+  found: "find",
+  spoke: "speak",
+  ran: "run",
+  built: "build",
+  left: "leave",
+  brought: "bring",
+  kept: "keep",
+  chose: "choose",
+  drove: "drive",
+  fed: "feed",
+  hung: "hang",
+  lent: "lend",
+  sought: "seek",
+  taught: "teach",
+  thought: "think",
+  caught: "catch",
+  understood: "understand",
+};
+
 /** A word's rough stem, so "called" meets "call" and "invoices" meets "invoice". */
 function stem(word: string): string {
-  return word.replace(/(?:ing|ed|es|s)$/, "") || word;
+  const base = IRREGULAR[word] ?? word;
+  if (/[^aeiou]ie[sd]$/.test(base)) return `${base.slice(0, -3)}y`;
+  return base.replace(/(?:ing|ed|es|s|e)$/, "") || base;
 }
 
 /**
- * Whether a sentence is about a task: most of the title's content words (60%,
- * and two when the title has two or more) are in it, by rough stem. Measured
+ * Whether a sentence is about a task: half or more of the title's content
+ * words (and two when the title has two or more) are in it, by rough stem. Measured
  * against the title, not the sentence, since a diary line says much more.
  */
 export function plannerSentenceAboutTask(
@@ -152,6 +220,6 @@ export function plannerSentenceAboutTask(
   const shared = titleWords.filter((word) => said.has(word)).length;
   return (
     shared >= Math.min(2, titleWords.length) &&
-    shared / titleWords.length >= 0.6
+    shared / titleWords.length >= 0.5
   );
 }
