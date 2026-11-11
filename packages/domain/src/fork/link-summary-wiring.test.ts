@@ -24,14 +24,10 @@ describe("the link summary hook-ins", () => {
     );
   });
 
-  it("memos-link-metadata.ts exports its address check", () => {
-    const text = read("apps/worker/src/memos-link-metadata.ts");
-    expect(text).toMatch(/^export function validateExternalUrl\(/m);
-  });
-
-  it("memory dreaming skips link summaries", () => {
-    const text = read("packages/domain/src/memory/consolidation.ts");
-    expect(text).toMatch(/from "\.\.\/fork\/link-summary"/);
-    expect(text).toContain("ne(memos.source, FORK_LINK_SUMMARY_SOURCE)");
+  it("the link reader checks addresses with upstream's outbound check", () => {
+    const text = read("apps/worker/src/fork/link-read.ts");
+    expect(text).toContain(
+      "validateOutboundUrl(value, { allowFragment: true })",
+    );
   });
 });

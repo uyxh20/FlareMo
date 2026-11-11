@@ -41,7 +41,6 @@ const context = (
   childGoals: [],
   northStar: null,
   previous: null,
-  memories: { created: 0, revised: 0, createdLines: [], revisedLines: [] },
   raw: [
     {
       source: "memo",

@@ -15,6 +15,10 @@ import {
 } from "@/api";
 import { QueryErrorState } from "@/components/query-error-state";
 import {
+  SettingsRow,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -40,7 +44,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/lib/error";
-import { SettingsRow, SettingsSectionGroup } from "./apple-settings-ui";
+import { queryKeys } from "@/lib/query-keys";
 
 export function EmailSettingsCard() {
   const { t } = useI18n();
@@ -56,7 +60,7 @@ export function EmailSettingsCard() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const settingsQuery = useQuery({
-    queryKey: ["email-settings"],
+    queryKey: queryKeys.emailSettings,
     queryFn: getEmailSettings,
   });
 
@@ -81,7 +85,7 @@ export function EmailSettingsCard() {
     try {
       await task();
       const value = await cache.fetchQuery({
-        queryKey: ["email-settings"],
+        queryKey: queryKeys.emailSettings,
         queryFn: getEmailSettings,
         staleTime: 0,
       });
@@ -360,7 +364,7 @@ export function OauthSettingsCard() {
   );
 
   const settingsQuery = useQuery({
-    queryKey: ["oauth-settings"],
+    queryKey: queryKeys.oauthSettings,
     queryFn: getOauthSettings,
   });
 
@@ -379,7 +383,7 @@ export function OauthSettingsCard() {
     try {
       await task();
       const value = await cache.fetchQuery({
-        queryKey: ["oauth-settings"],
+        queryKey: queryKeys.oauthSettings,
         queryFn: getOauthSettings,
         staleTime: 0,
       });

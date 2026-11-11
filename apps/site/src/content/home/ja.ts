@@ -2,16 +2,22 @@ import type { HomeContent } from "../copy";
 
 export const JA_HOME: HomeContent = {
   heroEyebrow: "オープンソース · Cloudflare ネイティブ · ナレッジ管理",
-  heroTitleLine1: "サーバー不要、一生モノの所有権。",
+  heroTitleLine1: "サーバーは要りません。",
   heroTitleLine2: "考えとともに育つ AI セカンドブレイン。",
   heroSubtitle:
-    "シンプルに、しかし深く。静かに、しかし妥協なく。Cloudflare のエッジで自由に書き、ノートがタスクと記事、知識ベースへ自然に育ち、すべての AI エージェントが共有する長期記憶にもなります。",
+    "Cloudflare のエッジで開いてすぐ書く。ノートはタスクと記事、検索できる知識ベースへ自然に育ち、AI エージェントも MCP で同じノートを読み書きできます。",
   primaryCta: "デプロイガイドを読む",
   secondaryCta: "GitHub ソースコード",
-  statMemos: "約250万件のメモ",
-  statPhotos: "約1万枚の圧縮画像 · 転送料0円",
-  statServers: "24時間超低遅延",
-  statUptime: "マルチリージョン冗長化",
+  heroFacts: [
+    { label: "D1 ストレージ", value: "5 GB", detail: "約 250 万件のテキスト" },
+    {
+      label: "R2 ストレージ",
+      value: "10 GB",
+      detail: "約 1 万枚の圧縮画像 · 転送料 0 円",
+    },
+    { label: "エッジ拠点", value: "300+", detail: "拠点、100ms 以内" },
+    { label: "デプロイ時間", value: "5 分", detail: "クローンから公開まで" },
+  ],
   featuresBadge: "コア機能",
   featuresHeading: "FlareMoを選ぶ理由",
   featuresSubtitle:
@@ -20,12 +26,12 @@ export const JA_HOME: HomeContent = {
     {
       title: "マルチリージョンでデータを守る",
       description:
-        "メモはCloudflare D1およびR2ストレージにマルチリージョン冗長化で保存。ディスク障害や停電の心配は不要です。",
+        "メモは Cloudflare D1 と R2 にマルチリージョンで複製して保存します。ディスク交換や移行の手間はありません。",
     },
     {
-      title: "無料枠は正直な数字で",
+      title: "無料枠と明確な上限",
       description:
-        "無料枠で約250万件のメモと1万枚の写真を保存可能。R2は下り転送料金が無料のため、急な請求の心配もありません。",
+        "無料枠で約250万件のメモと1万枚の写真を保存できます。R2 は下り転送料金が無料で、無料枠内なら請求は発生しません。",
     },
     {
       title: "オフライン対応 ＆ PWA",
@@ -33,9 +39,9 @@ export const JA_HOME: HomeContent = {
         "インストール可能なPWA。通信圏外でもローカルに即時保存され、オンライン復帰時に安全に同期されます。",
     },
     {
-      title: "AIネイティブな長期記憶",
+      title: "AIがあなたのノートを読み書き",
       description:
-        "/memory/mcp エンドポイントにより、ClaudeやCursorなどのAIがあなたの好みを長期記憶として自律的に読み書きできます。",
+        "MCP エンドポイントにより、Claude や Cursor などの AI があなたのノートを検索・読み取り・書き込みできます。独立した AI メモリは作りません。",
     },
     {
       title: "共有のためのチームスペース",
@@ -59,13 +65,13 @@ export const JA_HOME: HomeContent = {
   comparisonRows: [
     {
       label: "データの保存場所",
-      cloudflare: "Cloudflare エンタープライズ分散ストレージ",
+      cloudflare: "Cloudflare のマルチリージョン分散ストレージ",
       nas: "自宅内の単一またはRAIDハードディスク",
       vps: "単一クラウドベンダーの仮想ディスク",
     },
     {
       label: "ハードウェア障害リスク",
-      cloudflare: "自動フェイルオーバー、故障ストレスゼロ",
+      cloudflare: "マルチリージョンに複製、ディスク交換は不要",
       nas: "HDD故障や停電で全データ消失のリスク",
       vps: "ホスト障害や設定ミスによる消失リスク",
     },
@@ -77,7 +83,7 @@ export const JA_HOME: HomeContent = {
     },
     {
       label: "日常のメンテナンス",
-      cloudflare: "ゼロ：OS更新なし、Docker管理なし",
+      cloudflare: "OS パッチも Docker 運用も不要",
       nas: "OSアップデート、SMART監視が必要",
       vps: "セキュリティパッチ、デーモン監視が必要",
     },
@@ -89,15 +95,14 @@ export const JA_HOME: HomeContent = {
     },
     {
       label: "継続コスト",
-      cloudflare: "0円（無料枠を永久に活用）",
+      cloudflare: "無料枠内は 0 円（上限あり）",
       nas: "高額な初期ハードウェア代＋電気代",
       vps: "毎月のサーバー代と帯域費用の請求",
     },
   ],
-  screenshotsHeading: "洗練されたUI、今すぐ体験",
+  screenshotsHeading: "中をのぞいてみる",
   screenshotsSubtitle:
-    "ライトモード、ダークモード、モバイル対応。すべての機能が本番利用可能です。",
-  faqBadge: "チェックポイント",
+    "ライト・ダーク・スマートフォン。すべて出荷中のアプリの実画面です。",
   faqHeading: "よくある質問",
   faqItems: [
     {
@@ -114,14 +119,13 @@ export const JA_HOME: HomeContent = {
     },
     {
       q: "自分のスクリプトやツールをつなげられる？",
-      a: "はい。失効可能な個人アクセストークンを備えたオープン API で自動化を接続できます。AI ワークフローは内蔵 CLI と MCP エンドポイントから同じ Agent Memory を読み書きできます。対応範囲は互換性マトリクスに記載しています。",
+      a: "はい。失効可能な個人アクセストークンを備えたオープン API で自動化を接続できます。AI ワークフローは `/mcp` のノートツールと `flaremo-notes` Skill からノートを直接読み書きできます。対応範囲は互換性マトリクスに記載しています。",
     },
     {
       q: "個人利用とチーム利用の違いは？",
       a: "個人利用時は静かな1人用ノートとして動作し、チームモードを有効化すると招待リンクでメンバーを追加できます。ノートは非公開（自分のみ）、チーム可視（チームメンバーは閲覧・コメント可能）、公開の3段階から選べます。",
     },
   ],
-  ctaBadge: "今すぐ始める",
   ctaHeading: "知識の拠点を、自分のドメインに。",
   ctaSubtitle:
     "サーバー不要、クレジットカード不要。無料のCloudflareアカウントで5分でデプロイ。",

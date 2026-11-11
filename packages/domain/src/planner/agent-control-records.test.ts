@@ -1,7 +1,6 @@
 import { plannerAgentEditBaseline } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { healthRescan } from "../health/sync";
-import { createMemory } from "../memory";
 import { createMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import {
@@ -30,7 +29,7 @@ import {
   plannerTestRuntime,
 } from "./test-support";
 
-// The agent correcting or forgetting a memory, and fixing or adding a health
+// The agent fixing or adding a health
 // row, and a weekly goal added or rewritten (docs/fork-general-agent.md): proposed in an Ask chat, written through
 // the owner's own code on accept, stale-checked, and put back by Undo.
 
@@ -60,37 +59,6 @@ const undo = (id: string) =>
     id,
     today: TODAY,
   });
-
-async function memory(content: string) {
-  const made = await createMemory(
-    rt.db,
-    rt.user,
-    { type: "agent", name: "test" },
-    {
-      content,
-      type: "semantic",
-      kind: "fact",
-      scopeType: "global",
-      scopeKey: null,
-      tier: "normal",
-      importance: 50,
-      confidence: 60,
-    },
-  );
-  return made.memory.id;
-}
-
-const memoryRow = async (id: string) =>
-  (
-    await plannerTestRows<{
-      content: string;
-      status: string;
-      verification: string;
-    }>(
-      rt.database,
-      `SELECT content, status, verification FROM memory_items WHERE id = '${id}'`,
-    )
-  )[0];
 
 async function seedHealth(id: string, patch: Record<string, unknown> = {}) {
   const row = {
@@ -153,16 +121,9 @@ describe("the agent correcting records", () => {
   beforeEach(async () => {
     await rt.reset();
     await rt.database.batch(
-      [
-        "memory_events",
-        "memory_revisions",
-        "memory_relations",
-        "memory_evidence",
-        "memory_items",
-        "embedding_tasks",
-        "health_entry_event",
-        "health_entry",
-      ].map((table) => rt.database.prepare(`DELETE FROM ${table}`)),
+      ["embedding_tasks", "health_entry_event", "health_entry"].map((table) =>
+        rt.database.prepare(`DELETE FROM ${table}`),
+      ),
     );
     await plannerAgentCreateRun(rt.db, {
       userId: rt.user.id,
@@ -171,143 +132,6 @@ describe("the agent correcting records", () => {
       budgetCents: 500,
       step: "ask",
       now: NOW,
-    });
-  });
-
-  describe("memory", () => {
-    it("corrects a memory on accept, and Undo puts the words back", async () => {
-      const id = await memory("Lives in Hull.");
-      await expect(
-        call("propose_memory_change", {
-          memory_id: id,
-          action: "correct",
-          content: "  Lives in   Hull. ",
-          why: "x",
-        }),
-      ).rejects.toThrow(/already reads like that/);
-      await call("propose_memory_change", {
-        memory_id: id,
-        action: "correct",
-        content: "Lives in Leeds.",
-        why: "Moved.",
-      });
-      const [proposal] = await actions();
-      expect(proposal?.kind).toBe("memory_change");
-      expect(proposal?.change).toMatchObject({
-        was: { content: "Lives in Hull.", status: "active" },
-        label: "Lives in Hull.",
-      });
-      expect((await memoryRow(id))?.content).toBe("Lives in Hull.");
-
-      const accepted = await accept(proposal?.id ?? "");
-      expect(accepted.landed_id).toBe(id);
-      expect(await memoryRow(id)).toMatchObject({
-        content: "Lives in Leeds.",
-        verification: "confirmed",
-      });
-
-      await undo(proposal?.id ?? "");
-      // Undo puts the words back; no owner function lowers verification, so the
-      // memory stays marked as confirmed (the card says so).
-      expect(await memoryRow(id)).toMatchObject({
-        content: "Lives in Hull.",
-        verification: "confirmed",
-      });
-    });
-
-    it("refuses a stale correction, and an Undo after the words changed again", async () => {
-      const id = await memory("Lives in Hull.");
-      await call("propose_memory_change", {
-        memory_id: id,
-        action: "correct",
-        content: "Lives in Leeds.",
-        why: "x",
-      });
-      const [proposal] = await actions();
-      await plannerTestRun(
-        rt.database,
-        "UPDATE memory_items SET content = 'Lives in York.' WHERE id = ?",
-        id,
-      );
-      await expect(accept(proposal?.id ?? "")).rejects.toThrow(
-        PLANNER_AGENT_STALE,
-      );
-      await plannerTestRun(
-        rt.database,
-        "UPDATE memory_items SET content = 'Lives in Hull.' WHERE id = ?",
-        id,
-      );
-      await accept(proposal?.id ?? "");
-      await plannerTestRun(
-        rt.database,
-        "UPDATE memory_items SET content = 'Lives in Bath.' WHERE id = ?",
-        id,
-      );
-      await expect(undo(proposal?.id ?? "")).rejects.toThrow(/changed since/);
-    });
-
-    it("refuses a correction that would twin another memory", async () => {
-      const id = await memory("Lives in Hull.");
-      await memory("Lives in Leeds.");
-      await call("propose_memory_change", {
-        memory_id: id,
-        action: "correct",
-        content: "Lives in Leeds.",
-        why: "x",
-      });
-      const [proposal] = await actions();
-      await expect(accept(proposal?.id ?? "")).rejects.toThrow(
-        /already exists/,
-      );
-      expect((await memoryRow(id))?.content).toBe("Lives in Hull.");
-      expect((await actions())[0]?.state).toBe("open");
-    });
-
-    it("forgets a memory by archiving it, and Undo restores it", async () => {
-      const id = await memory("Hates mornings.");
-      await call("propose_memory_change", {
-        memory_id: id,
-        action: "forget",
-        why: "Not true any more.",
-      });
-      const [proposal] = await actions();
-      await accept(proposal?.id ?? "");
-      expect((await memoryRow(id))?.status).toBe("archived");
-      await undo(proposal?.id ?? "");
-      expect((await memoryRow(id))?.status).toBe("active");
-      await expect(
-        call("propose_memory_change", {
-          memory_id: "memories/none",
-          action: "forget",
-          why: "x",
-        }),
-      ).rejects.toThrow(/No memory/);
-    });
-
-    it("will not propose for an archived memory, and refuses an Undo of a forget that was restored by hand", async () => {
-      const id = await memory("Hates mornings.");
-      await call("propose_memory_change", {
-        memory_id: id,
-        action: "forget",
-        why: "x",
-      });
-      const [proposal] = await actions();
-      await accept(proposal?.id ?? "");
-      await expect(
-        call("propose_memory_change", {
-          memory_id: id,
-          action: "forget",
-          why: "x",
-        }),
-      ).rejects.toThrow(/archived/);
-      await plannerTestRun(
-        rt.database,
-        "UPDATE memory_items SET status = 'active' WHERE id = ?",
-        id,
-      );
-      await expect(undo(proposal?.id ?? "")).rejects.toThrow(
-        /not archived any more/,
-      );
     });
   });
 

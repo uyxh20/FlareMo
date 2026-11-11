@@ -4,7 +4,6 @@ import {
 } from "@flaremo/contracts";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ConflictError, ValidationError } from "../errors";
-import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import { plannerReadBoard } from "./board";
@@ -362,7 +361,7 @@ describe("the weekly review", () => {
       expect(context.diary[2]?.text).toMatch(/^Long talk with Zeta\. .*…$/);
     });
 
-    it("cuts the week at local midnight and reads the plan week's goals, health and memories", async () => {
+    it("cuts the week at local midnight and reads the plan week's goals and health", async () => {
       // Week 44, 26 Oct to 1 Nov 2026 (Copenhagen is UTC+1 after 25 Oct),
       // plans week 45 in November.
       const W44 = "2026-10-26";
@@ -402,36 +401,6 @@ describe("the weekly review", () => {
         "2026-10-27T18:00:00.000Z",
         "2026-10-27T18:00:00.000Z",
       );
-      const memory = (content: string) =>
-        createMemory(
-          rt.db,
-          rt.user,
-          { type: "user" },
-          {
-            content,
-            type: "semantic",
-            kind: "preference",
-            scopeType: "global",
-            scopeKey: null,
-            tier: "normal",
-            importance: 60,
-            confidence: 80,
-          },
-        );
-      for (const [content, at] of [
-        ["Trains best in the morning", "2026-10-28T09:00:00.000Z"],
-        ["Likes long walks", "2026-10-01T09:00:00.000Z"],
-      ] as const) {
-        await memory(content);
-        await plannerTestRun(
-          rt.database,
-          "UPDATE memory_items SET created_at = ?, updated_at = ? WHERE content = ?",
-          at,
-          at,
-          content,
-        );
-      }
-
       const context = await plannerReadReviewContext(rt.db, {
         userId: rt.user.id,
         ownerName: "Anon",
@@ -451,9 +420,6 @@ describe("the weekly review", () => {
       ]);
       expect(context.health?.summary.training.sessions).toBe(1);
       expect(context.health?.entries[0]?.feel).toBe("good pump");
-      expect(context.memories.map((item) => item.content)).toEqual([
-        "Trains best in the morning",
-      ]);
     });
 
     it("reads next year's goals when the plan week is in a new year", async () => {

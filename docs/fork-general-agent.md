@@ -3,7 +3,7 @@
 Fork-owned. One Claude Managed Agent does the diary's thinking jobs: the weekly
 review, the month, quarter and year chapters, the goal check, next week's
 proposals, and Ask my diary. It replaces the weekly memo agent of
-October 2026 and nightly memory dreaming. It reads the whole record through the app's own read-only MCP server
+October 2026. It reads the whole record through the app's own read-only MCP server
 and changes nothing; its only writes are proposals the owner accepts or
 dismisses.
 
@@ -26,9 +26,9 @@ handed a capped file.
 | Goal check                | Review page, before saving the week         | The check step in the review's session flags clashes in the drafted plan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Ask my diary              | Chat bubble, bottom-right of every page     | One session per conversation. It reads anything and proposes nothing (the propose tools are off and its notes are read-only). A conversation picks up where it left off; a new chat ends the session.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
-Memory proposals go to the Memory page, as dreaming's did. Nightly dreaming is
-skipped whenever the agent is set up (`forkAgentReplacesDreaming`); the nightly
-conflict patrol still runs.
+Memory proposals (and the nightly memory dreaming they replaced) went with
+upstream's memory layer in the v0.32.1 sync; the agent keeps its own notes in its
+Anthropic memory store.
 
 **Sunday prep (live only).** At noon Copenhagen time on Sunday the Worker
 starts the week's review session and sends the opening, so it is ready when the
@@ -43,9 +43,9 @@ The agent's MCP server is `POST /api/app/planner/agent/mcp`
 
 - reads: `review_week`, `review_period`, `week_diary`, `list_entries`,
   `read_entries`, `search_entries`, `read_goals`, `read_tasks`, `read_health`,
-  `read_memories`, `read_scorecard` (the owner's standing instructions and up
+  `read_scorecard` (the owner's standing instructions and up
   to 26 weeks of the flywheel's scorecard, `docs/fork-flywheel.md`);
-- proposals: `propose_memory`, `propose_goal`, `propose_task`. A proposal is
+- proposals: `propose_goal`, `propose_task`. A proposal is
   refused unless a review session is at its memo or propose step, and a quote
   it gives must be found word for word in the owner's entry.
 
@@ -93,7 +93,7 @@ later and later weeks' scores, and copies them (round 1 showed it). With the
 dev var `FLAREMO_REVIEW_AS_OF=review-week` the agent's MCP server hides, for
 the week of the open review session, everything written after the owner
 saved that week's look back (or after the Tuesday following the week, when
-it was never saved): diary entries, memories, health days, tasks made or
+it was never saved): diary entries, health days, tasks made or
 finished later, comments and history on a task, goals made later and later
 weeks' scores. `review_week`, `read_goals` and `read_tasks` take "today" as
 the cut's day. Goal state cannot be rolled back: points struck and results
@@ -202,11 +202,6 @@ Since November 2026 (the control panel, design option B) it can also propose:
 - `propose_entry_link`, linking two entries (or `remove: true` to unlink): a
   `reference` relation from `entry_id` to `related_entry_id`, with `was` the
   entry's sorted reference ids;
-- `propose_memory_change`, correcting a memory (`action: correct`, with the
-  new `content`) or forgetting it (`action: forget`), by the id `read_memories`
-  lists, only for an active memory the owner has ruled on (not a proposal
-  waiting on the Memory page). Stored as kind `memory_change` with
-  `was: { content, status }`. The review-only `propose_memory` is unchanged;
 - `propose_health_change`, fixing a health row the diary misread
   (`action: fix`, `entry_id` from `read_health`, any of `day`, `variant`,
   `minutes`, `home_at`; `was` holds the values of just those fields) or adding
@@ -633,5 +628,5 @@ session the nightly sweep ends. It refuses any deployment but dev.
 ## Turning it off
 
 Remove the four `FLAREMO_AGENT*` vars: reviews go back to the review model,
-Ask disappears, and nightly dreaming runs again. The agent's notes can be read,
+and Ask disappears. The agent's notes can be read,
 edited or deleted in the Anthropic Console under Memory stores.

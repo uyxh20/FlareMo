@@ -1,14 +1,5 @@
 import { z } from "zod";
 import {
-  exportMemoryEventSchema,
-  exportMemoryEvidenceSchema,
-  exportMemoryRelationSchema,
-  exportMemoryResourceLinkSchema,
-  exportMemoryRevisionSchema,
-  importMemorySchema,
-  memoryDtoSchema,
-} from "./memory";
-import {
   projectStatusSchema,
   taskActivityActionSchema,
   taskActorTypeSchema,
@@ -62,7 +53,27 @@ export const memoPayloadSchema = z
   })
   .passthrough();
 
+/**
+ * Client-generated memo id (docs/native-clients.md §7.7 global rule 1: the
+ * client owns the primary key so an offline note can be referenced, scheduled,
+ * or commented on before it ever reaches the server). Accepts `memos/<uuid>`
+ * or a bare uuid; the domain layer normalizes the prefix and the case. Only
+ * UUID-shaped values are allowed — this becomes the row's primary key and part
+ * of its URL, so a free-form string is not accepted.
+ */
+export const createMemoIdSchema = z
+  .string()
+  .trim()
+  .max(64)
+  .regex(
+    /^(?:memos\/)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    "Must be a UUID or memos/<uuid>",
+  );
+
 export const createMemoSchema = z.object({
+  // Optional: omitted by every server-side caller (web, MCP, IM, import),
+  // which keeps the server-generated id path unchanged.
+  id: createMemoIdSchema.optional(),
   content: z.string().trim().min(1).max(100_000),
   visibility: memoVisibilitySchema.default("private"),
   payload: memoPayloadSchema.optional(),
@@ -344,7 +355,6 @@ export const memoContextResponseSchema = z.object({
   relations: z.array(memoRelationContextSchema),
   backlinks: z.array(memoRelationContextSchema),
   revisions: z.array(memoRevisionDtoSchema),
-  memories: z.array(memoryDtoSchema),
 });
 
 export const publicShareDtoSchema = z.object({
@@ -400,6 +410,7 @@ export const importBundleSchema = z.object({
       z.literal(4),
       z.literal(5),
       z.literal(6),
+      z.literal(7),
     ])
     .default(1),
   memos: z
@@ -433,25 +444,6 @@ export const importBundleSchema = z.object({
   attachments: z.array(importAttachmentSchema).max(5_000).default([]),
   relations: z.array(memoRelationDtoSchema).max(100_000).default([]),
   shares: z.array(importShareSchema).max(10_000).default([]),
-  memories: z.array(importMemorySchema).max(50_000).default([]),
-  memory_revisions: z
-    .array(exportMemoryRevisionSchema)
-    .max(200_000)
-    .default([]),
-  memory_relations: z
-    .array(exportMemoryRelationSchema)
-    .max(100_000)
-    .default([]),
-  memory_resource_links: z
-    .array(exportMemoryResourceLinkSchema)
-    .max(100_000)
-    .default([]),
-  // v5: the memory ledger's evidence chain and lifecycle trail joined the
-  // bundle. Both are user-owned source data (not derived state): without them a
-  // round-trip would drop every "why does this fact exist" link and the whole
-  // supersession narrative, which is the product's core promise.
-  memory_evidence: z.array(exportMemoryEvidenceSchema).max(200_000).default([]),
-  memory_events: z.array(exportMemoryEventSchema).max(200_000).default([]),
   // v4: projects/tasks/task_activity joined the self-service bundle. Rows keep
   // their namespaced ids; soft-deleted (recycle-bin) rows travel with
   // `deleted_at` so nothing is silently dropped from a backup.
@@ -516,7 +508,6 @@ export const importResultSchema = z.object({
   imported_attachments: z.number().int().nonnegative(),
   imported_relations: z.number().int().nonnegative(),
   imported_shares: z.number().int().nonnegative(),
-  imported_memories: z.number().int().nonnegative().default(0),
   imported_projects: z.number().int().nonnegative().default(0),
   imported_tasks: z.number().int().nonnegative().default(0),
   imported_task_activity: z.number().int().nonnegative().default(0),

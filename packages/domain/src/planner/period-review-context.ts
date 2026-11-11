@@ -15,7 +15,7 @@ import {
   plannerSummaryMemoTag,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
+import { memos, memoTags, tasks } from "@flaremo/db";
 import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
   type PlannerEvidenceRow,
@@ -56,7 +56,7 @@ import {
 // docs/planning-cockpit-period-review.md): the period's weeks with their
 // records and raw counts, the raw rows themselves (diary entries, health rows,
 // done tasks) for the prompts and for checking receipts word for word, the
-// goals of the level and the level below, the memories made and revised, and
+// goals of the level and the level below, and
 // the last period's review. Nothing here writes.
 //
 // The raw rows are read whole once, grouped by week in the owner's own zone
@@ -75,8 +75,6 @@ export const PLANNER_PERIOD_DIARY_CHARS = 60_000;
 export const PLANNER_PERIOD_DIARY_CHARS_SMALL = 9_000;
 
 const FIRST_LINE_CHARS = 120;
-const MEMORY_LINE_CHARS = 160;
-const MEMORY_LINES_MAX = 16;
 const SUMMARY_CHARS = 3_000;
 
 /** One raw row a receipt can rest on. */
@@ -125,12 +123,6 @@ export type PlannerPeriodContext = {
     /** The key question its chat left for this review. */
     question: string | null;
   } | null;
-  memories: {
-    created: number;
-    revised: number;
-    createdLines: string[];
-    revisedLines: string[];
-  };
   /** Every raw row of the period, for the receipt check. */
   raw: PlannerRawRow[];
   row: PlannerPeriodReviewRow | null;
@@ -330,8 +322,6 @@ export async function plannerReadPeriodContext(
     goals,
     childGoals,
     northStar,
-    createdMemories,
-    revisedMemories,
     row,
     evidenceRows,
     previousRows,
@@ -415,39 +405,6 @@ export async function plannerReadPeriodContext(
     plannerReadPeriodGoals(db, { userId, level, periodStart }),
     readChildGoals(db, userId, level, periodStart),
     plannerReadNorthStar(db, userId),
-    db
-      .select({ content: memoryItems.content })
-      .from(memoryItems)
-      .where(
-        and(
-          eq(memoryItems.userId, userId),
-          eq(memoryItems.status, "active"),
-          isNull(memoryItems.deletedAt),
-          isNull(memoryItems.rejectedAt),
-          gte(memoryItems.createdAt, from),
-          lt(memoryItems.createdAt, to),
-        ),
-      )
-      .orderBy(desc(memoryItems.importance))
-      .limit(200)
-      .all(),
-    db
-      .select({ content: memoryItems.content })
-      .from(memoryItems)
-      .where(
-        and(
-          eq(memoryItems.userId, userId),
-          eq(memoryItems.status, "active"),
-          isNull(memoryItems.deletedAt),
-          isNull(memoryItems.rejectedAt),
-          lt(memoryItems.createdAt, from),
-          gte(memoryItems.updatedAt, from),
-          lt(memoryItems.updatedAt, to),
-        ),
-      )
-      .orderBy(desc(memoryItems.importance))
-      .limit(200)
-      .all(),
     db
       .select()
       .from(plannerPeriodReview)
@@ -687,16 +644,6 @@ export async function plannerReadPeriodContext(
           question: savedQuestion(previous.state),
         }
       : null,
-    memories: {
-      created: createdMemories.length,
-      revised: revisedMemories.length,
-      createdLines: createdMemories
-        .slice(0, MEMORY_LINES_MAX)
-        .map((memory) => trimTo(memory.content, MEMORY_LINE_CHARS)),
-      revisedLines: revisedMemories
-        .slice(0, MEMORY_LINES_MAX)
-        .map((memory) => trimTo(memory.content, MEMORY_LINE_CHARS)),
-    },
     raw,
     row: row ?? null,
     evidence: evidenceRows,

@@ -208,7 +208,6 @@ describe("the search column matches the search index", () => {
   // embedding_tasks resource enum and to data-sources.ts.
   const SEARCH_INDEX: Record<string, { embedding: string; fts: string }> = {
     memos: { embedding: "memo", fts: "memos_fts" },
-    memory_items: { embedding: "memory", fts: "memory_fts" },
   };
 
   // Tables only the cockpit's keyword task search reads (planner/task-search.ts):
@@ -238,49 +237,6 @@ describe("the search column matches the search index", () => {
     for (const index of Object.values(SEARCH_INDEX)) {
       expect(tableEntry(index.fts), index.fts).toBeDefined();
     }
-  });
-});
-
-describe("the memory column matches what the memory layer reads", () => {
-  // The memory layer's source files. A table they import from @flaremo/db is a
-  // table the layer reads; reading outside its own tables must be declared.
-  const MEMORY_SOURCES = [
-    ...readdirSync(repo("packages/domain/src/memory"))
-      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-      .map((name) => `packages/domain/src/memory/${name}`),
-    "apps/worker/src/memory-dreaming.ts",
-    // fork: the task comments dreaming reads.
-    "packages/domain/src/planner/dreaming-sources.ts",
-  ];
-
-  it("reads only the tables marked for memory, and all of them", async () => {
-    const schema = await schemaTables();
-    const imported = new Set<string>();
-    for (const file of MEMORY_SOURCES) {
-      const text = readFileSync(repo(file), "utf8");
-      for (const match of text.matchAll(
-        /import\s*\{([^}]*)\}\s*from\s*"@flaremo\/db[^"]*"/g,
-      )) {
-        for (const name of (match[1] ?? "").split(",")) {
-          const table = schema.get(name.replace(/^\s*type\s+/, "").trim());
-          if (table) imported.add(table);
-        }
-      }
-    }
-    const outside = (table: string) => {
-      const entry = tableEntry(table);
-      return entry && entry.module !== "memory" && entry.kind !== "system";
-    };
-    const read = [...imported].filter(outside).sort();
-    const declared = forkDataSources
-      .filter((source) => source.id === source.table && outside(source.table))
-      .filter((source) => forkUseVerdict(source.uses.memory) === "yes")
-      .map((source) => source.table)
-      .sort();
-    expect(
-      read,
-      "The memory layer reads these tables; mark memory as yes for exactly them in data-sources.ts",
-    ).toEqual(declared);
   });
 });
 

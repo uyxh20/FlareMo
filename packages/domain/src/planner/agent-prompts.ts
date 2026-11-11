@@ -69,7 +69,7 @@ export function plannerAgentSystem(ownerName: string): string {
 
 ## What you can do
 
-You read ${name}'s whole record through your tools, live. You change nothing yourself. The only writes you have are the propose tools, and each proposal waits for ${name}: a memory on the Memory page, a goal or a task on the review page, and in an Ask chat one card per answer listing every change you proposed in it (task fields, moves, exact places on the board, goal links, drops, new tasks, comments, new entries, flags on an entry that looks off, #tags added or removed, archiving or pinning, links between two entries, correcting or forgetting a memory, fixing, adding or removing a health row, a weekly goal that looks off or seems missing), which ${name} accepts row by row (that is what writes it) or dismisses, and can undo afterwards. Never say you saved, changed, added or deleted anything; say you proposed it. You never delete: dropping a task, archiving an entry or forgetting a memory (archived, can be brought back) is as far as you go. Goals and diary entries are written in ${name}'s own words: you point at a goal or an entry and say in a few words what looks off (propose_goal_change, propose_entry_edit with a flag), and ${name} writes the words on the card. You never write a goal's title, lines or note, or an entry's new text. Values stay yours to propose: a goal's objective and week, tags, links, dates, columns, health rows. A weekly goal is never deleted, and its status, result and scores are the owner's own verdicts: you do not propose them. The review propose tools are on only in a review's steps that ask for proposals; the action tools (propose_task_change, propose_add_task, propose_task_comment, propose_entry, propose_entry_edit, propose_entry_tags, propose_entry_state, propose_entry_link, propose_memory_change, propose_health_change, propose_goal_change) work only in an Ask chat, at most 25 in one answer and 100 a day.
+You read ${name}'s whole record through your tools, live. You change nothing yourself. The only writes you have are the propose tools, and each proposal waits for ${name}: a goal or a task on the review page, and in an Ask chat one card per answer listing every change you proposed in it (task fields, moves, exact places on the board, goal links, drops, new tasks, comments, new entries, flags on an entry that looks off, #tags added or removed, archiving or pinning, links between two entries, fixing, adding or removing a health row, a weekly goal that looks off or seems missing), which ${name} accepts row by row (that is what writes it) or dismisses, and can undo afterwards. Never say you saved, changed, added or deleted anything; say you proposed it. You never delete: dropping a task or archiving an entry (it can be brought back) is as far as you go. Goals and diary entries are written in ${name}'s own words: you point at a goal or an entry and say in a few words what looks off (propose_goal_change, propose_entry_edit with a flag), and ${name} writes the words on the card. You never write a goal's title, lines or note, or an entry's new text. Values stay yours to propose: a goal's objective and week, tags, links, dates, columns, health rows. A weekly goal is never deleted, and its status, result and scores are the owner's own verdicts: you do not propose them. The review propose tools are on only in a review's steps that ask for proposals; the action tools (propose_task_change, propose_add_task, propose_task_comment, propose_entry, propose_entry_edit, propose_entry_tags, propose_entry_state, propose_entry_link, propose_health_change, propose_goal_change) work only in an Ask chat, at most 25 in one answer and 100 a day.
 
 The tools:
 - review_week and review_period: a review's focus, everything it is about, in one read.
@@ -77,9 +77,9 @@ The tools:
 - list_entries: the index, one line per entry with its id, when it was written, who wrote it and its first words.
 - read_entries: entries in full, by id.
 - search_entries: full-text search over every entry ever written.
-- read_goals, read_tasks, read_task, read_health, read_memories: goals and recorded weeks, the task board, one task in full (its notes, comments, the files put on it with their text once read, and its history), the health tracker, and what the memory ledger holds.
-- propose_memory, propose_goal, propose_task: review proposals, only when a step asks for them.
-- propose_task_change, propose_add_task, propose_task_comment, propose_entry, propose_entry_edit, propose_entry_tags, propose_entry_state, propose_entry_link, propose_memory_change, propose_health_change, propose_goal_change: actions, only in an Ask chat when ${name} asks for them.
+- read_goals, read_tasks, read_task, read_health: goals and recorded weeks, the task board, one task in full (its notes, comments, the files put on it with their text once read, and its history), and the health tracker.
+- propose_goal, propose_task: review proposals, only when a step asks for them.
+- propose_task_change, propose_add_task, propose_task_comment, propose_entry, propose_entry_edit, propose_entry_tags, propose_entry_state, propose_entry_link, propose_health_change, propose_goal_change: actions, only in an Ask chat when ${name} asks for them.
 - find_done_tasks, find_replan_tasks, find_stale_backlog, compare_health: in an Ask chat, what the starter buttons Mark what I already did, Replan my week, Tidy my backlog and What did my health log miss are about; your ask-my-diary skill says how to answer each.
 - find_todos: in an Ask chat, the lines of ${name}'s recent entries that read like to-dos, marked when a task already covers them or they were offered before; propose the real, open ones with propose_add_task (from_entry_id, from_quote).
 
@@ -221,24 +221,20 @@ function cascadeRule(context: PlannerReviewContext, name: string): string {
 
 /**
  * The propose step: next week's goals, each the next step on a month or
- * quarter goal. Sent by the Worker once the memo is read (with memories), and
+ * quarter goal. Sent by the Worker once the memo is read, and
  * when the owner asks again on Look forward (again: the proposals they did
  * not take were withdrawn). Tasks come at Plan tasks, for the goals chosen.
  */
 export function plannerAgentProposeMessage(
   context: PlannerReviewContext,
-  options: { memories?: boolean; again?: boolean } = {},
+  options: { again?: boolean } = {},
 ): string {
   const name = firstName(context.ownerName);
-  const memories = options.memories ?? true;
   const goals = `Next week's goals, for the week starting Monday ${context.planWeek} (${plannerWeekCode(context.planWeek)}): at most one weekly goal per objective (propose_goal, week ${context.planWeek}). ${cascadeRule(context, name)} Name that month or quarter goal as serves, and say in why where it stands and why this is the next step; draw on the memo's Next Steps and the open threads. Don't propose tasks in this step: they come once ${name} has chosen the goals.`;
   const opening = options.again
     ? `Propose step, asked again: ${name} wants new suggestions for next week's goals. The goal proposals ${name} did not take are withdrawn and gone from the page; the ones ${name} took stay. Propose again from the start: don't reply done on the strength of your earlier proposals. The propose tools are on for this step.`
     : `Propose step: the memo is written and ${name} is reading it. Now make your proposals, following the propose part of your weekly-review skill. The propose tools are on for this step.`;
-  const body = memories
-    ? `1. Memories: at most three things this week showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory). Call read_memories first and skip what the ledger already holds.
-2. ${goals}`
-    : goals;
+  const body = goals;
   return `${opening}
 
 ${body}
@@ -263,10 +259,7 @@ ${step}`;
 export function plannerAgentProposeKickoff(
   context: PlannerReviewContext,
 ): string {
-  return proposeKickoff(
-    context,
-    plannerAgentProposeMessage(context, { memories: false }),
-  );
+  return proposeKickoff(context, plannerAgentProposeMessage(context));
 }
 
 /** The plan's goals as the owner chose them, for the task step. */
@@ -398,8 +391,7 @@ ${plannerAgentPeriodMemoMessage(context, request, happened)}`;
 }
 
 /**
- * The period's memo step. A period proposes memories here, after the memo:
- * it has no propose step of its own.
+ * The period's memo step. A period has no propose step of its own.
  */
 export function plannerAgentPeriodMemoMessage(
   context: PlannerPeriodContext,
@@ -423,8 +415,7 @@ ${parts.material}
 
 When the memo is checked:
 1. Update your memory store: a few short lines about this ${word} for the next reviews. Notes, not a copy of the memo or the diary.
-2. Propose at most three memories this ${word} showed about ${name} that will still be true in a month, each with ${name}'s own words as the receipt (propose_memory; call read_memories first and skip what the ledger holds). The propose tools are on for this step.
-3. ${MEMO_REPLY(name)}`;
+2. ${MEMO_REPLY(name)}`;
 }
 
 // ---------------------------------------------------------------------------

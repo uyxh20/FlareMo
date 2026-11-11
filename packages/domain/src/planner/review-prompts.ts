@@ -269,19 +269,6 @@ function trackerLine(
   }`;
 }
 
-/** Memories the app made or changed during the week. */
-export function plannerMemoryLines(context: PlannerReviewContext): string[] {
-  if (!context.memories.length) return [];
-  return [
-    "",
-    `Memories the app noted or updated about ${context.ownerName} this week. They are conclusions an AI drew from the diary, not events; "unconfirmed" ones were never checked by ${context.ownerName}:`,
-    ...context.memories.map(
-      (memory) =>
-        `- ${memory.kind}${memory.unconfirmed ? ", unconfirmed" : ""}: ${memory.content}`,
-    ),
-  ];
-}
-
 /** The context block every prompt ends with. */
 /**
  * The tasks done, worked on or touched this week, each with its status, notes,
@@ -377,7 +364,7 @@ export function plannerReviewContextBlock(
         .join("; ")}`,
     );
   }
-  lines.push(...plannerHealthLines(context), ...plannerMemoryLines(context));
+  lines.push(...plannerHealthLines(context));
   if (context.previousSummary) {
     lines.push(
       "",

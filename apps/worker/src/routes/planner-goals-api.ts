@@ -984,10 +984,7 @@ plannerGoalsApi.post(
               message:
                 kind === "tasks"
                   ? plannerAgentProposeTasksMessage(week, goals)
-                  : plannerAgentProposeMessage(week, {
-                      memories: false,
-                      again,
-                    }),
+                  : plannerAgentProposeMessage(week, { again }),
             })
           : "missing";
         if (sent === "missing") {

@@ -22,8 +22,7 @@ export async function forkSearchCatchupScheduled(
   try {
     const result = await runSearchCatchup(createDb(env.DB), {
       provider: createEmbeddingProvider(env),
-      memosIndex: createVectorIndex(env, "memo"),
-      memoriesIndex: createVectorIndex(env, "memory"),
+      memosIndex: createVectorIndex(env),
     });
     if (result.indexed || result.failed) {
       console.log(JSON.stringify({ message: "Search catch-up", result }));

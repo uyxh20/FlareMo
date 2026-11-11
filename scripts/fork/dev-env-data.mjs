@@ -193,18 +193,40 @@ export function orderByForeignKeys(tables, references) {
  * treated as diverged schemas: those are tables found by discovery, and one
  * made outside the migrations has no counterpart in dev.
  */
+/**
+ * The tables the given migration files drop on purpose (`DROP TABLE`), such as
+ * upstream's 0044_drop_agent_memory. A clone does not copy them: the upgrade
+ * rehearsal would drop them again.
+ */
+export function droppedTables(sqlTexts) {
+  const dropped = new Set();
+  for (const sql of sqlTexts) {
+    for (const match of sql.matchAll(
+      /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"[]?([A-Za-z0-9_]+)[`"\]]?/gi,
+    )) {
+      dropped.add(match[1]);
+    }
+  }
+  return dropped;
+}
+
 export function planTableCopy({
   tables = RESTORE_TABLES,
   prodColumns,
   devColumns,
   includeSideEffectTables = false,
   optional = [],
+  droppedByUpgrade = new Set(),
 }) {
   const copy = [];
   const skipped = [];
   for (const table of tables) {
     const prod = prodColumns.get(table) ?? [];
     const dev = devColumns.get(table) ?? [];
+    if (droppedByUpgrade.has(table)) {
+      skipped.push({ table, reason: "dropped by the upgrade migrations" });
+      continue;
+    }
     if (EPHEMERAL_TABLES.includes(table)) {
       skipped.push({
         table,
@@ -424,6 +446,14 @@ export function planMigrationLevels({ localFiles, prodApplied, devApplied }) {
  * A copied table must match the exported rows exactly; production drifting
  * after the export is reported but is not a failure.
  */
+/**
+ * Tables that database triggers also write while the clone imports the entity
+ * tables and rebuilds derived state: upstream's `sync_changes` (migration 0049)
+ * logs every memo, attachment, article and relation write. Dev holds the copied
+ * rows plus the ones the import itself logged, which is fine for a test copy.
+ */
+export const TRIGGER_FED_TABLES = ["sync_changes"];
+
 export function summarizeCounts({ copy, skipped, exported, prod, dev }) {
   const rows = [];
   const mismatches = [];
@@ -431,7 +461,9 @@ export function summarizeCounts({ copy, skipped, exported, prod, dev }) {
     const expected = exported[table] ?? 0;
     const actual = dev[table];
     let status = "ok";
-    if (actual !== expected) {
+    if (TRIGGER_FED_TABLES.includes(table) && actual > expected) {
+      status = `ok (plus ${actual - expected} rows the triggers wrote during the import)`;
+    } else if (actual !== expected) {
       status = "MISMATCH";
       mismatches.push(
         `${table}: exported ${expected} rows but dev holds ${actual}`,

@@ -126,7 +126,6 @@ const CONTEXT: PlannerReviewContext = {
   keptFlags: [],
   diary: [{ at: "2026-10-07T20:00:00.000Z", text: "Long talk with Acme." }],
   health: null,
-  memories: [],
 };
 
 const ANSWERS = {
@@ -235,7 +234,7 @@ describe("the context block", () => {
   });
 });
 
-describe("health and memories in the context", () => {
+describe("health in the context", () => {
   const health = {
     entries: [
       {
@@ -355,28 +354,6 @@ describe("health and memories in the context", () => {
       "- Cold shower (the owner's own tracker): 0 days this week",
     );
     expect(block).not.toContain("Nothing was logged");
-  });
-
-  it("lists the week's memories as conclusions, marking unconfirmed ones", () => {
-    const block = plannerReviewContextBlock({
-      ...CONTEXT,
-      memories: [
-        {
-          kind: "preference",
-          content: "Trains best mornings",
-          unconfirmed: false,
-        },
-        { kind: "fact", content: "Moved to Acme talks", unconfirmed: true },
-      ],
-    });
-    expect(block).toContain(
-      "Memories the app noted or updated about Anon this week.",
-    );
-    expect(block).toContain("- preference: Trains best mornings");
-    expect(block).toContain("- fact, unconfirmed: Moved to Acme talks");
-    expect(plannerReviewContextBlock(CONTEXT)).not.toContain(
-      "Memories the app",
-    );
   });
 
   it("dates a diary entry by the owner's local day, not the UTC day", () => {
@@ -654,10 +631,7 @@ describe("the general agent's review steps", () => {
     expect(propose).toContain("Call read_goals first.");
     expect(propose).toContain("as serves");
     expect(propose).not.toContain("propose_task");
-    const again = plannerAgentProposeMessage(CONTEXT, {
-      memories: false,
-      again: true,
-    });
+    const again = plannerAgentProposeMessage(CONTEXT, { again: true });
     expect(again).toContain("asked again");
     expect(again).not.toContain("propose_memory");
     const tasks = plannerAgentProposeTasksMessage(CONTEXT, [

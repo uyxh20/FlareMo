@@ -40,8 +40,10 @@ import { adminApi } from "./routes/admin-api";
 import { appApi } from "./routes/app-api";
 import { authApi } from "./routes/auth-api";
 import { brandingApi } from "./routes/branding-api";
+import { connectApi } from "./routes/connect-api";
+import { connectAppsApi } from "./routes/connect-apps-api";
 import { emailSettingsApi } from "./routes/email-settings-api";
-import { memoryApi } from "./routes/memory-api";
+import { insightApi } from "./routes/insight-api";
 import { memosApi } from "./routes/memos-api";
 import { memosConnectApi } from "./routes/memos-connect";
 import { isLegacyWireRequest, memosCurrentApi } from "./routes/memos-current";
@@ -265,13 +267,13 @@ export function createFlareMoApp(
     return voiceSettingsApi;
   });
   app.route("/api/app/account", accountApi);
+  app.route("/api/app/connect", connectAppsApi);
   // Registered before adminApi so these owner settings routes win; paths
   // adminApi owns (/plugins GET/PUT) still fall through to it.
   app.route("/api/app/admin/plugins", pluginsStoreApi);
   app.route("/api/app/admin/email-settings", emailSettingsApi);
   app.route("/api/app/admin/oauth-settings", oauthSettingsApi);
   app.route("/api/app/admin", adminApi);
-  app.route("/api/app/memory", memoryApi);
   app.route("/api/app/projects", projectsApi);
   // The articles API is a low-traffic tree with real sub-paths (`/:id`,
   // `/:id/publish`, …), so the wildcard registration is required. Lazy mounting
@@ -283,6 +285,9 @@ export function createFlareMoApp(
     return articlesApi;
   });
   app.route("/api/app/tasks", tasksApi);
+  // Registered before the catch-all `/api/app` tree: Hono matches in
+  // registration order, and the insights contract is its own namespace.
+  app.route("/api/app/insights", insightApi);
   mountLazyRoute(app, "/api/app/planner", async () => {
     const { plannerApi } = await import("./routes/planner-api");
     return plannerApi;
@@ -326,16 +331,13 @@ export function createFlareMoApp(
     return c.redirect("/brand/flaremo-mark-light-300.png", 302);
   });
   app.route("/file", memosFileApi);
-  // MCP surfaces + memory MCP: low-traffic tooling endpoints; the route trees
-  // (and their module graphs) load on first MCP request instead of startup.
+  // MCP surfaces are low-traffic tooling endpoints; the route trees (and their
+  // module graphs) load on first MCP request instead of startup.
   mountLazyRoute(app, "/mcp", async () => {
     const { mcpStreamableApi } = await import("./routes/mcp");
     return mcpStreamableApi;
   });
-  mountLazyRoute(app, "/memory/mcp", async () => {
-    const { memoryMcpApi } = await import("./routes/memory-mcp");
-    return memoryMcpApi;
-  });
+  app.route("/", connectApi);
   app.route("/", memosConnectApi);
   app.route("/", memosSseApi);
   app.route("/api/v1", memosSocialApi);
@@ -462,8 +464,7 @@ async function dispatchRequestEmbeddingOutbox(
 ) {
   await dispatchEmbeddingOutbox(createDb(env.DB), {
     provider: createEmbeddingProvider(env),
-    memosIndex: createVectorIndex(env, "memo"),
-    memoriesIndex: createVectorIndex(env, "memory"),
+    memosIndex: createVectorIndex(env),
     limits: await options.resolvePlanLimits(env),
     userLimits: hasCustomUserPlanLimits
       ? null
@@ -558,11 +559,41 @@ export function createFlareMoWorker(
       if (await forkAgentScheduled(controller, env)) return;
       // fork: search catch-up every 10 minutes (fork/search-catchup.ts)
       if (await forkSearchCatchupScheduled(controller, env)) return;
-      await runScheduledMaintenance(
-        env,
-        controller.scheduledTime,
-        await maintenanceOptions(env, resolvedOptions, hasCustomUserPlanLimits),
-      );
+      const startedAt = Date.now();
+      try {
+        await runScheduledMaintenance(
+          env,
+          controller.scheduledTime,
+          await maintenanceOptions(
+            env,
+            resolvedOptions,
+            hasCustomUserPlanLimits,
+          ),
+        );
+        console.log(
+          JSON.stringify({
+            message: "scheduled maintenance finished",
+            scheduledTime: controller.scheduledTime,
+            durationMs: Date.now() - startedAt,
+          }),
+        );
+      } catch (error) {
+        // Individual passes are already isolated inside
+        // runScheduledMaintenance; reaching this branch means the whole run
+        // could not start (or the summary itself failed). Log it and rethrow
+        // so the platform records a failed cron invocation instead of a
+        // silent no-op.
+        console.error(
+          JSON.stringify({
+            level: "error",
+            message: "scheduled maintenance failed",
+            scheduledTime: controller.scheduledTime,
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+        throw error;
+      }
     },
     async queue(batch, env) {
       // Two message shapes share the consumer: {jobId} (member removal) and

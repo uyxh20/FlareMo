@@ -1,6 +1,6 @@
 # Deploy FlareMo with GitHub Actions
 
-> **Note for this fork (Schizo Diary):** `.github/workflows/deploy-cloudflare.yml` was deleted from this fork, so pushing or merging to `main` deploys nothing. This fork ships only by running `scripts/fork/prod-deploy.mjs` by hand; see [fork-dev-environment.md](../fork-dev-environment.md). The guide below applies only to a deployment repository that still has that workflow.
+This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`, copied from the template at [`docs/templates/workflows/deploy-cloudflare.yml`](./templates/workflows/deploy-cloudflare.yml). It only runs from a manual `Run workflow` click; pushes do not publish. The upstream repository `realchendahuang/FlareMo` never runs this job.
 
 This guide is for **your deployment repository** (a fork or copy of FlareMo). The workflow is `.github/workflows/deploy-cloudflare.yml`. It publishes on a manual `Run workflow`. The upstream repository `realchendahuang/FlareMo` never runs this job. `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
 
@@ -8,7 +8,12 @@ Do not put `BETTER_AUTH_SECRET`, `FLAREMO_BOOTSTRAP_SECRET`, or `RESEND_API_KEY`
 
 ## Prerequisites
 
-- The deployment repository includes `.github/workflows/deploy-cloudflare.yml` (this fork deleted it).
+- The deployment repository has copied the template [`docs/templates/workflows/deploy-cloudflare.yml`](./templates/workflows/deploy-cloudflare.yml) to `.github/workflows/deploy-cloudflare.yml`:
+
+  ```bash
+  mkdir -p .github/workflows
+  cp <FlareMo checkout>/docs/templates/workflows/deploy-cloudflare.yml .github/workflows/
+  ```
 - The Cloudflare account has Workers enabled and an account-level `*.workers.dev` subdomain.
 - Two distinct random secrets of at least 32 characters, stored in a password manager first:
 
@@ -80,11 +85,11 @@ Open `Actions` → `Deploy to Cloudflare` → `Run workflow`:
 
 A production run will:
 
-1. Generate a job-local `wrangler.jsonc` from `wrangler.jsonc.example` (not committed), including Variables `FLAREMO_EMAIL_PROVIDER` / `FLAREMO_EMAIL_FROM` when set.
-2. Create or reuse D1 `flaremo`, R2 `flaremo-attachments`, queues `flaremo-member-removal` and `flaremo-data-export`, and Vectorize indexes `flaremo-memos` and `flaremo-memories` (1024 dimensions, cosine).
+1. Generate a job-local `wrangler.jsonc` from `wrangler.jsonc.example` (not committed).
+2. Create or reuse D1 `flaremo`, R2 `flaremo-attachments`, queues `flaremo-member-removal` and `flaremo-data-export`, and Vectorize index `flaremo-memos` (1024 dimensions, cosine).
 3. If `FLAREMO_PUBLIC_URL` is unset, write `https://flaremo.<subdomain>.workers.dev`.
-4. Build the web app; `cloudflare/wrangler-action` applies remote D1 migrations and runs `wrangler deploy`.
-5. Copy GitHub Secrets `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` onto the Worker. Logs show `***`. **`RESEND_API_KEY` is not synced.**
+4. Run `pnpm deploy`: build the web app, run a Worker bundle dry-run, apply remote D1 migrations, publish the Worker.
+5. Copy GitHub Secrets `BETTER_AUTH_SECRET` and `FLAREMO_BOOTSTRAP_SECRET` onto the Worker. Logs show `***`.
 6. Smoke check: request `FLAREMO_PUBLIC_URL` to confirm the Worker serves traffic, retrying for about a minute; a site that stays unreachable marks the run red.
 
 If those two GitHub Secrets are missing, the sync step skips and deploy still finishes; `/setup` and login will fail until you add the Secrets and run again without `dry_run`, or add them in Cloudflare Dashboard → Worker → Settings → Variables and Secrets.
@@ -138,7 +143,7 @@ These cannot be set in the FlareMo UI. Add them in Cloudflare when you need the 
 
 ## 8. Troubleshooting
 
-- No `Deploy to Cloudflare` workflow: you are on the wrong repository, or the file is not on the default branch.
+- No `Deploy to Cloudflare` workflow: copy the template into `.github/workflows/` and push it to the default branch of the deployment repository.
 - workers.dev subdomain lookup fails: register the account subdomain under Workers in the Cloudflare dashboard.
 - `/setup` fails: the two auth GitHub Secrets are missing or invalid, or the last run was `dry_run` only.
 - Queue / Vectorize / D1 create fails: the API token is missing permissions from step 1.

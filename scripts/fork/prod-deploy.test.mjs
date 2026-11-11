@@ -8,6 +8,7 @@ import {
   bindingDrift,
   buildProdConfig,
   compareCounts,
+  droppedTables,
   deploy,
   pendingMigrations,
   previousDeployment,
@@ -57,6 +58,23 @@ describe("prod-deploy", () => {
     assert.equal(compareCounts({ a: 1 }, {}).fatal.length, 1);
   });
 
+  test("a table a pending migration drops is a note, not a rollback", () => {
+    const drops = droppedTables([
+      "DROP TABLE IF EXISTS `memory_items`;--> statement-breakpoint\nDROP TABLE memory_fts;",
+      "CREATE TABLE `kept` (id text);",
+    ]);
+    assert.deepEqual([...drops].sort(), ["memory_fts", "memory_items"]);
+    const { fatal, notes } = compareCounts(
+      { memory_items: 126, memos: 10, kept: 1 },
+      { memos: 10 },
+      drops,
+    );
+    assert.deepEqual(fatal, ["kept: table disappeared (was 1)"]);
+    assert.deepEqual(notes, [
+      "memory_items: dropped by a pending migration (was 126)",
+    ]);
+  });
+
   test("redacts var values from wrangler output", () => {
     assert.equal(redact("key=abcd1234 ok", ["abcd1234", "ab"]), "key=*** ok");
   });
@@ -90,11 +108,14 @@ describe("prod-deploy", () => {
       { name: "RATE_LIMITER", type: "ratelimit" },
       { name: "MEMBER_REMOVAL_QUEUE", type: "queue" },
       { name: "EXTRA_KV", type: "kv_namespace" },
+      { name: "VECTORIZE_MEMORIES", type: "vectorize" },
       { name: "BETTER_AUTH_SECRET", type: "secret_text" },
       { name: "FLAREMO_PUBLIC_URL", type: "plain_text" },
     ];
     const drift = bindingDrift(live, config);
     assert.deepEqual(drift.unknown, ["EXTRA_KV (kv_namespace)"]);
+    // Upstream removed memory search: that binding goes on purpose.
+    assert.deepEqual(drift.retired, ["VECTORIZE_MEMORIES (vectorize)"]);
     assert.ok(drift.restored.includes("FLAREMO_SINGLE_USER_EMAIL"));
     assert.ok(!drift.restored.includes("FLAREMO_PUBLIC_URL"));
   });

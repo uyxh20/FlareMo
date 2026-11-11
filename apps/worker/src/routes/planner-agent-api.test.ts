@@ -241,7 +241,6 @@ describe("the general agent's Ask chat and schedule", () => {
         ?.tools ?? [];
     expect(tools.find((tool) => tool.type === "mcp_toolset")).toMatchObject({
       configs: [
-        { name: "propose_memory", enabled: false },
         { name: "propose_goal", enabled: false },
         { name: "propose_task", enabled: false },
       ],

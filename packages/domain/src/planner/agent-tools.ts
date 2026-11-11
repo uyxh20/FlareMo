@@ -45,12 +45,6 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 import { healthReadWeek, healthToday } from "../health/read";
 import { healthFindEntry } from "../health/write";
 import { parseResourceName } from "../ids";
-import { createMemory, isRejectedRecently, listMemories } from "../memory";
-import {
-  computeFingerprint,
-  normalizeMemoryContent,
-  requireMemory,
-} from "../memory/shared";
 import { getMemoById, listMemos } from "../memos-read";
 import {
   plannerAgentTaskFieldNow,
@@ -113,7 +107,7 @@ import { plannerReadTaskDetail } from "./task-detail";
 // (routes/planner-agent-mcp.ts) answers `tools/call` with these, and so does the
 // eval runner's bridge. Every read is the owner's own rows only. The propose
 // tools are the agent's only writes, and each lands where the owner decides on
-// it: a memory waits on the Memory page, a goal or task on the review page, and
+// it: a goal or task waits on the review page, and
 // an action (one task field, a new task, a new diary entry; migration 9015) as
 // a card in the chat it was proposed in. The review proposals work only while a
 // review is at a step that asks for them (the Ask chat has them turned off in
@@ -121,9 +115,6 @@ import { plannerReadTaskDetail } from "./task-detail";
 
 /** A whole diary for the agent: it reads tool results, so nothing is cut. */
 export const PLANNER_AGENT_DIARY_CHARS = 1_000_000;
-
-/** Who wrote memories the agent proposes, as the memory ledger records it. */
-export const PLANNER_AGENT_MEMORY_SOURCE = "agent";
 
 export type PlannerAgentToolContext = {
   db: FlareMoDb;
@@ -1221,38 +1212,6 @@ const handlers: Handlers = {
     return out.join("\n");
   },
 
-  async read_memories(context, input) {
-    const listed = await listMemories(context.db, context.user, {
-      q: input.query || undefined,
-      status: "active",
-      pageSize: 100,
-    });
-    const before = plannerBeforeAsOf(context.asOf);
-    const result = {
-      ...listed,
-      memories: listed.memories.filter((memory) => before(memory.created_at)),
-    };
-    if (result.memories.length === 0) {
-      return input.query
-        ? `No memory holds "${input.query}".`
-        : "The memory ledger is empty.";
-    }
-    return [
-      "Memories (id | kind | standing | content):",
-      ...result.memories.map(
-        (memory) =>
-          `- ${memory.id} | ${memory.kind} | ${
-            memory.verification === "confirmed" ||
-            memory.verification === "locked"
-              ? "confirmed by the owner"
-              : memory.needs_review
-                ? "a proposal, waiting for the owner"
-                : "noted by an agent"
-          } | ${oneLine(memory.content, 400)}`,
-      ),
-    ].join("\n");
-  },
-
   async find_todos(context, input) {
     const { db, user } = context;
     const today = toolToday(context);
@@ -1538,61 +1497,6 @@ const handlers: Handlers = {
       );
     }
     return out.join("\n");
-  },
-
-  async propose_memory(context, input) {
-    const { db, user } = context;
-    await proposingRun(context, ["review", "period"]);
-    const receipt = await receiptOf(context, input.quote, input.entry_id);
-    if (!receipt) {
-      throw new PlannerAgentToolError("A memory needs the owner's words.");
-    }
-    const fingerprint = await computeFingerprint(
-      user,
-      input.content.trim().replace(/\s+/g, " "),
-      "semantic",
-      input.kind,
-      "global",
-      null,
-    );
-    const rejected = await isRejectedRecently(db, user.id, null, fingerprint);
-    if (rejected.blocked) {
-      throw new PlannerAgentToolError(
-        "The owner rejected this memory in the last 30 days. Don't propose it again.",
-      );
-    }
-    const created = await createMemory(
-      db,
-      user,
-      { type: "agent", name: PLANNER_AGENT_MEMORY_SOURCE },
-      {
-        content: input.content,
-        factKey: null,
-        tags: [],
-        type: "semantic",
-        kind: input.kind,
-        scopeType: "global",
-        scopeKey: null,
-        tier: "normal",
-        importance: 50,
-        confidence: 60,
-        verification: "inferred",
-        sourceAgent: PLANNER_AGENT_MEMORY_SOURCE,
-        evidence: [
-          {
-            sourceType: "memo",
-            sourceId: `memos/${receipt.id}`,
-            relationType: "derived_from",
-            observedAt: receipt.day,
-            excerpt: receipt.quote,
-          },
-        ],
-      },
-    );
-    if (created.duplicate) {
-      return `Already held as memory ${created.memory.id}; nothing new was proposed.`;
-    }
-    return `Proposed as memory ${created.memory.id}. It waits on the Memory page for the owner; the receipt is the entry of ${receipt.day}.`;
   },
 
   async propose_goal(context, input) {
@@ -1903,51 +1807,6 @@ const handlers: Handlers = {
       why: input.why,
     });
     return `Proposed ${input.remove ? "unlinking" : "linking"} entry ${memo.id} and entry ${other.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
-  },
-
-  async propose_memory_change(context, input) {
-    const memory = await requireMemory(
-      context.db,
-      context.user,
-      input.memory_id,
-    ).catch(() => null);
-    if (!memory || memory.deletedAt) {
-      throw new PlannerAgentToolError(
-        "No memory of the owner's has that id. Use an id from read_memories.",
-      );
-    }
-    if (memory.status !== "active") {
-      throw new PlannerAgentToolError(
-        `That memory is ${memory.status}, not active, so it cannot be corrected or forgotten.`,
-      );
-    }
-    if (memory.needsReview) {
-      throw new PlannerAgentToolError(
-        "That memory is a proposal waiting on the Memory page; the owner rules on it there.",
-      );
-    }
-    if (
-      input.action === "correct" &&
-      normalizeMemoryContent(input.content ?? "") === memory.content
-    ) {
-      throw new PlannerAgentToolError(
-        "The memory already reads like that. Nothing was proposed.",
-      );
-    }
-    const action = await fileAction(context, {
-      kind: "memory_change",
-      taskId: null,
-      field: null,
-      change: {
-        memory_id: memory.id,
-        action: input.action,
-        ...(input.action === "correct" ? { content: input.content } : {}),
-        was: { content: memory.content, status: memory.status },
-        label: entryPreview(memory.content),
-      },
-      why: input.why,
-    });
-    return `Proposed ${input.action === "correct" ? "correcting" : "forgetting"} memory ${memory.id} (${action.id}). It shows in this answer's card; nothing changes before the owner accepts it.`;
   },
 
   async propose_health_change(context, input) {

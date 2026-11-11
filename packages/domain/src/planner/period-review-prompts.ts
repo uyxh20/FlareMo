@@ -134,7 +134,6 @@ export function plannerPeriodContextBlock(
             : ""
         }.`
       : "Last period: no review recorded.",
-    `Memories: ${context.memories.created} created in the period, ${context.memories.revised} older ones revised.`,
     "",
     ...context.weeks.flatMap((week) => [
       `## ${weekHeader(week)}`,
@@ -449,7 +448,7 @@ const STEP_GUIDANCE: Record<string, string> = {
   "year:northstar":
     "Set out what the year's rows proved and disproved about the north star. Ask whether it still holds. Do not rewrite it.",
   "year:beliefs":
-    "Compare memories created in the year with older ones revised in it. Name what changed. Ask what the owner believed in January that they do not now.",
+    "Compare what the entries said early in the year with what they say late in it. Name what changed. Ask what the owner believed in January that they do not now.",
   "year:sentence":
     "The owner writes the year sentence and next year's four goals. Check the sentence against the rows; never suggest a goal.",
 };

@@ -17,7 +17,7 @@ import {
 import type { Hono } from "hono";
 import { cleanupFlaremoArtifacts } from "../../artifact-cleanup";
 import {
-  getBrowserRequestContext,
+  getFlareMoDb,
   type HonoBindings,
   loadAuthFactory,
 } from "../../context";
@@ -83,17 +83,15 @@ export function registerMaintenanceRoutes(app: Hono<HonoBindings>) {
       return c.json({ ok: true, job: completed });
     } catch (error) {
       if (jobId) {
-        const context = await getBrowserRequestContext(c).catch(
-          () => undefined,
-        );
-        if (context) {
-          await failMemberRemovalJob(
-            context.db,
-            jobId,
-            "member_removal_failed",
-            error instanceof Error ? error.message : "Member removal failed",
-          ).catch(() => undefined);
-        }
+        // Record the failure even when the caller used a PAT: the browser-only
+        // context resolver rejects Authorization headers, so the previous
+        // fallback silently skipped the failed-job write for machine callers.
+        await failMemberRemovalJob(
+          getFlareMoDb(c.env),
+          jobId,
+          "member_removal_failed",
+          error instanceof Error ? error.message : "Member removal failed",
+        ).catch(() => undefined);
       }
       return jsonError(c, error);
     }
@@ -143,24 +141,22 @@ export function registerMaintenanceRoutes(app: Hono<HonoBindings>) {
     }
   });
 
-  // Owner-only recovery path: re-embed every memo and memory from D1 into the
-  // vector indexes. Used after model/dimension changes or index corruption;
+  // Owner-only recovery path: re-embed every memo from D1 into the memo
+  // vector index. Used after model/dimension changes or index corruption;
   // the ops runbook documents it as the outbox/repair trigger.
   app.post("/embeddings/rebuild", async (c) => {
     try {
       const context = await ownerContext(c);
       const provider = createEmbeddingProvider(c.env);
-      const memosIndex = createVectorIndex(c.env, "memo");
-      const memoriesIndex = createVectorIndex(c.env, "memory");
-      if (!provider || !memosIndex || !memoriesIndex) {
+      const memosIndex = createVectorIndex(c.env);
+      if (!provider || !memosIndex) {
         throw new ValidationError(
-          "Embedding provider or vector indexes are not configured.",
+          "Embedding provider or vector index are not configured.",
         );
       }
       const result = await rebuildEmbeddingIndexes(context.db, {
         provider,
         memosIndex,
-        memoriesIndex,
       });
       return c.json(result);
     } catch (error) {

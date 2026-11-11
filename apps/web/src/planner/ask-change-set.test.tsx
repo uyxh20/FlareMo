@@ -349,30 +349,9 @@ describe("one card per answer", () => {
       "Slept badly. #sleep → Skipped the gym.",
     );
   });
-  it("shows a memory correction, a forgotten memory and health rows", async () => {
+  it("shows health rows", async () => {
     const base = { task_id: null, field: null, entry_id: null } as const;
     const container = show([
-      action("m", {
-        ...base,
-        kind: "memory_change",
-        change: {
-          memory_id: "memories/m",
-          action: "correct",
-          content: "Lives in Leeds.",
-          was: { content: "Lives in Hull.", status: "active" },
-          label: "Lives in Hull.",
-        },
-      }),
-      action("f", {
-        ...base,
-        kind: "memory_change",
-        change: {
-          memory_id: "memories/f",
-          action: "forget",
-          was: { content: "Hates mornings.", status: "active" },
-          label: "Hates mornings.",
-        },
-      }),
       action("h", {
         ...base,
         kind: "health_change",
@@ -401,10 +380,6 @@ describe("one card per answer", () => {
     const text =
       container.querySelector('[data-testid="planner-change-set"]')
         ?.textContent ?? "";
-    expect(text).toContain("Correct memory");
-    expect(text).toContain("Lives in Hull. → Lives in Leeds.");
-    expect(text).toContain("Forget memory");
-    expect(text).toContain("Hates mornings.");
     expect(text).toContain("Fix health row");
     // The fix's minutes are a field; the day (no field) stays words.
     expect(text).toContain("minutes: 30 min →");

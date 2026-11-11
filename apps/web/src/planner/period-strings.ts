@@ -117,7 +117,6 @@ export type PlannerPeriodStrings = {
   noSummary: string;
   rungs: string;
   rungsHint: string;
-  memories: string;
   /** The month and quarter chat (period-chat.tsx): the weekly chat's words for a period. */
   chat: {
     reads: string;
@@ -264,8 +263,7 @@ const en: PlannerPeriodStrings = {
   noSummary: "no summary",
   rungs: "Raw rows this review reads",
   rungsHint:
-    "Entries, health rows, tasks done and week records are evidence. Summaries and memories are claims to test.",
-  memories: "Memories",
+    "Entries, health rows, tasks done and week records are evidence. Summaries are claims to test.",
   chat: {
     reads: "What this review reads",
     entries: (count) => `${count} diary ${count === 1 ? "entry" : "entries"}`,
@@ -416,9 +414,7 @@ const zhCN: PlannerPeriodStrings = {
   summary: "总结",
   noSummary: "无总结",
   rungs: "本复盘读取的原始记录",
-  rungsHint:
-    "日记、健康记录、完成的任务和周记录是证据。总结和记忆是待检验的说法。",
-  memories: "记忆",
+  rungsHint: "日记、健康记录、完成的任务和周记录是证据。总结是待检验的说法。",
   chat: {
     ...en.chat,
     reads: "本复盘读取",

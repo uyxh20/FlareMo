@@ -158,13 +158,9 @@ const en = {
       `To ${column}, ${below ? "below" : "above"} ${anchor}`,
     link: "Link entries",
     unlink: "Unlink entries",
-    memoryCorrect: "Correct memory",
-    memoryForget: "Forget memory",
     healthFix: "Fix health row",
     healthAdd: "Add health row",
     healthRemove: "Remove health row",
-    memoryUndoNote:
-      "Undo puts the words back; the memory stays marked as confirmed by you.",
     goalAdd: "New weekly goal",
     goalEdit: "Edit weekly goal",
     goalField: {
@@ -315,12 +311,9 @@ const zhCN: PlannerAskCopy = {
       `移到${column}，在${anchor}${below ? "之下" : "之上"}`,
     link: "关联日记",
     unlink: "取消关联日记",
-    memoryCorrect: "修正记忆",
-    memoryForget: "忘掉记忆",
     healthFix: "修正健康记录",
     healthAdd: "添加健康记录",
     healthRemove: "移除健康记录",
-    memoryUndoNote: "撤销会恢复原来的文字；这条记忆仍标记为由你确认。",
     goalAdd: "新周目标",
     goalEdit: "修改周目标",
     goalField: {
@@ -507,10 +500,6 @@ function usePlannerActionRefresh(task: string | null) {
       void queryClient.invalidateQueries({ queryKey: ["memos"] });
       return;
     }
-    if (action.kind === "memory_change") {
-      void queryClient.invalidateQueries({ queryKey: ["memories"] });
-      return;
-    }
     if (action.kind === "health_change") {
       void queryClient.invalidateQueries({ queryKey: ["health"] });
       return;
@@ -693,12 +682,6 @@ function PlannerProposalBody({
     case "entry_link":
       heading = change.remove ? copy.proposal.unlink : copy.proposal.link;
       break;
-    case "memory_change":
-      heading =
-        change.action === "forget"
-          ? copy.proposal.memoryForget
-          : copy.proposal.memoryCorrect;
-      break;
     case "goal_change":
       heading =
         change.action === "add"
@@ -731,26 +714,24 @@ function PlannerProposalBody({
       ? taskTitle
       : action.kind === "entry_state" || action.kind === "entry_edit"
         ? preview
-        : action.kind === "memory_change" && change.action === "forget"
-          ? asString(change.label)
-          : action.kind === "health_change"
-            ? healthLabel()
-            : action.kind === "goal_change"
-              ? [
-                  asString(
-                    editing && keys.includes("period_start")
-                      ? plannerCardValue(action, editing.edit, "period_start")
-                      : change.week,
-                  ),
-                  change.action === "add"
-                    ? action.state === "open"
-                      ? null
-                      : asString(change.title)
-                    : asString(change.goal_title),
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              : null;
+        : action.kind === "health_change"
+          ? healthLabel()
+          : action.kind === "goal_change"
+            ? [
+                asString(
+                  editing && keys.includes("period_start")
+                    ? plannerCardValue(action, editing.edit, "period_start")
+                    : change.week,
+                ),
+                change.action === "add"
+                  ? action.state === "open"
+                    ? null
+                    : asString(change.title)
+                  : asString(change.goal_title),
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : null;
   const shortField =
     action.kind === "task_change" &&
     action.field &&
@@ -834,17 +815,6 @@ function PlannerProposalBody({
         <p className="font-medium [overflow-wrap:anywhere]">
           {asString(change.preview) ?? ""} →{" "}
           {asString(change.related_preview) ?? ""}
-        </p>
-      )}
-      {action.kind === "memory_change" && change.action === "correct" && (
-        <p className="font-medium [overflow-wrap:anywhere]">
-          {isRecord(change.was) ? (asString(change.was.content) ?? "") : ""} →{" "}
-          {asString(change.content) ?? ""}
-        </p>
-      )}
-      {action.kind === "memory_change" && change.action === "correct" && (
-        <p className="text-xs text-muted-foreground">
-          {copy.proposal.memoryUndoNote}
         </p>
       )}
       {action.kind === "health_change" && change.action === "fix" && (

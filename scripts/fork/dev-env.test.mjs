@@ -28,6 +28,7 @@ import {
   DevEnv,
   devResourceName,
   discoverExtraTables,
+  droppedTables,
   EPHEMERAL_TABLES,
   isProdIdentifier,
   isReadOnlySql,
@@ -440,7 +441,7 @@ describe("assertSafeWranglerCall", () => {
         /production resource/,
       ],
       "vectorize delete production": [
-        ["vectorize", "delete", PROD.vectorizeIndexes[1]],
+        ["vectorize", "delete", PROD.retiredVectorizeIndexes[0]],
         /production resource/,
       ],
       "production names are matched case-insensitively": [
@@ -695,7 +696,6 @@ describe("buildDevConfig", () => {
       DEV_CONFIG.vectorize.map((index) => [index.binding, index.index_name]),
       [
         ["VECTORIZE_MEMOS", "flaremo-dev-memos"],
-        ["VECTORIZE_MEMORIES", "flaremo-dev-memories"],
       ],
     );
     assert.equal(DEV_CONFIG.ratelimits[0].namespace_id, "2001");
@@ -1405,10 +1405,28 @@ describe("table copy policy", () => {
       plan.copy.map(({ table }) => table),
       ["users", "memos"],
     );
-    const created = plan.skipped.find(
-      ({ table }) => table === "memory_evidence",
-    );
+    const created = plan.skipped.find(({ table }) => table === "sync_changes");
     assert.match(created.reason, /created by the upgrade migrations/);
+  });
+
+  test("skips tables the upgrade drops, such as upstream's memory tables", () => {
+    const dropped = droppedTables([
+      "DROP TABLE IF EXISTS `memory_items`;--> statement-breakpoint\nDROP TABLE `memory_fts`;",
+    ]);
+    assert.deepEqual([...dropped].sort(), ["memory_fts", "memory_items"]);
+    const plan = planTableCopy({
+      tables: ["users", "memory_items"],
+      prodColumns: columns({ users: ["id"], memory_items: ["id"] }),
+      devColumns: columns({ users: ["id"], memory_items: ["id"] }),
+      droppedByUpgrade: dropped,
+    });
+    assert.deepEqual(
+      plan.copy.map(({ table }) => table),
+      ["users"],
+    );
+    assert.deepEqual(plan.skipped, [
+      { table: "memory_items", reason: "dropped by the upgrade migrations" },
+    ]);
   });
 
   test("copies the columns both sides have, in dev order, and says what it drops", () => {
@@ -1460,9 +1478,9 @@ describe("import order", () => {
   });
 
   test("only clears tables that exist in dev at the current level", () => {
-    const partial = new Map([...everything, ["memory_evidence", []]]);
+    const partial = new Map([...everything, ["sync_changes", []]]);
     const order = planClearTables(partial);
-    assert.ok(!order.includes("memory_evidence"));
+    assert.ok(!order.includes("sync_changes"));
     assert.equal(order.length, RESTORE_TABLES.length - 1);
   });
 });
@@ -1787,11 +1805,17 @@ function seedProduction(
     "INSERT INTO memo_tags (memo_id, user_id, tag, created_at) VALUES ('memos/1', 'users/owner', 'alpha', ?)",
     NOW,
   );
-  for (const [id, content, verification] of [
-    ["mem/1", "prefers dark mode", "observed"],
-    ["mem/2", "might like tea", "inferred"],
-    ["mem/3", "uses pnpm", "observed"],
-  ]) {
+  // Memories exist only below upstream's 0044, which drops them.
+  const hasMemories = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE name = 'memory_items'")
+    .get();
+  for (const [id, content, verification] of hasMemories
+    ? [
+        ["mem/1", "prefers dark mode", "observed"],
+        ["mem/2", "might like tea", "inferred"],
+        ["mem/3", "uses pnpm", "observed"],
+      ]
+    : []) {
     insert(
       "INSERT INTO memory_items (id, user_id, content, fingerprint, verification, created_at, updated_at) VALUES (?, 'users/owner', ?, ?, ?, ?, ?)",
       id,
@@ -1943,14 +1967,13 @@ e2e("dev environment against a fake Cloudflare", () => {
       "flaremo-dev-member-removal",
     ]);
     assert.deepEqual([...h.fake.indexes].sort(), [
-      ["flaremo-dev-memories", { dimensions: 1024, metric: "cosine" }],
       ["flaremo-dev-memos", { dimensions: 1024, metric: "cosine" }],
     ]);
     assert.deepEqual(
       h.fake.secretNames("flaremo-dev").sort(),
       [...REQUIRED_WORKER_SECRETS].sort(),
     );
-    assert.equal(first.created.length, 6);
+    assert.equal(first.created.length, 5);
 
     // Secrets: random, valid, and never printed.
     const output = h.logs.join("\n");
@@ -2038,10 +2061,18 @@ e2e("dev environment against a fake Cloudflare", () => {
     const local = sortedMigrationFiles(MIGRATIONS_DIR);
     assert.equal(latestMigration(dev), local.at(-1));
     assert.equal(count(dev, "d1_migrations"), local.length);
+    // Upstream's 0044 dropped the memory tables, and the clone did not copy
+    // them only to drop them again.
     assert.ok(
-      dev
-        .prepare("SELECT 1 FROM sqlite_master WHERE name = 'memory_evidence'")
+      !dev
+        .prepare("SELECT 1 FROM sqlite_master WHERE name = 'memory_items'")
         .get(),
+    );
+    assert.ok(
+      summary.skipped.some(
+        ({ table, reason }) =>
+          table === "memory_items" && /dropped by the upgrade/.test(reason),
+      ),
     );
     assert.equal(summary.plan.prodLatest, PROD_LEVEL);
     assert.deepEqual(
@@ -2061,17 +2092,29 @@ e2e("dev environment against a fake Cloudflare", () => {
       auth_apikeys: 2,
       memos: 3,
       memo_tags: 1,
-      memory_items: 3,
       settings: 1,
       attachments: 1,
     })) {
       assert.equal(count(dev, table), expected, table);
+      // Upstream's 0050 gives a token with no scope the notes scope; the
+      // rehearsal runs it on dev, so that one column is checked apart.
+      const scrub = (rows) =>
+        table === "auth_apikeys"
+          ? rows.map(({ permissions: _scope, ...row }) => row)
+          : rows;
       assert.deepEqual(
-        copiedData(dev, prod, table),
-        copiedData(prod, prod, table),
+        scrub(copiedData(dev, prod, table)),
+        scrub(copiedData(prod, prod, table)),
         `${table} content`,
       );
     }
+    assert.deepEqual(
+      dev
+        .prepare("SELECT DISTINCT permissions FROM auth_apikeys")
+        .all()
+        .map((row) => row.permissions),
+      ['{"memos":["read","write"]}'],
+    );
     assert.equal(
       dev.prepare("SELECT password FROM auth_accounts").get().password,
       "scrypt$login-hash",
@@ -2109,9 +2152,9 @@ e2e("dev environment against a fake Cloudflare", () => {
       );
     }
 
-    // Derived state is rebuilt for the fresh Vectorize indexes: memos that are
-    // normal/archived, and active memories that are not unconfirmed guesses.
-    assert.equal(count(dev, "embedding_tasks"), 2 + 2);
+    // Derived state is rebuilt for the fresh Vectorize index: memos that are
+    // normal/archived.
+    assert.equal(count(dev, "embedding_tasks"), 2);
     assert.equal(
       dev
         .prepare(
@@ -2122,7 +2165,6 @@ e2e("dev environment against a fake Cloudflare", () => {
     );
     assert.ok(count(dev, "memo_hourly_counts") > 0);
     assert.equal(count(dev, "memos_fts"), count(dev, "memos"));
-    assert.equal(count(dev, "memory_fts"), count(dev, "memory_items"));
 
     // R2: the one attachment object was copied with its content type.
     const copied = h.fake.buckets
@@ -2863,7 +2905,7 @@ e2e("dev environment against a fake Cloudflare", () => {
     assert.equal(report.prodLatest, PROD_LEVEL);
     assert.equal(report.bucket, true);
     assert.deepEqual(Object.values(report.queues), [true, true]);
-    assert.deepEqual(Object.values(report.indexes), [true, true]);
+    assert.deepEqual(Object.values(report.indexes), [true]);
     assert.deepEqual(report.secrets, {
       BETTER_AUTH_SECRET: true,
       FLAREMO_BOOTSTRAP_SECRET: true,

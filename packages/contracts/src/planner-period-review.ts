@@ -349,7 +349,7 @@ export const plannerPeriodSteps: Record<
       id: "beliefs",
       title: "Belief ledger",
       question: "What did you believe in January that you don't now?",
-      from: "Memories created against memories revised",
+      from: "Early entries against late ones",
     },
     {
       id: "sentence",
@@ -583,13 +583,6 @@ export const plannerPeriodReviewResponseSchema = z.object({
   child_goals: z.array(plannerPeriodGoalSchema),
   north_star: plannerPeriodGoalSchema.nullable(),
   previous: plannerPeriodPreviousSchema.nullable(),
-  // Memories: created in the period, and older ones revised in it (the belief ledger).
-  memories: z.object({
-    created: z.number().int(),
-    revised: z.number().int(),
-    created_lines: z.array(z.string()),
-    revised_lines: z.array(z.string()),
-  }),
   state: z.record(z.string(), z.unknown()),
   done_at: z.string().nullable(),
   memo: z.object({ id: z.string(), content: z.string() }).nullable(),

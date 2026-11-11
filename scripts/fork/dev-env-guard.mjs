@@ -22,7 +22,10 @@ export const PROD = Object.freeze({
   d1Id: "d4ad3911-7515-4b6d-ac52-b06537ed9c37",
   bucket: "flaremo-attachments",
   queues: Object.freeze(["flaremo-member-removal", "flaremo-data-export"]),
-  vectorizeIndexes: Object.freeze(["flaremo-memos", "flaremo-memories"]),
+  vectorizeIndexes: Object.freeze(["flaremo-memos"]),
+  // Upstream removed memory search in v0.27, so the Worker no longer binds
+  // this index. It still exists on the account and stays protected.
+  retiredVectorizeIndexes: Object.freeze(["flaremo-memories"]),
   publicUrl: "https://flaremo.ulysse-ha-19.workers.dev",
   // The namespace id shipped in wrangler.jsonc.example.
   ratelimitNamespaceId: "1001",
@@ -88,6 +91,7 @@ export function prodIdentifiers(prod = PROD) {
       prod.bucket,
       ...prod.queues,
       ...prod.vectorizeIndexes,
+      ...(prod.retiredVectorizeIndexes ?? []),
     ].map(normalize),
   );
 }

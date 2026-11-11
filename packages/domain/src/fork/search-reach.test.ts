@@ -10,16 +10,15 @@ import type {
 } from "../embedding";
 import { dispatchEmbeddingOutbox } from "../embedding-outbox";
 import { importData } from "../import-export";
-import { createMemory } from "../memory";
 import { createMemo, updateMemo } from "../memos";
 import type { TeamViewer } from "../team-permissions";
 import { ensureTeamOwner } from "../test-support";
 import { runSearchCatchup } from "./search-catchup";
 
-// Every way an entry or a memory gets into the app must also get it into
+// Every way an entry gets into the app must also get it into
 // search (fork-owned; docs/fork-data-sources.md, "Ways in").
 //
-// Search has two indexes. The keyword index (memos_fts, memory_fts) is kept by
+// Search has two indexes. The keyword index (memos_fts) is kept by
 // database triggers, so every insert reaches it. The semantic index lives in
 // Vectorize and is fed by the embedding outbox: a write path reaches it only if
 // it queues an embedding task. Each test writes through one path, runs the
@@ -50,8 +49,8 @@ class MemoryIndex implements VectorIndex {
   async describe() {
     return { vectorCount: this.store.size, dimensions: 4 };
   }
-  /** The memo or memory ids the index holds vectors for. */
-  resources(key: "memo_id" | "memory_id"): string[] {
+  /** The memo ids the index holds vectors for. */
+  resources(key: "memo_id"): string[] {
     return [...this.store.values()].map((vector) =>
       String((vector.metadata as Record<string, unknown> | undefined)?.[key]),
     );
@@ -71,14 +70,13 @@ let database: Awaited<ReturnType<Miniflare["getD1Database"]>>;
 let db: ReturnType<typeof createDb>;
 let owner: TeamViewer;
 let memosIndex: MemoryIndex;
-let memoriesIndex: MemoryIndex;
 
 async function runOutbox() {
-  await dispatchEmbeddingOutbox(db, { provider, memosIndex, memoriesIndex });
+  await dispatchEmbeddingOutbox(db, { provider, memosIndex });
 }
 
-async function keywordHits(table: "memos_fts" | "memory_fts", word: string) {
-  const column = table === "memos_fts" ? "memo_id" : "memory_id";
+async function keywordHits(table: "memos_fts", word: string) {
+  const column = "memo_id";
   const rows = await database
     .prepare(`SELECT ${column} AS id FROM ${table} WHERE ${table} MATCH ?`)
     .bind(word)
@@ -119,7 +117,6 @@ describe("every way in reaches search", () => {
     await applyFlaremoMigrations(database);
     owner = await ensureTeamOwner(db);
     memosIndex = new MemoryIndex();
-    memoriesIndex = new MemoryIndex();
   });
 
   afterEach(async () => {
@@ -164,29 +161,7 @@ describe("every way in reaches search", () => {
   it("an imported entry reaches the semantic index", async () => {
     await importOne({ name: "memos/imported-sem", content: "Snorkeling trip" });
     await runOutbox();
-    await runSearchCatchup(db, { provider, memosIndex, memoriesIndex });
+    await runSearchCatchup(db, { provider, memosIndex });
     expect(memosIndex.resources("memo_id")).toEqual(["memos/imported-sem"]);
-  });
-
-  it("a memory the owner writes reaches both indexes", async () => {
-    const created = await createMemory(
-      db,
-      owner,
-      { type: "user" },
-      {
-        content: "Owner prefers swimming before work",
-        type: "semantic",
-        kind: "preference",
-        scopeType: "global",
-        scopeKey: null,
-        tier: "normal",
-        importance: 60,
-        confidence: 90,
-      },
-    );
-    await runOutbox();
-    const id = created.memory.id;
-    expect(await keywordHits("memory_fts", "swimming")).toEqual([id]);
-    expect(memoriesIndex.resources("memory_id")).toEqual([id]);
   });
 });

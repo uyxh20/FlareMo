@@ -19,7 +19,7 @@ import {
   plannerWeekMonthOf,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
+import { memos, memoTags, tasks } from "@flaremo/db";
 import { healthEntry } from "@flaremo/db/src/schema/fork-health";
 import {
   plannerGoalFlag,
@@ -40,7 +40,6 @@ import {
   lt,
   ne,
   notInArray,
-  or,
   sql,
 } from "drizzle-orm";
 import { healthReadGoalProgress, healthReadWeek } from "../health/read";
@@ -56,7 +55,7 @@ import type { PlannerCascadeStyle } from "./review-cascade";
 // What the weekly review's model reads (fork-owned add-on,
 // docs/planning-cockpit-goals-review.md): the goal cascade, recent scores, the
 // last summary, the week's tasks, the week's diary entries, the week's health
-// tracker rows and the memories made or changed that week, read from the
+// tracker rows, read from the
 // owner's own data each time a draft is asked for. The prompts that use it are in
 // review-prompts.ts. Nothing here writes.
 //
@@ -374,72 +373,6 @@ export async function plannerReadWeekDiary(
   return plannerFitDiary(rows.map(plannerMarkLinkSummary), budget);
 }
 
-/** A memory made or changed during the week, as the review reads it. */
-export type PlannerWeekMemory = {
-  kind: string;
-  content: string;
-  /** Proposed by the memory layer and not confirmed by the owner yet. */
-  unconfirmed: boolean;
-};
-
-/** Memories the review reads per week, most important first. */
-export const PLANNER_MEMORY_MAX = 25;
-const MEMORY_CHARS = 280;
-
-/**
- * The owner's live memories created or updated during the week (local
- * midnight to local midnight), most important first. Rejected, archived,
- * superseded and deleted memories are left out.
- */
-export async function plannerReadWeekMemories(
-  db: FlareMoDb,
-  input: { userId: string; weekStart: string },
-): Promise<PlannerWeekMemory[]> {
-  const week = plannerWeekInstants(input.weekStart);
-  const rows = await db
-    .select({
-      kind: memoryItems.kind,
-      content: memoryItems.content,
-      verification: memoryItems.verification,
-    })
-    .from(memoryItems)
-    .where(
-      and(
-        eq(memoryItems.userId, input.userId),
-        eq(memoryItems.status, "active"),
-        isNull(memoryItems.deletedAt),
-        isNull(memoryItems.rejectedAt),
-        or(
-          and(
-            gte(memoryItems.createdAt, week.from),
-            lt(memoryItems.createdAt, week.to),
-          ),
-          and(
-            gte(memoryItems.updatedAt, week.from),
-            lt(memoryItems.updatedAt, week.to),
-          ),
-        ),
-      ),
-    )
-    .orderBy(desc(memoryItems.importance), desc(memoryItems.updatedAt))
-    .limit(PLANNER_MEMORY_MAX)
-    .all();
-  return rows.flatMap((row) => {
-    const text = row.content.replace(/\s+/g, " ").trim();
-    if (!text) return [];
-    return [
-      {
-        kind: row.kind,
-        content:
-          text.length > MEMORY_CHARS
-            ? `${text.slice(0, MEMORY_CHARS - 1)}…`
-            : text,
-        unconfirmed: row.verification === "inferred",
-      },
-    ];
-  });
-}
-
 /** The week's health tracker rows and how they compare with the targets. */
 export type PlannerWeekHealth = {
   entries: Array<
@@ -608,8 +541,6 @@ export type PlannerReviewContext = {
   diary: PlannerDiaryEntry[];
   /** The health tracker's rows for the week, with the targets. */
   health: PlannerWeekHealth | null;
-  /** Memories made or changed during the week. */
-  memories: PlannerWeekMemory[];
   /**
    * How the context shows the goal cascade: four flat lines (the default) or
    * the ladder per objective with counts (fork-owned, review-cascade.ts).
@@ -716,7 +647,6 @@ export async function plannerReadReviewContext(
     planQuarterGoals,
     planMonthGoals,
     health,
-    memories,
   ] = await Promise.all([
     plannerReadNorthStar(db, userId),
     yearRead,
@@ -796,7 +726,6 @@ export async function plannerReadReviewContext(
     samePeriod(monthStart, planMonthStart, readMonth, monthRead),
     // The tracker is an add-on: a review still works if it cannot be read.
     plannerReadWeekHealth(db, { userId, weekStart }).catch(() => null),
-    plannerReadWeekMemories(db, { userId, weekStart }).catch(() => []),
   ]);
 
   const live = open.filter((row) => !row.droppedAt);
@@ -878,7 +807,6 @@ export async function plannerReadReviewContext(
       })),
     diary,
     health,
-    memories,
   };
 }
 

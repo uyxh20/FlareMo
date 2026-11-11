@@ -2,16 +2,26 @@ import type { HomeContent } from "../copy";
 
 export const ES_HOME: HomeContent = {
   heroEyebrow: "Código abierto · Cloudflare nativo · Gestión del conocimiento",
-  heroTitleLine1: "Cero servidores. Tuyo para siempre.",
-  heroTitleLine2: "Un segundo cerebro nativo de IA que crece contigo.",
+  heroTitleLine1: "Sin servidores que mantener.",
+  heroTitleLine2: "Un segundo cerebro nativo de IA.",
   heroSubtitle:
-    "Mínimo, nunca superficial. Sereno, nunca estridente. Escribe con libertad en Cloudflare Edge: tus notas se convierten en tareas, artículos y una base de conocimiento, además de una memoria a largo plazo compartida por tus agentes de IA.",
+    "Escribe en el edge de Cloudflare: tus notas se convierten en tareas, artículos y una base de conocimiento con búsqueda, las mismas que tus agentes de IA pueden leer y escribir por MCP.",
   primaryCta: "Guía de despliegue",
   secondaryCta: "Código en GitHub",
-  statMemos: "~2,5 millones de notas",
-  statPhotos: "10.000 fotos comprimidas · 0$ tráfico",
-  statServers: "Latencia ultrabaja 24/7",
-  statUptime: "Replicación multirregional",
+  heroFacts: [
+    {
+      label: "Almacenamiento D1",
+      value: "5 GB",
+      detail: "~2,5 millones de notas",
+    },
+    {
+      label: "Almacenamiento R2",
+      value: "10 GB",
+      detail: "~10.000 fotos · 0 $ de tráfico",
+    },
+    { label: "Red edge", value: "300+", detail: "ubicaciones, < 100 ms" },
+    { label: "Despliegue", value: "5 min", detail: "del clon a producción" },
+  ],
   featuresBadge: "Funciones clave",
   featuresHeading: "¿Por qué elegir FlareMo?",
   featuresSubtitle:
@@ -20,12 +30,12 @@ export const ES_HOME: HomeContent = {
     {
       title: "Durabilidad por diseño",
       description:
-        "Tus notas viven en Cloudflare D1 y R2 con persistencia multirregional. Fallos de disco o cortes de luz jamás tocarán tus datos.",
+        "Tus notas viven en Cloudflare D1 y R2 con replicación multirregional. Un disco roto o una migración no se las llevan.",
     },
     {
-      title: "Plan gratuito sin letra pequeña",
+      title: "Plan gratuito, límites claros",
       description:
-        "El plan gratuito alberga 2,5 millones de notas y 10.000 fotos. R2 no cobra por transferencia saliente, sin sorpresas en tu factura.",
+        "El plan gratuito incluye 5 GB en D1 (~2,5 millones de notas) y 10 GB en R2 (~10.000 fotos). R2 no cobra tráfico saliente mientras sigas dentro de esas cuotas.",
     },
     {
       title: "Funciona sin conexión y PWA",
@@ -33,9 +43,9 @@ export const ES_HOME: HomeContent = {
         "PWA instalable. Escribe en aviones o el metro. Tus borradores se guardan en local y se sincronizan al recuperar la red.",
     },
     {
-      title: "Memoria de IA a largo plazo",
+      title: "La IA trabaja sobre tus notas",
       description:
-        "Mediante /memory/mcp, agentes de IA (Claude, Cursor) leen y actualizan tu contexto y preferencias persistentes de forma auditada.",
+        "Un endpoint MCP integrado permite a los agentes de IA (Claude, Cursor, Codex) buscar, leer y escribir tus propias notas. Nada se resume automáticamente en un almacén de memoria aparte.",
     },
     {
       title: "Un espacio de equipo para compartir",
@@ -60,13 +70,13 @@ export const ES_HOME: HomeContent = {
   comparisonRows: [
     {
       label: "Ubicación de datos",
-      cloudflare: "Almacenamiento distribuido multirregional Cloudflare",
+      cloudflare: "Almacenamiento multirregional de Cloudflare",
       nas: "Disco duro único o RAID en tu propia casa",
       vps: "Disco virtual en un centro de datos único",
     },
     {
       label: "Riesgo de hardware",
-      cloudflare: "Conmutación por error automática, cero riesgo",
+      cloudflare: "Replicado entre regiones, sin discos que gestionar",
       nas: "Fallo de disco o corte eléctrico = pérdida total",
       vps: "Caída del hipervisor o error de configuración",
     },
@@ -78,7 +88,7 @@ export const ES_HOME: HomeContent = {
     },
     {
       label: "Mantenimiento diario",
-      cloudflare: "Cero: sin parches de sistema ni Docker",
+      cloudflare: "Sin parches de sistema ni Docker que mantener",
       nas: "Actualizaciones de SO y revisión de discos SMART",
       vps: "Parches de seguridad y configuración de cortafuegos",
     },
@@ -90,15 +100,14 @@ export const ES_HOME: HomeContent = {
     },
     {
       label: "Coste recurrente",
-      cloudflare: "0 $ / mes en el generoso plan gratuito",
+      cloudflare: "0 $ dentro del plan gratuito (con límites)",
       nas: "Alto coste de hardware inicial + gasto de electricidad",
       vps: "Facturas mensuales o anuales de alojamiento",
     },
   ],
-  screenshotsHeading: "Experiencia visual refinada",
+  screenshotsHeading: "Un vistazo por dentro",
   screenshotsSubtitle:
-    "Modo claro, modo oscuro y diseño adaptable para móviles. Todo en producción y funcionando.",
-  faqBadge: "Conviene saber",
+    "Claro, oscuro y móvil: capturas reales de la app publicada, no un mockup.",
   faqHeading: "Preguntas Frecuentes",
   faqItems: [
     {
@@ -115,15 +124,14 @@ export const ES_HOME: HomeContent = {
     },
     {
       q: "¿Puedo conectar mis propios scripts y herramientas?",
-      a: "Sí. Una API abierta con tokens personales revocables cubre la automatización; para IA, el CLI y el endpoint MCP integrados leen y escriben la misma Agent Memory. El alcance exacto está en la matriz de compatibilidad.",
+      a: "Sí. Una API abierta con tokens personales revocables cubre la automatización; para IA, el endpoint `/mcp` expone listar, buscar, leer, crear, actualizar y eliminar tus notas, y el skill `flaremo-notes` cubre las reglas de uso. El alcance exacto está en la matriz de compatibilidad.",
     },
     {
       q: "¿Qué diferencia hay entre modo personal y equipo?",
       a: "Por defecto es un diario personal cifrado. Al activar el modo de equipo, invitas a colegas con enlaces de un solo uso; cada nota puede ser privada (solo tú), visible para el equipo (lectura y comentarios) o pública.",
     },
   ],
-  ctaBadge: "Empieza ahora",
-  ctaHeading: "Cinco minutos para desplegar. Tuyo para siempre.",
+  ctaHeading: "Cinco minutos para desplegar. Y es tuyo.",
   ctaSubtitle:
     "Sin servidores, sin tarjeta de crédito. Despliega en Cloudflare en 5 minutos.",
   ctaButton: "Ver guía de despliegue en 5 minutos",

@@ -166,13 +166,34 @@ export function strayMigrations(localFiles, trackedFiles) {
   return localFiles.filter((name) => !tracked.has(name)).sort();
 }
 
-/** Compare row counts. `fatal` means roll back; `notes` are just reported. */
-export function compareCounts(before, after) {
+/**
+ * The tables the given migration files drop on purpose (`DROP TABLE`), such as
+ * upstream's 0044_drop_agent_memory. Their disappearance is expected.
+ */
+export function droppedTables(sqlTexts) {
+  const dropped = new Set();
+  for (const sql of sqlTexts) {
+    for (const match of sql.matchAll(
+      /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?[`"[]?([A-Za-z0-9_]+)[`"\]]?/gi,
+    )) {
+      dropped.add(match[1]);
+    }
+  }
+  return dropped;
+}
+
+/**
+ * Compare row counts. `fatal` means roll back; `notes` are just reported.
+ * `expectedDrops` are tables a pending migration drops on purpose.
+ */
+export function compareCounts(before, after, expectedDrops = new Set()) {
   const fatal = [];
   const notes = [];
   for (const [table, was] of Object.entries(before)) {
     const now = after[table];
-    if (now === undefined) {
+    if (now === undefined && expectedDrops.has(table)) {
+      notes.push(`${table}: dropped by a pending migration (was ${was})`);
+    } else if (now === undefined) {
       fatal.push(`${table}: table disappeared (was ${was})`);
     } else if (now < was) {
       const line = `${table}: ${was} -> ${now}`;
@@ -222,23 +243,37 @@ function configBindingNames(config) {
 }
 
 /**
+ * Live bindings a deploy removes on purpose: upstream removed memory search in
+ * v0.27 (the fork followed in the v0.32.1 sync), so `VECTORIZE_MEMORIES` goes.
+ */
+export const RETIRED_BINDINGS = new Set(["VECTORIZE_MEMORIES"]);
+
+/**
  * What a deploy of `config` would change in live's bindings. `unknown`: live
  * bindings (not vars or secrets) the config lacks, which wrangler would remove.
+ * `retired`: the ones of those it removes on purpose (RETIRED_BINDINGS).
  * `restored`: vars the config sets that live does not have, which come back
  * with the example's default.
  */
 export function bindingDrift(liveBindings, config) {
   const declared = configBindingNames(config);
   const liveNames = new Set(liveBindings.map((binding) => binding.name));
-  const unknown = liveBindings
+  const removed = liveBindings
     .filter((binding) => !VAR_BINDING_TYPES.has(binding.type))
-    .filter((binding) => binding.name && !declared.has(binding.name))
-    .map((binding) => `${binding.name} (${binding.type})`)
+    .filter((binding) => binding.name && !declared.has(binding.name));
+  const label = (binding) => `${binding.name} (${binding.type})`;
+  const unknown = removed
+    .filter((binding) => !RETIRED_BINDINGS.has(binding.name))
+    .map(label)
+    .sort();
+  const retired = removed
+    .filter((binding) => RETIRED_BINDINGS.has(binding.name))
+    .map(label)
     .sort();
   const restored = Object.keys(config.vars ?? {})
     .filter((name) => !liveNames.has(name))
     .sort();
-  return { unknown, restored };
+  return { unknown, retired, restored };
 }
 
 /**
@@ -344,6 +379,8 @@ export function realIo() {
     say: (line = "") => console.log(line),
     localMigrations: () =>
       readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql")),
+    readMigration: (name) =>
+      readFileSync(join(ROOT, "migrations", name), "utf8"),
     readExample: () =>
       readFileSync(join(ROOT, "wrangler.jsonc.example"), "utf8"),
     readRootConfig: () =>
@@ -549,6 +586,11 @@ async function deploySteps(io, { dryRun }) {
   say(
     "1/9 Config rebuilt from the example + live settings (matches production).",
   );
+  if (drift.retired?.length > 0) {
+    say(
+      `   This deploy removes retired bindings on purpose: ${drift.retired.join(", ")}.`,
+    );
+  }
   if (drift.restored.length > 0) {
     say(
       `    note: vars live does not set will take the example's default: ${drift.restored.join(", ")}`,
@@ -591,6 +633,11 @@ async function deploySteps(io, { dryRun }) {
     io.localMigrations(),
     await appliedMigrations(io),
   );
+  // Tables a pending migration drops on purpose (upstream's memory removal):
+  // their disappearance is reported, not rolled back.
+  const expectedDrops = droppedTables(
+    pending.map((name) => io.readMigration?.(name) ?? ""),
+  );
   // Taken as late as possible, so normal diary use during the build cannot
   // make the comparison cry wolf.
   const before = await rowCounts(io);
@@ -621,7 +668,7 @@ async function deploySteps(io, { dryRun }) {
       );
       migrated = true;
       const afterMigrations = await rowCounts(io);
-      const { fatal } = compareCounts(before, afterMigrations);
+      const { fatal } = compareCounts(before, afterMigrations, expectedDrops);
       if (fatal.length > 0) {
         throw new Error(
           `rows dropped during the migrations, so the Worker was not deployed: ${fatal.join("; ")}`,
@@ -644,7 +691,7 @@ async function deploySteps(io, { dryRun }) {
 
     await io.sleep(5000);
     const afterCounts = await rowCounts(io);
-    const { fatal, notes } = compareCounts(before, afterCounts);
+    const { fatal, notes } = compareCounts(before, afterCounts, expectedDrops);
     if (fatal.length > 0) {
       throw new Error(
         fatal.map((line) => `row count dropped: ${line}`).join("; "),
@@ -706,7 +753,7 @@ async function recover(io, { rollbackTarget, bookmark, migrated, pending }) {
   }
   if (migrated) {
     say(
-      `The database schema is NOT rolled back: ${pending.length} migration(s) stay applied (${pending.join(", ")}). Migrations only add, so the old Worker keeps working on the new tables.`,
+      `The database schema is NOT rolled back: ${pending.length} migration(s) stay applied (${pending.join(", ")}). Migrations mostly add, so the old Worker keeps working on the new tables; a table a migration dropped stays dropped.`,
     );
   }
   say(

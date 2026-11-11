@@ -904,8 +904,7 @@ plannerPeriodReviewApi.get(`${CHAT}/agent/:session/stream`, async (c) => {
 });
 
 // The agent's answer to a step, asked for every few seconds, as for a week.
-// The memo is the last step (the period's memories are proposed in it): once
-// it is read, the session is deleted.
+// The memo is the last step: once it is read, the session is deleted.
 plannerPeriodReviewApi.get(`${CHAT}/agent/:session`, async (c) => {
   try {
     const context = await getRequestContext(c);

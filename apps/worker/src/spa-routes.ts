@@ -25,7 +25,7 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/recover",
   "/setup",
   "/account",
-  "/memory",
+  "/connect",
   "/projects",
   "/cockpit",
   "/goals",

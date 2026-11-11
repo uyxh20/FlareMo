@@ -170,9 +170,8 @@ The full list, with each response type, is the comment block in `packages/contra
 - the week's tasks: titles of those done (40), in Doing (30) and planned To Do (30); and for those done, worked on or touched this week and those in Doing (up to 60, most recently touched first), their status, notes, live comments and what happened to them this week (`plannerReadTaskDetails`), 600 characters of notes and comments each, or 20,000 for the review agent. The clash check reads the same task details;
 - the week's diary entries, without the summaries: up to 40,000 characters, or 12,000 with Workers AI. Entries shorter than an even share stay whole and give the rest to the longer ones, which are cut to one length.
 - the health tracker's rows for the week (day, kind, variant, minutes, home time, units, bender, a short "feel" note) and its totals against the targets, including the night-out units used this year (`plannerReadWeekHealth`);
-- the owner's live memories created or updated during the week, up to 25, most important first, with the ones the owner never confirmed marked (`plannerReadWeekMemories`).
 
-A week runs from Monday 00:00 to the next Monday 00:00 in the owner's zone (`FORK_HEALTH_TIME_ZONE`, Europe/Copenhagen), not in UTC: diary entries, finished tasks and memories are cut at local midnight (`plannerWeekInstants`), and each entry is dated by its local day.
+A week runs from Monday 00:00 to the next Monday 00:00 in the owner's zone (`FORK_HEALTH_TIME_ZONE`, Europe/Copenhagen), not in UTC: diary entries and finished tasks are cut at local midnight (`plannerWeekInstants`), and each entry is dated by its local day.
 
 The context opens with rules for reading it, one for each kind of invented fact the model eval found: only what this week's material says happened is an event, an entry's day is when it was written and not always the day it describes, numbers are copied and never totalled, and #tags are not names. When the owner changes a drafted score, the memo is told which scores the drafts were written for and writes the basis afresh.
 

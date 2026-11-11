@@ -448,7 +448,6 @@ plannerAgentApi.post(
         action.kind !== "entry_edit" &&
         action.kind !== "entry_state" &&
         action.kind !== "entry_link" &&
-        action.kind !== "memory_change" &&
         action.kind !== "health_change" &&
         action.kind !== "goal_change"
       ) {

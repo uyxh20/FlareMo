@@ -102,11 +102,3 @@ export async function forkAgentNightly(
   const scored = await plannerFlywheelNightly(db, now);
   console.log(JSON.stringify({ message: "Flywheel scorecard", ...scored }));
 }
-
-/**
- * Nightly dreaming is off where the general agent runs: the agent proposes
- * memories from the reviews instead. The conflict patrol still runs.
- */
-export function forkAgentReplacesDreaming(env: FlareMoEnv): boolean {
-  return Boolean(env.ANTHROPIC_API_KEY?.trim() && env.FLAREMO_AGENT?.trim());
-}

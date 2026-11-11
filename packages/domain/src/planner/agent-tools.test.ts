@@ -76,9 +76,7 @@ describe("the general agent's tools", () => {
   beforeEach(async () => {
     await rt.reset();
     await rt.database.batch(
-      ["memory_evidence", "memory_events", "memory_items", "memos"].map(
-        (table) => rt.database.prepare(`DELETE FROM ${table}`),
-      ),
+      ["memos"].map((table) => rt.database.prepare(`DELETE FROM ${table}`)),
     );
   });
 
@@ -116,58 +114,22 @@ describe("the general agent's tools", () => {
   });
 
   it("takes proposals only while a review is at a step that asks for them", async () => {
-    await entry("I always train better in the morning than at night.");
-    const memory = {
-      content: "Trains better in the morning than at night.",
-      kind: "preference",
-      quote: "I always train better in the morning",
+    const goal = {
+      week: NEXT_WEEK,
+      pillar: "work",
+      title: "Send the contract",
+      why: "The month goal is open.",
     };
-    await expect(call("propose_memory", memory)).rejects.toThrow(
+    await expect(call("propose_goal", goal)).rejects.toThrow(
       "Proposals are taken only in a review's propose step.",
     );
     const run = await reviewAt("opening");
-    await expect(call("propose_memory", memory)).rejects.toThrow(
+    await expect(call("propose_goal", goal)).rejects.toThrow(
       "Proposals are taken only in a review's propose step.",
     );
     await plannerAgentEndRun(rt.db, { runId: run.id, state: "ended" });
     await reviewAt("propose");
-    expect(await call("propose_memory", memory)).toContain(
-      "Proposed as memory",
-    );
-  });
-
-  it("proposes a memory only on the owner's own words, as a proposal", async () => {
-    await reviewAt("propose");
-    await entry("I always train better in the morning than at night.");
-    await entry("# Week 41\n\nYou train better in the evening.", {
-      source: "weekly-review",
-    });
-    await expect(
-      call("propose_memory", {
-        content: "Trains better in the evening.",
-        kind: "preference",
-        quote: "You train better in the evening.",
-      }),
-    ).rejects.toThrow(/not found word for word/);
-    const result = await call("propose_memory", {
-      content: "Trains better in the morning than at night.",
-      kind: "preference",
-      quote: "I always train better in the morning",
-    });
-    expect(result).toContain("It waits on the Memory page");
-    const [memory] = await plannerTestRows<{
-      needs_review: number;
-      source_agent: string;
-      verification: string;
-    }>(
-      rt.database,
-      "SELECT needs_review, source_agent, verification FROM memory_items",
-    );
-    expect(memory).toEqual({
-      needs_review: 1,
-      source_agent: "agent",
-      verification: "inferred",
-    });
+    expect(await call("propose_goal", goal)).toContain("Proposed");
   });
 
   it("ties a proposed goal to the month or quarter goal it serves", async () => {

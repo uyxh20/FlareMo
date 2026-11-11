@@ -1,5 +1,5 @@
+import { validateOutboundUrl } from "@flaremo/domain";
 import type { PlannerAgentLinkReading } from "@flaremo/domain/src/planner";
-import { validateExternalUrl } from "../memos-link-metadata";
 
 // Fork add-on (docs/fork-link-summaries.md): reads a link the owner gave the
 // general agent, for its read_link tool. The agent's sandbox has no web; the
@@ -80,7 +80,7 @@ export async function forkReadLink(
 
 function checkedUrl(value: string): URL {
   try {
-    return validateExternalUrl(value);
+    return validateOutboundUrl(value, { allowFragment: true });
   } catch (error) {
     throw new LinkReadError(
       error instanceof Error ? error.message : "not a web address",

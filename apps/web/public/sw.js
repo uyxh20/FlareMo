@@ -128,7 +128,6 @@ function isPrivateAppNavigation(url) {
     `${scopePath}health`, // fork: health tracker
     `${scopePath}forgot-password`,
     `${scopePath}login`,
-    `${scopePath}memory`,
     `${scopePath}memo`,
     `${scopePath}projects`,
     `${scopePath}recover`,
@@ -315,8 +314,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
-      icon: `${self.registration.scope}brand`,
-      badge: `${self.registration.scope}brand`,
+      icon: `${self.registration.scope}brand/flaremo-app-icon-192.png`,
+      badge: `${self.registration.scope}brand/flaremo-mark-dark-320.png`,
       tag: payload.url,
       data: { url: payload.url },
     }),

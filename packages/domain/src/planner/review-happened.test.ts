@@ -82,7 +82,6 @@ const CONTEXT: PlannerReviewContext = {
     },
     trackers: [],
   },
-  memories: [],
 };
 
 describe("the weekly opening's receipts", () => {

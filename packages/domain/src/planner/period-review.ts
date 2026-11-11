@@ -235,12 +235,6 @@ export function plannerPeriodResponse(
           question: context.previous.question,
         }
       : null,
-    memories: {
-      created: context.memories.created,
-      revised: context.memories.revised,
-      created_lines: context.memories.createdLines,
-      revised_lines: context.memories.revisedLines,
-    },
     state: context.row?.state ?? {},
     done_at: context.row?.doneAt ?? null,
     memo: context.memo,

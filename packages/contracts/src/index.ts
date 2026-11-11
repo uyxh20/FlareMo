@@ -1,3 +1,4 @@
+export * from "./agent-access";
 export * from "./articles";
 export * from "./attachment-refs";
 export * from "./branding";
@@ -6,9 +7,10 @@ export * from "./capture";
 export * from "./constants";
 export * from "./embedding";
 export * from "./fork-brand";
-export * from "./memory";
+export * from "./insight";
 export * from "./memos";
 export * from "./memos-current";
+export * from "./pat";
 export * from "./planner";
 export * from "./projects";
 export * from "./search-query";

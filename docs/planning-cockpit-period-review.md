@@ -4,7 +4,7 @@ Status: built 2026-10-17 on `feat/period-reviews`, folded into the one review pa
 
 ## The idea in one paragraph
 
-A month, a quarter and a year each close on the Sunday of their last week (a week belongs to the month of its Thursday, the Year map's rule). On that Sunday the weekly review runs first (Look back), then its "superset" runs in the middle, then Look forward plans the next week against the new goals. Each level has five steps in the same shape as the weekly review: raw rows on the right, the owner's own words and a chat with a reader on the left, a memo the owner edits, and Save. The raw rows (diary entries, health rows, tasks done, week records, goals) are evidence; the weekly summaries and the memories are claims to test. Every claim the review rests on is a **receipt**: a quote that the server checks word for word against the raw rows. The model reads, checks, counts and quotes; it never writes goals, verdicts or marks.
+A month, a quarter and a year each close on the Sunday of their last week (a week belongs to the month of its Thursday, the Year map's rule). On that Sunday the weekly review runs first (Look back), then its "superset" runs in the middle, then Look forward plans the next week against the new goals. Each level has five steps in the same shape as the weekly review: raw rows on the right, the owner's own words and a chat with a reader on the left, a memo the owner edits, and Save. The raw rows (diary entries, health rows, tasks done, week records, goals) are evidence; the weekly summaries are claims to test. Every claim the review rests on is a **receipt**: a quote that the server checks word for word against the raw rows. The model reads, checks, counts and quotes; it never writes goals, verdicts or marks.
 
 ## Month and quarter: the weekly chat
 
@@ -27,7 +27,7 @@ The five-step designs below (checks, themes, two readers, forecasts, the calenda
 | --- | --- | --- |
 | Month | Check the summaries · Grade the key questions · Strike the month goals · Write the fold · Verdict and forecast | The weekly memos against the diary; each week's question against the next week's rows; each strike needs a receipt; one sentence per objective; graded at the next month review |
 | Quarter | Goal walk (keep, rephrase, kill) · Themes · Scores · Pre-mortem · Close-out | The owner's grade with receipts per point; two independent readers with the agreement shown; thirteen weeks against the floors; the quarter's misses; next quarter's goals are the owner's |
-| Year | Calendar walk (repeat, never again) · Grade the year goals · North star test · Belief ledger · Year sentence | One line per week from its own entries; twelve months of receipts; what the year proved and disproved; memories created against memories revised; next year's goals are the owner's |
+| Year | Calendar walk (repeat, never again) · Grade the year goals · North star test · Belief ledger · Year sentence | One line per week from its own entries; twelve months of receipts; what the year proved and disproved; early entries against late ones; next year's goals are the owner's |
 
 The steps and their questions are the owner's method, word for word, in `packages/contracts/src/planner-period-review.ts` (`plannerPeriodSteps`).
 
@@ -58,7 +58,7 @@ Both tables are registered in `packages/domain/src/fork/data-sources.ts` with pr
 | Where | What |
 | --- | --- |
 | `packages/contracts/src/planner-period-review.ts` | Period maths (the Thursday rule, the weeks of a period, what closes with a week, what is due), the steps, the schemas and routes. |
-| `packages/domain/src/planner/period-review-context.ts` | Reads the period: weeks with records and counts, the raw rows kept whole (done tasks carry their notes and comments, so a receipt can rest on them), goals with linked-task counts, memories created and revised, the last review. `plannerVerifyQuote`. |
+| `packages/domain/src/planner/period-review-context.ts` | Reads the period: weeks with records and counts, the raw rows kept whole (done tasks carry their notes and comments, so a receipt can rest on them), goals with linked-task counts, the last review. `plannerVerifyQuote`. |
 | `packages/domain/src/planner/period-review-prompts.ts` | The prompts (checks, themes per reader, coach per step, memo), their parsers, the memo cleaner, the rewrite rate. |
 | `packages/domain/src/planner/period-review.ts` | Read, status, state autosave, start over, save. |
 | `apps/worker/src/routes/planner-period-review-api.ts` | The routes, mounted from `planner-api.ts` like the weekly review's; the same model (`planner-review-ai.ts`), buckets and NDJSON streaming. |

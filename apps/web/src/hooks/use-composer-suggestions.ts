@@ -8,6 +8,7 @@ import {
   filterMentionSuggestions,
   type MentionCandidate,
 } from "@/lib/mention-autocomplete";
+import { queryKeys } from "@/lib/query-keys";
 import {
   filterTagSuggestions,
   type TagSuggestion,
@@ -153,7 +154,7 @@ export function useComposerSuggestions({
   const [anchor, setAnchor] = useState<SuggestionAnchor | null>(null);
 
   const wikiSuggestionsQuery = useQuery({
-    queryKey: ["composer-wiki-suggestions", activeWikiToken?.query],
+    queryKey: queryKeys.composerWikiSuggestions(activeWikiToken?.query),
     queryFn: ({ signal }) =>
       listMemos(
         { q: activeWikiToken?.query?.trim() || undefined, page_size: 5 },
@@ -164,7 +165,7 @@ export function useComposerSuggestions({
   });
 
   const peopleQuery = useQuery({
-    queryKey: ["mentionable-users"],
+    queryKey: queryKeys.mentionableUsers,
     queryFn: listMentionableUsers,
     enabled: mentions && Boolean(activeMentionToken),
     staleTime: 5 * 60_000,

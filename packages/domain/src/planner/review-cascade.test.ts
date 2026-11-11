@@ -112,7 +112,6 @@ const CONTEXT: PlannerReviewContext = {
   keptFlags: [],
   diary: [],
   health: null,
-  memories: [],
   cascade: "ladder",
 };
 

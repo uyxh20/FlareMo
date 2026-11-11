@@ -235,14 +235,6 @@ export const plannerAgentToolInputs = {
     from: daySchema.describe("The first day, YYYY-MM-DD."),
     to: daySchema.describe("The last day, YYYY-MM-DD, at most 26 weeks on."),
   }),
-  read_memories: z.strictObject({
-    query: z
-      .string()
-      .trim()
-      .max(200)
-      .optional()
-      .describe("Words to find; every memory when left out."),
-  }),
   find_todos: z.strictObject({
     days: z
       .number()
@@ -296,19 +288,6 @@ export const plannerAgentToolInputs = {
       .max(26)
       .optional()
       .describe("How many weeks back from this one; 8 when left out."),
-  }),
-  propose_memory: z.strictObject({
-    content: z
-      .string()
-      .trim()
-      .min(1)
-      .max(600)
-      .describe(
-        "One durable fact about the owner, in one or two plain sentences.",
-      ),
-    kind: z.enum(["fact", "preference", "decision", "constraint", "lesson"]),
-    quote: quoteSchema,
-    entry_id: entryIdSchema.optional(),
   }),
   propose_goal: z.strictObject({
     week: mondaySchema.describe(
@@ -601,36 +580,6 @@ export const plannerAgentToolInputs = {
       .max(500)
       .describe("One sentence: what the owner asked for."),
   }),
-  propose_memory_change: z
-    .strictObject({
-      memory_id: idSchema.describe(
-        "The memory to correct or forget, by id, as read_memories lists it.",
-      ),
-      action: z
-        .enum(["correct", "forget"])
-        .describe(
-          "correct puts new words on the memory; forget archives it (it can be brought back, never deleted).",
-        ),
-      content: z
-        .string()
-        .trim()
-        .min(1)
-        .max(600)
-        .optional()
-        .describe(
-          "Only with correct: the memory as it should read, one or two plain sentences.",
-        ),
-      why: z
-        .string()
-        .trim()
-        .min(1)
-        .max(500)
-        .describe("One sentence: what the owner asked for."),
-    })
-    .refine((value) => (value.action === "correct") === !!value.content, {
-      message: "content goes with correct, and only with correct.",
-      path: ["content"],
-    }),
   propose_health_change: z
     .strictObject({
       action: z
@@ -800,7 +749,7 @@ export const plannerAgentToolDescriptions: Record<
   string
 > = {
   review_week:
-    "The weekly review's focus in one read: the goal cascade, eight weeks of scores, last week's key question, Next Steps and summary, the task board with the week's task details, the health tracker's week, the memories made that week, every diary entry of the week whole, and an index of those entries with their ids. Read it first in a weekly review.",
+    "The weekly review's focus in one read: the goal cascade, eight weeks of scores, last week's key question, Next Steps and summary, the task board with the week's task details, the health tracker's week, every diary entry of the week whole, and an index of those entries with their ids. Read it first in a weekly review.",
   review_period:
     "A month, quarter or year review's focus in one read: the period's goals and results, every week of it with its scores, verdict and saved summary, its diary, and the health totals.",
   week_diary:
@@ -818,8 +767,6 @@ export const plannerAgentToolDescriptions: Record<
     "One task in full: its title, notes, column, plan, due day, priority, effort, start day, goal, comments and history. Read it before proposing a change to it.",
   read_health:
     "The health tracker between two days: each training session, breathwork and night out by day, and each week's totals against the owner's targets.",
-  read_memories:
-    "What the memory ledger already holds about the owner: each memory with its kind and whether the owner confirmed it or it waits as a proposal. Check here before proposing a memory.",
   find_todos:
     "The to-dos the owner wrote in recent diary entries: each line that reads like something still to do (an open '- [ ]' box, 'need to', 'should', 'don't forget', 'il faut'...), with its entry id, its day and its exact words, marked when a board task already covers it or when it was offered before. Fixed word rules, so some lines are not to-dos at all: judge each. Only in an Ask chat. For each real one not on the board and not offered before, call propose_add_task with from_entry_id and from_quote.",
   find_done_tasks:
@@ -832,8 +779,6 @@ export const plannerAgentToolDescriptions: Record<
     "The health log next to the diary, day by day: each health row (with its id, for propose_health_change) and each entry line that mentions training, breathwork or a night out (with its entry id), each line saying whether the log has a row of its kind that day ('NO training row that day' is a session to add if it happened). Fixed word rules: judge each. Only in an Ask chat.",
   read_scorecard:
     "How your work has landed with the owner, week by week: how many of your proposals were seen, accepted and kept for seven days, how often the owner edited what you drafted against what they wrote themselves, tasks done by their due day and week goals met for your proposals against the owner's own, and your standing instructions from the owner. Numbers only. A share over fewer than 10 cases says too few.",
-  propose_memory:
-    "Propose a memory about the owner. It waits on the Memory page until the owner accepts or rejects it; nothing is remembered before that. Only in a review, only for something durable that the diary states, with the owner's own words as the receipt.",
   propose_goal:
     "Propose a weekly goal for the week being planned. It shows on the review page next to the plan; the owner adds it or dismisses it. Only in a weekly review's propose step. Returns the proposal's id, which propose_task can name as its goal.",
   propose_task:
@@ -856,8 +801,6 @@ export const plannerAgentToolDescriptions: Record<
     "Propose linking two diary entries (or taking a link away with remove). The link goes on entry_id and points at related_entry_id; it shows in the answer's card and can be undone. Only in an Ask chat, only when the owner asks for it.",
   propose_entry_state:
     "Propose archiving an entry (or bringing it back), or pinning it (or unpinning). Never deletes. Only in an Ask chat.",
-  propose_memory_change:
-    "Propose correcting a memory the ledger holds (new words) or forgetting it (archived, never deleted), only when the owner asks. Take the id from read_memories. It shows in the answer's card and can be undone; a corrected memory reads as confirmed by the owner once accepted. Only in an Ask chat. Not for a new memory (that is propose_memory, in a review).",
   propose_goal_change:
     "Point at a weekly goal, only when the owner asks: one the owner seems to need for a week (action add: period_start a Monday, pillar, and a flag saying why, such as 'you wrote you would train three times'), or one of theirs that looks off (action edit: goal_id from read_goals and a flag saying what; pillar only to move it to another objective; this week's or a later week's goal only, past weeks are closed). You never write the goal's title, lines or note: the owner writes them on the card. Weekly goals only: no delete, and no status, result or score, which are the owner's own verdicts. It can be undone; the change log keeps the old words. Only in an Ask chat.",
   propose_health_change:
@@ -866,7 +809,6 @@ export const plannerAgentToolDescriptions: Record<
 
 /** The tools that write a review proposal: off in every session but a review's. */
 export const plannerAgentProposeTools = [
-  "propose_memory",
   "propose_goal",
   "propose_task",
 ] as const satisfies readonly PlannerAgentToolName[];
@@ -881,7 +823,6 @@ export const plannerAgentActionTools = [
   "propose_entry_tags",
   "propose_entry_state",
   "propose_entry_link",
-  "propose_memory_change",
   "propose_health_change",
   "propose_goal_change",
 ] as const satisfies readonly PlannerAgentToolName[];
@@ -1100,9 +1041,6 @@ export const plannerAgentActionKinds = [
   // Two entries linked (or unlinked): `{ entry_id, related_entry_id, remove?,
   // was: [reference ids of entry_id] }`.
   "entry_link",
-  // A memory corrected or forgotten: `{ memory_id, action, content?, was: {
-  // content, status }, label }`.
-  "memory_change",
   // A health row fixed or added: `{ action, entry_id?, day, kind, ..., was?,
   // label }`.
   "health_change",

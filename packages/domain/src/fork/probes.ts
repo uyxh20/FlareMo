@@ -4,7 +4,6 @@ import {
 } from "@flaremo/contracts";
 import type { UserRow } from "@flaremo/db";
 import { exportData } from "../import-export";
-import { createMemory } from "../memory";
 import {
   PLANNER_DIARY_CHARS,
   plannerAgentCallTool,
@@ -148,31 +147,6 @@ export const PROBES: Record<string, Probe> = {
       `${p.marker}.jpg`,
       IN_WEEK,
       IN_WEEK,
-    );
-  },
-  memory_items: async (p) => {
-    await createMemory(
-      p.rt.db,
-      p.user,
-      { type: "user" },
-      {
-        content: `Prefers training in the morning, tag ${p.marker}`,
-        type: "semantic",
-        kind: "preference",
-        scopeType: "global",
-        scopeKey: null,
-        tier: "normal",
-        importance: 60,
-        confidence: 80,
-      },
-    );
-    // The review reads the memories made during the reviewed week.
-    await plannerTestRun(
-      p.rt.database,
-      "UPDATE memory_items SET created_at = ?, updated_at = ? WHERE user_id = ?",
-      IN_WEEK,
-      IN_WEEK,
-      p.user.id,
     );
   },
   tasks: async (p) => {
@@ -403,12 +377,6 @@ export type Measured = (typeof MEASURED)[number];
 
 /** Rows a probe can write outside the planner runtime's own reset. */
 const EXTRA_RESET = [
-  "memory_events",
-  "memory_evidence",
-  "memory_resource_links",
-  "memory_relations",
-  "memory_revisions",
-  "memory_items",
   "embedding_tasks",
   "attachments",
   "articles",
@@ -505,7 +473,6 @@ async function agentReads(rt: PlannerTestRuntime): Promise<string> {
     call("read_goals", { year: 2026 }),
     call("read_tasks", { done_days: 90 }),
     call("read_health", { from: "2026-09-01", to: TODAY }),
-    call("read_memories", {}),
     call("read_scorecard", { weeks: 8 }),
   ]);
   const opened = [];

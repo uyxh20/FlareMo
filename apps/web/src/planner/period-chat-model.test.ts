@@ -77,7 +77,6 @@ const period: PlannerPeriodReviewResponse = {
     forecast_grade: null,
     memo_id: null,
   },
-  memories: { created: 0, revised: 0, created_lines: [], revised_lines: [] },
   state: {},
   done_at: null,
   memo: null,

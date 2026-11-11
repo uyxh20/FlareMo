@@ -61,6 +61,7 @@ import {
   buildCountsQuery,
   buildImportSql,
   discoverExtraTables,
+  droppedTables,
   listLocalMigrations,
   orderByForeignKeys,
   planClearTables,
@@ -1109,12 +1110,20 @@ export class DevEnv {
       run.dryRun && run.plan.devPending.length > 0
         ? new Map(tables.map((table) => [table, prodColumns.get(table) ?? []]))
         : this.tableColumns("DB", tables);
+    // Upstream's 0044 drops the memory tables: copying them only to have the
+    // rehearsal drop them again would make the row count check fail.
+    const droppedByUpgrade = droppedTables(
+      (run.plan?.upgrade ?? []).map((name) =>
+        readFileSync(join(this.paths.migrationsDir, name), "utf8"),
+      ),
+    );
     const tablePlan = planTableCopy({
       tables,
       prodColumns,
       devColumns,
       includeSideEffectTables: run.includeSideEffectTables,
       optional: forkTables,
+      droppedByUpgrade,
     });
     for (const { warnings } of tablePlan.copy) {
       for (const warning of warnings) this.log(`    WARNING ${warning}`);
@@ -1128,6 +1137,7 @@ export class DevEnv {
       ...DERIVED_INDEX_TABLES,
     ]);
     run.inspected = {
+      droppedByUpgrade,
       tables,
       prodColumns,
       devColumns,
@@ -1208,7 +1218,9 @@ export class DevEnv {
       ...DERIVED_INDEX_TABLES,
     ]);
     const devTables = tables.filter(
-      (table) => (run.inspected.devColumns.get(table) ?? []).length > 0,
+      (table) =>
+        (run.inspected.devColumns.get(table) ?? []).length > 0 &&
+        !run.inspected.droppedByUpgrade?.has(table),
     );
     const dev = this.countRows("DB", [
       ...devTables,

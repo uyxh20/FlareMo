@@ -72,11 +72,10 @@ A summary is something the owner read, not something they said:
 - the agent's reads label it "link summary (you wrote it from a web page; not
   the owner's words)", and the owner's comments read "as a comment on entry
   <id>";
-- a memory proposal's quote is never found in a link summary
+- a proposal's quote is never found in a link summary
   (`plannerAgentFindQuote`);
 - the review model's diary (week and period) prefixes it with "[Link summary
   ... not the owner's words]";
-- memory dreaming skips it (`collectDreamingSources`, upstream hook-in);
 - search and the export treat it as any entry.
 
 ## Cost

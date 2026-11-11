@@ -18,7 +18,7 @@ import {
   plannerTaskPlan,
 } from "@flaremo/db/src/schema/planner";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { ConflictError, NotFoundError, ValidationError } from "../errors";
+import { NotFoundError, ValidationError } from "../errors";
 import { healthSnapshot, healthToDto } from "../health/rows";
 import {
   healthCreateEntry,
@@ -28,13 +28,6 @@ import {
   healthRevertEntry,
 } from "../health/write";
 import { parseResourceName } from "../ids";
-import {
-  archiveMemory,
-  type MemoryActor,
-  restoreMemory,
-  updateMemory,
-} from "../memory";
-import { normalizeMemoryContent, requireMemory } from "../memory/shared";
 import { getMemoById } from "../memos-read";
 import { createMemo, updateMemo } from "../memos-write";
 import type { QuotaScope } from "../quotas";
@@ -216,36 +209,6 @@ async function replaceReferences(
       type: "reference" as const,
     })),
   });
-}
-
-/** The owner's own hand on the memory ledger, as memory-api.ts uses it. */
-const USER_MEMORY_ACTOR: MemoryActor = { type: "user" };
-
-/** The live memory a memory action names (any status but deleted), or a ValidationError. */
-async function memoryOf(
-  db: FlareMoDb,
-  user: UserRow,
-  change: Record<string, unknown>,
-) {
-  const id = asString(change.memory_id);
-  if (!id) throw new ValidationError("This proposal names no memory.");
-  const memory = await requireMemory(db, user, id).catch(() => null);
-  if (!memory || memory.deletedAt || memory.status === "deleted") {
-    throw new ValidationError("That memory is gone.");
-  }
-  return memory;
-}
-
-/** A refused memory write (a twin, a fact key taken) as a message on the card. */
-async function memoryWrite<T>(write: Promise<T>): Promise<T> {
-  try {
-    return await write;
-  } catch (error) {
-    if (error instanceof ConflictError) {
-      throw new ValidationError(error.message);
-    }
-    throw error;
-  }
 }
 
 /** The fields of a weekly goal an edit changes, and the card's `was` holds. */
@@ -582,35 +545,6 @@ export async function plannerAgentAcceptAction(
             : [...current.filter((id) => id !== target), target];
         await replaceReferences(db, user, memo.id, next);
         landedId = memo.id;
-        break;
-      }
-      case "memory_change": {
-        const memory = await memoryOf(db, user, change);
-        const now = { content: memory.content, status: memory.status };
-        if ("was" in change && !same(change.was, now)) {
-          throw new ValidationError(PLANNER_AGENT_STALE);
-        }
-        if (memory.status !== "active") {
-          throw new ValidationError(
-            "That memory is not active any more, so it cannot be changed.",
-          );
-        }
-        before = {
-          ...now,
-          verification: memory.verification,
-          fact_key: memory.factKey,
-          tier: memory.tier,
-        };
-        if (change.action === "forget") {
-          await archiveMemory(db, user, USER_MEMORY_ACTOR, memory.id);
-        } else {
-          const content = asString(change.content);
-          if (!content) throw new ValidationError("The new words are missing.");
-          await memoryWrite(
-            updateMemory(db, user, USER_MEMORY_ACTOR, memory.id, { content }),
-          );
-        }
-        landedId = memory.id;
         break;
       }
       case "health_change": {
@@ -1012,38 +946,6 @@ export async function plannerAgentRevertAction(
         memo.id,
         removed ? [...current, target] : current.filter((id) => id !== target),
       );
-      await settle();
-      break;
-    }
-    case "memory_change": {
-      const memory = await memoryOf(db, user, row.change);
-      const was = row.before ?? {};
-      if (row.change.action === "forget") {
-        if (memory.status !== "archived") {
-          throw new ValidationError(
-            "The memory is not archived any more, so this cannot be put back.",
-          );
-        }
-        await memoryWrite(
-          restoreMemory(db, user, USER_MEMORY_ACTOR, memory.id),
-        );
-      } else {
-        const content = asString(was.content);
-        if (!content) throw new ValidationError("The old words were not kept.");
-        const accepted = normalizeMemoryContent(
-          asString(row.change.content) ?? "",
-        );
-        if (memory.status !== "active" || memory.content !== accepted) {
-          throw new ValidationError(
-            "The memory changed since, so this cannot be put back.",
-          );
-        }
-        // Puts the words back; updateMemory reads the owner's hand as a
-        // confirmation, so the old confidence level does not come back.
-        await memoryWrite(
-          updateMemory(db, user, USER_MEMORY_ACTOR, memory.id, { content }),
-        );
-      }
       await settle();
       break;
     }
