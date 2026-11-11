@@ -44,9 +44,9 @@
 
 Second brains have always come with a server: a VPS bill, Docker, PostgreSQL, a backup script, and the quiet dread of a dead disk.
 
-FlareMo asks a different question: **what if your second brain needed no server at all — and your AI agents could actually remember with it?**
+FlareMo asks a different question: **what if your second brain needed no server at all — and your AI agents could work directly on your notes?**
 
-- **AI-native, not bolted on**: Agent Memory ships a CLI and a cross-agent skill, so Claude, Cursor, Codex, ChatGPT and ZCode read and write the same long-term memory — preferences, decisions, project context — over MCP or the CLI.
+- **AI-native, not bolted on**: A notes MCP endpoint plus the `flaremo-notes` skill lets Claude, Cursor, Codex, ChatGPT and ZCode search, read and write your own notes. No separate AI memory store, no second notebook to curate.
 - **Truly serverless**: code and static assets run on the Cloudflare Workers edge node nearest you; D1 and R2 hold notes, tasks, articles and media with multi-region durability.
 - **Knowledge that grows**: a quick note becomes a task, a task becomes an article, and the whole thing settles into a searchable, linked knowledge base.
 - **Quiet for one, useful for a team**: private by default; turn on team mode for a shared space with roles and three-tier visibility.
@@ -65,10 +65,10 @@ FlareMo asks a different question: **what if your second brain needed no server 
 - **Thought activation**: Built-in **Daily Review** (on this day), **Random Walk** (wandering through tag and backlink graphs with postcard summaries), and related note recommendations.
 - **Revision history**: Full version diffs and one-click historical restore.
 
-### 2. AI Long-term Memory (CLI + Skills)
-- **Agent Memory**: Ships `flaremo` CLI and the `flaremo-memory` skill — agents record and update cross-session long-term memory (preferences, project decisions, constraints, lessons) through a shared REST base.
-- **Human in the loop**: Review, verify, lock, or correct AI-recorded memories at `/memory`.
-- **Open ecosystem**: CLI + Skills are the recommended path; `/memory/mcp` (Streamable HTTP MCP) and `/mcp` endpoints are available for existing MCP clients.
+### 2. AI Works on Your Notes (MCP + Skill)
+- **Notes MCP**: `/mcp` exposes list, search, read, create, update and delete over your memos, authenticated with a revocable `memos_pat_` token.
+- **One skill**: `skills/flaremo-notes` teaches every agent to search before writing, keep your wording, and return the memo ID it touched.
+- **No separate memory**: agents read your notes on demand; nothing is auto-extracted into a second ledger.
 
 ### 3. To-dos & Projects
 - **Schedule a note**: Pick a day and a project for a note; each unchecked to-do in it becomes a task. Checking it off in the note or on the to-do page stays in sync both ways.
@@ -96,7 +96,7 @@ FlareMo asks a different question: **what if your second brain needed no server 
 - **Live voice input**: The composer's microphone button streams speech-to-text (ASR) into the draft as you speak.
 
 ### 7. Secure Better Auth Application Security
-- **Better Auth powered**: HttpOnly, `SameSite=Lax` browser cookie sessions; revocable `memos_pat_` Personal Access Tokens for scripts, CLI, and MCP.
+- **Better Auth powered**: HttpOnly, `SameSite=Lax` browser cookie sessions; revocable `memos_pat_` Personal Access Tokens for scripts and MCP.
 - **Strict Origin protection**: State-changing requests enforce exact origin whitelisting. Cloudflare Access remains available as an optional outer defensive perimeter.
 
 ### 8. Your Data, Always Yours
@@ -148,7 +148,7 @@ Clones the repository into your GitHub account and provisions D1, R2, Queues, an
 
 ### Method 2: GitHub Action (self-hosted fork)
 
-In a deployment repository that has the **Deploy to Cloudflare** workflow, run it manually from Actions to provision resources, publish the Worker with `cloudflare/wrangler-action`, and sync auth secrets. This fork deleted that workflow, so pushes to `main` deploy nothing; it ships only through `scripts/fork/prod-deploy.mjs`. Mail keys stay as Worker secrets (`wrangler secret put RESEND_API_KEY`). See [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
+On your fork, copy [`docs/templates/workflows/deploy-cloudflare.yml`](./docs/templates/workflows/deploy-cloudflare.yml) into `.github/workflows/`, then run **Deploy to Cloudflare** from Actions to provision resources, publish the Worker, and sync auth secrets. Pushes do not publish. See [docs/en/github-action-deploy.md](./docs/en/github-action-deploy.md).
 
 ### Method 3: Deploy with an AI Agent (Recommended)
 
@@ -196,7 +196,7 @@ Detailed guides: [Deployment Guide](./docs/en/deploy.md) · [GitHub Action deplo
 ```mermaid
 flowchart LR
   Browser["FlareMo Web UI (React 19 / PWA)"] --> Worker["Cloudflare Worker"]
-  Clients["Scripts / CLI / MCP"] --> Worker
+  Clients["Scripts / MCP"] --> Worker
 
   Worker --> Auth["Better Auth (Session / PAT)"]
   Worker --> D1["Cloudflare D1 (Notes / Relations / Settings)"]

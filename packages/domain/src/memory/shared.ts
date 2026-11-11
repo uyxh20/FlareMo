@@ -2,13 +2,14 @@ import type {
   MemoryEvidenceRelationType,
   MemoryEvidenceSourceType,
 } from "@flaremo/contracts";
-import type { FlareMoDb, MemoryItemRow, UserRow } from "@flaremo/db";
+import type { FlareMoDb, UserRow } from "@flaremo/db";
+import type { MemoryItemRow } from "@flaremo/db/src/schema/memory";
 import {
   memoryEvents,
   memoryEvidence,
   memoryItems,
   memoryRevisions,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import {
   and,
   desc,
@@ -22,7 +23,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors";
-import { createResourceId } from "../ids";
+import { createResourceId } from "./fork-compat";
 
 export const MEMORY_MAX_CONTENT_LENGTH = 4_000;
 

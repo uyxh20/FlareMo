@@ -4,18 +4,15 @@ import type {
   ArticleSummaryDto,
   AttachmentDto,
   CalendarView,
-  CompiledMemoryDto,
   CreateArticleInput,
   CreateMemoInput,
-  CreateMemoryInput,
   CreateProjectInput,
   CreateTaskInput,
   MemoContextResponse,
   MemoDto,
-  MemoryDto,
-  MemoryRevisionDto,
   MemoState,
   MemoStatsResponse,
+  MemosPatScope,
   MemoVisibility,
   ProjectDto,
   PublicShareDto,
@@ -31,7 +28,6 @@ import type {
   TodayReviewReason,
   UpdateArticleInput,
   UpdateMemoInput,
-  UpdateMemoryInput,
   UpdateProjectInput,
   UpdateTaskInput,
   VectorUsageReport,
@@ -45,9 +41,6 @@ export type MemoContext = MemoContextResponse;
 export type RelatedMemo = RelatedMemosResponse["memos"][number];
 export type TagHierarchyNode = TagHierarchyResponse["tags"][number];
 export type AppNotification = AppNotificationDto;
-export type Memory = MemoryDto;
-export type { CompiledMemoryDto };
-export type MemoryRevision = MemoryRevisionDto;
 export type {
   MemoState,
   MemoStatsResponse,
@@ -82,8 +75,6 @@ export type CloudflareUsageReport = {
 
 export type CreateMemoRequest = CreateMemoInput;
 export type UpdateMemoRequest = UpdateMemoInput;
-export type CreateMemoryRequest = CreateMemoryInput;
-export type UpdateMemoryRequest = UpdateMemoryInput;
 
 export type Project = ProjectDto;
 export type Task = TaskDto;
@@ -139,6 +130,7 @@ export type PersonalAccessToken = {
   start: string | null;
   prefix: string | null;
   enabled: boolean;
+  scopes: MemosPatScope[];
   expires_at: string | null;
   created_at: string;
   updated_at: string;

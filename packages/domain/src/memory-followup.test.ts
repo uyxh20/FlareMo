@@ -3,12 +3,14 @@ import {
   applyFlaremoMigrations,
   createDb,
   embeddingTasks,
+  memos,
+} from "@flaremo/db";
+import {
   memoryCompileArchives,
   memoryEvidence,
   memoryItems,
   memoryRejections,
-  memos,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import { and, eq } from "drizzle-orm";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -51,7 +53,7 @@ async function embeddingTasksFor(resourceId: string, operation: string) {
     .from(embeddingTasks)
     .where(
       and(
-        eq(embeddingTasks.resourceType, "memory"),
+        eq(embeddingTasks.resourceType, "memory" as "memo"), // fork: upstream narrowed the type
         eq(embeddingTasks.resourceId, resourceId),
         eq(
           embeddingTasks.operation,

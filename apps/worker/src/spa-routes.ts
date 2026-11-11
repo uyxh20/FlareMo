@@ -25,7 +25,7 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/recover",
   "/setup",
   "/account",
-  "/memory",
+  "/connect",
   "/projects",
   "/cockpit",
   "/goals",
@@ -33,6 +33,7 @@ export const SPA_EXACT_ROUTES: ReadonlySet<string> = new Set([
   "/weekly-review", // fork: old address, goes to /review
   "/period-review", // fork: old address, goes to /review
   "/health", // fork: health tracker
+  "/memory", // fork: the Memory page upstream removed in v0.27
   "/articles",
   "/review/daily",
   "/review/walk",

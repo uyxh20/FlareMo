@@ -14,7 +14,7 @@
 //   of the fork tables comes from the D1 backup.
 // - Which tables are here is decided in data-sources.ts (userExport: yes for a
 //   fork table); export.test.ts fails when this list and the registry disagree.
-// - One query per table: 19 queries. The weekly backup runs the whole export in
+// - One query per table: 26 queries. The weekly backup runs the whole export in
 //   one cron invocation, which the free plan caps at 50 D1 queries.
 
 import type { FlareMoDb, UserRow } from "@flaremo/db";
@@ -22,6 +22,14 @@ import {
   healthEntry,
   healthEntryEvent,
 } from "@flaremo/db/src/schema/fork-health";
+import {
+  memoryEvents,
+  memoryEvidence,
+  memoryItems,
+  memoryRelations,
+  memoryResourceLinks,
+  memoryRevisions,
+} from "@flaremo/db/src/schema/memory";
 import {
   plannerAgentAction,
   plannerAgentChat,
@@ -72,6 +80,13 @@ export const FORK_EXPORT_TABLES = {
   planner_tuning: plannerTuning,
   health_entry: healthEntry,
   health_entry_event: healthEntryEvent,
+  // The memory layer upstream removed in v0.27 (its export went with it).
+  memory_items: memoryItems,
+  memory_revisions: memoryRevisions,
+  memory_relations: memoryRelations,
+  memory_resource_links: memoryResourceLinks,
+  memory_evidence: memoryEvidence,
+  memory_events: memoryEvents,
 } satisfies Record<string, OwnedTable>;
 
 export type ForkExportTable = keyof typeof FORK_EXPORT_TABLES;

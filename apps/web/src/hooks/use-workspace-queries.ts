@@ -65,7 +65,7 @@ export function useWorkspaceQueries({
   const [semanticMode, setSemanticMode] = useState(false);
 
   const vectorUsageQuery = useQuery({
-    queryKey: ["vector-usage"],
+    queryKey: queryKeys.vectorUsage,
     queryFn: () => getVectorUsage(),
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -88,7 +88,7 @@ export function useWorkspaceQueries({
     [],
   );
   const semanticResultsQuery = useQuery({
-    queryKey: ["semantic-search", space, searchQuery],
+    queryKey: queryKeys.semanticSearch.forQuery(space, searchQuery),
     enabled: isSemanticSearch,
     queryFn: ({ signal }) =>
       semanticSearchMemos(

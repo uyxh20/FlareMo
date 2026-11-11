@@ -1,11 +1,11 @@
 import type { FlareMoDb } from "@flaremo/db";
+import { memos } from "@flaremo/db";
 import {
   memoryCompileArchives,
   memoryEvidence,
   memoryItems,
   memoryRevisions,
-  memos,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import {
   and,
   eq,
@@ -17,8 +17,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { insertEmbeddingTask } from "../embedding-outbox";
-import { createResourceId } from "../ids";
+import { createResourceId, insertEmbeddingTask } from "./fork-compat";
 import { memoryEventStatement } from "./shared";
 
 /**

@@ -746,13 +746,29 @@ svg.lucide[stroke-width="2"] {
     @apply rounded-none border-0 bg-transparent p-0 text-[13px] leading-6;
   }
 
+  /* Code is always LTR. Arabic RTL otherwise leaks into <pre>/<code> and
+     mirrors brackets, operators and line punctuation (screenshot check
+     2026-11-04: a TS snippet rendered its closing brace on the left). */
+  .memo-markdown pre,
+  .memo-markdown pre code,
+  .memo-markdown :not(pre) > code,
+  .article-editor-content pre,
+  .article-editor-content pre code,
+  .article-editor-content :not(pre) > code,
+  .article-paper .memo-markdown pre,
+  .article-paper .memo-markdown pre code,
+  .article-paper .memo-markdown :not(pre) > code {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
   .memo-markdown table {
     @apply w-full border-collapse text-sm;
   }
 
   .memo-markdown th,
   .memo-markdown td {
-    @apply border px-3 py-2 text-left;
+    @apply border px-3 py-2 text-start;
   }
 
   /* Drawn task box: the native one renders as a glaring white square in dark
@@ -858,7 +874,7 @@ svg.lucide[stroke-width="2"] {
 
   .article-editor-content th,
   .article-editor-content td {
-    @apply border px-3 py-2 text-left;
+    @apply border px-3 py-2 text-start;
   }
 
   /* Article preview: the typesetting of the public article page

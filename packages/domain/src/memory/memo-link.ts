@@ -1,11 +1,14 @@
 import type { MemoryDto } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
-import { memoryItems, memoryResourceLinks } from "@flaremo/db";
+import {
+  memoryItems,
+  memoryResourceLinks,
+} from "@flaremo/db/src/schema/memory";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { createResourceId } from "../ids";
 import { createMemo } from "../memos";
 import type { QuotaScope } from "../quotas";
 import { memoryToDto } from "./dto";
+import { createResourceId } from "./fork-compat";
 import {
   assertAgentCanMutate,
   type MemoryActor,

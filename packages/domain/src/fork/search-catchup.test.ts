@@ -71,10 +71,9 @@ let database: Awaited<ReturnType<Miniflare["getD1Database"]>>;
 let db: ReturnType<typeof createDb>;
 let owner: TeamViewer;
 let memosIndex: MemoryIndex;
-let memoriesIndex: MemoryIndex;
 let queries = 0;
 
-const deps = () => ({ provider, memosIndex, memoriesIndex });
+const deps = () => ({ provider, memosIndex });
 
 async function importEntries(entries: Array<[string, string]>) {
   await importData(
@@ -168,7 +167,6 @@ describe("search catch-up", () => {
     db = createDb(counted as typeof database);
     owner = await ensureTeamOwner(db);
     memosIndex = new MemoryIndex();
-    memoriesIndex = new MemoryIndex();
   });
 
   afterEach(async () => {
@@ -235,7 +233,7 @@ describe("search catch-up", () => {
     });
   });
 
-  it("leaves rows the outbox owns, trashed entries and guessed memories alone", async () => {
+  it("leaves rows the outbox owns, trashed entries and memories alone", async () => {
     await importEntries([
       ["memos/queued", "Has an outbox task"],
       ["memos/binned", "In the bin"],
@@ -248,14 +246,13 @@ describe("search catch-up", () => {
     await database
       .prepare("UPDATE memos SET status = 'trashed' WHERE id = 'memos/binned'")
       .run();
-    const guessed = await strandedMemory("Probably likes tea", "inferred");
-    const confirmed = await strandedMemory("Swims before work", "confirmed");
+    // Memories have no vectors since the upstream v0.32 sync.
+    await strandedMemory("Probably likes tea", "inferred");
+    await strandedMemory("Swims before work", "confirmed");
 
     const result = await runSearchCatchup(db, deps());
-    expect(result).toEqual({ indexed: 1, failed: 0, more: false });
+    expect(result).toEqual({ indexed: 0, failed: 0, more: false });
     expect(memosIndex.resources("memo_id")).toEqual([]);
-    expect(memoriesIndex.resources("memory_id")).toEqual([confirmed]);
-    expect(memoriesIndex.resources("memory_id")).not.toContain(guessed);
     expect(await statusOf("memos/queued")).toBe("not_indexed");
   });
 
@@ -264,7 +261,6 @@ describe("search catch-up", () => {
     const result = await runSearchCatchup(db, {
       provider: null,
       memosIndex,
-      memoriesIndex,
     });
     expect(result).toEqual({ indexed: 0, failed: 0, more: false });
     expect(await statusOf("memos/off")).toBe("not_indexed");

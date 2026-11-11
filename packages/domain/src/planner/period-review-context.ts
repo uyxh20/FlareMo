@@ -15,8 +15,9 @@ import {
   plannerSummaryMemoTag,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
-import { memoryItems, memos, memoTags, tasks } from "@flaremo/db";
+import { memos, memoTags, tasks } from "@flaremo/db";
 import { healthEntry } from "@flaremo/db/src/schema/fork-health";
+import { memoryItems } from "@flaremo/db/src/schema/memory";
 import {
   type PlannerEvidenceRow,
   type PlannerPeriodReviewRow,

@@ -1,12 +1,11 @@
 import type { UserRow } from "@flaremo/db";
+import { applyFlaremoMigrations, createDb } from "@flaremo/db";
 import {
-  applyFlaremoMigrations,
-  createDb,
   memoryItems,
   memoryRelations,
   memoryResourceLinks,
   memoryRevisions,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { exportData, importData } from "./import-export";
@@ -631,7 +630,10 @@ describe("memory domain services", () => {
     );
   });
 
-  it("round-trips memories through export and import", async () => {
+  it("puts memories in the export's fork section", async () => {
+    // Fork: upstream dropped memories from its export bundle in v0.28. The
+    // fork keeps the memory layer and exports its rows in the fork section;
+    // a full restore comes from the D1 backup (fork/export.ts).
     const created = await createMemory(db, user, USER, {
       content: "FlareMo 必须保持 Cloudflare Native",
       type: "semantic",
@@ -644,34 +646,10 @@ describe("memory domain services", () => {
     });
 
     const bundle = await exportData(db, user);
-    expect(bundle.version).toBe(6);
-    expect(bundle.memories).toHaveLength(1);
-    expect(bundle.memories[0]?.name).toBe(created.memory.id);
-
-    // Wipe the memory tables, then re-import and verify the record survives
-    // with the same namespaced id and content.
-    await db.delete(memoryRelations).all();
-    await db.delete(memoryResourceLinks).all();
-    await db.delete(memoryRevisions).all();
-    await db.delete(memoryItems).all();
-
-    const result = await importData(db, user, bundle);
-    expect(result.imported_memories).toBe(1);
-
-    const { memories: restored } = await listMemories(db, user, {});
-    expect(restored).toHaveLength(1);
-    expect(restored[0]?.id).toBe(created.memory.id);
-    expect(restored[0]?.content).toBe("FlareMo 必须保持 Cloudflare Native");
-    expect(restored[0]?.verification).toBe("confirmed");
-
-    // v5 carries the ledger's evidence chain and lifecycle trail. A round-trip
-    // that dropped them would silently erase why a fact exists and how it
-    // evolved, which is the product's central promise.
-    const lineage = await getMemoryLineage(db, user, created.memory.id);
-    expect(lineage.events.length).toBeGreaterThan(0);
-    expect(
-      lineage.events.some((event) => event.event_type === "confirmed"),
-    ).toBe(true);
+    const rows = bundle.fork.tables.memory_items;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(created.memory.id);
+    expect(bundle.fork.counts.memory_events).toBeGreaterThan(0);
   });
 
   it("pages the ledger with a cursor and rejects forged tokens", async () => {

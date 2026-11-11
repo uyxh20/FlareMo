@@ -3,11 +3,15 @@ import type {
   CompileInput,
   MemoryCompileArchiveDto,
 } from "@flaremo/contracts";
-import type { FlareMoDb, MemoryItemRow, UserRow } from "@flaremo/db";
-import { memoryCompileArchives, memoryItems } from "@flaremo/db";
+import type { FlareMoDb, UserRow } from "@flaremo/db";
+import type { MemoryItemRow } from "@flaremo/db/src/schema/memory";
+import {
+  memoryCompileArchives,
+  memoryItems,
+} from "@flaremo/db/src/schema/memory";
 import { and, desc, eq, or, type SQL, sql } from "drizzle-orm";
-import { createResourceId } from "../ids";
 import { memoryToDto } from "./dto";
+import { createResourceId } from "./fork-compat";
 import { memoryLivenessCondition } from "./shared";
 
 export async function compileCoreMemory(

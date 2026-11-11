@@ -2,7 +2,8 @@ import type {
   MemoryForgetReason,
   ResolveProposalInput,
 } from "@flaremo/contracts";
-import type { FlareMoDb, MemoryItemRow, UserRow } from "@flaremo/db";
+import type { FlareMoDb, UserRow } from "@flaremo/db";
+import type { MemoryItemRow } from "@flaremo/db/src/schema/memory";
 import {
   memoryCompileArchives,
   memoryEvents,
@@ -12,12 +13,11 @@ import {
   memoryRelations,
   memoryResourceLinks,
   memoryRevisions,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import { and, eq, ne, or, sql } from "drizzle-orm";
-import { insertEmbeddingTask } from "../embedding-outbox";
 import { ConflictError, ForbiddenError, ValidationError } from "../errors";
-import { createResourceId } from "../ids";
 import { memoryToDto } from "./dto";
+import { createResourceId, insertEmbeddingTask } from "./fork-compat";
 import {
   appendMemoryEvent,
   appendRevision,

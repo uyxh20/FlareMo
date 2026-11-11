@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { InfoTip } from "@/components/info-tip";
+import { SettingsRow } from "@/components/settings-section";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,6 @@ import {
   CUTE_AVATAR_PRESETS,
   useCloseOnSuccess,
 } from "./account-panel-presets";
-import { SettingsRow } from "./apple-settings-ui";
 
 /**
  * The account group's avatar, display name and username rows plus their three
@@ -367,7 +367,7 @@ export function AccountProfileSection({
             >
               {t("auth.usernameHandle")}
               <div className="relative flex items-center">
-                <span className="absolute left-3 text-muted-foreground text-sm font-medium select-none pointer-events-none">
+                <span className="absolute start-3 text-muted-foreground text-sm font-medium select-none pointer-events-none">
                   @
                 </span>
                 <Input

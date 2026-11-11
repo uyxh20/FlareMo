@@ -24,9 +24,11 @@ describe("the link summary hook-ins", () => {
     );
   });
 
-  it("memos-link-metadata.ts exports its address check", () => {
-    const text = read("apps/worker/src/memos-link-metadata.ts");
-    expect(text).toMatch(/^export function validateExternalUrl\(/m);
+  it("the link reader checks addresses with upstream's outbound check", () => {
+    const text = read("apps/worker/src/fork/link-read.ts");
+    expect(text).toContain(
+      "validateOutboundUrl(value, { allowFragment: true })",
+    );
   });
 
   it("memory dreaming skips link summaries", () => {

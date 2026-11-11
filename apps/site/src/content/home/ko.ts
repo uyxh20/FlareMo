@@ -2,16 +2,26 @@ import type { HomeContent } from "../copy";
 
 export const KO_HOME: HomeContent = {
   heroEyebrow: "오픈소스 · Cloudflare 네이티브 · 지식 관리",
-  heroTitleLine1: "서버 제로, 영구 소유.",
+  heroTitleLine1: "서버는 필요 없습니다.",
   heroTitleLine2: "생각과 함께 자라는 AI 세컨드 브레인.",
   heroSubtitle:
-    "심플하게, 얕지 않게. 조용하게, 과하지 않게. Cloudflare 엣지에서 자유롭게 쓰면 노트가 할 일과 아티클, 지식 베이스로 자라고, 모든 AI 에이전트가 함께 쓰는 장기 기억이 됩니다.",
+    "Cloudflare 엣지에서 열자마자 기록하세요. 노트는 할 일과 아티클, 검색 가능한 지식 베이스로 자라고, AI 에이전트도 MCP로 같은 노트를 읽고 쓸 수 있습니다.",
   primaryCta: "배포 가이드 읽기",
   secondaryCta: "GitHub 소스코드",
-  statMemos: "약 250만 건의 메모",
-  statPhotos: "약 1만 장 압축 사진 · 트래픽 0원",
-  statServers: "24/7 글로벌 초저지연",
-  statUptime: "멀티 리전 다중화",
+  heroFacts: [
+    {
+      label: "D1 스토리지",
+      value: "5 GB",
+      detail: "약 250만 건의 텍스트 메모",
+    },
+    {
+      label: "R2 스토리지",
+      value: "10 GB",
+      detail: "약 1만 장 압축 사진 · 전송료 0원",
+    },
+    { label: "엣지 네트워크", value: "300+", detail: "개 거점, 100ms 이내" },
+    { label: "배포 시간", value: "5분", detail: "클론에서 공개까지" },
+  ],
   featuresBadge: "핵심 기능",
   featuresHeading: "왜 FlareMo인가",
   featuresSubtitle:
@@ -20,12 +30,12 @@ export const KO_HOME: HomeContent = {
     {
       title: "기본값이 내구성",
       description:
-        "메모는 Cloudflare D1과 R2에 멀티 리전으로 안전하게 저장됩니다. 디스크 고장이나 정전 걱정 없이 데이터를 보호하세요.",
+        "메모는 Cloudflare D1과 R2에 멀티 리전으로 복제됩니다. 노트북이 고장 나거나 이전해도 기록은 남습니다.",
     },
     {
-      title: "투명한 무료 제공량",
+      title: "무료 티어, 명확한 한도",
       description:
-        "무료 플랜만으로 약 250만 건의 메모와 1만 장의 사진을 보관할 수 있습니다. R2는 다운로드 트래픽 비용이 무료입니다.",
+        "무료 플랜에 D1 5GB(약 250만 건)와 R2 10GB(약 1만 장)가 포함됩니다. 한도 안에서는 R2 전송 비용이 발생하지 않습니다.",
     },
     {
       title: "오프라인 퍼스트 & PWA",
@@ -33,9 +43,9 @@ export const KO_HOME: HomeContent = {
         "설치 가능한 PWA. 비행기나 지하철에서도 원활하게 작성하세요. 작성된 메모는 로컬에 보관 후 온라인 복구 시 자동 제출됩니다.",
     },
     {
-      title: "AI 네이티브 장기 기억",
+      title: "AI가 내 노트를 읽고 쓰기",
       description:
-        "/memory/mcp 엔드포인트를 통해 Claude, Cursor 등의 AI 에이전트가 사용자의 영구 기억과 개인 맥락을 안전하게 읽고 씁니다.",
+        "MCP 엔드포인트를 통해 Claude, Cursor 등의 AI 에이전트가 사용자의 노트를 검색·읽기·쓰기합니다. 별도의 AI 기억 저장소는 만들지 않습니다.",
     },
     {
       title: "공유를 위한 팀 공간",
@@ -59,13 +69,13 @@ export const KO_HOME: HomeContent = {
   comparisonRows: [
     {
       label: "데이터 저장 위치",
-      cloudflare: "Cloudflare 글로벌 멀티 리전 스토리지",
+      cloudflare: "Cloudflare 멀티 리전 스토리지",
       nas: "집 안의 단일 또는 RAID 하드디스크",
       vps: "단일 클라우드 데이터센터의 가상 디스크",
     },
     {
       label: "하드웨어 장애 위험",
-      cloudflare: "자동 장애 조치로 하드웨어 위험 0%",
+      cloudflare: "리전 간 복제, 직접 교체할 디스크 없음",
       nas: "디스크 배드섹터나 정전 시 전량 손실 위험",
       vps: "하이퍼바이저 장애나 설정 실수로 손실 위험",
     },
@@ -77,7 +87,7 @@ export const KO_HOME: HomeContent = {
     },
     {
       label: "일상 유지보수",
-      cloudflare: "제로 : OS 패치 및 Docker 관리 불필요",
+      cloudflare: "OS 패치도, Docker 관리도 없음",
       nas: "OS 정기 업데이트 및 디스크 SMART 감시 필요",
       vps: "보안 패치, 커널 업그레이드, 방화벽 관리 필요",
     },
@@ -89,15 +99,14 @@ export const KO_HOME: HomeContent = {
     },
     {
       label: "지속 비용",
-      cloudflare: "월 0원 (넉넉한 무료 티어 활용)",
+      cloudflare: "무료 티어 내 0원 (한도 있음)",
       nas: "수십~수백만 원의 초기 기기값 + 전기요금",
       vps: "매월 반복 청구되는 호스팅 요금과 트래픽비",
     },
   ],
-  screenshotsHeading: "단정하고 유려한 디자인",
+  screenshotsHeading: "안을 살펴보세요",
   screenshotsSubtitle:
-    "라이트 모드, 다크 모드, 모바일 반응형 완벽 대응. 모든 기능이 백엔드와 연동되어 작동합니다.",
-  faqBadge: "알아두면 좋은 점",
+    "라이트, 다크, 모바일까지 — 실제 배포된 앱의 화면입니다.",
   faqHeading: "자주 묻는 질문",
   faqItems: [
     {
@@ -114,15 +123,14 @@ export const KO_HOME: HomeContent = {
     },
     {
       q: "내 스크립트와 도구를 연결할 수 있나요?",
-      a: "네. 폐기 가능한 개인 액세스 토큰이 있는 오픈 API로 자동화를 연결합니다. AI 워크플로는 내장 CLI와 MCP 엔드포인트로 같은 Agent Memory를 읽고 씁니다. 정확한 지원 범위는 호환성 매트릭스에 있습니다.",
+      a: "네. 폐기 가능한 개인 액세스 토큰이 있는 오픈 API로 자동화를 연결합니다. AI 워크플로는 `/mcp` 노트 도구와 `flaremo-notes` Skill로 노트를 직접 읽고 씁니다. 정확한 지원 범위는 호환성 매트릭스에 있습니다.",
     },
     {
       q: "개인용과 팀용의 차이는 무엇인가요?",
       a: "혼자 사용할 때는 조용한 1인용 노트로 작동하며, 팀 모드를 켜면 일회용 초대 링크로 동료를 추가할 수 있습니다. 노트는 비공개(나만 보기), 팀 공개(팀원이 읽고 댓글 가능), 전체 공개 중에서 고릅니다.",
     },
   ],
-  ctaBadge: "시작하기",
-  ctaHeading: "5분 만에 배포, 영원히 당신의 것.",
+  ctaHeading: "5분 만에 배포, 이제 당신의 것.",
   ctaSubtitle:
     "서버도, 신용카드도 필요 없습니다. 무료 Cloudflare 계정으로 5분 만에 배포하세요.",
   ctaButton: "5분 배포 가이드 확인하기",

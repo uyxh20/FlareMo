@@ -1,6 +1,6 @@
 import type { EmbeddingTaskRow, FlareMoDb } from "@flaremo/db";
-import { embeddingTasks, memoryItems, memos } from "@flaremo/db";
-import { and, asc, eq, inArray, ne, notExists } from "drizzle-orm";
+import { embeddingTasks, memos } from "@flaremo/db";
+import { and, asc, eq, inArray, notExists } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { EmbeddingProvider, VectorIndex } from "../embedding";
 import { processEmbeddingTask } from "../embedding-processors";
@@ -8,7 +8,7 @@ import { markResourceEmbeddingError } from "../embedding-task-store";
 
 // Search catch-up (fork-owned; docs/fork-customizations.md, "Search catch-up").
 //
-// Entries and memories that reached D1 without an embedding task (bulk
+// Entries that reached D1 without an embedding task (bulk
 // imports, mainly) sit at `not_indexed` forever: the outbox only works from its
 // task rows and nothing sweeps the column. This job finds a few such rows per
 // run and indexes them with the outbox's own per-resource processor, so the
@@ -20,8 +20,12 @@ import { markResourceEmbeddingError } from "../embedding-task-store";
 // allows 50 D1 queries per invocation: two candidate reads, then about four
 // queries per resource (read, two usage counters, status update), plus one if
 // it fails. CATCHUP_QUERY_BUDGET is what the tests hold it to.
+//
+// Since the upstream v0.32 sync, memories have no vectors (upstream removed
+// memory indexing; the fork keeps the memory layer with keyword recall), so
+// this indexes entries only.
 
-/** Resources indexed per run, memos and memories together. */
+/** Entries indexed per run. */
 export const SEARCH_CATCHUP_BATCH = 4;
 /** Upper bound on D1 queries per run; the Free plan's cap is 50. */
 export const CATCHUP_QUERY_BUDGET = 30;
@@ -29,7 +33,6 @@ export const CATCHUP_QUERY_BUDGET = 30;
 export type SearchCatchupDeps = {
   provider: EmbeddingProvider | null;
   memosIndex: VectorIndex | null;
-  memoriesIndex: VectorIndex | null;
 };
 
 export type SearchCatchupResult = {
@@ -46,14 +49,14 @@ export async function runSearchCatchup(
 ): Promise<SearchCatchupResult> {
   const result: SearchCatchupResult = { indexed: 0, failed: 0, more: false };
   // Indexing off (dev's default): leave every row as it is.
-  if (!deps.provider || !deps.memosIndex || !deps.memoriesIndex) return result;
+  if (!deps.provider || !deps.memosIndex) return result;
 
   const batch = Math.max(1, options.batch ?? SEARCH_CATCHUP_BATCH);
   const nowIso = (options.now ?? new Date()).toISOString();
 
   // A resource with an open outbox task belongs to the outbox; skip it so the
   // two never index the same row at once.
-  const openTask = (type: "memo" | "memory", id: SQLiteColumn) =>
+  const openTask = (type: "memo", id: SQLiteColumn) =>
     db
       .select({ one: embeddingTasks.id })
       .from(embeddingTasks)
@@ -78,29 +81,7 @@ export async function runSearchCatchup(
     .orderBy(asc(memos.id))
     .limit(batch);
 
-  const memoryRows =
-    memoRows.length < batch
-      ? await db
-          .select({ id: memoryItems.id, userId: memoryItems.userId })
-          .from(memoryItems)
-          .where(
-            and(
-              eq(memoryItems.embeddingStatus, "not_indexed"),
-              eq(memoryItems.status, "active"),
-              // Inferred guesses stay out of the vector index on purpose
-              // (scripts/persistence-manifest.mjs, POST_RESTORE_DERIVED_SQL).
-              ne(memoryItems.verification, "inferred"),
-              notExists(openTask("memory", memoryItems.id)),
-            ),
-          )
-          .orderBy(asc(memoryItems.id))
-          .limit(batch - memoRows.length)
-      : [];
-
-  const work = [
-    ...memoRows.map((row) => ({ ...row, type: "memo" as const })),
-    ...memoryRows.map((row) => ({ ...row, type: "memory" as const })),
-  ];
+  const work = [...memoRows.map((row) => ({ ...row, type: "memo" as const }))];
   result.more = work.length >= batch;
 
   for (const item of work) {

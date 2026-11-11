@@ -1,11 +1,12 @@
-import type { FlareMoDb, MemoryItemRow, UserRow } from "@flaremo/db";
+import type { FlareMoDb, UserRow } from "@flaremo/db";
+import type { MemoryItemRow } from "@flaremo/db/src/schema/memory";
 import {
   memoryEvents,
   memoryEvidence,
   memoryItems,
   memoryRelations,
   memoryRevisions,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import {
   and,
   desc,

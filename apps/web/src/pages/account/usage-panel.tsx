@@ -1,10 +1,13 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { InfoIcon } from "lucide-react";
 import type { CloudflareUsageReport, VectorUsageReport } from "@/api";
+import {
+  SettingsRow,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { TranslationKey } from "@/i18n";
 import { formatBytes } from "@/lib/utils";
-import { SettingsRow, SettingsSectionGroup } from "./apple-settings-ui";
 
 type UsagePanelProps = {
   t: (key: TranslationKey) => string;
@@ -215,12 +218,6 @@ function PlanQuotaBars({
           limit: plan.user.limits.maxMemosPerUser,
           format: localeFormat,
         },
-        {
-          key: "usage.planMemories",
-          used: plan.user.usage.maxMemoryItemsPerUser,
-          limit: plan.user.limits.maxMemoryItemsPerUser,
-          format: localeFormat,
-        },
       ]
     : null;
   const userLimited = userRows?.filter((row) => row.limit !== null) ?? [];
@@ -312,7 +309,7 @@ function UsageBar({
             <span className="text-xs text-muted-foreground">{hint}</span>
           ) : null}
         </span>
-        <span className="ml-auto text-muted-foreground tabular-nums">
+        <span className="ms-auto text-muted-foreground tabular-nums">
           {format(used)} / {format(limit)}
         </span>
       </div>

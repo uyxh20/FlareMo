@@ -1,5 +1,6 @@
 import type { FlareMoDb, UserRow } from "@flaremo/db";
-import { memoryItems, memoryRejections, memos } from "@flaremo/db";
+import { memos } from "@flaremo/db";
+import { memoryItems, memoryRejections } from "@flaremo/db/src/schema/memory";
 import { and, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm";
 import { FORK_LINK_SUMMARY_SOURCE } from "../fork/link-summary"; // fork: link summaries
 import { plannerCollectDreamingComments } from "../planner/dreaming-sources"; // fork: task comments

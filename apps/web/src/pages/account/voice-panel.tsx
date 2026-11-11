@@ -10,6 +10,10 @@ import {
 } from "@/api";
 import { QueryErrorState } from "@/components/query-error-state";
 import {
+  SettingsRow,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -36,7 +40,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useI18n } from "@/i18n";
 import type { TranslationKey } from "@/i18n/key";
 import { queryKeys } from "@/lib/query-keys";
-import { SettingsRow, SettingsSectionGroup } from "./apple-settings-ui";
 
 type CredentialField =
   | "appId"
@@ -87,7 +90,7 @@ export function VoicePanel() {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   const settingsQuery = useQuery({
-    queryKey: ["voice-settings"],
+    queryKey: queryKeys.voiceSettings,
     queryFn: getVoiceSettings,
   });
 
@@ -133,7 +136,7 @@ export function VoicePanel() {
         baseUrl: "",
       });
       const value = await cache.fetchQuery({
-        queryKey: ["voice-settings"],
+        queryKey: queryKeys.voiceSettings,
         queryFn: getVoiceSettings,
         staleTime: 0,
       });

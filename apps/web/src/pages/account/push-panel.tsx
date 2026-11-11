@@ -5,16 +5,20 @@ import { toast } from "sonner";
 import { getPushConfig, subscribeToPush, unsubscribeFromPush } from "@/api";
 import { InfoTip } from "@/components/info-tip";
 import { QueryErrorState } from "@/components/query-error-state";
+import {
+  SettingsRow,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/lib/error";
-import { SettingsRow, SettingsSectionGroup } from "./apple-settings-ui";
+import { queryKeys } from "@/lib/query-keys";
 
 export function PushPanel() {
   const { t } = useI18n();
   const configQuery = useQuery({
-    queryKey: ["push-config"],
+    queryKey: queryKeys.pushConfig,
     queryFn: getPushConfig,
     retry: false,
   });

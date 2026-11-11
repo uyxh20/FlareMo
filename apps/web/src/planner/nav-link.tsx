@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { CalendarCheck2Icon, GaugeIcon, TargetIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { ForkMemoryNavLink } from "@/fork/memory/nav-link";
 import { HealthNavLink } from "@/health/nav-link"; // fork: health tracker
 import { useI18n } from "@/i18n";
 import { plannerFetchReviewStatus } from "./goals-api";
@@ -125,6 +126,7 @@ export function PlannerNavLink({ onNavigate }: { onNavigate?: () => void }) {
         )}
       </PlannerLink>
       <HealthNavLink onNavigate={onNavigate} /> {/* fork: health tracker */}
+      <ForkMemoryNavLink onNavigate={onNavigate} />
     </>
   );
 }

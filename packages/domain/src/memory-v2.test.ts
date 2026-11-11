@@ -1,11 +1,10 @@
 import type { UserRow } from "@flaremo/db";
+import { applyFlaremoMigrations, createDb } from "@flaremo/db";
 import {
-  applyFlaremoMigrations,
-  createDb,
   memoryEvents,
   memoryEvidence,
   memoryRelations,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 import { eq } from "drizzle-orm";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";

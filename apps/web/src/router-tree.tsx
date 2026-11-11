@@ -11,11 +11,11 @@ import {
   getRelatedMemos,
   getTodayReview,
   listArticles,
-  listMemories,
   listProjects,
 } from "@/api";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { forkMemoryRoute } from "@/fork/memory/route"; // fork: Memory page
 import { healthRoute } from "@/health/route"; // fork: health tracker
 import { isRtlLocale, useI18n } from "@/i18n";
 import { todayKey } from "@/lib/calendar-date";
@@ -92,6 +92,11 @@ const AccountPage = lazy(() =>
     default: module.AccountPage,
   })),
 );
+const ConnectPage = lazy(() =>
+  import("@/pages/connect-page").then((module) => ({
+    default: module.ConnectPage,
+  })),
+);
 const DailyReviewPage = lazy(() =>
   import("@/pages/daily-review-page").then((module) => ({
     default: module.DailyReviewPage,
@@ -100,11 +105,6 @@ const DailyReviewPage = lazy(() =>
 const RandomWalkPage = lazy(() =>
   import("@/pages/random-walk-page").then((module) => ({
     default: module.RandomWalkPage,
-  })),
-);
-const MemoryPage = lazy(() =>
-  import("@/pages/memory-page").then((module) => ({
-    default: module.MemoryPage,
   })),
 );
 const ProjectsPage = lazy(() =>
@@ -153,13 +153,13 @@ const memoRoute = createRoute({
   loader: ({ context, params }) => {
     warmQuery(
       context.queryClient.ensureQueryData({
-        queryKey: ["memo-context", params.memoId],
+        queryKey: queryKeys.memoContext.forMemo(params.memoId),
         queryFn: () => getMemoContext(params.memoId),
       }),
     );
     warmQuery(
       context.queryClient.ensureQueryData({
-        queryKey: ["memo-related", params.memoId],
+        queryKey: queryKeys.memoRelated.forMemo(params.memoId),
         queryFn: () => getRelatedMemos(params.memoId),
       }),
     );
@@ -330,6 +330,25 @@ const accountRoute = createRoute({
   }),
 });
 
+function ConnectRoutePage() {
+  const { code } = connectRoute.useSearch();
+  return <ConnectPage initialCode={code} />;
+}
+
+// The pairing-code approval page. It sits beside the explorer sidebar like the
+// other workspace pages so the guard (`AuthenticatedRoute`) redirects a signed
+// out visitor to /login and returns them here with `?code=` intact.
+const connectRoute = createRoute({
+  getParentRoute: () => workspaceRoute,
+  path: "/connect",
+  // Clients hand out `verification_uri_complete` with the code prefilled
+  // (`/connect?code=ABCD-EFGH`), so the page opens with it already filled in.
+  validateSearch: (search: Record<string, unknown>): { code?: string } => ({
+    code: typeof search.code === "string" ? search.code : undefined,
+  }),
+  component: ConnectRoutePage,
+});
+
 function DailyReviewRoutePage() {
   return <DailyReviewPage />;
 }
@@ -360,24 +379,6 @@ const randomWalkRoute = createRoute({
   component: RandomWalkRoutePage,
 });
 
-function MemoryRoutePage() {
-  return <MemoryPage />;
-}
-
-const memoryRoute = createRoute({
-  getParentRoute: () => workspaceRoute,
-  path: "/memory",
-  component: MemoryRoutePage,
-  loader: ({ context }) => {
-    warmQuery(
-      context.queryClient.ensureQueryData({
-        queryKey: ["memories", "list"],
-        queryFn: () => listMemories(),
-      }),
-    );
-  },
-});
-
 function ProjectsRoutePage() {
   return <ProjectsPage />;
 }
@@ -400,7 +401,7 @@ const projectsRoute = createRoute({
   loader: ({ context }) => {
     warmQuery(
       context.queryClient.ensureQueryData({
-        queryKey: ["projects"],
+        queryKey: queryKeys.projects.all,
         queryFn: () => listProjects(),
       }),
     );
@@ -420,7 +421,7 @@ const articlesRoute = createRoute({
   loader: ({ context }) => {
     warmQuery(
       context.queryClient.ensureQueryData({
-        queryKey: ["articles"],
+        queryKey: queryKeys.articles.all,
         queryFn: () => listArticles({ include_deleted: true }),
       }),
     );
@@ -457,11 +458,12 @@ const router = createRouter({
       memoRoute,
       dailyReviewRoute,
       randomWalkRoute,
-      memoryRoute,
       projectsRoute,
       ...plannerRoutes, // fork: planning cockpit
       healthRoute, // fork: health tracker
+      forkMemoryRoute, // fork: Memory page
       articlesRoute,
+      connectRoute,
     ]),
     shareRoute,
     loginRoute,

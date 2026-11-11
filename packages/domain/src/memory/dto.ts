@@ -15,7 +15,7 @@ import type {
   memoryRelations,
   memoryResourceLinks,
   memoryRevisions,
-} from "@flaremo/db";
+} from "@flaremo/db/src/schema/memory";
 
 export function memoryToDto(
   row: MemoryItemRow,

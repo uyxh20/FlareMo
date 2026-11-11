@@ -539,7 +539,9 @@ async function callMemoryTool(
     case "memory_recall": {
       const input = recallInputSchema.parse(args);
       const provider = createEmbeddingProvider(c.env);
-      const index = createVectorIndex(c.env, "memory");
+      // fork: memories have no vectors since the upstream v0.32 sync (upstream
+      // removed memory indexing); recall uses fact keys, keywords and links.
+      const index = null as import("@flaremo/domain").VectorIndex | null;
       if (provider && index) {
         await assertMonthlyQuota(
           context.db,

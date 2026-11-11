@@ -1,12 +1,16 @@
 import type { UpdateMemoryInput } from "@flaremo/contracts";
-import type { FlareMoDb, MemoryItemRow, UserRow } from "@flaremo/db";
-import { memoryItems, memoryRelations } from "@flaremo/db";
+import type { FlareMoDb, UserRow } from "@flaremo/db";
+import type { MemoryItemRow } from "@flaremo/db/src/schema/memory";
+import { memoryItems, memoryRelations } from "@flaremo/db/src/schema/memory";
 import { and, eq, ne, sql } from "drizzle-orm";
-import { insertEmbeddingTask } from "../embedding-outbox";
 import { ConflictError, NotFoundError, ValidationError } from "../errors";
-import { createResourceId } from "../ids";
-import { assertMemoryCountQuota, type QuotaScope } from "../quotas";
+import type { QuotaScope } from "../quotas";
 import { memoryToDto } from "./dto";
+import {
+  assertMemoryCountQuota,
+  createResourceId,
+  insertEmbeddingTask,
+} from "./fork-compat";
 import { confirmMemory, lockMemory } from "./lifecycle";
 import {
   appendMemoryEvent,

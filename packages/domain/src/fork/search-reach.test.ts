@@ -71,10 +71,9 @@ let database: Awaited<ReturnType<Miniflare["getD1Database"]>>;
 let db: ReturnType<typeof createDb>;
 let owner: TeamViewer;
 let memosIndex: MemoryIndex;
-let memoriesIndex: MemoryIndex;
 
 async function runOutbox() {
-  await dispatchEmbeddingOutbox(db, { provider, memosIndex, memoriesIndex });
+  await dispatchEmbeddingOutbox(db, { provider, memosIndex });
 }
 
 async function keywordHits(table: "memos_fts" | "memory_fts", word: string) {
@@ -119,7 +118,6 @@ describe("every way in reaches search", () => {
     await applyFlaremoMigrations(database);
     owner = await ensureTeamOwner(db);
     memosIndex = new MemoryIndex();
-    memoriesIndex = new MemoryIndex();
   });
 
   afterEach(async () => {
@@ -164,11 +162,13 @@ describe("every way in reaches search", () => {
   it("an imported entry reaches the semantic index", async () => {
     await importOne({ name: "memos/imported-sem", content: "Snorkeling trip" });
     await runOutbox();
-    await runSearchCatchup(db, { provider, memosIndex, memoriesIndex });
+    await runSearchCatchup(db, { provider, memosIndex });
     expect(memosIndex.resources("memo_id")).toEqual(["memos/imported-sem"]);
   });
 
-  it("a memory the owner writes reaches both indexes", async () => {
+  // Memories have no semantic vectors since the upstream v0.32 sync (upstream
+  // removed memory indexing; the fork keeps the memory layer).
+  it("a memory the owner writes reaches the keyword index", async () => {
     const created = await createMemory(
       db,
       owner,
@@ -187,6 +187,6 @@ describe("every way in reaches search", () => {
     await runOutbox();
     const id = created.memory.id;
     expect(await keywordHits("memory_fts", "swimming")).toEqual([id]);
-    expect(memoriesIndex.resources("memory_id")).toEqual([id]);
+    expect(memosIndex.resources("memory_id")).toEqual([]);
   });
 });

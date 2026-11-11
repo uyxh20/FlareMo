@@ -7,12 +7,16 @@ import type {
   MemoryResourceType,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
-import { memoryItems, memoryRelations, memoryResourceLinks } from "@flaremo/db";
+import {
+  memoryItems,
+  memoryRelations,
+  memoryResourceLinks,
+} from "@flaremo/db/src/schema/memory";
 import { and, eq } from "drizzle-orm";
 import { ConflictError } from "../errors";
-import { createResourceId } from "../ids";
 import type { QuotaScope } from "../quotas";
 import { memoryRelationToDto, memoryResourceLinkToDto } from "./dto";
+import { createResourceId } from "./fork-compat";
 import {
   assertAgentCanMutate,
   type MemoryActor,

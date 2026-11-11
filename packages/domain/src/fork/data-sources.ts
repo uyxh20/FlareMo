@@ -327,12 +327,14 @@ export const forkDataSources: readonly ForkDataSource[] = [
   },
 
   // --- Memory --------------------------------------------------------------
+  // Upstream removed the memory layer in v0.27 (tables dropped in v0.28); the
+  // fork keeps it, so these tables are the fork's now.
   {
     id: "memory_items",
     table: "memory_items",
     module: "memory",
     kind: "content",
-    owner: "upstream",
+    owner: "fork",
     holds:
       "Memories: facts, preferences and patterns extracted about the owner",
     uses: {
@@ -343,14 +345,14 @@ export const forkDataSources: readonly ForkDataSource[] = [
         "the goal check does not read memories (preferences, constraints)",
       ),
       search: yes(
-        "keyword index (memory_fts) and semantic index (resource memory)",
+        "keyword index (memory_fts); no semantic vectors since the upstream v0.32 sync",
       ),
       memory: yes("the memory layer's own store"),
       mcp: yes("recall, remember, compile, forget"),
       agent: yes(
         "read_memories (active memories) and the week's memories in review_week; propose_memory adds proposals in a review, and propose_memory_change in Ask corrects or forgets one only when the owner accepts it",
       ),
-      userExport: yes("every memory"),
+      userExport: FORK_EXPORT,
       backup: IN_BACKUP,
     },
   },
@@ -372,12 +374,12 @@ export const forkDataSources: readonly ForkDataSource[] = [
       table,
       module: "memory",
       kind,
-      owner: "upstream",
+      owner: "fork",
       holds,
       uses: {
         ...plumbing("supporting rows of a memory"),
         memory: yes("the memory layer's own store"),
-        userExport: yes("exported with the memories"),
+        userExport: FORK_EXPORT,
       },
     }),
   ),
@@ -386,7 +388,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     table: "memory_rejections",
     module: "memory",
     kind: "bookkeeping",
-    owner: "upstream",
+    owner: "fork",
     holds:
       "Memories the owner rejected, so dreaming does not propose them again",
     uses: {
@@ -402,7 +404,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     table: "memory_compile_archives",
     module: "memory",
     kind: "bookkeeping",
-    owner: "upstream",
+    owner: "fork",
     holds: "Compiled memory snapshots handed to agents",
     uses: {
       ...plumbing("snapshots of memories"),
@@ -417,7 +419,8 @@ export const forkDataSources: readonly ForkDataSource[] = [
     module: "search",
     kind: "derived",
     owner: "upstream",
-    holds: "Queue of entries and memories waiting to be (re)indexed",
+    holds:
+      "Queue of entries waiting to be (re)indexed (memory rows are finished without work since the v0.32 sync)",
     uses: plumbing(
       "indexing work",
       no("recreated from memos and memories after a restore"),
