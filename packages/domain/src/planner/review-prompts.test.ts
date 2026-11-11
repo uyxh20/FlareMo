@@ -13,6 +13,8 @@ import {
 } from "./agent-prompts";
 import type { PlannerReviewContext } from "./review-context";
 import {
+  plannerAgentMemoOf,
+  plannerAgentMemoStreamFilter,
   plannerCheckMessages,
   plannerCleanMemo,
   plannerCloseMessages,
@@ -29,8 +31,6 @@ import {
   plannerParseOpening,
   plannerReviewContextBlock,
   plannerWeekRangeText,
-  plannerAgentMemoOf,
-  plannerAgentMemoStreamFilter,
 } from "./review-prompts";
 
 // The weekly review's prompts and parsers (review-prompts.ts). Pure functions.
