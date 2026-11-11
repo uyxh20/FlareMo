@@ -259,7 +259,7 @@
       <li><a href="#data">Where data sits</a></li>
       <li><a href="#memos">Diary entries</a></li>
       <li><a href="#search">Search and vectors</a></li>
-      <li><a href="#memory">Memory and dreaming</a></li>
+      <li><a href="#memory">Memory (being removed)</a></li>
       <li><a href="#review">Weekly review</a></li>
       <li><a href="#period">Month, quarter, year</a></li>
       <li><a href="#agent">Diary agent</a></li>
@@ -282,7 +282,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-11-11 · describes main and live version #52 (shipped 2026-11-11): the Nights out card on the health page shows days since the last night out. Version #51 (2026-11-11): the morning page, a full page once a day with an idea line, due tasks and the week's goals (migration 9019). Version #50 (2026-11-11): the Sunday review streams its memo and takes files, Ask my diary gets five starter buttons (diary to-dos, mark done, replan, tidy backlog, health check) with a skip and edit log, and task notes and comments are findable in search and read by the memory sweep. Version #49 (2026-11-10) brought the agent control panel's new cards (place a task, link entries, tags, memories, health rows, weekly goals with a change log), editable card values, a Redo line, live coach replies and files in the review answer. Version #48 added the sidebar overdue link opening the cockpit, imported entries are caught up into semantic search every 10 minutes, the personal export carries the Schizo Diary tables with a weekly Sunday backup to R2, and two fixes (export on D1's 100-value limit, semantic search query option). Version #47 turned on the <a href="#review">cascade ladder</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
+      <p class="meta">Last updated 2026-11-11 · <b>On dev:</b> the upstream FlareMo v0.32.1 sync (branch <code>claude/upstream-sync</code>): upstream's persistent sidebar layout, device sign-in for apps, AI insights, native app sync and phone push tables (migrations 0034 to 0050, none switched on), personal tokens without a scope get the notes scope, and <a href="#memory">Memory removed</a>. Describes main and live version #52 (shipped 2026-11-11): the Nights out card on the health page shows days since the last night out. Version #51 (2026-11-11): the morning page, a full page once a day with an idea line, due tasks and the week's goals (migration 9019). Version #50 (2026-11-11): the Sunday review streams its memo and takes files, Ask my diary gets five starter buttons (diary to-dos, mark done, replan, tidy backlog, health check) with a skip and edit log, and task notes and comments are findable in search and read by the memory sweep. Version #49 (2026-11-10) brought the agent control panel's new cards (place a task, link entries, tags, memories, health rows, weekly goals with a change log), editable card values, a Redo line, live coach replies and files in the review answer. Version #48 added the sidebar overdue link opening the cockpit, imported entries are caught up into semantic search every 10 minutes, the personal export carries the Schizo Diary tables with a weekly Sunday backup to R2, and two fixes (export on D1's 100-value limit, semantic search query option). Version #47 turned on the <a href="#review">cascade ladder</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
     </header>
 
     <!-- ============================================================ -->
@@ -578,54 +578,8 @@
 
     <!-- ============================================================ -->
     <section id="memory">
-      <h2>Memory and dreaming</h2>
-      <p>Memories are short conclusions about you, kept apart from the diary so AI agents don't have to reread everything.</p>
-      <figure>
-        <div class="fig">
-          <svg viewBox="0 0 900 290" role="img" aria-label="Memories come from AI agents directly, or from the nightly dreaming pass, which reads recent entries, asks a small model for up to 8 ideas and saves at most 5 a day.">
-            <rect x="20" y="30" width="170" height="56" rx="8" class="n" />
-            <text x="34" y="54" class="t-b">AI agent</text>
-            <text x="34" y="73" class="t-s t-m">memory_remember</text>
-            <line x1="190" y1="58" x2="676" y2="70" class="a" marker-end="url(#ah)" />
-            <text x="420" y="56" class="t-s">writes directly</text>
-
-            <text x="20" y="150" class="t-s t-m">NIGHTLY DREAMING</text>
-            <rect x="20" y="164" width="170" height="72" rx="8" class="n n-d1" />
-            <text x="34" y="188" class="t-b">Recent entries</text>
-            <text x="34" y="207" class="t-s">≤ 20 entries</text>
-            <text x="34" y="225" class="t-s">≤ 12,000 chars</text>
-            <rect x="226" y="164" width="140" height="72" rx="8" class="n n-ai" />
-            <text x="296" y="194" text-anchor="middle" class="t-b">Llama 3.1 8B</text>
-            <text x="296" y="213" text-anchor="middle" class="t-s">Workers AI</text>
-            <rect x="402" y="174" width="120" height="52" rx="8" class="n" />
-            <text x="462" y="198" text-anchor="middle" class="t-b">≤ 8 ideas</text>
-            <text x="462" y="216" text-anchor="middle" class="t-s">candidates</text>
-            <rect x="558" y="182" width="96" height="36" rx="8" class="n n-acc" />
-            <text x="606" y="205" text-anchor="middle" class="t-b">≤ 5 / day</text>
-            <line x1="190" y1="200" x2="222" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="366" y1="200" x2="398" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="522" y1="200" x2="554" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="654" y1="200" x2="676" y2="200" class="a" marker-end="url(#ah)" />
-            <text x="402" y="258" class="t-s">rejected in last 30 days → blocked</text>
-            <text x="402" y="276" class="t-s">sounds like an instruction → waits for you</text>
-
-            <rect x="680" y="20" width="200" height="250" rx="12" class="n n-d1" />
-            <text x="696" y="46" class="t-h">memory_items</text>
-            <text x="696" y="76" class="t-s">kind</text>
-            <text x="696" y="94">fact · decision · lesson…</text>
-            <text x="696" y="124" class="t-s">trust</text>
-            <text x="696" y="142">inferred → locked</text>
-            <text x="696" y="172" class="t-s">confidence 0–100</text>
-            <rect x="696" y="180" width="160" height="8" rx="4" class="f-track" />
-            <rect x="696" y="180" width="80" height="8" rx="4" class="f-acc" />
-            <text x="696" y="212" class="t-s">evidence</text>
-            <text x="696" y="230">link to source entry</text>
-            <text x="696" y="256" class="t-s">also vectorized</text>
-          </svg>
-        </div>
-        <figcaption>Nothing is extracted when you save an entry. <b>Since version #33 the diary agent replaces dreaming on live</b>: while the agent is set up the nightly dreaming step is skipped and new memories arrive as the agent's memory cards (at most three per review), which you Add or Dismiss on the Memory page; the nightly conflict check still runs. The figure shows the dreaming path, which comes back if the agent is turned off. Recall mixes exact-key, keyword, vector and linked-memory search and favours confirmed memories. Code: <code>apps/worker/src/memory-dreaming.ts</code>, <code>packages/domain/src/memory/</code>.</figcaption>
-      </figure>
-      <p class="note"><b>Memory sweep reads task comments</b> <span class="chip">fork</span> <span class="chip">live since version #50, 2026-11-11</span>: the nightly dreaming run also reads live task comments written since its last run (up to 10, newest first), and runs for an owner who only wrote comments. Notes are not read, since they are rewritten in place. A memory made from a comment does not link back to its source. No migration. Code: <code>packages/domain/src/planner/dreaming-sources.ts</code>.</p>
+      <h2>Memory (being removed)</h2>
+      <p class="note"><b>On dev since 2026-11-11, not live yet</b> <span class="chip">upstream v0.32.1</span>: upstream FlareMo deleted Memory, and the fork follows with no archive. Migration 0044 drops every <code>memory_*</code> table and <code>memory_fts</code>; the Memory page, <code>/memory/mcp</code>, the nightly dreaming and memory upkeep steps, the memories search index and the agent's memory tools and cards all go. The weekly and period reviews no longer read memories, and the propose step offers goals and tasks only. The agent's own notes (its memory store) are not affected. Until the upgrade reaches live, live still holds 126 memories and everything described elsewhere on this page about them stays true there.</p>
     </section>
 
     <!-- ============================================================ -->
