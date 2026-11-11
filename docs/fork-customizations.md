@@ -181,6 +181,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 
 | File | Hook-in |
 | --- | --- |
+| `apps/worker/src/kernel-boundary.test.ts` | Test only: the import scanner ignores string text that only looks like an import. Undo: revert the line filter in `extractImportSpecifiers`. |
 | `apps/web/src/components/flaremo-explorer.tsx` | Sidebar: one import, `<nav` becomes `<ForkSidebarNav`, `</nav>` becomes `</ForkSidebarNav>`. Planner: one import and `<PlannerNavLink onNavigate={onNavigate} />` after the Team projects link. Overdue reminder (section 8): the `MiniCalendarReminders` import and element are swapped for `PlannerOverdueReminders`, in the same place. |
 | `apps/web/src/hooks/use-workspace-queries.ts` | One import and `!forkOnThisDayBannerHidden &&` in the "On this day" banner condition. |
 | `apps/web/src/components/rich-composer-editor.tsx` | New optional `onSuggestionKeyDown` prop (type, destructure, ref) and a call at the very top of `handleKeyDown`, after the IME check and before the early return that hides arrows and Tab from the rest of the handler. When it returns true the editor does nothing else with the key. |
