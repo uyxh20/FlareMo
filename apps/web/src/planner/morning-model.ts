@@ -8,13 +8,11 @@ import {
 
 // What the morning page draws from the cockpit's board (fork-owned add-on,
 // docs/fork-customizations.md "Morning page"): the open tasks due today or
-// overdue, and the week's goals with a five-step meter of their tasks done.
+// overdue, and the week's goals (shown by name only since 11 Nov).
 // Pure functions, so the page and its tests read the same rules.
 
 /** At most this many tasks in "Due today". */
 export const plannerMorningDueMax = 5;
-/** Steps in a goal's meter. */
-export const plannerMorningMeterSteps = 5;
 
 export type PlannerMorningTask = {
   id: string;
@@ -30,8 +28,6 @@ export type PlannerMorningGoal = {
   pillar: PlannerPillar | null;
   done: number;
   total: number;
-  /** Steps of the meter filled, 0 to 5. */
-  filled: number;
 };
 
 function allCards(board: PlannerBoardResponse): PlannerBoardCard[] {
@@ -97,7 +93,6 @@ export function plannerMorningGoals(
       pillar: goal.pillar ?? null,
       done,
       total,
-      filled: total ? Math.round((done / total) * plannerMorningMeterSteps) : 0,
     };
   });
 }

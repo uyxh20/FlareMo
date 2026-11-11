@@ -29,7 +29,6 @@ import {
   plannerMorningGoals,
   plannerMorningGoalsHeading,
   plannerMorningLateLabel,
-  plannerMorningMeterSteps,
 } from "./morning-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
@@ -41,7 +40,7 @@ import "./goals.css";
 // rest of the day and lands on the diary. It shows the date, the day's idea
 // line with "Another", the tasks due today or overdue (a tick marks one done
 // through the cockpit's own route, so the history archive records it) and the
-// week's goals with a five-step meter of their tasks done.
+// week's goals (names only, Anon's call of 11 Nov).
 //
 // The line is written on the first open of the day and saved, so a reload shows
 // the same one. When no model is set up, or it declines, the slot is hidden.
@@ -333,7 +332,7 @@ function GoalRow({ goal }: { goal: PlannerMorningGoal }) {
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-[auto_1fr_auto] items-center gap-2.5 text-[15px]",
+        "grid min-w-0 grid-cols-[auto_1fr] items-center gap-2.5 text-[15px]",
         plannerPillarClass(goal.pillar),
       )}
     >
@@ -342,25 +341,6 @@ function GoalRow({ goal }: { goal: PlannerMorningGoal }) {
         className={cn("planner-dot", !goal.pillar && "bg-muted-foreground")}
       />
       <span className="min-w-0 truncate">{goal.title}</span>
-      <span
-        aria-label={`${goal.done} of ${goal.total} tasks done`}
-        className="flex gap-[3px]"
-        role="img"
-        title={`${goal.done} of ${goal.total} tasks done`}
-      >
-        {Array.from({ length: plannerMorningMeterSteps }, (_, step) => (
-          <i
-            className={cn(
-              "block size-3 rounded-[3px] border",
-              step < goal.filled
-                ? "border-foreground bg-foreground"
-                : "border-border bg-muted",
-            )}
-            // biome-ignore lint/suspicious/noArrayIndexKey: fixed five steps
-            key={step}
-          />
-        ))}
-      </span>
     </div>
   );
 }

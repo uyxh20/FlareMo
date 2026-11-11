@@ -98,7 +98,7 @@ describe("plannerMorningDue", () => {
 });
 
 describe("plannerMorningGoals", () => {
-  it("fills the meter with the share of the goal's tasks done", () => {
+  it("counts each goal's tasks and how many are done", () => {
     const goals = plannerMorningGoals(
       board(
         [
@@ -115,10 +115,10 @@ describe("plannerMorningGoals", () => {
         ],
       ),
     );
-    expect(goals.map((g) => [g.id, g.done, g.total, g.filled])).toEqual([
-      ["g1", 2, 3, 3],
-      ["g2", 0, 1, 0],
-      ["g3", 0, 0, 0],
+    expect(goals.map((g) => [g.id, g.done, g.total])).toEqual([
+      ["g1", 2, 3],
+      ["g2", 0, 1],
+      ["g3", 0, 0],
     ]);
   });
 });
