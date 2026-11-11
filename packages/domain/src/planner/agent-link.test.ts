@@ -208,6 +208,12 @@ describe("link summaries", () => {
         now: NOW,
       }),
     ).toBeNull();
+    // The memo is stamped with the real clock; pin it into the test week so
+    // the check does not depend on which week the suite runs in.
+    await rt.database
+      .prepare("UPDATE memos SET created_at = ? WHERE id = ?")
+      .bind(NOW.toISOString(), saved.landed_id)
+      .run();
     const diary = await plannerReadWeekDiary(rt.db, {
       userId: rt.user.id,
       weekStart: "2026-11-02",

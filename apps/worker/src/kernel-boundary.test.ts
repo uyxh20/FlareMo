@@ -140,7 +140,12 @@ function extractImportSpecifiers(source: string): string[] {
       specifiers.add(match[1] ?? "");
     }
   }
-  return [...specifiers].filter(Boolean).sort();
+  // A real module specifier never holds spaces, quotes, backticks or "${":
+  // matches like `from("from") ? \`From: ${header("` are string text that
+  // the line patterns picked up, not imports.
+  return [...specifiers]
+    .filter((specifier) => specifier && !/[\s`$()?|]/.test(specifier))
+    .sort();
 }
 
 /** Reduce a specifier to its registry identity: "@scope/name" or "name". */
