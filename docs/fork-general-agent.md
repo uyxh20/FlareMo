@@ -241,6 +241,42 @@ the card), so the card shows the value before and after, and an **accept is
 refused when the record changed since** ("This changed since the agent
 proposed it"): the proposal stays open, to dismiss and ask again.
 
+### To-dos from the diary
+
+Since November 2026 Ask my diary turns to-dos the owner wrote into task cards.
+The empty chat offers **Find to-dos in my diary** (or the owner asks in words):
+
+- `find_todos` (Ask only, like `read_link`) reads the owner's own entries of
+  the last 14 days (`days`, up to 60; no review memos, no link summaries) and
+  lists every line that reads like a to-do by fixed word rules, no model: an
+  open `- [ ]` box, or a sentence with "need to", "have to", "should", "must",
+  "don't forget", "remember to", "I'll", "going to", "il faut", "je dois" and
+  the like, leaving out done or regretted forms ("should have", "had to",
+  "[x]"). Each line carries its entry id, its day and its exact words, and is
+  marked "maybe on the board" when a task's title shares its content words
+  (backlog to done, and dropped), or "offered before" when an earlier card
+  came from the same entry and words. Code: `packages/domain/src/planner/diary-todos.ts`.
+- The agent judges which lines are real, open to-dos and proposes each with
+  `propose_add_task` plus `from_entry_id` and `from_quote`. The server checks
+  the words are in that entry (case and punctuation aside, three characters
+  are enough since the entry is named) and refuses a to-do offered before in
+  any state (open, accepted, dismissed, skipped, undone), except one sent back
+  with a redo, which the agent redraws. The row keeps
+  `change.source: { entry_id, quote, day, preview }`.
+- The card is the usual new-task row (title, column, due day and goal are
+  fields) with the source under the title: "From your entry of Nov 11", a link
+  that opens the entry in a new tab, and the words in quotes.
+
+### Skipped rows
+
+On a card of several rows, **Accept N, skip M** accepts the ticked rows and
+dismisses the unticked ones with `change.settled_reason: "skipped"` (the
+settle route takes `reason: "skipped"` with `dismissed`); they read
+**Skipped**. A ticked row that still waits on the owner's words stays open.
+**Dismiss** of the whole card stays a plain dismiss. The skip is the learning
+log's signal that the rest of the card was right and this row was not
+(`proposal.skipped`, [fork-flywheel.md](fork-flywheel.md)).
+
 ### One card per answer
 
 Every proposal filed while one question was being answered shows in **one
@@ -413,7 +449,12 @@ marks it `reverted` (`plannerAgentRevertAction` in `agent-apply.ts`):
   when the row no longer matches `was`;
 - a health row add: `healthCreateEntry` makes a `manual` row with no memo; Undo
   soft-deletes it (`deleted_at` and a `delete` event, never removed); refused
-  if the row was fixed since.
+  if the row was fixed since. When the diary reader has made a row since the
+  proposal for the same day and kind with a variant that fits (an accepted
+  #wimhof tag on the same card makes one), the accept fixes that row with the
+  card's values instead (`healthPatchEntry`, `before.merged`), so one session
+  is not counted twice (10 + 15 min showed as 25); Undo then puts the reader's
+  row back as it was.
 - a weekly goal add: `plannerCreateGoal` as `proposal:<id>` (version `create`);
   Undo soft-deletes it through `plannerDeleteGoal` (version `delete`, never
   removed); refused if the goal's last version is not the accept's or the goal
