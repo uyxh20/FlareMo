@@ -21,6 +21,7 @@ export * from "./board";
 export * from "./board-rank";
 export * from "./columns";
 export * from "./comments";
+export * from "./dreaming-sources";
 export * from "./flywheel";
 export * from "./goal-version";
 export * from "./goals";

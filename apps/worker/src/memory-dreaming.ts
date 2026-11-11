@@ -5,6 +5,7 @@ import {
   proposeDreamingConflicts,
   runDreamingCycle,
 } from "@flaremo/domain";
+import { plannerDreamingCommentUsers } from "@flaremo/domain/src/planner/dreaming-sources"; // fork: task comments
 import { desc, eq, gt, sql } from "drizzle-orm";
 import type { FlareMoEnv } from "./env";
 
@@ -61,7 +62,8 @@ function formatSources(sources: DreamingSource[]) {
   for (const source of sources) {
     if (budget <= 0) break;
     const body =
-      `${source.kind === "memo" ? "MEMO" : "CHECKPOINT"} ${source.id}` +
+      // fork: task comments are labelled as such (planner/dreaming-sources.ts).
+      `${source.kind === "memo" ? "MEMO" : source.kind === "task_comment" ? "TASK COMMENT" : "CHECKPOINT"} ${source.id}` +
       ` (${source.createdAt}): ${source.content}`;
     const cut = body.slice(0, Math.min(1_200, budget));
     budget -= cut.length;
@@ -206,13 +208,19 @@ export function createConflictDetector(env: FlareMoEnv) {
  */
 async function listDreamingUsers(db: ReturnType<typeof createDb>) {
   const since = new Date(Date.now() - 2 * 86_400_000).toISOString();
-  return db
+  const memoUsers = await db
     .select({ userId: memos.userId })
     .from(memos)
     .where(gt(memos.createdAt, since))
     .groupBy(memos.userId)
     .orderBy(desc(sql`max(${memos.createdAt})`))
     .limit(20);
+  // fork: owners who only wrote task comments get a run too.
+  const known = new Set(memoUsers.map((row) => row.userId));
+  const commentUsers = (await plannerDreamingCommentUsers(db, since))
+    .filter((userId) => !known.has(userId))
+    .map((userId) => ({ userId }));
+  return [...memoUsers, ...commentUsers].slice(0, 20);
 }
 
 export async function runMemoryDreaming(
