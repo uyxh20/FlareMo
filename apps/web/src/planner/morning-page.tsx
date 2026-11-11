@@ -190,7 +190,7 @@ function IdeaLine({
     return (
       <p
         aria-live="polite"
-        className="max-w-[34rem] text-[clamp(22px,3vw,28px)] font-semibold leading-tight text-muted-foreground motion-safe:animate-pulse"
+        className="max-w-[34rem] text-[clamp(22px,3vw,28px)] font-medium leading-tight text-muted-foreground motion-safe:animate-pulse"
       >
         Writing today's line…
       </p>
