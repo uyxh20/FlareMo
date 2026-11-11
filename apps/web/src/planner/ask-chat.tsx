@@ -7,7 +7,6 @@ import {
   ArrowUpIcon,
   CheckIcon,
   FlagIcon,
-  ListTodoIcon,
   Loader2Icon,
   PaperclipIcon,
   RotateCcwIcon,
@@ -48,6 +47,7 @@ import {
   plannerCardNeedsWords,
   plannerCardValue,
 } from "./ask-card-edit-model";
+import { PlannerAskStarterButtons } from "./ask-starters";
 import { plannerDueLabel } from "./dates";
 import { plannerQueryKeys } from "./query-keys";
 import { PlannerMarkdown } from "./review-markdown";
@@ -90,10 +90,21 @@ const en = {
     "Ask about your diary, goals, tasks or health. The agent reads everything and writes only what you accept.",
   emptyTask:
     "Ask for notes, a title, a due date or a plan for this task. The agent proposes; you accept or dismiss.",
-  /** Ask my diary's starter: the to-dos written in recent entries. */
-  findTodos: "Find to-dos in my diary",
-  findTodosQuestion:
-    "Find the to-dos I wrote in my diary in the last two weeks that are not on the board yet, and offer them as tasks.",
+  /** Ask my diary's starter buttons (ask-starters.tsx). */
+  starters: {
+    label: "Start with",
+    todos: "Find to-dos in my diary",
+    done: "Mark what I already did",
+    replan: (overdue: number, stuck: number) =>
+      `Replan my week · ${[
+        overdue ? `${overdue} overdue` : "",
+        stuck ? `${stuck} stuck` : "",
+      ]
+        .filter(Boolean)
+        .join(", ")}`,
+    backlog: (count: number) => `Tidy my backlog · ${count} untouched`,
+    health: "What did my health log miss",
+  },
   reading: "Reading your diary",
   noAnswer: "No answer came. Ask again.",
   placeholder: "Ask a question",
@@ -239,9 +250,20 @@ const zhCN: PlannerAskCopy = {
   close: "关闭",
   empty: "问问你的日记、目标、任务或健康记录。代理读一切，只写你接受的内容。",
   emptyTask: "为这项任务要备注、标题、截止日期或安排。代理提议，你接受或忽略。",
-  findTodos: "找出日记里的待办",
-  findTodosQuestion:
-    "找出我最近两周日记里写下、但还不在看板上的待办，作为任务提议给我。",
+  starters: {
+    label: "从这里开始",
+    todos: "找出日记里的待办",
+    done: "标记我已做完的",
+    replan: (overdue: number, stuck: number) =>
+      `重排本周 · ${[
+        overdue ? `${overdue} 项逾期` : "",
+        stuck ? `${stuck} 项卡住` : "",
+      ]
+        .filter(Boolean)
+        .join("，")}`,
+    backlog: (count: number) => `整理待办池 · ${count} 项未动`,
+    health: "健康记录漏了什么",
+  },
   reading: "正在读你的日记",
   noAnswer: "没有收到回答，请再问一次。",
   placeholder: "提一个问题",
@@ -614,6 +636,27 @@ function PlannerProposalBody({
         }
       : null;
   const preview = asString(change.preview);
+  const sourceBlock = source ? (
+    <div
+      className="flex flex-col gap-0.5 border-l-2 border-border pl-2"
+      data-testid="planner-todo-source"
+    >
+      <a
+        className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+        href={`/memo/${encodeURIComponent(source.entryId)}`}
+        rel="noreferrer"
+        target="_blank"
+        title={copy.proposal.openEntry}
+      >
+        {copy.proposal.fromEntry(
+          source.day
+            ? plannerDueLabel(source.day, today, strings)
+            : (source.preview ?? ""),
+        )}
+      </a>
+      <p className="text-xs text-muted-foreground italic">“{source.quote}”</p>
+    </div>
+  ) : null;
   let heading: string;
   switch (action.kind) {
     case "task_change":
@@ -758,6 +801,7 @@ function PlannerProposalBody({
             value(action.field, change[action.field])}
         </div>
       )}
+      {action.kind === "task_change" && sourceBlock}
       {action.kind === "task_change" && action.field === "notes" && (
         <div className="[overflow-wrap:anywhere]">
           <PlannerMarkdown
@@ -937,29 +981,7 @@ function PlannerProposalBody({
           {control("title") ?? (
             <p className="font-medium">{asString(change.title) ?? ""}</p>
           )}
-          {source && (
-            <div
-              className="flex flex-col gap-0.5 border-l-2 border-border pl-2"
-              data-testid="planner-todo-source"
-            >
-              <a
-                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-                href={`/memo/${encodeURIComponent(source.entryId)}`}
-                rel="noreferrer"
-                target="_blank"
-                title={copy.proposal.openEntry}
-              >
-                {copy.proposal.fromEntry(
-                  source.day
-                    ? plannerDueLabel(source.day, today, strings)
-                    : (source.preview ?? ""),
-                )}
-              </a>
-              <p className="text-xs text-muted-foreground italic">
-                “{source.quote}”
-              </p>
-            </div>
-          )}
+          {sourceBlock}
           {asString(change.notes) && (
             <PlannerMarkdown
               diaryLabel={copy.days}
@@ -1753,19 +1775,11 @@ export function PlannerAskChat({
           </p>
         )}
         {count === 0 && !busy && !task && (
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() =>
-                send.mutate({ question: copy.findTodosQuestion, files: [] })
-              }
-            >
-              <ListTodoIcon data-icon="inline-start" />
-              {copy.findTodos}
-            </Button>
-          </div>
+          <PlannerAskStarterButtons
+            copy={copy}
+            today={today}
+            onAsk={(question) => send.mutate({ question, files: [] })}
+          />
         )}
         {messages.map((message) =>
           message.role === "owner" ? (

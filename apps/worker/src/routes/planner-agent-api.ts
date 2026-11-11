@@ -2,11 +2,13 @@ import {
   PLANNER_AGENT_SKIP_REASON,
   type PlannerAgentActionResponse,
   type PlannerAskResponse,
+  type PlannerAskStartersResponse,
   type PlannerOkResponse,
   plannerAgentRevertActionSchema,
   plannerAgentSettleActionSchema,
   plannerAskQuerySchema,
   plannerAskSchema,
+  plannerAskStartersQuerySchema,
 } from "@flaremo/contracts";
 import type { FlareMoDb, UserRow } from "@flaremo/db";
 import {
@@ -34,6 +36,7 @@ import {
   plannerAgentRedoRestore,
   plannerAgentRevertAction,
   plannerAgentSettleAction,
+  plannerAskStarterCounts,
   plannerReadTaskDetail,
   plannerSyncHistory,
 } from "@flaremo/domain/src/planner";
@@ -178,6 +181,28 @@ plannerAgentApi.get(
           query.task ? taskIdOf(query.task) : null,
         ));
       return c.json(await readAsk(plannerAgent(c.env), db, user, conversation));
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// The counts Ask my diary's starter buttons show (overdue, stuck in Doing,
+// untouched Backlog): read from the board, no model, so a button with nothing
+// to do is hidden (docs/fork-general-agent.md, "The starter buttons").
+plannerAgentApi.get(
+  "/ask/starters",
+  zValidator("query", plannerAskStartersQuerySchema),
+  async (c) => {
+    try {
+      const { db, user } = await getRequestContext(c);
+      const query = c.req.valid("query");
+      plannerAssertToday(query.today, new Date());
+      const counts: PlannerAskStartersResponse = await plannerAskStarterCounts(
+        db,
+        { userId: user.id, today: query.today },
+      );
+      return c.json(counts);
     } catch (error) {
       return jsonError(c, error);
     }

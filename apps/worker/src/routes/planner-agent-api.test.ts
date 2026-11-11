@@ -485,6 +485,12 @@ describe("the general agent's Ask chat and schedule", () => {
         agentEnv,
       ),
     );
+    // The starter buttons' counts, read from the board without the agent.
+    expect(
+      await body<Record<string, number>>(
+        call("GET", `/ask/starters?today=${TODAY}`),
+      ),
+    ).toEqual({ overdue: expect.any(Number), stuck: 0, stale_backlog: 0 });
     expect(skipped).toMatchObject({
       state: "dismissed",
       change: { title: "Fix bike", settled_reason: "skipped" },

@@ -21,6 +21,7 @@ const LEFT_OUT = new Set([
   "proposed",
   "edited",
   "settled_reason",
+  "starter",
   "preview",
   "related_preview",
   "column_ranks",

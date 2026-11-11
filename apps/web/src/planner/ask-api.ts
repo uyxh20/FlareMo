@@ -2,6 +2,7 @@ import type {
   PlannerAgentActionResponse,
   PlannerAgentEdit,
   PlannerAskResponse,
+  PlannerAskStartersResponse,
   PlannerOkResponse,
 } from "@flaremo/contracts";
 import { apiRequest } from "@/api/client";
@@ -89,5 +90,12 @@ export function plannerEndAskRequest(conversation: string) {
   return apiRequest<PlannerOkResponse>(
     `${ASK}/${encodeURIComponent(conversation)}/end`,
     { method: "POST", body: "{}" },
+  );
+}
+
+/** The counts Ask my diary's starter buttons show (no model). */
+export function plannerFetchAskStarters(today: string) {
+  return apiRequest<PlannerAskStartersResponse>(
+    `${ASK}/starters?${new URLSearchParams({ today })}`,
   );
 }
