@@ -24,6 +24,7 @@ export * from "./board-rank";
 export * from "./columns";
 export * from "./comments";
 export * from "./diary-todos";
+export * from "./dreaming-sources";
 export * from "./flywheel";
 export * from "./goal-version";
 export * from "./goals";
@@ -52,3 +53,4 @@ export type {
 } from "./shared";
 export * from "./task-change";
 export * from "./task-detail";
+export * from "./task-search";

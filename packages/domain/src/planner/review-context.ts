@@ -623,8 +623,13 @@ export type PlannerReviewTask = {
   /** todo, in_progress or done; `gone` for a task deleted or purged since. */
   status: string;
   notes: string | null;
-  /** Its live comments, oldest first. */
+  /**
+   * Its live comments, oldest first: the period's own comments are picked
+   * first, then older ones newest first, while the task's budget lasts.
+   */
   comments: Array<{ at: string; text: string }>;
+  /** Older comments the budget left out (absent when none were). */
+  commentsLeftOut?: number;
   /** What happened to it during the week, oldest first. */
   history: Array<{ at: string; what: string }>;
 };
@@ -633,9 +638,11 @@ export type PlannerReviewTask = {
 const TASK_DETAIL_MAX = 60;
 /**
  * Characters of notes and comments per task: small for the chat models' prompt,
- * whole for the general agent, which reads the week through its tools.
+ * whole for the general agent, which reads the week through its tools. Notes
+ * take at most `TASK_NOTES_SHARE` of it, so the comments always keep room.
  */
-const TASK_DETAIL_CHARS = 600;
+const TASK_DETAIL_CHARS = 1_500;
+const TASK_NOTES_SHARE = 0.4;
 const TASK_DETAIL_CHARS_WHOLE = 20_000;
 
 const PREVIOUS_SUMMARY_MAX = 4_000;
@@ -1022,25 +1029,44 @@ export async function plannerReadTaskDetails(
     const history = events.filter((event) => event.taskId === id);
     const title = row?.title ?? history.find((e) => e.taskTitle)?.taskTitle;
     if (!title) return [];
-    // Notes first, then comments, within the task's budget.
+    // Notes first (at most their share), then the comments: the period's
+    // own first, then older ones newest first, while the budget lasts. They
+    // are shown oldest first, so the task still reads in order.
     let left = input.chars;
-    const take = (text: string) => {
-      const kept = trimTo(text, Math.max(left, 0));
+    const take = (text: string, max = left) => {
+      const kept = trimTo(text, Math.max(Math.min(max, left), 0));
       left -= kept.length;
       return kept;
     };
-    const notes = row?.notes?.trim() ? take(row.notes) : null;
+    const notes = row?.notes?.trim()
+      ? take(
+          row.notes,
+          Math.max(600, Math.floor(input.chars * TASK_NOTES_SHARE)),
+        )
+      : null;
+    const own = comments.filter(
+      (comment) => comment.taskId === id && comment.body.trim(),
+    );
+    const inPeriod = (at: string) => at >= from && at < to;
+    const picked = new Map<(typeof own)[number], string>();
+    for (const comment of [
+      ...own.filter((c) => inPeriod(c.at)).reverse(),
+      ...own.filter((c) => !inPeriod(c.at)).reverse(),
+    ]) {
+      if (left <= 0) break;
+      picked.set(comment, take(comment.body));
+    }
+    const leftOut = own.length - picked.size;
     return [
       {
         title,
         status: !row || row.deletedAt ? "gone" : row.status,
         notes,
-        comments: comments
-          .filter((comment) => comment.taskId === id && comment.body.trim())
-          .flatMap((comment) => {
-            if (left <= 0) return [];
-            return [{ at: comment.at, text: take(comment.body) }];
-          }),
+        comments: own.flatMap((comment) => {
+          const text = picked.get(comment);
+          return text === undefined ? [] : [{ at: comment.at, text }];
+        }),
+        ...(leftOut > 0 ? { commentsLeftOut: leftOut } : {}),
         history: history.map((event) => ({
           at: event.at,
           what: taskEventWhat(event.type, event.data ?? {}),

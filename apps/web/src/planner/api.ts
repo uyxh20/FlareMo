@@ -14,6 +14,7 @@ import {
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
+  type PlannerTaskSearchResponse,
   type PlannerUpdateTaskInput,
   plannerAttachmentCopyHeader,
   plannerAttachmentNameHeader,
@@ -210,6 +211,13 @@ export function plannerSetAttachmentSettingsRequest(
 /** Whether a file shows as a picture in the panel. */
 export function plannerAttachmentIsImage(attachment: PlannerAttachmentDto) {
   return (attachment.content_type ?? "").startsWith("image/");
+}
+
+/** Live tasks whose title, notes or comments contain the words (the diary search box). */
+export function plannerSearchTasksRequest(query: string) {
+  return apiRequest<PlannerTaskSearchResponse>(
+    `${PLANNER_API}/search?q=${encodeURIComponent(query)}`,
+  );
 }
 
 /** Adds a comment to a task. The server trims the text and keeps 1 to 5000 characters. */

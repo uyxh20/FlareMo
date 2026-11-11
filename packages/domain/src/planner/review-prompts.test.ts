@@ -702,6 +702,25 @@ describe("task details", () => {
     );
     expect(plannerReviewContextBlock(CONTEXT)).not.toContain("Task details");
   });
+
+  it("says how many older comments the budget left out", () => {
+    const lines = plannerReviewContextBlock({
+      ...CONTEXT,
+      taskDetails: [
+        {
+          title: "Move",
+          status: "in_progress",
+          notes: null,
+          comments: [{ at: "2026-10-07T09:00:00.000Z", text: "Signed." }],
+          commentsLeftOut: 2,
+          history: [],
+        },
+      ],
+    });
+    expect(lines).toContain(
+      '- "Move" (in progress) · comments: [Wed 7 Oct] "Signed." (2 older comments left out)',
+    );
+  });
 });
 
 describe("reading what the model wrote", () => {

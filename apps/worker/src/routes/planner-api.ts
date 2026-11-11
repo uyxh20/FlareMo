@@ -10,12 +10,14 @@ import {
   type PlannerTaskDetailResponse,
   type PlannerTaskHistoryResponse,
   type PlannerTaskPlanResponse,
+  type PlannerTaskSearchResponse,
   plannerBoardQuerySchema,
   plannerCreateCommentSchema,
   plannerCreateTaskSchema,
   plannerHistoryRangeQuerySchema,
   plannerOverdueQuerySchema,
   plannerRevertEventSchema,
+  plannerTaskSearchQuerySchema,
   plannerUpdateCommentSchema,
   plannerUpdateTaskSchema,
 } from "@flaremo/contracts";
@@ -33,6 +35,7 @@ import {
   plannerReadTaskDetail,
   plannerReadTaskHistory,
   plannerRevertEvent,
+  plannerSearchTasks,
   plannerSyncHistory,
   plannerUpdateComment,
 } from "@flaremo/domain/src/planner";
@@ -327,6 +330,30 @@ plannerApi.post(
         task: result.task,
         plan: result.plan,
         reverted: result.reverted,
+      };
+      return c.json(response);
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
+
+// --- Search -----------------------------------------------------------------
+//
+// The diary search box's task hits: live tasks whose title, notes or comments
+// contain the words (planner/task-search.ts). Read-only.
+
+plannerApi.get(
+  "/search",
+  zValidator("query", plannerTaskSearchQuerySchema),
+  async (c) => {
+    try {
+      const { db, user } = await getRequestContext(c);
+      const response: PlannerTaskSearchResponse = {
+        tasks: await plannerSearchTasks(db, {
+          userId: user.id,
+          query: c.req.valid("query").q,
+        }),
       };
       return c.json(response);
     } catch (error) {

@@ -2,6 +2,7 @@ import type { FlareMoDb, UserRow } from "@flaremo/db";
 import { memoryItems, memoryRejections, memos } from "@flaremo/db";
 import { and, desc, eq, gt, gte, ne, or, sql } from "drizzle-orm";
 import { FORK_LINK_SUMMARY_SOURCE } from "../fork/link-summary"; // fork: link summaries
+import { plannerCollectDreamingComments } from "../planner/dreaming-sources"; // fork: task comments
 import {
   computeFingerprint,
   type MemoryActor,
@@ -195,7 +196,8 @@ export async function extractAndProposeDreamingFact(
 // --- Dreaming cycle (§VI.8): the daily offline extraction driver -------------
 
 export type DreamingSource = {
-  kind: "memo" | "episode";
+  // fork: "task_comment" is a comment on a cockpit task (planner/dreaming-sources.ts).
+  kind: "memo" | "episode" | "task_comment";
   id: string;
   content: string;
   createdAt: string;
@@ -299,9 +301,17 @@ export async function collectDreamingSources(
     .orderBy(desc(memoryItems.createdAt))
     .limit(Math.ceil(maxSources / 2));
 
+  // fork: the task comments written since the last run.
+  const commentRows = await plannerCollectDreamingComments(
+    db,
+    user.id,
+    sinceIso,
+  );
+
   return [
     ...memoRows.map((row) => ({ ...row, kind: "memo" as const })),
     ...episodeRows.map((row) => ({ ...row, kind: "episode" as const })),
+    ...commentRows.map((row) => ({ ...row, kind: "task_comment" as const })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
