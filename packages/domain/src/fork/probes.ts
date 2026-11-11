@@ -376,6 +376,18 @@ export const PROBES: Record<string, Probe> = {
       IN_WEEK,
     );
   },
+  planner_morning_line: async (p) => {
+    await plannerTestRun(
+      p.rt.database,
+      `INSERT INTO planner_morning_line (id, user_id, day, text, direction, model, created_at)
+       VALUES (?, ?, ?, ?, 'away', 'claude-opus-5-5', ?)`,
+      nextId("morning"),
+      p.user.id,
+      IN_WEEK.slice(0, 10),
+      `Send ${p.marker} a postcard today.`,
+      IN_WEEK,
+    );
+  },
   articles: async (p) => {
     await plannerTestRun(
       p.rt.database,

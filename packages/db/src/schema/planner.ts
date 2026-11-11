@@ -743,6 +743,48 @@ export const plannerGoalVersion = sqliteTable(
   ],
 );
 
+// Added by 9019: the morning page's idea lines (docs/fork-customizations.md,
+// "Morning page"). Every line is kept: which ones the owner kept and which they
+// replaced is flywheel data. The line shown for a day is its newest row with no
+// `replacedBy`.
+export const plannerMorningLine = sqliteTable(
+  "planner_morning_line",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    day: text("day").notNull(),
+    text: text("text").notNull(),
+    direction: text("direction", { enum: ["away", "free"] }).notNull(),
+    model: text("model").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    shown: integer("shown").notNull().default(0),
+    chosen: integer("chosen").notNull().default(0),
+    replacedBy: text("replaced_by"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("planner_morning_line_user_day_idx").on(
+      table.userId,
+      table.day,
+      table.createdAt,
+    ),
+  ],
+);
+
+// Added by 9019: one row per day the morning page was seen; `dismissedAt` is
+// set by "Start the day".
+export const plannerMorningDay = sqliteTable(
+  "planner_morning_day",
+  {
+    userId: text("user_id").notNull(),
+    day: text("day").notNull(),
+    dismissedAt: text("dismissed_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.day] })],
+);
+
 export type PlannerTaskPlanRow = typeof plannerTaskPlan.$inferSelect;
 export type PlannerGoalRow = typeof plannerGoal.$inferSelect;
 export type PlannerWeekRow = typeof plannerWeek.$inferSelect;
@@ -763,3 +805,5 @@ export type PlannerEventRow = typeof plannerEvent.$inferSelect;
 export type PlannerMetricWeekRow = typeof plannerMetricWeek.$inferSelect;
 export type PlannerTuningRow = typeof plannerTuning.$inferSelect;
 export type PlannerGoalVersionRow = typeof plannerGoalVersion.$inferSelect;
+export type PlannerMorningLineRow = typeof plannerMorningLine.$inferSelect;
+export type PlannerMorningDayRow = typeof plannerMorningDay.$inferSelect;

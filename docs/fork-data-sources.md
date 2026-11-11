@@ -86,6 +86,8 @@ Generated from `packages/domain/src/fork/data-sources.ts`; the test fails when t
 | `planner_event` | agent | history | – | – | – | – | – | – | yes | yes |
 | `planner_metric_week` | agent | derived | – | – | – | – | – | yes | yes | yes |
 | `planner_tuning` | agent | content | – | – | – | – | – | yes | yes | yes |
+| `planner_morning_line` | goals | content | – | – | – | – | – | – | yes | yes |
+| `planner_morning_day` | goals | bookkeeping | – | – | – | – | – | – | – | yes |
 | `health_entry` | health | content | yes | – | – | – | **gap** | yes | yes | yes |
 | `health_entry_event` | health | history | – | – | – | – | – | – | yes | yes |
 | `health_target` | health | bookkeeping | – | – | – | – | – | – | – | yes |

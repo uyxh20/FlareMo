@@ -10,6 +10,7 @@ import {
 } from "@/components/workspace/workspace-sidebar";
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
+import { PlannerMorningEntry } from "@/planner/morning-entry"; // fork: morning page
 
 /**
  * The timeline top bar: sidebar toggle, scope switcher and the two spotlight
@@ -95,6 +96,7 @@ export function WorkspaceHeader({
           />
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          <PlannerMorningEntry /> {/* fork: morning page */}
           <SpotlightSearchTrigger
             className="hidden md:flex"
             onClick={() => setSpotlightOpen(true)}

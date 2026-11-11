@@ -20,6 +20,7 @@ const PAGES = [
   "review",
   "weekly-review",
   "period-review",
+  "morning",
 ] as const;
 
 const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
@@ -48,6 +49,15 @@ const hookIns: Array<{ file: string; path: string; mustContain: RegExp[] }> = [
     mustContain: [
       /import \{ PlannerAskBubble \} from "@\/planner\/ask-bubble"/,
       /<PlannerAskBubble \/>/,
+    ],
+  },
+  {
+    // The morning page's replay button and its once-a-day gate.
+    file: "apps/web/src/components/workspace/workspace-header.tsx",
+    path: "../components/workspace/workspace-header.tsx",
+    mustContain: [
+      /import \{ PlannerMorningEntry \} from "@\/planner\/morning-entry"/,
+      /<PlannerMorningEntry \/>/,
     ],
   },
   {
@@ -106,7 +116,7 @@ describe("the planner's hook-ins in upstream files", () => {
       expect(text).toContain(`path: "/${page}",`);
     }
     expect(text).toMatch(
-      /plannerRoutes = \[\s*cockpitRoute,\s*goalsRoute,\s*reviewRoute,\s*weeklyReviewRoute,\s*periodReviewRoute,?\s*\] as const/,
+      /plannerRoutes = \[\s*cockpitRoute,\s*goalsRoute,\s*reviewRoute,\s*weeklyReviewRoute,\s*periodReviewRoute,\s*morningRoute,?\s*\] as const/,
     );
   });
 });

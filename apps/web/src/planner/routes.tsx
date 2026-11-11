@@ -27,6 +27,11 @@ const GoalsPage = lazy(() =>
     default: module.PlannerGoalsPage,
   })),
 );
+const MorningPage = lazy(() =>
+  import("./morning-page").then((module) => ({
+    default: module.PlannerMorningPage,
+  })),
+);
 const ReviewPage = lazy(() =>
   import("./review-page").then((module) => ({
     default: module.PlannerReviewPage,
@@ -106,10 +111,28 @@ const periodReviewRoute = createRoute({
   },
 });
 
+function MorningRoutePage() {
+  return (
+    <AuthenticatedRoute>
+      <Suspense fallback={<RouteLoading />}>
+        <MorningPage />
+      </Suspense>
+    </AuthenticatedRoute>
+  );
+}
+
+/** The morning page (docs/fork-customizations.md "Morning page"). */
+const morningRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/morning",
+  component: MorningRoutePage,
+});
+
 export const plannerRoutes = [
   cockpitRoute,
   goalsRoute,
   reviewRoute,
   weeklyReviewRoute,
   periodReviewRoute,
+  morningRoute,
 ] as const;

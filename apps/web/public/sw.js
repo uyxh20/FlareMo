@@ -113,6 +113,7 @@ function isPrivateAppNavigation(url) {
     `${scopePath}weekly-review`, // fork: old review address, goes to /review
     `${scopePath}period-review`, // fork: old review address, goes to /review
     `${scopePath}health`, // fork: health tracker
+    `${scopePath}morning`, // fork: the morning page
     `${scopePath}forgot-password`,
     `${scopePath}login`,
     `${scopePath}memory`,
