@@ -7,7 +7,7 @@ import type {
 import { plannerCardColumn } from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ import {
   type PlannerMorningTask,
   plannerMorningDateLabel,
   plannerMorningDue,
+  plannerMorningDueWindow,
   plannerMorningGoals,
   plannerMorningGoalsHeading,
   plannerMorningLateLabel,
@@ -213,6 +214,9 @@ function MorningPanels({
   const tickedIds = useMemo(() => new Set(ticked.keys()), [ticked]);
   const due = plannerMorningDue(board, today, tickedIds);
   const goals = plannerMorningGoals(board);
+  // More than three: three at a time, with up and down arrows.
+  const [start, setStart] = useState(0);
+  const view = plannerMorningDueWindow(due.length, start);
 
   const toggle = async (task: PlannerMorningTask) => {
     const card = findCard(board, task.id);
@@ -247,15 +251,52 @@ function MorningPanels({
   return (
     <div className="grid w-full max-w-[620px] gap-3.5 text-left sm:grid-cols-2">
       <section className="flex min-w-0 flex-col gap-2 rounded-2xl border border-border bg-card p-3.5">
-        <h2 className="text-sm font-normal text-muted-foreground">Due today</h2>
+        <div className="flex min-h-7 items-center justify-between gap-2">
+          <h2 className="text-sm font-normal text-muted-foreground">
+            Due today
+            {view.paged ? (
+              <span className="ml-1.5 tabular-nums">
+                ·{" "}
+                {view.to - view.from === 1
+                  ? view.to
+                  : `${view.from + 1}–${view.to}`}{" "}
+                of {due.length}
+              </span>
+            ) : null}
+          </h2>
+          {view.paged ? (
+            <div className="flex gap-0.5">
+              <Button
+                aria-label="Earlier tasks"
+                disabled={!view.canUp}
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setStart(view.upStart)}
+              >
+                <ChevronUpIcon />
+              </Button>
+              <Button
+                aria-label="More tasks"
+                disabled={!view.canDown}
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => setStart(view.downStart)}
+              >
+                <ChevronDownIcon />
+              </Button>
+            </div>
+          ) : null}
+        </div>
         {due.length ? (
-          due.map((task) => (
-            <DueRow
-              key={task.id}
-              task={task}
-              onToggle={() => void toggle(task)}
-            />
-          ))
+          due
+            .slice(view.from, view.to)
+            .map((task) => (
+              <DueRow
+                key={task.id}
+                task={task}
+                onToggle={() => void toggle(task)}
+              />
+            ))
         ) : (
           <p className="text-[15px] text-muted-foreground">
             Nothing due. A clear day.

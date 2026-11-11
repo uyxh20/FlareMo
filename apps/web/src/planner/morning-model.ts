@@ -11,8 +11,10 @@ import {
 // overdue, and the week's goals (shown by name only since 11 Nov).
 // Pure functions, so the page and its tests read the same rules.
 
-/** At most this many tasks in "Due today". */
-export const plannerMorningDueMax = 5;
+/** At most this many tasks in "Due today" (three shown at a time). */
+export const plannerMorningDueMax = 30;
+/** Tasks shown at once; more than this brings the up and down arrows. */
+export const plannerMorningDueVisible = 3;
 
 export type PlannerMorningTask = {
   id: string;
@@ -43,7 +45,7 @@ function daysBetween(from: string, to: string): number {
 }
 
 /**
- * Open tasks due today or earlier, oldest due first, at most five. A task the
+ * Open tasks due today or earlier, oldest due first, at most thirty. A task the
  * owner ticked on this page (`ticked`) stays in the list, shown done, so a
  * tick never makes a row jump away.
  */
@@ -125,4 +127,37 @@ export function plannerMorningDateLabel(today: string): string {
 /** "2d late" for an overdue task, nothing when it is due today. */
 export function plannerMorningLateLabel(daysLate: number): string | null {
   return daysLate > 0 ? `${daysLate}d late` : null;
+}
+
+/**
+ * Which slice of "Due today" is on screen: pages of three (1-3, 4-6, 7),
+ * clamped so a list that shrinks never shows an empty page, and where the up
+ * and down arrows go.
+ */
+export function plannerMorningDueWindow(
+  total: number,
+  start: number,
+  size: number = plannerMorningDueVisible,
+): {
+  from: number;
+  to: number;
+  paged: boolean;
+  canUp: boolean;
+  canDown: boolean;
+  upStart: number;
+  downStart: number;
+} {
+  const lastPage = Math.max(0, Math.floor((total - 1) / size)) * size;
+  const page = Math.floor(Math.max(0, start) / size) * size;
+  const from = Math.min(page, lastPage);
+  const to = Math.min(total, from + size);
+  return {
+    from,
+    to,
+    paged: total > size,
+    canUp: from > 0,
+    canDown: to < total,
+    upStart: Math.max(0, from - size),
+    downStart: Math.min(lastPage, from + size),
+  };
 }

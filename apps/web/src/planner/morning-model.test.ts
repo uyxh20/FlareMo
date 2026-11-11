@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   plannerMorningDateLabel,
   plannerMorningDue,
+  plannerMorningDueWindow,
   plannerMorningGoals,
   plannerMorningGoalsHeading,
   plannerMorningLateLabel,
@@ -89,11 +90,11 @@ describe("plannerMorningDue", () => {
     ]);
   });
 
-  it("shows at most five", () => {
-    const many = Array.from({ length: 8 }, (_, i) =>
+  it("lists up to thirty", () => {
+    const many = Array.from({ length: 40 }, (_, i) =>
       card({ id: `t${i}`, title: `T${i}`, due_at: TODAY }),
     );
-    expect(plannerMorningDue(board(many), TODAY)).toHaveLength(5);
+    expect(plannerMorningDue(board(many), TODAY)).toHaveLength(30);
   });
 });
 
@@ -129,5 +130,49 @@ describe("labels", () => {
     expect(plannerMorningGoalsHeading(board([]))).toBe("Week 46 goals");
     expect(plannerMorningLateLabel(2)).toBe("2d late");
     expect(plannerMorningLateLabel(0)).toBeNull();
+  });
+});
+
+describe("plannerMorningDueWindow", () => {
+  it("pages three at a time, with arrows only when there are more", () => {
+    expect(plannerMorningDueWindow(3, 0)).toMatchObject({
+      from: 0,
+      to: 3,
+      paged: false,
+      canUp: false,
+      canDown: false,
+    });
+    const first = plannerMorningDueWindow(7, 0);
+    expect(first).toMatchObject({
+      from: 0,
+      to: 3,
+      paged: true,
+      canUp: false,
+      canDown: true,
+    });
+    const second = plannerMorningDueWindow(7, first.downStart);
+    expect(second).toMatchObject({
+      from: 3,
+      to: 6,
+      canUp: true,
+      canDown: true,
+    });
+    const last = plannerMorningDueWindow(7, second.downStart);
+    expect(last).toMatchObject({
+      from: 6,
+      to: 7,
+      canDown: false,
+      canUp: true,
+      upStart: 3,
+    });
+  });
+
+  it("never shows an empty page after the list shrinks", () => {
+    expect(plannerMorningDueWindow(6, 6)).toMatchObject({ from: 3, to: 6 });
+    expect(plannerMorningDueWindow(0, 3)).toMatchObject({
+      from: 0,
+      to: 0,
+      paged: false,
+    });
   });
 });
