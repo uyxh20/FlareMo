@@ -148,12 +148,14 @@ export const healthStrings = {
       days === 0
         ? "Last night out: today"
         : `${days} ${days === 1 ? "day" : "days"} since your last night out`,
-    unitsSoFar: "units so far this year",
-    pace: (pace: string) => `At this rate the year ends at ${pace}.`,
-    nightsLine: (nights: number, benders: number) =>
-      benders > 0
-        ? `${nights} ${nights === 1 ? "night" : "nights"}, ${benders} ${benders === 1 ? "bender" : "benders"}`
-        : `${nights} ${nights === 1 ? "night" : "nights"}`,
+    sinceDays: (days: number) =>
+      `${days === 1 ? "day" : "days"} since last night out`,
+    sinceStripStart: (days: number) =>
+      `${days} ${days === 1 ? "day" : "days"} ago`,
+    sinceStripCapped: (days: number) => `Last ${days} days`,
+    sinceStripEnd: "Today",
+    unitsSoFar: (units: string) =>
+      `${units === "1" ? "unit" : "units"} so far this year`,
     needsTitle: "Home time needed",
     needsHint: "These nights were written without a time.",
     yearTitle: (year: number) => `${year}, week by week`,
