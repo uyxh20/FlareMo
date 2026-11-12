@@ -6,7 +6,6 @@ import {
   type PlannerMetricWeekDto,
   plannerFlywheelHeadline,
   plannerFlywheelMetrics,
-  plannerTuningInstructionsMax,
   plannerTuningNoteMax,
 } from "@flaremo/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   plannerFetchFlywheel,
-  plannerProposeTuningRequest,
   plannerSaveTuningNoteRequest,
   plannerSettleTuningRequest,
 } from "./flywheel-api";
@@ -28,10 +26,11 @@ import { plannerQueryKeys } from "./query-keys";
 // The weekly review's scorecard card (fork-owned add-on,
 // docs/fork-flywheel.md), in Look back's side panel: three numbers on the
 // agent's week against the week before, the one question "What should the
-// agent do differently?", and, when there is one, a proposed change to the
-// agent's standing instructions to accept, edit or dismiss, or a version four
-// weeks on to keep or roll back. Nothing here changes the agent without the
-// owner's press.
+// agent do differently?", and, when there is one, a version four weeks on to
+// keep or roll back. The "Proposed change to the agent" block and its
+// "Suggest a change" button were removed at the owner's request (2026-11-12); the
+// server routes stay, so a later change can bring them back. Nothing here
+// changes the agent without the owner's press.
 
 export type PlannerFlywheelTile = {
   metric: PlannerFlywheelMetric;
@@ -196,75 +195,6 @@ function NoteBlock({
   );
 }
 
-function ProposalBlock({
-  response,
-  strings,
-  saving,
-  onSettle,
-}: {
-  response: PlannerFlywheelResponse;
-  strings: PlannerFlywheelStrings;
-  saving: boolean;
-  onSettle: (
-    id: string,
-    decision: "accept" | "dismiss",
-    instructions?: string,
-  ) => void;
-}) {
-  const proposal = response.proposal;
-  const [text, setText] = useState(proposal?.instructions ?? "");
-  useEffect(() => setText(proposal?.instructions ?? ""), [proposal]);
-  if (!proposal) return null;
-  return (
-    <div
-      className="border-t border-border pt-3"
-      data-testid="planner-flywheel-proposal"
-    >
-      <Heading>{strings.proposalTitle}</Heading>
-      {proposal.why && (
-        <p className="mb-2 text-sm leading-snug text-muted-foreground">
-          {proposal.why}
-        </p>
-      )}
-      {proposal.metric && (
-        <p className="mb-2 text-sm text-muted-foreground">
-          {strings.aimsAt(strings.metric[proposal.metric])}
-        </p>
-      )}
-      <Textarea
-        aria-label={strings.proposalTitle}
-        className="min-h-24 text-sm"
-        maxLength={plannerTuningInstructionsMax}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-      />
-      <div className="mt-2 flex gap-2">
-        <Button
-          disabled={saving || !text.trim()}
-          size="sm"
-          onClick={() =>
-            onSettle(
-              proposal.id,
-              "accept",
-              text.trim() === proposal.instructions ? undefined : text.trim(),
-            )
-          }
-        >
-          {strings.accept}
-        </Button>
-        <Button
-          disabled={saving}
-          size="sm"
-          variant="ghost"
-          onClick={() => onSettle(proposal.id, "dismiss")}
-        >
-          {strings.dismiss}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function VerdictBlock({
   response,
   strings,
@@ -362,12 +292,6 @@ export function PlannerFlywheelCard({
   const saving = mutation.isPending;
   const tiles = plannerFlywheelTiles(response, strings);
   const nothingCounted = tiles.every((tile) => tile.den === 0);
-  const canSuggest =
-    response.can_propose &&
-    response.proposal_due &&
-    !response.proposal &&
-    !response.verdict;
-
   return (
     <section
       className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
@@ -415,37 +339,12 @@ export function PlannerFlywheelCard({
           run(() => plannerSettleTuningRequest(week, id, decision))
         }
       />
-      <ProposalBlock
-        response={response}
-        saving={saving}
-        strings={strings}
-        onSettle={(id, decision, instructions) =>
-          run(() =>
-            plannerSettleTuningRequest(week, id, decision, instructions),
-          )
-        }
-      />
       <NoteBlock
         response={response}
         saving={saving}
         strings={strings}
         onSave={(note) => run(() => plannerSaveTuningNoteRequest(week, note))}
       />
-      {canSuggest && (
-        <Button
-          disabled={saving}
-          size="sm"
-          variant="outline"
-          onClick={() =>
-            run(
-              () => plannerProposeTuningRequest(week, today),
-              strings.suggestFailed,
-            )
-          }
-        >
-          {saving ? strings.suggesting : strings.suggest}
-        </Button>
-      )}
       {response.current ? (
         <details className="text-sm text-muted-foreground">
           <summary className="cursor-pointer">

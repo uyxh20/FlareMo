@@ -7,7 +7,7 @@ import { PlannerFlywheelCard } from "./flywheel-card";
 import { plannerTestMount } from "./test-render";
 
 // The scorecard card in a jsdom page (flywheel-card.tsx): the numbers, the
-// proposal with Accept carrying the owner's edits, and the weekly note.
+// proposal kept off the card, and the weekly note.
 
 const api = vi.hoisted(() => ({
   plannerFetchFlywheel: vi.fn(),
@@ -85,7 +85,7 @@ const button = (container: HTMLElement, label: string) =>
 describe("PlannerFlywheelCard", () => {
   afterEach(() => vi.clearAllMocks());
 
-  it("shows the numbers, accepts an edited proposal and saves the note", async () => {
+  it("shows the numbers, hides the proposed change and saves the note", async () => {
     api.plannerFetchFlywheel.mockResolvedValue(base);
     api.plannerSettleTuningRequest.mockResolvedValue({
       ...base,
@@ -105,23 +105,15 @@ describe("PlannerFlywheelCard", () => {
     expect(container.textContent).toContain("The agent this week");
     expect(container.textContent).toContain("75%");
     expect(container.textContent).toContain("none yet");
-    expect(container.textContent).toContain("Errands were dismissed.");
+    expect(container.textContent).not.toContain("Errands were dismissed.");
 
-    const proposal = container.querySelector(
-      '[data-testid="planner-flywheel-proposal"] textarea',
-    ) as HTMLTextAreaElement;
-    type(proposal, "Propose no errands.");
-    act(() => button(container, "Accept").click());
-    await flush();
-    expect(api.plannerSettleTuningRequest).toHaveBeenCalledWith(
-      WEEK,
-      "t1",
-      "accept",
-      "Propose no errands.",
-    );
+    // The proposed change to the agent is not shown, even when the server
+    // has one, and there is no "Suggest a change" button.
     expect(
       container.querySelector('[data-testid="planner-flywheel-proposal"]'),
     ).toBeNull();
+    expect(container.textContent).not.toContain("Proposed change to the agent");
+    expect(container.textContent).not.toContain("Suggest a change");
 
     const note = container.querySelector(
       '[data-testid="planner-flywheel-note"]',
@@ -135,6 +127,23 @@ describe("PlannerFlywheelCard", () => {
     );
     expect(container.textContent).toContain("Less nagging.");
     expect(button(container, "Edit")).toBeTruthy();
+    mount.unmount();
+  });
+
+  it("offers no Suggest button even when a suggestion is due", async () => {
+    api.plannerFetchFlywheel.mockResolvedValue({
+      ...base,
+      proposal: null,
+      proposal_due: true,
+      can_propose: true,
+    });
+    const mount = plannerTestMount(
+      <PlannerFlywheelCard today="2026-11-01" week={WEEK} />,
+      { queryClient: new QueryClient() },
+    );
+    await flush();
+    expect(mount.container.textContent).toContain("The agent this week");
+    expect(mount.container.textContent).not.toContain("Suggest a change");
     mount.unmount();
   });
 });

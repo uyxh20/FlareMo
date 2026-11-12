@@ -23,19 +23,11 @@ export type PlannerFlywheelStrings = {
   skip: string;
   edit: string;
   skipped: string;
-  proposalTitle: string;
-  /** "Aims at: Kept 7 days". */
-  aimsAt: (metric: string) => string;
-  accept: string;
-  dismiss: string;
   verdictTitle: (version: number) => string;
   before: string;
   after: string;
   keep: string;
   rollBack: string;
-  suggest: string;
-  suggesting: string;
-  suggestFailed: string;
   paused: string;
   /** "The agent follows version 3". */
   current: (version: number) => string;
@@ -76,18 +68,11 @@ const en: PlannerFlywheelStrings = {
   skip: "Skip",
   edit: "Edit",
   skipped: "Skipped this week.",
-  proposalTitle: "Proposed change to the agent",
-  aimsAt: (metric) => `Aims at: ${metric}`,
-  accept: "Accept",
-  dismiss: "Dismiss",
   verdictTitle: (version) => `Version ${version}, four weeks on`,
   before: "Before",
   after: "After",
   keep: "Keep",
   rollBack: "Roll back",
-  suggest: "Suggest a change to the agent",
-  suggesting: "Writing a suggestion…",
-  suggestFailed: "No suggestion this time. Try again later.",
   paused:
     "The agent's proposals are paused: you saw almost none of them lately.",
   current: (version) => `The agent follows version ${version}`,
@@ -128,18 +113,11 @@ const zhCN: PlannerFlywheelStrings = {
   skip: "跳过",
   edit: "编辑",
   skipped: "本周已跳过。",
-  proposalTitle: "对助手的修改建议",
-  aimsAt: (metric) => `目标指标：${metric}`,
-  accept: "接受",
-  dismiss: "忽略",
   verdictTitle: (version) => `第 ${version} 版，四周之后`,
   before: "之前",
   after: "之后",
   keep: "保留",
   rollBack: "回退",
-  suggest: "建议修改助手",
-  suggesting: "正在写建议…",
-  suggestFailed: "这次没有建议，请稍后再试。",
   paused: "助手的提议已暂停：最近你几乎没有看到它们。",
   current: (version) => `助手正在使用第 ${version} 版`,
   noCurrent: "还没有长期指示",
