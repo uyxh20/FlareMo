@@ -680,6 +680,14 @@ export type PlannerCoachMode = "free" | "force" | "chat";
  * from reply to reply comes last, so everything before it is the same on every
  * turn of a review and a provider can bill the repeat as cached.
  */
+/**
+ * The coach may ask for proof as a file: the review's answer box takes files,
+ * read into the answer (fork, docs/fork-task-attachments.md, "Files in the
+ * review"). Shared by the week's coach and the period chats'.
+ */
+export const PLANNER_COACH_FILES_RULE =
+  '- When an answer rests on something the diary does not show (a contract, an offer, a result, what was agreed in a meeting), you may ask for it as a file in your probing question, for example "If you have the contract, attach it with the paperclip." Ask for a file at most once per prompt, and only when it would settle the point. A file they attach comes after their answer, under "The owner attached"; treat it as their own record and point at it as you would at the diary.';
+
 export function plannerCoachSystem(
   context: PlannerReviewContext,
   mode: PlannerCoachMode,
@@ -704,6 +712,7 @@ How to reply:
 - Last week's key question: if the answer is "partly", "no" or vague, ask once what specifically happened.
 - Prompt 6 (blindspot) is the coaching moment: don't accept the first answer; offer one candidate blindspot from the context and name the bias it looks like (confirmation, sunk cost, anchoring, complexity or recency).
 - Prompt 7 (tempted to hide): probe once to confirm.
+${PLANNER_COACH_FILES_RULE}
 - After your sentences, end with one last line, exactly @@ {"advance": true} when the answer is specific enough to move to the next prompt, or @@ {"advance": false} when you asked a question and want their answer.
 
 Context from ${name}'s goals system:

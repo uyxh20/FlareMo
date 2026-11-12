@@ -19,6 +19,7 @@ import {
 } from "./period-review-prompts";
 import { plannerParseHappened } from "./review-happened";
 import {
+  PLANNER_COACH_FILES_RULE,
   type PlannerChatMessage,
   type PlannerCoachMode,
   type PlannerReviewAnswers,
@@ -253,6 +254,7 @@ How to reply:
 - Last ${word}'s key question: if the answer is "partly", "no" or vague, ask once what specifically happened.
 - Prompt 6 (blindspot) is the coaching moment: don't accept the first answer; offer one candidate blindspot from the material and name the bias it looks like (confirmation, sunk cost, anchoring, complexity or recency).
 - Prompt 7 (tempted to hide): probe once to confirm.
+${PLANNER_COACH_FILES_RULE}
 - After your sentences, end with one last line, exactly @@ {"advance": true} when the answer is specific enough to move to the next prompt, or @@ {"advance": false} when you asked a question and want their answer.
 
 Material from ${name}'s ${word}:
