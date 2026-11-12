@@ -20,9 +20,14 @@ afterEach(() => {
   mounted = null;
 });
 
-function mount(state: PlannerVoiceState, notice: string | null = null) {
+function mount(
+  state: PlannerVoiceState,
+  notice: string | null = null,
+  paused = false,
+) {
   const handlers = {
     onDone: vi.fn(),
+    onMic: vi.fn(),
     onSkip: vi.fn(),
     onRetry: vi.fn(),
     onType: vi.fn(),
@@ -31,6 +36,7 @@ function mount(state: PlannerVoiceState, notice: string | null = null) {
     <PlannerReviewVoiceBar
       level={0.5}
       notice={notice}
+      paused={paused}
       seconds={65}
       state={state}
       strings={strings}
@@ -60,13 +66,35 @@ describe("PlannerReviewVoiceBar", () => {
       root.querySelector('[data-testid="planner-review-voice-time"]')
         ?.textContent,
     ).toBe("1:05");
-    expect(buttons()).toEqual(["Send", "Type instead"]);
+    expect(buttons()).toEqual(["", "Send", "Type instead"]);
     plannerTestClick(
       root.querySelector(
         '[data-testid="planner-review-voice-done"]',
       ) as HTMLButtonElement,
     );
     expect(handlers.onDone).toHaveBeenCalledOnce();
+  });
+
+  it("pauses and resumes the mic with its own button", () => {
+    const live = mount("listening");
+    const mic = () =>
+      live.root.querySelector(
+        '[data-testid="planner-review-voice-mic"]',
+      ) as HTMLButtonElement;
+    expect(mic().getAttribute("aria-label")).toBe("Pause the mic");
+    expect(mic().getAttribute("aria-pressed")).toBe("false");
+    plannerTestClick(mic());
+    expect(live.handlers.onMic).toHaveBeenCalledOnce();
+    mounted?.unmount();
+
+    const held = mount("listening", null, true);
+    expect(held.root.textContent).toContain("Mic paused");
+    expect(held.root.textContent).toContain("Nothing is recorded now");
+    const button = held.root.querySelector(
+      '[data-testid="planner-review-voice-mic"]',
+    ) as HTMLButtonElement;
+    expect(button.getAttribute("aria-label")).toBe("Turn the mic back on");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("shows thinking with only the way back to typing", () => {

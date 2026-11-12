@@ -189,6 +189,10 @@ export type PlannerGoalsStrings = {
       listening: string;
       /** Under "Listening": pauses never end the turn. */
       listeningHint: string;
+      paused: string;
+      pausedHint: string;
+      micPause: string;
+      micResume: string;
       hearing: string;
       thinking: string;
       waiting: string;
@@ -536,6 +540,10 @@ const en: PlannerGoalsStrings = {
       speaking: "Coach is speaking",
       listening: "Listening",
       listeningHint: "Pause as long as you like. Tap the bubble to send.",
+      paused: "Mic paused",
+      pausedHint: "Nothing is recorded now. Tap the mic to go on, or send.",
+      micPause: "Pause the mic",
+      micResume: "Turn the mic back on",
       hearing: "Writing down what you said",
       thinking: "Thinking",
       waiting: "Pick an option above, or type",
@@ -868,6 +876,10 @@ const zhCN: PlannerGoalsStrings = {
       speaking: "教练正在说",
       listening: "正在听",
       listeningHint: "可以随意停顿。说完点气泡发送。",
+      paused: "麦克风已暂停",
+      pausedHint: "现在不会录音。点麦克风继续，或直接发送。",
+      micPause: "暂停麦克风",
+      micResume: "重新打开麦克风",
       hearing: "正在记下你说的话",
       thinking: "思考中",
       waiting: "选上面的一个选项，或者打字",

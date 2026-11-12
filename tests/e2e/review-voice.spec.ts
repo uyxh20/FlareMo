@@ -101,7 +101,7 @@ test("Talk reads the question, listens, and sends what was heard", async ({
   await shot(page, "6-back-to-typing");
 });
 
-test("the send bubble ends the turn at once, and the next question is read out", async ({
+test("the mic button pauses and resumes, the send bubble ends the turn, and the next question is read out", async ({
   page,
 }) => {
   const voice = await stubVoice(page);
@@ -116,6 +116,22 @@ test("the send bubble ends the turn at once, and the next question is read out",
   await expect(bar).toHaveAttribute("data-state", "listening", {
     timeout: 10_000,
   });
+  // The mic button pauses recording: the clock stops and the turn stays open.
+  const mic = page.getByTestId("planner-review-voice-mic");
+  const clock = page.getByTestId("planner-review-voice-time");
+  await page.waitForTimeout(1_200);
+  await mic.click();
+  await expect(mic).toHaveAttribute("aria-pressed", "true");
+  await expect(bar).toContainText(/Mic paused|麦克风已暂停/);
+  const held = await clock.textContent();
+  await page.waitForTimeout(2_200);
+  await expect(clock).toHaveText(held ?? "");
+  expect(voice.clips()).toBe(0);
+  await shot(page, "3b-mic-paused");
+  await mic.click();
+  await expect(mic).toHaveAttribute("aria-pressed", "false");
+  await expect(bar).toContainText(/Listening|正在听/);
+
   await page.getByTestId("planner-review-voice-done").click();
   await expect(
     page.getByTestId("planner-review-chat").getByText(HEARD).last(),

@@ -18,6 +18,9 @@ aloud. Nothing is recorded or kept.
    mid-thought): you end it by tapping the **Send** bubble, as in the
    tap-to-send mode of the big voice assistants. The bar shows how long you
    have been talking. Only at 6 minutes is the answer sent without a tap.
+   The **mic** button beside Send pauses recording (the bar says "Mic
+   paused", the clock stops, nothing is captured) and turns it back on; the
+   turn stays open either way, and Send sends what was recorded.
 4. **Writing down what you said**, then **Thinking**: the words appear in the
    chat as your answer and the coach replies as usual. Its reply is read out,
    and the loop goes on. Messages that arrive together (a reply and the next

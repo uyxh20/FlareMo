@@ -621,10 +621,12 @@ function Composer({
         <PlannerReviewVoiceBar
           level={talk.level}
           notice={talk.notice}
+          paused={talk.paused}
           seconds={talk.seconds}
           state={talk.state}
           strings={strings}
           onDone={talk.finish}
+          onMic={talk.toggleMic}
           onRetry={talk.retry}
           onSkip={talk.skip}
           onType={talk.stop}
