@@ -1,5 +1,14 @@
 import { plannerAskStarters } from "@flaremo/contracts";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { createMemo } from "../memos-write";
 import type { TaskActor } from "../tasks";
 import { plannerAgentAcceptAction } from "./agent-apply";
@@ -92,6 +101,9 @@ describe("Ask my diary's starter buttons", () => {
   });
   afterAll(async () => {
     await rt.dispose();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
   beforeEach(async () => {
     await rt.reset();
@@ -232,6 +244,9 @@ describe("Ask my diary's starter buttons", () => {
   });
 
   it("says per entry line whether the log has a row of its kind", async () => {
+    // The diary reader stamps its rows with the clock; pin it to the test's day.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
     await plannerTestRows(
       rt.database,
       `INSERT INTO health_entry (id, user_id, kind, day, variant, minutes, bender, needs_check, source, memo_id, dismissed, edited, created_at, updated_at)
