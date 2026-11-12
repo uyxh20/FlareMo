@@ -156,7 +156,7 @@ describe("the period chat's words", () => {
       "October 2026 review",
     );
     expect(plannerPeriodCoachSystem(context(), "free")).toContain(
-      "attach it with the paperclip",
+      "attach it with the Upload button",
     );
   });
 

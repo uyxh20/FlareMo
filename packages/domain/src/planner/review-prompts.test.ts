@@ -480,7 +480,7 @@ describe("what each call asks for", () => {
     ).toBe(true);
     expect(force.endsWith('end with @@ {"advance": true}.')).toBe(true);
     // It may ask for proof as a file, which the answer box takes.
-    expect(free).toContain("attach it with the paperclip");
+    expect(free).toContain("attach it with the Upload button");
     expect(free).toContain('under "The owner attached"');
     const shared = free.slice(0, free.lastIndexOf("\n\n"));
     expect(force.startsWith(shared)).toBe(true);

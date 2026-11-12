@@ -740,7 +740,7 @@ function Composer({
               onClick={() => picker.current?.click()}
             >
               <PaperclipIcon />
-              <span className="max-sm:sr-only">{copy.upload}</span>
+              <span>{copy.upload}</span>
             </Button>
           </>
         )}
