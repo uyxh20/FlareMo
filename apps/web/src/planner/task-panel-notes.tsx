@@ -1,11 +1,21 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckIcon, Loader2Icon } from "lucide-react";
+import {
+  BoldIcon,
+  CheckIcon,
+  Heading2Icon,
+  ListIcon,
+  ListTodoIcon,
+  Loader2Icon,
+  PencilIcon,
+} from "lucide-react";
 import {
   type ReactNode,
   type RefObject,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +24,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { plannerErrorMessage, plannerUpdateTaskRequest } from "./api";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { PlannerTaskMarkdown } from "./task-markdown";
 import { plannerStoreFor, plannerToastId } from "./use-planner-actions";
 import { usePlannerAutosave } from "./use-planner-autosave";
 
@@ -24,6 +35,11 @@ import { usePlannerAutosave } from "./use-planner-autosave";
 // when the page is hidden or closed (see use-planner-autosave.ts), and says so
 // quietly: "Saving…", then "Saved". A save that fails keeps the text, says
 // "Couldn't save" with a Retry, and toasts.
+//
+// Notes read as Markdown (task-markdown.tsx): the panel opens on the drawn note,
+// whose to-do boxes can be ticked there (the line is rewritten and saved at
+// once). A click on the text or Edit opens the plain box, with a small toolbar;
+// Done, Esc or clicking away goes back. Empty notes show the box straight away.
 
 /** The most upstream stores in a task's notes. */
 const NOTES_MAX = 20_000;
@@ -114,7 +130,93 @@ export function PlannerTaskNotes({
       }
     },
   });
-  usePlannerAutoGrow(textareaRef, autosave.value);
+  const [editing, setEditing] = useState(false);
+  const empty = autosave.value.trim() === "";
+  const showBox = editing || empty;
+  usePlannerAutoGrow(textareaRef, showBox ? autosave.value : "");
+
+  // Opening the box puts the cursor at the end of the text.
+  useEffect(() => {
+    if (!editing) return;
+    const field = textareaRef.current;
+    if (!field || document.activeElement === field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, [editing]);
+
+  const startEditing = () => {
+    // Selecting text to copy it is not asking to edit.
+    if (window.getSelection()?.toString()) return;
+    setEditing(true);
+  };
+  const stopEditing = () => {
+    autosave.onBlur();
+    setEditing(false);
+  };
+  const toggle = (next: string) => {
+    autosave.onChange(next);
+    // A tick is a finished edit: save it now, like a blur.
+    autosave.onBlur();
+  };
+  /** A toolbar button: changes the box's text and keeps the cursor in it. */
+  const apply = (
+    edit: (
+      value: string,
+      start: number,
+      end: number,
+    ) => { value: string; start: number; end: number },
+  ) => {
+    const field = textareaRef.current;
+    if (!field) return;
+    const result = edit(field.value, field.selectionStart, field.selectionEnd);
+    autosave.onChange(result.value);
+    requestAnimationFrame(() => {
+      field.focus();
+      field.setSelectionRange(result.start, result.end);
+    });
+  };
+  const startLine = (prefix: string) =>
+    apply((value, start, end) => {
+      const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+      return {
+        value: value.slice(0, lineStart) + prefix + value.slice(lineStart),
+        start: start + prefix.length,
+        end: end + prefix.length,
+      };
+    });
+  const wrap = (mark: string) =>
+    apply((value, start, end) => ({
+      value:
+        value.slice(0, start) +
+        mark +
+        value.slice(start, end) +
+        mark +
+        value.slice(end),
+      start: start + mark.length,
+      end: end + mark.length,
+    }));
+  const tools = [
+    {
+      label: strings.panel.notes.todo,
+      icon: <ListTodoIcon />,
+      run: () => startLine("- [ ] "),
+    },
+    {
+      label: strings.panel.notes.heading,
+      icon: <Heading2Icon />,
+      run: () => startLine("## "),
+    },
+    {
+      label: strings.panel.notes.list,
+      icon: <ListIcon />,
+      run: () => startLine("- "),
+    },
+    {
+      label: strings.panel.notes.bold,
+      icon: <BoldIcon />,
+      run: () => wrap("**"),
+    },
+  ];
 
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-1.5">
@@ -160,17 +262,95 @@ export function PlannerTaskNotes({
             </>
           )}
         </p>
+        {!empty &&
+          (editing ? (
+            <Button
+              className="h-6 px-2 text-xs"
+              size="xs"
+              type="button"
+              variant="outline"
+              onClick={stopEditing}
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              {strings.panel.notes.done}
+            </Button>
+          ) : (
+            <Button
+              aria-label={strings.panel.notes.edit}
+              className="h-6 px-2 text-xs"
+              size="xs"
+              title={strings.panel.notes.edit}
+              type="button"
+              variant="ghost"
+              onClick={() => setEditing(true)}
+            >
+              <PencilIcon className="size-3" />
+              {strings.panel.notes.editShort}
+            </Button>
+          ))}
       </div>
-      <Textarea
-        aria-labelledby={headingId}
-        className="field-sizing-fixed min-h-24 resize-none overflow-hidden border-transparent bg-transparent px-2 leading-relaxed hover:bg-muted/60 focus-visible:bg-transparent md:text-sm dark:bg-transparent dark:hover:bg-muted/40"
-        maxLength={NOTES_MAX}
-        placeholder={strings.panel.notes.placeholder}
-        ref={textareaRef}
-        value={autosave.value}
-        onBlur={autosave.onBlur}
-        onChange={(event) => autosave.onChange(event.target.value)}
-      />
+      {!showBox && (
+        // A click on the text opens the box; the Edit button is the keyboard's way in.
+        // biome-ignore lint/a11y/noStaticElementInteractions: the Edit button is the accessible control
+        // biome-ignore lint/a11y/useKeyWithClickEvents: the Edit button is the accessible control
+        <div
+          className="-mx-0 cursor-text rounded-md px-2 py-1.5 hover:bg-muted/60 dark:hover:bg-muted/40"
+          data-testid="planner-notes-view"
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a, input, button")) {
+              return;
+            }
+            startEditing();
+          }}
+        >
+          <PlannerTaskMarkdown onToggle={toggle} text={autosave.value} title />
+        </div>
+      )}
+      {showBox && editing && (
+        <div
+          aria-label={strings.panel.notes.toolbar}
+          className="flex flex-wrap gap-1"
+          role="toolbar"
+        >
+          {tools.map((tool) => (
+            <Button
+              aria-label={tool.label}
+              className="h-6 gap-1 px-1.5 text-xs text-muted-foreground"
+              key={tool.label}
+              size="xs"
+              title={tool.label}
+              type="button"
+              variant="ghost"
+              // Keeps the cursor in the box, so it does not close.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={tool.run}
+            >
+              {tool.icon}
+              {tool.label}
+            </Button>
+          ))}
+        </div>
+      )}
+      {showBox && (
+        <Textarea
+          aria-labelledby={headingId}
+          className="field-sizing-fixed min-h-24 resize-none overflow-hidden border-transparent bg-transparent px-2 leading-relaxed hover:bg-muted/60 focus-visible:bg-transparent md:text-sm dark:bg-transparent dark:hover:bg-muted/40"
+          maxLength={NOTES_MAX}
+          placeholder={strings.panel.notes.placeholder}
+          ref={textareaRef}
+          value={autosave.value}
+          onBlur={stopEditing}
+          onChange={(event) => autosave.onChange(event.target.value)}
+          onFocus={() => setEditing(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              // Close the box, not the panel behind it.
+              event.stopPropagation();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+      )}
     </section>
   );
 }

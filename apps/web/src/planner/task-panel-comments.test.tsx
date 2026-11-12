@@ -238,13 +238,35 @@ describe("the comments list", () => {
     expect(second.textContent).toContain("edited");
   });
 
-  it("keeps line breaks in a comment", async () => {
+  it("keeps line breaks in a comment: each line is its own row", async () => {
     const { items } = await show([
       comment("c-1", "First line\nSecond line", 5),
     ]);
-    const body = items()[0].querySelector("p") as HTMLElement;
-    expect(body.textContent).toBe("First line\nSecond line");
-    expect(body.className).toContain("whitespace-pre-wrap");
+    const rows = Array.from(
+      items()[0].querySelectorAll('[data-testid="planner-markdown"] > p'),
+    ).map((row) => row.textContent);
+    expect(rows).toEqual(["First line", "Second line"]);
+  });
+
+  it("draws a comment as Markdown, and ticking a box saves the comment with that line ticked", async () => {
+    edit.mockImplementation(async (id, body) => ({
+      comment: comment(id, body, 5),
+    }));
+    const { items } = await show([
+      comment("c-1", "## Plan\n- [ ] Call the bakery\n- [x] Buy flour", 5),
+    ]);
+    const item = items()[0];
+    expect(item.querySelector("h5")?.textContent).toBe("Plan");
+    const boxes = item.querySelectorAll<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    expect(Array.from(boxes).map((box) => box.checked)).toEqual([false, true]);
+    plannerTestClick(boxes[0]);
+    await settle();
+    expect(edit).toHaveBeenCalledWith(
+      "c-1",
+      "## Plan\n- [x] Call the bakery\n- [x] Buy flour",
+    );
   });
 });
 

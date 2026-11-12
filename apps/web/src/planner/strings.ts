@@ -201,6 +201,15 @@ export type PlannerStrings = {
       saved: string;
       failed: string;
       retry: string;
+      /** The Edit button's name, and its short visible word. */
+      edit: string;
+      editShort: string;
+      done: string;
+      toolbar: string;
+      todo: string;
+      heading: string;
+      list: string;
+      bold: string;
     };
     comments: {
       title: string;
@@ -218,6 +227,9 @@ export type PlannerStrings = {
       deleteTitle: string;
       deleteBody: string;
       deleteConfirm: string;
+      write: string;
+      preview: string;
+      previewEmpty: string;
     };
     /** The task's files (docs/fork-task-attachments.md). */
     attachments: {
@@ -492,6 +504,14 @@ const en: PlannerStrings = {
       saved: "Saved",
       failed: "Couldn't save",
       retry: "Retry",
+      edit: "Edit notes",
+      editShort: "Edit",
+      done: "Done",
+      toolbar: "Formatting",
+      todo: "To-do",
+      heading: "Heading",
+      list: "List",
+      bold: "Bold",
     },
     comments: {
       title: "Comments",
@@ -508,6 +528,9 @@ const en: PlannerStrings = {
       deleteTitle: "Delete this comment?",
       deleteBody: "It is removed from this task. This can't be undone.",
       deleteConfirm: "Delete",
+      write: "Write",
+      preview: "Preview",
+      previewEmpty: "Nothing to preview",
     },
     attachments: {
       title: "Attachments",
@@ -767,6 +790,14 @@ const zhCN: PlannerStrings = {
       saved: "已保存",
       failed: "保存失败",
       retry: "重试",
+      edit: "编辑备注",
+      editShort: "编辑",
+      done: "完成",
+      toolbar: "格式",
+      todo: "待办",
+      heading: "标题",
+      list: "列表",
+      bold: "加粗",
     },
     comments: {
       title: "评论",
@@ -783,6 +814,9 @@ const zhCN: PlannerStrings = {
       deleteTitle: "删除这条评论？",
       deleteBody: "评论会从这项任务中移除，无法撤销。",
       deleteConfirm: "删除",
+      write: "编辑",
+      preview: "预览",
+      previewEmpty: "没有可预览的内容",
     },
     attachments: {
       title: "附件",

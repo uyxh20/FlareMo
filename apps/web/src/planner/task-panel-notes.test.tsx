@@ -113,7 +113,17 @@ function show(notes: string | null = "Draft in the doc") {
   return {
     root,
     rerender: (value: string | null) => mounted?.rerender(ui(value)),
-    box: () => root.querySelector("textarea") as HTMLTextAreaElement,
+    /** The plain box, opened with Edit when the note is showing drawn. */
+    box: () => {
+      if (!root.querySelector("textarea")) {
+        plannerTestClick(root.querySelector('button[aria-label="Edit notes"]'));
+      }
+      return root.querySelector("textarea") as HTMLTextAreaElement;
+    },
+    view: () =>
+      root.querySelector(
+        '[data-testid="planner-notes-view"]',
+      ) as HTMLElement | null,
     status: () =>
       root.querySelector('[data-testid="planner-notes-status"]')?.textContent ??
       "",
@@ -142,6 +152,45 @@ describe("the notes box", () => {
       root.querySelector("h3")?.id,
     );
     expect(status()).toBe("");
+  });
+
+  it("opens on the note drawn as Markdown, with an Edit button", () => {
+    const { root, view } = show("Plan\n## Next\n- [ ] Call the bakery");
+    expect(root.querySelector("textarea")).toBeNull();
+    expect(view()?.querySelector("h5")?.textContent).toBe("Next");
+    expect(
+      root.querySelector('button[aria-label="Edit notes"]'),
+    ).not.toBeNull();
+  });
+
+  it("ticks a box in the drawn note and saves at once, with only that line changed", async () => {
+    const { root, view } = show("Plan\n- [ ] Call the bakery\n- [x] Buy flour");
+    const boxes = view()?.querySelectorAll<HTMLInputElement>(
+      'input[type="checkbox"]',
+    );
+    plannerTestClick(boxes?.[0]);
+    await wait(0);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][1]).toMatchObject({
+      notes: "Plan\n- [x] Call the bakery\n- [x] Buy flour",
+    });
+    // Still reading, not editing.
+    expect(root.querySelector("textarea")).toBeNull();
+  });
+
+  it("opens the plain box with a click on the text, with a toolbar, and Esc goes back", () => {
+    const { root, view } = show("Plan\n- [ ] Call the bakery");
+    plannerTestClick(view()?.querySelector("p"));
+    const box = root.querySelector("textarea") as HTMLTextAreaElement;
+    expect(box.value).toBe("Plan\n- [ ] Call the bakery");
+    expect(root.querySelector('[role="toolbar"]')).not.toBeNull();
+    act(() => {
+      box.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    expect(root.querySelector("textarea")).toBeNull();
+    expect(view()).not.toBeNull();
   });
 
   it("invites notes when there are none", () => {
