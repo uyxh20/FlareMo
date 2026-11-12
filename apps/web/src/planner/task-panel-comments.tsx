@@ -43,6 +43,7 @@ import {
 } from "./panel-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerStrings } from "./strings";
+import { PlannerTaskMarkdown } from "./task-markdown";
 import { usePlannerAutoGrow } from "./task-panel-notes";
 import { plannerStoreFor, plannerToastId } from "./use-planner-actions";
 
@@ -56,6 +57,10 @@ import { plannerStoreFor, plannerToastId } from "./use-planner-actions";
 // shows at once, dimmed, until the server's copy replaces it; an edit and a
 // delete show at once too. A failure takes back only that change and says why in
 // a toast (and a new comment's text returns to the box, so nothing typed is lost).
+//
+// Comments read as Markdown (task-markdown.tsx), and their to-do boxes can be
+// ticked, which saves the comment with that line changed. The new comment box has
+// Write and Preview tabs once something is typed.
 
 type Detail = PlannerTaskDetailResponse;
 
@@ -324,9 +329,10 @@ function CommentItem({
           </div>
         </div>
       ) : (
-        <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
-          {comment.body}
-        </p>
+        <PlannerTaskMarkdown
+          text={comment.body}
+          onToggle={waiting ? undefined : (next) => void onSave(comment, next)}
+        />
       )}
     </li>
   );
@@ -343,54 +349,91 @@ function CommentComposer({
   const strings = usePlannerStrings();
   const copy = strings.panel.comments;
   const [text, setText] = useState("");
+  const [previewing, setPreviewing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const hintId = useId();
-  usePlannerAutoGrow(textareaRef, text);
+  const showPreview = previewing && text.trim() !== "";
+  usePlannerAutoGrow(textareaRef, showPreview ? "" : text);
 
   const submit = () => {
     const body = text.trim();
     if (!body) return;
     setText("");
-    textareaRef.current?.focus();
+    setPreviewing(false);
+    requestAnimationFrame(() => textareaRef.current?.focus());
     void onSubmit(body).then((added) => {
       // Not added: the text comes back, unless something new was typed meanwhile.
       if (!added) setText((current) => (current === "" ? body : current));
     });
   };
 
+  const tab = (on: boolean, label: string, select: () => void) => (
+    <button
+      aria-pressed={on}
+      className={cn(
+        "rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground",
+        on && "bg-muted font-medium text-foreground",
+      )}
+      type="button"
+      onClick={select}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="flex items-end gap-2">
-      <Textarea
-        aria-describedby={hintId}
-        aria-label={copy.label}
-        className="field-sizing-fixed max-h-48 min-h-9 resize-none py-1.5"
-        enterKeyHint="send"
-        maxLength={5000}
-        placeholder={copy.placeholder}
-        ref={textareaRef}
-        rows={1}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
-          if (isSendKey(event)) {
-            event.preventDefault();
-            submit();
-          }
-        }}
-      />
-      <span className="sr-only" id={hintId}>
-        {copy.hint}
-      </span>
-      <Button
-        aria-label={copy.send}
-        disabled={text.trim() === ""}
-        size="icon"
-        title={`${copy.send} · ${copy.hint}`}
-        type="button"
-        onClick={submit}
-      >
-        <SendHorizontalIcon />
-      </Button>
+    <div className="flex flex-col gap-1">
+      {text.trim() !== "" && (
+        <div className="flex gap-0.5">
+          {tab(!showPreview, copy.write, () => {
+            setPreviewing(false);
+            requestAnimationFrame(() => textareaRef.current?.focus());
+          })}
+          {tab(showPreview, copy.preview, () => setPreviewing(true))}
+        </div>
+      )}
+      <div className="flex items-end gap-2">
+        {showPreview ? (
+          <div
+            className="max-h-48 min-h-9 flex-1 overflow-y-auto rounded-md border border-dashed px-2.5 py-1.5"
+            data-testid="planner-comment-preview"
+          >
+            <PlannerTaskMarkdown text={text} onToggle={setText} />
+          </div>
+        ) : (
+          <Textarea
+            aria-describedby={hintId}
+            aria-label={copy.label}
+            className="field-sizing-fixed max-h-48 min-h-9 resize-none py-1.5"
+            enterKeyHint="send"
+            maxLength={5000}
+            placeholder={copy.placeholder}
+            ref={textareaRef}
+            rows={1}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (isSendKey(event)) {
+                event.preventDefault();
+                submit();
+              }
+            }}
+          />
+        )}
+        <span className="sr-only" id={hintId}>
+          {copy.hint}
+        </span>
+        <Button
+          aria-label={copy.send}
+          disabled={text.trim() === ""}
+          size="icon"
+          title={`${copy.send} · ${copy.hint}`}
+          type="button"
+          onClick={submit}
+        >
+          <SendHorizontalIcon />
+        </Button>
+      </div>
     </div>
   );
 }
