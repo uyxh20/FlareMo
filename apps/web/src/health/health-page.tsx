@@ -375,11 +375,9 @@ function YearSections({ year }: { year: number }) {
           <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-semibold tabular-nums">
-                {healthFormatUnits(out.used)}
+                {out.nights}
               </span>
-              <span className="text-sm">
-                {s.unitsSoFar(healthFormatUnits(out.used))}
-              </span>
+              <span className="text-sm">{s.nightsSoFar(out.nights)}</span>
             </div>
             {sinceDays !== null &&
               (sinceDays === 0 ? (

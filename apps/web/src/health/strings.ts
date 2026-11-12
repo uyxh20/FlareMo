@@ -154,8 +154,8 @@ export const healthStrings = {
       `${days} ${days === 1 ? "day" : "days"} ago`,
     sinceStripCapped: (days: number) => `Last ${days} days`,
     sinceStripEnd: "Today",
-    unitsSoFar: (units: string) =>
-      `${units === "1" ? "unit" : "units"} so far this year`,
+    nightsSoFar: (nights: number) =>
+      `${nights === 1 ? "night" : "nights"} so far this year`,
     needsTitle: "Home time needed",
     needsHint: "These nights were written without a time.",
     yearTitle: (year: number) => `${year}, week by week`,

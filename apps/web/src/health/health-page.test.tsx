@@ -180,11 +180,12 @@ describe("the Health page", () => {
     expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
   });
 
-  it("shows the year's units and the days since the last night out", async () => {
+  it("shows the year's nights and the days since the last night out", async () => {
     const container = await show();
     const budget = container.querySelector('[data-testid="health-budget"]');
     expect(container.textContent).toContain("Nights out 2026");
-    expect(budget?.textContent).toContain("6units so far this year");
+    expect(budget?.textContent).toContain("9nights so far this year");
+    expect(budget?.textContent).not.toContain("units");
     expect(
       budget?.querySelector('[data-testid="health-since-last"]')?.textContent,
     ).toBe("4days since last night out");
