@@ -48,7 +48,6 @@ import { WorkspacePageHeader } from "@/components/workspace/workspace-page-heade
 import { useI18n } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { plannerErrorMessage, plannerFetchBoard } from "./api";
-import { PlannerFlywheelCard } from "./flywheel-card";
 import { plannerMarkWeekFresh } from "./goal-cards";
 import {
   plannerAiCheck,
@@ -1585,7 +1584,6 @@ function ReviewSession({
               ) : undefined,
             }}
             review={review}
-            side={<PlannerFlywheelCard today={today} week={week} />}
             strings={backStrings}
             writing={memoLive !== null}
           />

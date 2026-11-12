@@ -85,7 +85,16 @@ week, and done on time.
 
 ## The loop
 
-- **Every Sunday**, Look back's side panel shows the three numbers against last
+- **The whole card is off the review (2026-11-12, later the same day).** The
+  owner found "The agent this week" distracting, so Look back's side panel no
+  longer renders `PlannerFlywheelCard` (one line in
+  `apps/web/src/planner/review-page.tsx`). The card's code, its routes, the
+  nightly scorecard, the log and `planner_tuning` all stay, so the flywheel
+  keeps counting; the agent still reads the scorecard through
+  `read_scorecard`, and the active version (if any) still rides on its
+  sessions. Nothing is shown and no weekly note is asked for. To bring the card
+  back, revert the commit "remove the agent this week card from the review".
+- **Every Sunday** (as built), Look back's side panel shows the three numbers against last
   week and one question: "What should the agent do differently?". The answer,
   or a skip, is saved on `planner_week.tuning_note` with the active version.
 - **Not on the card any more (2026-11-12).** The owner asked to remove the

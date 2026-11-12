@@ -95,7 +95,8 @@ type Props = {
   writing: boolean;
   strings: PlannerGoalsStrings;
   actions: PlannerBackActions;
-  /** Under the checklist: the week's scorecard card (flywheel-card.tsx). */
+  /** Under the checklist: an optional card. Empty since 2026-11-12, when the
+   * flywheel scorecard card (flywheel-card.tsx) was taken off the review. */
   side?: ReactNode;
 };
 
