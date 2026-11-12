@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import {
   type ClipboardEvent,
-  type DragEvent,
   type FormEvent,
   useEffect,
   useRef,
@@ -25,6 +24,7 @@ import { ApiError } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { ForkDropOverlay, useForkFileDrop } from "@/fork/file-drop";
 import { healthQueryKeys } from "@/health/query-keys";
 import { useI18n } from "@/i18n";
 import { queryKeys } from "@/lib/query-keys";
@@ -1671,7 +1671,6 @@ export function PlannerAskChat({
   // this chat are listed by name, with their state from the cached detail.
   const files = usePlannerAttachmentActions(task ?? "");
   const [dropped, setDropped] = useState<string[]>([]);
-  const [over, setOver] = useState(false);
   const detail = useQuery({
     queryKey: plannerQueryKeys.detail(task ?? ""),
     queryFn: () => plannerFetchTaskDetail(task ?? ""),
@@ -1692,11 +1691,8 @@ export function PlannerAskChat({
     ]);
     files.actions.add(list);
   };
-  const onDrop = (event: DragEvent<HTMLElement>) => {
-    event.preventDefault();
-    setOver(false);
-    addFiles(Array.from(event.dataTransfer?.files ?? []));
-  };
+  const drop = useForkFileDrop(addFiles);
+  const over = drop.over;
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const list = Array.from(event.clipboardData?.files ?? []);
     if (list.length === 0) return;
@@ -1731,16 +1727,15 @@ export function PlannerAskChat({
   }, [count, running]);
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target around the chat; the question box below is the control
     <div
-      className={cn("flex min-h-0 flex-1 flex-col", className)}
-      onDragLeave={() => setOver(false)}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setOver(true);
-      }}
-      onDrop={onDrop}
+      className={cn("relative flex min-h-0 flex-1 flex-col", className)}
+      {...drop.props}
     >
+      <ForkDropOverlay
+        className="inset-1 rounded-lg"
+        label={task ? copy.dropFile : copy.dropFileChat}
+        show={over}
+      />
       <div
         aria-live="polite"
         className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3"

@@ -20,6 +20,11 @@ import {
 } from "@/components/composer/format-actions";
 import { VoiceCaptureBar } from "@/components/composer/voice-capture-bar";
 import { RichComposerEditor } from "@/components/rich-composer-editor-lazy";
+import {
+  ForkDropOverlay,
+  forkNoteDropLabel,
+  useForkFileDrop,
+} from "@/fork/file-drop"; // fork: drop files
 import { useComposerSuggestions } from "@/hooks/use-composer-suggestions";
 import { useComposerVoice } from "@/hooks/use-composer-voice";
 import { useInlineImageUploads } from "@/hooks/use-inline-image-uploads";
@@ -70,7 +75,7 @@ export function MemoComposer({
   onSubmit,
   onVisibilityChange,
 }: MemoComposerProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const editorRef = useRef<Editor | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -190,6 +195,23 @@ export function MemoComposer({
     action(editor);
   };
 
+  const addFiles = (files: File[]) => {
+    // A note holds nine images at most; extra picks are dropped
+    // with a pointer to articles rather than failing at send time.
+    let room = MAX_MEMO_IMAGES - countMemoImages(draftRef.current);
+    const accepted = files.filter((file) => {
+      if (!file.type.startsWith("image/")) return true;
+      room -= 1;
+      return room >= 0;
+    });
+    if (accepted.length < files.length) {
+      toast.error(t("toast.tooManyMemoImages"));
+    }
+    if (accepted.length === 0) return;
+    commitDraft({ files: [...draftRef.current.files, ...accepted] });
+  };
+  const forkDrop = useForkFileDrop(addFiles, !isPending); // fork: drop files
+
   return (
     <form
       className="paper group relative flex w-full flex-col rounded-xl border border-border/80 bg-card shadow-xs motion-safe:animate-rise motion-safe:transition-[border-color,box-shadow] motion-safe:duration-200 focus-within:border-[color-mix(in_oklch,var(--input),var(--foreground)_10%)] focus-within:shadow-md"
@@ -203,11 +225,13 @@ export function MemoComposer({
       }}
       onFocus={() => setIsComposerFocused(true)}
       ref={formRef}
+      {...forkDrop.props}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
+      <ForkDropOverlay label={forkNoteDropLabel(locale)} show={forkDrop.over} />
       <Suspense fallback={<ComposerEditorSkeleton />}>
         <RichComposerEditor
           ariaLabel={t("composer.ariaLabel")}
@@ -286,21 +310,7 @@ export function MemoComposer({
           voiceActive={voiceActive}
           captureAvailable={captureAvailable}
           withEditor={withEditor}
-          onAddFiles={(files) => {
-            // A note holds nine images at most; extra picks are dropped
-            // with a pointer to articles rather than failing at send time.
-            let room = MAX_MEMO_IMAGES - countMemoImages(draftRef.current);
-            const accepted = files.filter((file) => {
-              if (!file.type.startsWith("image/")) return true;
-              room -= 1;
-              return room >= 0;
-            });
-            if (accepted.length < files.length) {
-              toast.error(t("toast.tooManyMemoImages"));
-            }
-            if (accepted.length === 0) return;
-            commitDraft({ files: [...draftRef.current.files, ...accepted] });
-          }}
+          onAddFiles={addFiles}
           schedule={draft.schedule}
           onScheduleChange={(schedule) => commitDraft({ schedule })}
           forkDraftContent={draft.content} // fork: link summaries

@@ -4,14 +4,7 @@ import {
   plannerAttachmentsPerTask,
 } from "@flaremo/contracts";
 import { Loader2Icon, XIcon } from "lucide-react";
-import {
-  type DragEvent,
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { ForkDropOverlay, useForkFileDrop } from "@/fork/file-drop";
 import { useI18n } from "@/i18n";
 import { cn, formatBytes } from "@/lib/utils";
 import { MORE_BUTTON_CLASS } from "@/pages/projects/constants";
@@ -228,17 +222,9 @@ export function PlannerTaskAttachments({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { actions, uploading } = usePlannerAttachmentActions(taskId);
   const [removing, setRemoving] = useState<PlannerAttachmentDto | null>(null);
-  const [over, setOver] = useState(false);
 
-  const onDrop = useCallback(
-    (event: DragEvent<HTMLElement>) => {
-      event.preventDefault();
-      setOver(false);
-      const files = Array.from(event.dataTransfer?.files ?? []);
-      if (files.length > 0) actions.add(files);
-    },
-    [actions],
-  );
+  const drop = useForkFileDrop(actions.add);
+  const over = drop.over;
 
   // A paste anywhere in the page while the panel is open, unless a text box has
   // the focus (a note or a comment keeps its own paste).
@@ -268,15 +254,15 @@ export function PlannerTaskAttachments({
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-3"
+      className="relative flex flex-col gap-3"
       data-testid="planner-attachments"
-      onDragLeave={() => setOver(false)}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setOver(true);
-      }}
-      onDrop={onDrop}
+      {...drop.props}
     >
+      <ForkDropOverlay
+        className="-inset-2 rounded-lg"
+        label={copy.dropHere}
+        show={over}
+      />
       <h3 className="text-xs font-medium text-muted-foreground" id={headingId}>
         {copy.title}
         {count > 0 && (

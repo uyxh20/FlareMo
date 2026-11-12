@@ -239,6 +239,8 @@ export type PlannerStrings = {
       empty: string;
       /** The drop zone's line, with the "choose files" link in it. */
       drop: string;
+      /** Over the files while one is dragged on them. */
+      dropHere: string;
       choose: string;
       uploading: string;
       stored: string;
@@ -537,6 +539,7 @@ const en: PlannerStrings = {
       count: (count, max) => `${count} of ${max}`,
       empty: "No files yet.",
       drop: "Drop files here, paste, or",
+      dropHere: "Drop to add to the task",
       choose: "choose files",
       uploading: "uploading…",
       stored: "stored",
@@ -823,6 +826,7 @@ const zhCN: PlannerStrings = {
       count: (count, max) => `${count} / ${max}`,
       empty: "还没有文件。",
       drop: "把文件拖到这里、粘贴，或",
+      dropHere: "松开即可添加到任务",
       choose: "选择文件",
       uploading: "上传中…",
       stored: "已保存",

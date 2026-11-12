@@ -17,6 +17,11 @@ import {
 import { VoiceCaptureBar } from "@/components/composer/voice-capture-bar";
 import { RichComposerEditor } from "@/components/rich-composer-editor";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
+import {
+  ForkDropOverlay,
+  forkNoteDropLabel,
+  useForkFileDrop,
+} from "@/fork/file-drop"; // fork: drop files
 import { useComposerSuggestions } from "@/hooks/use-composer-suggestions";
 import { useComposerVoice } from "@/hooks/use-composer-voice";
 import { useInlineImageUploads } from "@/hooks/use-inline-image-uploads";
@@ -56,7 +61,7 @@ export function ComposerFocusCanvas({
   onSubmitMemo,
   onVisibilityChange,
 }: ComposerFocusCanvasProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const canvasEditorRef = useRef<Editor | null>(null);
   const editorBoxRef = useRef<HTMLDivElement | null>(null);
   const [activeFormats, setActiveFormats] = useState<CanvasActiveFormats>({
@@ -194,6 +199,11 @@ export function ComposerFocusCanvas({
   const charCount = draft.content.trim().length;
   const readingTimeMinutes = Math.max(1, Math.ceil(charCount / 350));
 
+  const forkDrop = useForkFileDrop(
+    (files) => commitDraft({ files: [...draftRef.current.files, ...files] }),
+    !isPending,
+  ); // fork: drop files
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
@@ -207,11 +217,17 @@ export function ComposerFocusCanvas({
         >
           <form
             className="flex h-full flex-col"
+            {...forkDrop.props}
             onSubmit={(event) => {
               event.preventDefault();
               void submit();
             }}
           >
+            <ForkDropOverlay
+              className="fixed inset-3 rounded-xl"
+              label={forkNoteDropLabel(locale)}
+              show={forkDrop.over}
+            />
             {/* Header: Title accessibility, Save status, Word count, Reading time & minimize */}
             <ComposerCanvasHeader
               charCount={charCount}
