@@ -1,6 +1,7 @@
 import {
   type PlannerBoardCard,
   type PlannerBoardResponse,
+  type PlannerCreateTaskInput,
   type PlannerGoalDto,
   type PlannerPillar,
   plannerIsoWeekOf,
@@ -160,4 +161,40 @@ export function plannerMorningDueWindow(
     upStart: Math.max(0, from - size),
     downStart: Math.min(lastPage, from + size),
   };
+}
+
+/** The note on a task made from the idea line, so the cockpit shows where it came from. */
+export const plannerMorningIdeaTaskNote = "From the morning page's idea line.";
+
+/** The "+" request: the idea as a task in To Do, planned for today and due today. */
+export function plannerMorningIdeaTaskInput(
+  text: string,
+  today: string,
+): PlannerCreateTaskInput {
+  return {
+    title: text,
+    notes: plannerMorningIdeaTaskNote,
+    column: "todo",
+    plan: { horizon: "day", day: today },
+    due_at: today,
+    today,
+  };
+}
+
+/**
+ * Whether the idea is already a task due today (same words, not dropped), so
+ * "+" shows a tick after a reload and never adds it twice.
+ */
+export function plannerMorningLineIsTask(
+  board: PlannerBoardResponse | undefined,
+  text: string,
+  today: string,
+): boolean {
+  if (!board) return false;
+  return allCards(board).some(
+    (card) =>
+      card.title.trim() === text.trim() &&
+      card.dropped_at === null &&
+      (card.due_at ?? "").slice(0, 10) === today,
+  );
 }

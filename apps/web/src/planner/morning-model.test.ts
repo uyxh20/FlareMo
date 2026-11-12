@@ -10,7 +10,9 @@ import {
   plannerMorningDueWindow,
   plannerMorningGoals,
   plannerMorningGoalsHeading,
+  plannerMorningIdeaTaskInput,
   plannerMorningLateLabel,
+  plannerMorningLineIsTask,
 } from "./morning-model";
 
 // The morning page's panels, read from the cockpit's board.
@@ -174,5 +176,35 @@ describe("plannerMorningDueWindow", () => {
       to: 0,
       paged: false,
     });
+  });
+});
+
+describe("the idea line as a task", () => {
+  it("asks for a To Do task planned and due today", () => {
+    expect(plannerMorningIdeaTaskInput("Call Ana.", TODAY)).toEqual({
+      title: "Call Ana.",
+      notes: "From the morning page's idea line.",
+      column: "todo",
+      plan: { horizon: "day", day: TODAY },
+      due_at: TODAY,
+      today: TODAY,
+    });
+  });
+
+  it("knows when the idea is already a task due today", () => {
+    const b = board([
+      card({ id: "a", title: "Call Ana.", due_at: TODAY }),
+      card({ id: "b", title: "Old idea", due_at: "2026-11-01" }),
+      card({
+        id: "c",
+        title: "Dropped idea",
+        due_at: TODAY,
+        dropped_at: TODAY,
+      }),
+    ]);
+    expect(plannerMorningLineIsTask(b, "Call Ana.", TODAY)).toBe(true);
+    expect(plannerMorningLineIsTask(b, "Old idea", TODAY)).toBe(false);
+    expect(plannerMorningLineIsTask(b, "Dropped idea", TODAY)).toBe(false);
+    expect(plannerMorningLineIsTask(undefined, "Call Ana.", TODAY)).toBe(false);
   });
 });
