@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 // Talk in the weekly review (fork-owned add-on, docs/fork-review-voice.md).
+// Off by default since 12 Nov 2026; the first two cases turn it on through
+// the stubbed GET /voice.
 // Registered in the opt-in memo-ui project through the regex in
 // playwright.config.ts; like every e2e spec here it runs only when asked.
 //
@@ -143,4 +145,16 @@ test("the mic button pauses and resumes, the send bubble ends the turn, and the 
   await expect.poll(() => voice.spoken.length).toBeGreaterThan(before);
   await expect(bar).toHaveAttribute("data-state", "speaking");
   await shot(page, "5-next-question-read-out");
+});
+
+test("Talk is hidden unless the Worker turns a voice on", async ({ page }) => {
+  // No stub: the local Worker has FLAREMO_REVIEW_VOICE unset, so voice is off.
+  await page.goto("/review?part=back");
+  await expect(page.getByTestId("planner-review-chat")).toBeVisible();
+  const start = page.getByTestId("planner-start-look-back");
+  if (await start.isVisible()) await start.click();
+  await expect(page.getByTestId("planner-review-composer")).toBeEnabled();
+  await page.waitForTimeout(1_000);
+  await expect(page.getByTestId("planner-review-talk")).toHaveCount(0);
+  await shot(page, "0-voice-off-no-talk-button");
 });

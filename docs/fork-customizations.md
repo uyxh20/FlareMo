@@ -196,7 +196,7 @@ Layout B of the morning card, chosen by Anon on 11 Nov 2026 (mockup and tuning: 
 
 ### 14. Talk: the weekly review by voice
 
-Built 11 Nov 2026 (see `docs/fork-review-voice.md`). A Talk button beside Send in Look back turns the answer box into a voice bar: the coach's newest message is read out, the microphone listens, and what was heard is sent as a typed answer. Listening and speaking run on Workers AI (Deepgram nova-3 and aura-2 by default, Whisper and MeloTTS with `FLAREMO_REVIEW_VOICE=basic`, hidden with `off`). Nothing is stored, no migration. Undo: `FLAREMO_REVIEW_VOICE=off`, or revert the commit.
+Built 11 Nov 2026 (see `docs/fork-review-voice.md`). A Talk button beside Send in Look back turns the answer box into a voice bar: the coach's newest message is read out, the microphone listens, and what was heard is sent as a typed answer. Listening and speaking run on Workers AI (Deepgram nova-3 and aura-2 by default, Whisper and MeloTTS with `FLAREMO_REVIEW_VOICE=basic`, hidden with `off`). Nothing is stored, no migration. **Off by default since 12 Nov 2026** (Anon prefers reading the review): `FLAREMO_REVIEW_VOICE` must be `natural` or `basic` for the Talk button to show. Remove: revert the commits.
 
 ### 15. Task notes and comments as Markdown (12 Nov 2026)
 

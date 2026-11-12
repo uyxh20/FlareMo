@@ -6,9 +6,9 @@
 // to be read out. Nothing here is stored.
 //
 // FLAREMO_REVIEW_VOICE picks the voice:
-//   natural (default)  Deepgram on Workers AI: nova-3 listens, aura-2 speaks.
+//   off (default)      no Talk button (since 12 Nov 2026: Anon prefers reading).
+//   natural            Deepgram on Workers AI: nova-3 listens, aura-2 speaks.
 //   basic              the older models: Whisper listens, MeloTTS speaks.
-//   off                no Talk button.
 // When the natural model refuses (for example over the free plan's daily
 // allowance), the same call is retried once on the basic model.
 
@@ -35,9 +35,10 @@ export function reviewVoiceMode(env: {
   AI?: unknown;
 }): ReviewVoiceMode {
   if (!env.AI) return "off";
+  // Off unless asked for: Anon prefers reading the review (12 Nov 2026).
   const value = env.FLAREMO_REVIEW_VOICE?.trim().toLowerCase();
-  if (value === "off" || value === "basic") return value;
-  return "natural";
+  if (value === "natural" || value === "basic") return value;
+  return "off";
 }
 
 export class ReviewVoiceError extends Error {

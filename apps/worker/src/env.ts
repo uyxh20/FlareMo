@@ -123,8 +123,8 @@ export type FlareMoEnv = Env & {
   // Files on tasks are read into proposed comments with the same key
   // (docs/fork-task-attachments.md); this picks the model for pictures and PDFs.
   FLAREMO_ATTACHMENT_MODEL?: string;
-  // The weekly review's voice (docs/fork-review-voice.md): natural (default,
-  // Deepgram on Workers AI), basic (Whisper + MeloTTS) or off.
+  // The weekly review's voice (docs/fork-review-voice.md): off (default),
+  // natural (Deepgram on Workers AI) or basic (Whisper + MeloTTS).
   FLAREMO_REVIEW_VOICE?: string;
   FLAREMO_AGENT?: string;
   FLAREMO_AGENT_ENVIRONMENT?: string;

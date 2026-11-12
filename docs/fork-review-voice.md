@@ -7,6 +7,11 @@ you said goes in as an ordinary typed answer. Claude (or whichever model runs
 the review) stays the brain: voice only fills the answer box and reads replies
 aloud. Nothing is recorded or kept.
 
+**Off since 12 Nov 2026.** Anon found the review needs stillness and prefers
+reading, so voice is now opt-in: `FLAREMO_REVIEW_VOICE` defaults to `off` and
+the Talk button does not show. The code stays; setting the var to `natural`
+or `basic` on a Worker brings it back with no code change.
+
 ## The loop
 
 1. Tap **Talk** (it shows once Look back has started). The browser asks for the
@@ -40,9 +45,9 @@ leaves Cloudflare and no new account or key is needed.
 
 | `FLAREMO_REVIEW_VOICE`     | Listening                           | Speaking                                      |
 | -------------------------- | ----------------------------------- | --------------------------------------------- |
-| `natural` (default, unset) | `@cf/deepgram/nova-3`               | `@cf/deepgram/aura-2-en`, speaker `luna`, mp3 |
+| `off` (default, unset)     | no Talk button                      |                                               |
+| `natural`                  | `@cf/deepgram/nova-3`               | `@cf/deepgram/aura-2-en`, speaker `luna`, mp3 |
 | `basic`                    | `@cf/openai/whisper-large-v3-turbo` | `@cf/myshell-ai/melotts`                      |
-| `off`                      | no Talk button                      |                                               |
 
 If a natural model call fails (for example the free plan's daily allowance is
 used up), that one call is retried on the basic model, and the Worker logs it.
@@ -90,5 +95,6 @@ stored.
 
 ## Undo
 
-Set `FLAREMO_REVIEW_VOICE=off` to hide it. To remove it, revert the commit
+It is hidden by default. To turn it on, set `FLAREMO_REVIEW_VOICE=natural`
+on the Worker. To remove the code, revert the commit
 "Talk: the weekly review by voice".
