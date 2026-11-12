@@ -7,7 +7,7 @@ import {
   plannerScoreRubric,
   plannerVerdictKinds,
 } from "@flaremo/contracts";
-import { Loader2Icon, PaperclipIcon, XIcon } from "lucide-react";
+import { Loader2Icon, MicIcon, PaperclipIcon, XIcon } from "lucide-react";
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -35,6 +35,8 @@ import {
   type PlannerReviewEntry,
   plannerPastStage,
 } from "./review-model";
+import { usePlannerReviewVoice, usePlannerVoiceMode } from "./review-voice";
+import { PlannerReviewVoiceBar } from "./review-voice-bar";
 import { usePlannerChatFiles } from "./use-chat-files";
 
 // Look back, the first part of the weekly review (fork-owned add-on,
@@ -221,6 +223,45 @@ function promptQuestion(
   return period?.word
     ? question.replace(/\bthis week\b/g, `this ${period.word}`)
     : question;
+}
+
+/**
+ * What Talk reads out for a chat message (docs/fork-review-voice.md): the
+ * coach's words and each question; nothing for your answers or the cards.
+ */
+function voiceLine(entry: PlannerReviewEntry, props: Props): string {
+  const { review, drafts, strings, period } = props;
+  switch (entry.k) {
+    case "coach":
+      return entry.text;
+    case "recap":
+      return drafts.recap;
+    case "lastq":
+      return review.last_question
+        ? `${strings.review.lastQuestion}. ${review.last_question}`
+        : "";
+    case "prompt": {
+      const prompt = plannerReviewPrompts[entry.i];
+      return prompt ? promptQuestion(prompt.question, period) : "";
+    }
+    case "question": {
+      const { trajectory } = drafts;
+      return [
+        trajectory.pattern &&
+          `${strings.review.pattern}: ${trajectory.pattern}`,
+        trajectory.risk && `${strings.review.risk}: ${trajectory.risk}`,
+        trajectory.opportunity &&
+          `${strings.review.opportunity}: ${trajectory.opportunity}`,
+        strings.review.nextQuestion,
+      ]
+        .filter(Boolean)
+        .join(". ");
+    }
+    case "verdict":
+      return strings.review.verdictTitle;
+    default:
+      return "";
+  }
 }
 
 function Entry({ entry, props }: { entry: PlannerReviewEntry; props: Props }) {
@@ -495,11 +536,14 @@ function Composer({
   attach,
   strings,
   onSend,
+  voice,
 }: {
   disabled: boolean;
   attach: boolean;
   strings: PlannerGoalsStrings;
   onSend: (text: string, files: PlannerAnswerFile[]) => void;
+  /** Talk (docs/fork-review-voice.md): what to read out, and whether voice is on. */
+  voice: { available: boolean; lines: readonly string[]; busy: boolean };
 }) {
   const [text, setText] = useState("");
   const [over, setOver] = useState(false);
@@ -511,6 +555,13 @@ function Composer({
     tooMany: copy.tooMany,
   });
   const { clear } = files;
+  const talk = usePlannerReviewVoice({
+    lines: voice.lines,
+    busy: voice.busy,
+    canAnswer: !disabled,
+    notHeard: strings.review.voice.notHeard,
+    onHeard: (heard) => onSend(heard, []),
+  });
 
   // Files wait for an answer the coach replies to; a step without one drops them.
   useEffect(() => {
@@ -563,6 +614,24 @@ function Composer({
     event.preventDefault();
     add(list);
   };
+
+  if (talk.on) {
+    return (
+      <div className="border-t border-border">
+        <PlannerReviewVoiceBar
+          level={talk.level}
+          notice={talk.notice}
+          seconds={talk.seconds}
+          state={talk.state}
+          strings={strings}
+          onDone={talk.finish}
+          onRetry={talk.retry}
+          onSkip={talk.skip}
+          onType={talk.stop}
+        />
+      </div>
+    );
+  }
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a drop target around the answer box; the box and the paperclip are the controls
@@ -666,6 +735,20 @@ function Composer({
               <PaperclipIcon />
             </Button>
           </>
+        )}
+        {voice.available && (
+          <Button
+            aria-label={strings.review.voice.talk}
+            data-testid="planner-review-talk"
+            size="sm"
+            title={strings.review.voice.talk}
+            type="button"
+            variant="outline"
+            onClick={() => void talk.start()}
+          >
+            <MicIcon />
+            <span className="max-sm:sr-only">{strings.review.voice.talk}</span>
+          </Button>
         )}
         <Button disabled={!canSend} size="sm" type="submit">
           {strings.review.send}
@@ -790,6 +873,9 @@ export function PlannerLookBack(props: Props) {
   const { review, back, busy, coach, live, done, strings, actions } = props;
   const messages = useRef<HTMLDivElement | null>(null);
   const stage = back.stage;
+  // Talk shows only where the Worker has a voice (FLAREMO_REVIEW_VOICE).
+  const voiceMode = usePlannerVoiceMode();
+  const voiceLines = back.log.map((entry) => voiceLine(entry, props));
 
   // The newest message stays in view as the chat grows or a reply streams in.
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls on new content
@@ -901,6 +987,11 @@ export function PlannerLookBack(props: Props) {
           }
           disabled={composerOff}
           strings={strings}
+          voice={{
+            available: stage !== "start" && voiceMode !== "off",
+            busy,
+            lines: voiceLines,
+          }}
           onSend={actions.answer}
         />
       </section>
