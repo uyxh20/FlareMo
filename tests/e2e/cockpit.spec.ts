@@ -361,9 +361,55 @@ test("a task's notes save by themselves and are there after a reload", async ({
 
   await page.goto("/");
   await page.goto(link);
+  // Saved notes open drawn (as Markdown); Edit opens the plain box again.
+  await expect(panel(page).getByTestId("planner-notes-view")).toContainText(
+    notes,
+  );
+  await panel(page)
+    .getByRole("button", { name: /^(编辑备注|Edit notes)$/ })
+    .click();
   await expect(
     panel(page).getByRole("textbox", { name: /^(备注|Notes)$/ }),
   ).toHaveValue(notes);
+});
+
+test("notes read as Markdown: a box ticked while reading is saved, and Edit shows the [x]", async ({
+  page,
+}) => {
+  const title = `Cockpit markdown ${Date.now()}`;
+  const notes =
+    "Plan for the week\n\n1. Inbox\n- [ ] Reply to the café\n- [ ] Order flour";
+  await quickAdd(page, title);
+  await openPanel(page, COLUMN.todo, title);
+  const link = await panelAddress(page);
+
+  const box = panel(page).getByRole("textbox", { name: /^(备注|Notes)$/ });
+  await box.fill(notes);
+  await expect(panel(page).getByTestId("planner-notes-status")).toHaveText(
+    /(已保存|Saved)/,
+  );
+  await page.goto("/");
+  await page.goto(link);
+  const view = panel(page).getByTestId("planner-notes-view");
+  await expect(view.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await view.getByRole("checkbox", { name: "Reply to the café" }).check();
+  await expect(panel(page).getByTestId("planner-notes-status")).toHaveText(
+    /(已保存|Saved)/,
+  );
+
+  await page.goto("/");
+  await page.goto(link);
+  await expect(
+    panel(page)
+      .getByTestId("planner-notes-view")
+      .getByRole("checkbox", { name: "Reply to the café" }),
+  ).toBeChecked();
+  await panel(page)
+    .getByRole("button", { name: /^(编辑备注|Edit notes)$/ })
+    .click();
+  await expect(
+    panel(page).getByRole("textbox", { name: /^(备注|Notes)$/ }),
+  ).toHaveValue(notes.replace("- [ ] Reply", "- [x] Reply"));
 });
 
 test("a comment is sent with Enter, is there after a reload, and is deleted after a confirmation", async ({
