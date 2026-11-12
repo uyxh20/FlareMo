@@ -1179,6 +1179,7 @@
     <section id="flywheel">
       <h2>Flywheel <span class="chip">fork</span></h2>
       <p>What you keep, edit and undo becomes a weekly scorecard of the agent against your own work, and that scorecard feeds small changes to the agent's standing instructions. Nothing changes the agent until you press a button. Live since version #42 (2026-11-04).</p>
+      <p class="note"><b>Proposed change removed from the card</b> <span class="chip">on dev since 2026-11-12</span>: at your request the Sunday card no longer shows the "Proposed change to the agent" block (why, aims at, the editable text, Accept and Dismiss) or the "Suggest a change to the agent" button. The three numbers, the weekly question and the current version stay, and a version you already accepted still gets its four-week keep or roll back. The server routes and tables are unchanged, so step 4 of the loop below simply has no button on screen. Code: <code>apps/web/src/planner/flywheel-card.tsx</code>; branch <code>claude/remove-agent-proposal</code>.</p>
       <figure>
         <div class="fig">
           <svg viewBox="0 0 900 250" role="img" aria-label="A loop of five steps: what you do is logged; a nightly scorecard is rebuilt; the Sunday card shows three numbers and asks one question; every four weeks one proposed change to the agent's instructions is offered and you accept, edit or dismiss it; the accepted version rides on every agent session. Four weeks later you keep it or roll it back.">
