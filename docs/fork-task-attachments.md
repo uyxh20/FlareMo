@@ -205,10 +205,15 @@ toward the 200 task reads a month; the AI rate limit applies.
 
 Since November 2026 the review's Look back chat takes files the same way, for
 the week and for the month, quarter and year chats: a drop on the answer box, a
-paste into it, or the paperclip beside it. The paperclip shows only where the
-coach replies to the answer (last week's question, the seven prompts, and the
-chat after the scores, with the coach on); the question for next Sunday and the
-verdict take no file. Each file goes through the same chat-file routes as Ask
+paste into it, or the Upload button beside it (in the spot Talk had; Talk is
+off by default). The button shows, with its label, in every stage after the
+opening. It is live where the coach replies to the answer (last week's
+question, the seven prompts, and the chat after the scores, with the coach on);
+in the question for next Sunday, the verdict, or with the coach off it is
+greyed out and its title says where files go. The coach is told
+(`PLANNER_COACH_FILES_RULE`, weekly and period) that it may ask once a prompt
+for proof as a file, such as a contract or an offer, when the diary does not
+settle the point. Each file goes through the same chat-file routes as Ask
 (upload, reading copy, read at once, file deleted), at most three an answer,
 and waits as a line above the box until the answer is sent. An answer can be
 just the files.
