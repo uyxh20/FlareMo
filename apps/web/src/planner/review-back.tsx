@@ -10,7 +10,6 @@ import {
 import { Loader2Icon, MicIcon, PaperclipIcon, XIcon } from "lucide-react";
 import {
   type ClipboardEvent,
-  type DragEvent,
   type FormEvent,
   type ReactNode,
   useEffect,
@@ -18,6 +17,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { ForkDropOverlay, useForkFileDrop } from "@/fork/file-drop";
 import { cn } from "@/lib/utils";
 import { PlannerPillarLabel, plannerPillarClass } from "./goal-cards";
 import {
@@ -550,7 +550,6 @@ function Composer({
   voice: { available: boolean; lines: readonly string[]; busy: boolean };
 }) {
   const [text, setText] = useState("");
-  const [over, setOver] = useState(false);
   const area = useRef<HTMLTextAreaElement | null>(null);
   const picker = useRef<HTMLInputElement | null>(null);
   const copy = strings.review.files;
@@ -606,12 +605,8 @@ function Composer({
   const add = (list: readonly File[]) => {
     if (attach && list.length > 0) files.add(list);
   };
-  const onDrop = (event: DragEvent<HTMLElement>) => {
-    if (!attach) return;
-    event.preventDefault();
-    setOver(false);
-    add(Array.from(event.dataTransfer?.files ?? []));
-  };
+  const drop = useForkFileDrop(add, attach);
+  const over = drop.over;
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const list = Array.from(event.clipboardData?.files ?? []);
     if (!attach || list.length === 0) return;
@@ -640,17 +635,8 @@ function Composer({
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target around the answer box; the box and the paperclip are the controls
-    <div
-      className="border-t border-border"
-      onDragLeave={() => setOver(false)}
-      onDragOver={(event) => {
-        if (!attach) return;
-        event.preventDefault();
-        setOver(true);
-      }}
-      onDrop={onDrop}
-    >
+    <div className="relative border-t border-border" {...drop.props}>
+      <ForkDropOverlay label={copy.drop} show={over} />
       {attach && (files.files.length > 0 || files.notice) && (
         <ul
           className="flex flex-col gap-1 px-3 pt-2 text-[13px] text-muted-foreground"

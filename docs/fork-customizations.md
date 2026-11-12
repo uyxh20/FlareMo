@@ -122,6 +122,15 @@ The owner can backdate a note (retrofit entries) from the memo's ⋯ menu: **Edi
 - Not covered: the MCP update tool does not take `created_at`.
 - Files: `apps/web/src/fork/memo-date-dialog.tsx`, `apps/web/src/fork/memo-date.ts`, `packages/domain/src/fork/memo-backdate.ts`, `packages/domain/src/memo-backdate.test.ts`. Undo: remove the menu item and dialog lines in `memo-card-menu.tsx`, the `created_at` field in `updateMemoSchema`, and the `forkApplyBackdate` lines in `updateMemo`.
 
+### Drop files anywhere they upload
+
+Asked 12 Nov 2026: every place that takes a file takes it by drag and drop, with a clear highlight while a file is over it.
+
+- Where: the note composer (any file, not just images dropped in the text) and its full-screen canvas, Ask my diary, a task's files, and the review's answer box. The three planner areas already took drops; they now share the same highlight.
+- `useForkFileDrop` (`apps/web/src/fork/file-drop.tsx`) lights the area only for drags that carry files, counts enters and leaves so it does not flicker over children, and leaves alone a drop something inside already took (the note editor still puts a dropped image where it lands). `ForkDropOverlay` is the dashed brand border with one line saying what a drop does.
+- Not covered: the admin and account uploads (avatar, branding, plugin package, data import) keep their pickers.
+- Undo: remove the `forkDrop` lines in `memo-composer.tsx` and `composer-focus-canvas.tsx` (in `memo-composer.tsx`, `addFiles` can go back inline into `onAddFiles`).
+
 ### 6. Cockpit tasks over MCP
 
 A personal access token (`memos_pat_…`) could always read and change cockpit tasks through the web API (`/api/app/planner`), but the app's MCP server (`/mcp`) only had upstream's memo, shortcut and attachment tools, so an agent connected over MCP could not see the board. Six fork tools now sit on the same server: `task_read_board`, `task_get_task`, `task_get_history`, `task_create_task`, `task_update_task` and `task_add_comment`.
@@ -212,7 +221,7 @@ Variant 1 ("Read, then Edit") of the five mocks in `/mnt/project-files/task-mark
 
 These are all the upstream files this fork changes, compared with the upstream commit `main` last merged (named on the first line of `packages/domain/src/fork/upstream-manifest.txt`). `packages/domain/src/fork/upstream-hookins.test.ts` fails when a changed upstream file has no row here, or a row names a file that is back to upstream, so the list cannot drift. Line counts: `git diff --numstat <that commit> -- <file>`.
 
-**App code.** Each hook-in below has a wiring test that fails when a merge drops it: `sidebar-nav-wiring`, `tag-picker-wiring`, `product-name-wiring` and `memo-date-wiring` in `apps/web/src/fork/`, `health-wiring` in `apps/web/src/health/`, `planner-wiring` in `apps/web/src/planner/`, and `packages/domain/src/fork/guards.test.ts` for the nightly planner sync and the `/api/app/planner` mount.
+**App code.** Each hook-in below has a wiring test that fails when a merge drops it: `sidebar-nav-wiring`, `tag-picker-wiring`, `product-name-wiring`, `memo-date-wiring` and `file-drop-wiring` in `apps/web/src/fork/`, `health-wiring` in `apps/web/src/health/`, `planner-wiring` in `apps/web/src/planner/`, and `packages/domain/src/fork/guards.test.ts` for the nightly planner sync and the `/api/app/planner` mount.
 
 | File | Hook-in |
 | --- | --- |
@@ -220,7 +229,8 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/web/src/components/flaremo-explorer.tsx` | Sidebar: one import, `<nav` becomes `<ForkSidebarNav`, `</nav>` becomes `</ForkSidebarNav>`. Planner: one import and `<PlannerNavLink onNavigate={onNavigate} />` after the Projects link. Overdue reminder (section 8): the `MiniCalendarReminders` import and element are swapped for `PlannerOverdueReminders`, in the same place. |
 | `apps/web/src/hooks/use-workspace-queries.ts` | One import and `!forkOnThisDayBannerHidden &&` in the "On this day" banner condition. |
 | `apps/web/src/hooks/use-composer-suggestions.ts` | Tag list: one import, and `filterTagSuggestions(tags, activeTagToken.text, FORK_TAG_PICKER_LIMIT)` so the list holds every matching tag and scrolls (`apps/web/src/fork/tag-picker.ts`). Since the v0.26 sync upstream has its own keyboard picker, so the fork's picker hooks are gone. Undo: drop the third argument. |
-| `apps/web/src/components/memo-composer.tsx` | Link summaries: passes `forkDraftContent={draft.content}` to the toolbar. |
+| `apps/web/src/components/memo-composer.tsx` | Link summaries: passes `forkDraftContent={draft.content}` to the toolbar. File drop: `onAddFiles` moved into a named `addFiles`, then `useForkFileDrop(addFiles, !isPending)`, its props on the `<form>`, and `<ForkDropOverlay>` as the form's first child. |
+| `apps/web/src/components/composer/composer-focus-canvas.tsx` | File drop: one import, `useForkFileDrop` adding the files to the draft, its props on the `<form>`, and a `<ForkDropOverlay>` inset over the canvas. |
 | `apps/web/src/i18n.tsx` | `I18nProvider` reads `useBranding()` and runs `brandTemplate` on each template in `t()` before interpolation. |
 | `apps/web/src/branding.tsx` | `DEFAULT_BRANDING.product` is the fork constant. |
 | `apps/web/src/components/reading/reading-audio-provider.tsx` | The media-session artist and album read the live product. |
@@ -293,6 +303,7 @@ All new, none in conflict with anything upstream ships.
 | `apps/worker/src/fork/task-mcp-tools.ts`, `task-mcp-tools.test.ts` | The cockpit's task tools on `/mcp` (section 6) and their end-to-end test with a real token. |
 | `apps/worker/src/fork/email-reset.test.ts` | Password reset checks: a reset through upstream's forgot-password route revokes browser sessions but not `memos_pat_` tokens, reset mail goes out through Resend, and Better Auth's own `/api/auth/request-password-reset` stays off. |
 | `apps/web/src/fork/memo-date-dialog.tsx`, `memo-date.ts`, `memo-date-wiring.test.ts` | The backdating menu item and dialog, the date helpers, and the test that fails when a merge drops a backdating hook-in. |
+| `apps/web/src/fork/file-drop.tsx`, `file-drop.test.tsx`, `file-drop-wiring.test.ts` | `useForkFileDrop` and `ForkDropOverlay`, the drop highlight used by the note composer and the planner, their tests, and the test that fails when a merge drops a composer hook-in. |
 | `apps/web/src/planner/routes.tsx`, `planner-wiring.test.ts` | The cockpit, goals and review routes (`/review`, plus `/weekly-review` and `/period-review`, which go to it), and the test that fails when a merge drops a planner hook-in. |
 | `apps/web/src/planner/period-*.ts(x)`, `apps/worker/src/routes/planner-period-review-api.ts`, `packages/domain/src/planner/period-review*.ts`, `packages/contracts/src/planner-period-review.ts`, `migrations/9013_planner_period_review.sql` | The month, quarter and year chapters of the review (see `docs/planning-cockpit-period-review.md`): the chat, its routes, the readers, prompts and receipt check, the period maths, and the two tables. `review-page.tsx` renders them as chapters between Look back and Look forward, chosen by the date (the owner's decision of 17 October 2026: one Review, nothing to choose). The week's Look back shows the same counts and receipt-checked What happened (`review-receipts.tsx`, `packages/domain/src/planner/review-happened.ts`, `reads` on the review response). |
 | `apps/web/src/fork/product-name.ts`                                                  | `brandTemplate`, plus the two key lists: `PRODUCT_NAME_EXCLUDED_KEYS` and `STOCK_BRAND_KEYS`.                                                                                                                                                  |
