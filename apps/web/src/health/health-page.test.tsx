@@ -180,16 +180,38 @@ describe("the Health page", () => {
     expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
   });
 
-  it("shows the year's nights out and their pace, with no budget", async () => {
+  it("shows the year's nights and the days since the last night out", async () => {
     const container = await show();
     const budget = container.querySelector('[data-testid="health-budget"]');
     expect(container.textContent).toContain("Nights out 2026");
-    expect(budget?.textContent).toContain("6units so far this year");
-    expect(budget?.textContent).toContain("9 nights, 2 benders");
-    expect(budget?.textContent).toContain("ends at 7.7");
-    expect(budget?.textContent).toContain("4 days since your last night out");
+    expect(budget?.textContent).toContain("9nights so far this year");
+    expect(budget?.textContent).not.toContain("units");
+    expect(
+      budget?.querySelector('[data-testid="health-since-last"]')?.textContent,
+    ).toBe("4days since last night out");
+    // Nights, benders and the pace line are gone from the card.
+    expect(budget?.textContent).not.toContain("benders");
+    expect(budget?.textContent).not.toContain("ends at");
     expect(budget?.textContent).not.toContain("12");
     expect(budget?.textContent).not.toContain("budget");
+    // One square per day since the last night out.
+    const strip = budget?.querySelector('[data-testid="health-since-strip"]');
+    expect(strip?.querySelectorAll(".health-since-cell")).toHaveLength(4);
+    expect(strip?.textContent).toContain("4 days ago");
+    expect(strip?.textContent).toContain("Today");
+  });
+
+  it("says today and draws no strip when the last night out was today", async () => {
+    fetchYear.mockResolvedValue({
+      ...YEAR,
+      night_out: { ...YEAR.night_out, last_day: "2026-10-13" },
+    });
+    const container = await show();
+    const budget = container.querySelector('[data-testid="health-budget"]');
+    expect(budget?.textContent).toContain("Last night out: today");
+    expect(
+      budget?.querySelector('[data-testid="health-since-strip"]'),
+    ).toBeNull();
   });
 
   it("lists the nights that need a home time and answers them", async () => {

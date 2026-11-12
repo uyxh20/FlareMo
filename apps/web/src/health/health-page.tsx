@@ -30,6 +30,7 @@ import {
   healthYearWeeks,
 } from "./model";
 import { healthQueryKeys } from "./query-keys";
+import { HealthSinceStrip } from "./since-strip";
 import { healthStrings } from "./strings";
 import { useHealthThisWeek } from "./this-week";
 import {
@@ -42,7 +43,7 @@ import "./health.css";
 
 // The Health page at /health (fork-owned add-on, docs/fork-health-tracker.md):
 // what happened this week (counts, no targets), the nights out so far this year
-// with their pace,
+// with a strip of the days since the last one,
 // the nights still waiting for a home time, and the year week by week. A button
 // reads the whole diary again. Same WorkspaceLayout and WorkspacePageHeader as
 // the cockpit.
@@ -355,7 +356,11 @@ function YearSections({ year }: { year: number }) {
   }
   const data = query.data;
   const out = data.night_out;
-  const projected = Math.round(out.pace * 10) / 10;
+  // Only for the current year: an old year's "days since" means nothing.
+  const sinceDays =
+    out.last_day && data.year === Number(data.today.slice(0, 4))
+      ? healthDaysBetween(out.last_day, data.today)
+      : null;
   const empty =
     data.days.length === 0 &&
     data.totals.training === 0 &&
@@ -364,33 +369,35 @@ function YearSections({ year }: { year: number }) {
     <>
       <Section title={s.budgetTitle(data.year)}>
         <div
-          className="health-kind-night_out flex flex-col gap-2.5 rounded-xl border border-border/50 bg-card/60 p-4"
+          className="flex flex-col gap-3 rounded-xl border border-border/50 bg-card/60 p-4"
           data-testid="health-budget"
         >
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span
-              className="text-3xl font-semibold tabular-nums"
-              style={{ color: "var(--k-ink)" }}
-            >
-              {healthFormatUnits(out.used)}
-            </span>
-            <span className="text-sm text-muted-foreground">
-              {s.unitsSoFar}
-            </span>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-semibold tabular-nums">
+                {out.nights}
+              </span>
+              <span className="text-sm">{s.nightsSoFar(out.nights)}</span>
+            </div>
+            {sinceDays !== null &&
+              (sinceDays === 0 ? (
+                <p className="text-sm" data-testid="health-since-last">
+                  {s.sinceLast(0)}
+                </p>
+              ) : (
+                <div
+                  className="flex items-baseline gap-2"
+                  data-testid="health-since-last"
+                >
+                  <span className="text-3xl font-semibold tabular-nums">
+                    {sinceDays}
+                  </span>
+                  <span className="text-sm">{s.sinceDays(sinceDays)}</span>
+                </div>
+              ))}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {s.nightsLine(out.nights, out.benders)}
-            {out.days_elapsed > 0 && out.used > 0 && (
-              <>
-                {". "}
-                {s.pace(healthFormatUnits(projected))}
-              </>
-            )}
-          </p>
-          {out.last_day && data.year === Number(data.today.slice(0, 4)) && (
-            <p className="text-sm font-medium" data-testid="health-since-last">
-              {s.sinceLast(healthDaysBetween(out.last_day, data.today))}
-            </p>
+          {sinceDays !== null && sinceDays > 0 && (
+            <HealthSinceStrip days={sinceDays} />
           )}
         </div>
       </Section>
