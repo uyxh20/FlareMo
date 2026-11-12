@@ -259,7 +259,7 @@
       <li><a href="#data">Where data sits</a></li>
       <li><a href="#memos">Diary entries</a></li>
       <li><a href="#search">Search and vectors</a></li>
-      <li><a href="#memory">Memory and dreaming</a></li>
+      <li><a href="#memory">Memory (removed)</a></li>
       <li><a href="#review">Weekly review</a></li>
       <li><a href="#period">Month, quarter, year</a></li>
       <li><a href="#agent">Diary agent</a></li>
@@ -282,7 +282,7 @@
       <p class="eyebrow">uyxh20/FlareMo · docs/architecture.html</p>
       <h1>How Schizo Diary works</h1>
       <p class="lede">The whole app in pictures: what runs where, where data is kept, and what the AI reads.</p>
-      <p class="meta">Last updated 2026-11-11 · describes main and live version #52 (shipped 2026-11-11): the Nights out card on the health page shows days since the last night out. Version #51 (2026-11-11): the morning page, a full page once a day with an idea line, due tasks and the week's goals (migration 9019). Version #50 (2026-11-11): the Sunday review streams its memo and takes files, Ask my diary gets five starter buttons (diary to-dos, mark done, replan, tidy backlog, health check) with a skip and edit log, and task notes and comments are findable in search and read by the memory sweep. Version #49 (2026-11-10) brought the agent control panel's new cards (place a task, link entries, tags, memories, health rows, weekly goals with a change log), editable card values, a Redo line, live coach replies and files in the review answer. Version #48 added the sidebar overdue link opening the cockpit, imported entries are caught up into semantic search every 10 minutes, the personal export carries the Schizo Diary tables with a weekly Sunday backup to R2, and two fixes (export on D1's 100-value limit, semantic search query option). Version #47 turned on the <a href="#review">cascade ladder</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
+      <p class="meta">Last updated 2026-11-12 · <b>Live since version #53 (2026-11-12):</b> the upstream FlareMo v0.32.1 sync (upstream's persistent sidebar layout, device sign-in for apps, AI insights, native app sync and phone push tables, migrations 0034 to 0050 with none of the app features switched on, personal tokens without a scope get the notes scope), <a href="#memory">Memory removed</a> (its tables were dropped), the Nights out card counting nights with a days-since strip, and the morning page listing tasks due today three at a time with up and down arrows and no goal squares. <b>On dev only:</b> Talk, the weekly review by voice, and the <a href="#flywheel">proposed change to the agent</a> taken off the review card. Before that, version #52 (shipped 2026-11-11): the Nights out card on the health page shows days since the last night out. Version #51 (2026-11-11): the morning page, a full page once a day with an idea line, due tasks and the week's goals (migration 9019). Version #50 (2026-11-11): the Sunday review streams its memo and takes files, Ask my diary gets five starter buttons (diary to-dos, mark done, replan, tidy backlog, health check) with a skip and edit log, and task notes and comments are findable in search and read by the memory sweep. Version #49 (2026-11-10) brought the agent control panel's new cards (place a task, link entries, tags, memories, health rows, weekly goals with a change log), editable card values, a Redo line, live coach replies and files in the review answer. Version #48 added the sidebar overdue link opening the cockpit, imported entries are caught up into semantic search every 10 minutes, the personal export carries the Schizo Diary tables with a weekly Sunday backup to R2, and two fixes (export on D1's 100-value limit, semantic search query option). Version #47 turned on the <a href="#review">cascade ladder</a>. What each live version added is in the <a href="#releases">release log</a> at the end.</p>
     </header>
 
     <!-- ============================================================ -->
@@ -578,54 +578,8 @@
 
     <!-- ============================================================ -->
     <section id="memory">
-      <h2>Memory and dreaming</h2>
-      <p>Memories are short conclusions about you, kept apart from the diary so AI agents don't have to reread everything.</p>
-      <figure>
-        <div class="fig">
-          <svg viewBox="0 0 900 290" role="img" aria-label="Memories come from AI agents directly, or from the nightly dreaming pass, which reads recent entries, asks a small model for up to 8 ideas and saves at most 5 a day.">
-            <rect x="20" y="30" width="170" height="56" rx="8" class="n" />
-            <text x="34" y="54" class="t-b">AI agent</text>
-            <text x="34" y="73" class="t-s t-m">memory_remember</text>
-            <line x1="190" y1="58" x2="676" y2="70" class="a" marker-end="url(#ah)" />
-            <text x="420" y="56" class="t-s">writes directly</text>
-
-            <text x="20" y="150" class="t-s t-m">NIGHTLY DREAMING</text>
-            <rect x="20" y="164" width="170" height="72" rx="8" class="n n-d1" />
-            <text x="34" y="188" class="t-b">Recent entries</text>
-            <text x="34" y="207" class="t-s">≤ 20 entries</text>
-            <text x="34" y="225" class="t-s">≤ 12,000 chars</text>
-            <rect x="226" y="164" width="140" height="72" rx="8" class="n n-ai" />
-            <text x="296" y="194" text-anchor="middle" class="t-b">Llama 3.1 8B</text>
-            <text x="296" y="213" text-anchor="middle" class="t-s">Workers AI</text>
-            <rect x="402" y="174" width="120" height="52" rx="8" class="n" />
-            <text x="462" y="198" text-anchor="middle" class="t-b">≤ 8 ideas</text>
-            <text x="462" y="216" text-anchor="middle" class="t-s">candidates</text>
-            <rect x="558" y="182" width="96" height="36" rx="8" class="n n-acc" />
-            <text x="606" y="205" text-anchor="middle" class="t-b">≤ 5 / day</text>
-            <line x1="190" y1="200" x2="222" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="366" y1="200" x2="398" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="522" y1="200" x2="554" y2="200" class="a" marker-end="url(#ah)" />
-            <line x1="654" y1="200" x2="676" y2="200" class="a" marker-end="url(#ah)" />
-            <text x="402" y="258" class="t-s">rejected in last 30 days → blocked</text>
-            <text x="402" y="276" class="t-s">sounds like an instruction → waits for you</text>
-
-            <rect x="680" y="20" width="200" height="250" rx="12" class="n n-d1" />
-            <text x="696" y="46" class="t-h">memory_items</text>
-            <text x="696" y="76" class="t-s">kind</text>
-            <text x="696" y="94">fact · decision · lesson…</text>
-            <text x="696" y="124" class="t-s">trust</text>
-            <text x="696" y="142">inferred → locked</text>
-            <text x="696" y="172" class="t-s">confidence 0–100</text>
-            <rect x="696" y="180" width="160" height="8" rx="4" class="f-track" />
-            <rect x="696" y="180" width="80" height="8" rx="4" class="f-acc" />
-            <text x="696" y="212" class="t-s">evidence</text>
-            <text x="696" y="230">link to source entry</text>
-            <text x="696" y="256" class="t-s">also vectorized</text>
-          </svg>
-        </div>
-        <figcaption>Nothing is extracted when you save an entry. <b>Since version #33 the diary agent replaces dreaming on live</b>: while the agent is set up the nightly dreaming step is skipped and new memories arrive as the agent's memory cards (at most three per review), which you Add or Dismiss on the Memory page; the nightly conflict check still runs. The figure shows the dreaming path, which comes back if the agent is turned off. Recall mixes exact-key, keyword, vector and linked-memory search and favours confirmed memories. Code: <code>apps/worker/src/memory-dreaming.ts</code>, <code>packages/domain/src/memory/</code>.</figcaption>
-      </figure>
-      <p class="note"><b>Memory sweep reads task comments</b> <span class="chip">fork</span> <span class="chip">live since version #50, 2026-11-11</span>: the nightly dreaming run also reads live task comments written since its last run (up to 10, newest first), and runs for an owner who only wrote comments. Notes are not read, since they are rewritten in place. A memory made from a comment does not link back to its source. No migration. Code: <code>packages/domain/src/planner/dreaming-sources.ts</code>.</p>
+      <h2>Memory (removed)</h2>
+      <p class="note"><b>Live since version #53, 2026-11-12</b> <span class="chip">upstream v0.32.1</span>: upstream FlareMo deleted Memory, and the fork follows with no archive. Migration 0044 drops every <code>memory_*</code> table and <code>memory_fts</code>; the Memory page, <code>/memory/mcp</code>, the nightly dreaming and memory upkeep steps, the memories search index and the agent's memory tools and cards all go. The weekly and period reviews no longer read memories, and the propose step offers goals and tasks only. The agent's own notes (its memory store) are not affected. Until the upgrade reaches live, live still holds 126 memories and everything described elsewhere on this page about them stays true there.</p>
     </section>
 
     <!-- ============================================================ -->
@@ -1139,7 +1093,7 @@
       <p>The first time the diary opens each day it shows a full page: the date, one idea line written from your own life, what is due, and the week's goals. "Start the day" puts it away until tomorrow. Built on branch <code>claude/morning-card</code>, not live yet.</p>
       <figure>
         <div class="fig">
-          <svg viewBox="0 0 900 250" role="img" aria-label="The diary opens on /morning once a day. The page reads the cockpit board for tasks due and goal meters, and asks the morning route for the idea line, which reads goals, tasks, health counts, three weeks of entries and the last seven lines, calls Claude Opus 5.5 once and saves the line in planner_morning_line. Start the day writes planner_morning_day.">
+          <svg viewBox="0 0 900 250" role="img" aria-label="The diary opens on /morning once a day. The page reads the cockpit board for tasks due and the week goals, and asks the morning route for the idea line, which reads goals, tasks, health counts, three weeks of entries and the last seven lines, calls Claude Opus 5.5 once and saves the line in planner_morning_line. Start the day writes planner_morning_day.">
             <rect x="20" y="30" width="150" height="40" rx="6" class="n" />
             <text x="95" y="55" text-anchor="middle" class="t-b">Diary opens</text>
             <line x1="170" y1="50" x2="230" y2="50" class="a" marker-end="url(#ah)" />
@@ -1179,7 +1133,7 @@
     <section id="flywheel">
       <h2>Flywheel <span class="chip">fork</span></h2>
       <p>What you keep, edit and undo becomes a weekly scorecard of the agent against your own work, and that scorecard feeds small changes to the agent's standing instructions. Nothing changes the agent until you press a button. Live since version #42 (2026-11-04).</p>
-      <p class="note"><b>Proposed change removed from the card</b> <span class="chip">on dev since 2026-11-12</span>: at your request the Sunday card no longer shows the "Proposed change to the agent" block (why, aims at, the editable text, Accept and Dismiss) or the "Suggest a change to the agent" button. The three numbers, the weekly question and the current version stay, and a version you already accepted still gets its four-week keep or roll back. The server routes and tables are unchanged, so step 4 of the loop below simply has no button on screen. Code: <code>apps/web/src/planner/flywheel-card.tsx</code>; branch <code>claude/remove-agent-proposal</code>.</p>
+      <p class="note"><b>Proposed change removed from the card</b> <span class="chip">on dev since 2026-11-12</span>: at your request the Sunday card in Look back no longer shows the "Proposed change to the agent" block (why, aims at, the editable text, Accept and Dismiss) or the "Suggest a change to the agent" button. The three numbers, the weekly question and the current version stay, and a version already accepted still gets its four-week keep or roll back. The server routes and tables are unchanged, so the "Every 4 weeks" step below simply has no button on screen. No migration. Code: <code>apps/web/src/planner/flywheel-card.tsx</code>; branch <code>claude/remove-agent-proposal</code>.</p>
       <figure>
         <div class="fig">
           <svg viewBox="0 0 900 250" role="img" aria-label="A loop of five steps: what you do is logged; a nightly scorecard is rebuilt; the Sunday card shows three numbers and asks one question; every four weeks one proposed change to the agent's instructions is offered and you accept, edit or dismiss it; the accepted version rides on every agent session. Four weeks later you keep it or roll it back.">
@@ -1510,6 +1464,7 @@
         <table>
           <thead><tr><th>Live</th><th>Date</th><th>What changed</th><th>Migration</th><th>Live rows</th></tr></thead>
           <tbody>
+            <tr><td>#53</td><td class="num">2026-11-12</td><td>Upstream v0.32.1 sync (sidebar layout, device sign-in, AI insights, native sync tables; none switched on); Memory removed (memory tables dropped); Nights out card counts nights with a days-since strip; morning page: Due today three at a time with arrows, goal squares removed</td><td class="num">0034–0050</td><td class="num">5,358 → 5,652 (8 memory tables dropped, 8 new tables, 611 sync rows)</td></tr>
             <tr><td>#52</td><td class="num">2026-11-11</td><td>Health page: the Nights out card shows days since the last night out (<code>night_out.last_day</code> on the year read)</td><td class="num">none</td><td class="num">5,341 → 5,341</td></tr>
             <tr><td>#51</td><td class="num">2026-11-11</td><td>Morning page: first open of the day goes to a full page with one idea line (with Another), tasks due today and the week's goals; Start the day dismisses it; a sunrise icon in the header replays it; tables <code>planner_morning_line</code> and <code>planner_morning_day</code></td><td class="num">9019</td><td class="num">5,327 → 5,328</td></tr>
             <tr><td>#50</td><td class="num">2026-11-11</td><td>Sunday review streams its memo and takes up to three files; Ask my diary starter buttons (Find to-dos, Mark what I already did, Replan, Tidy backlog, Health check) with Skipped rows and an edit and skip learning log; task notes and comments findable in search, read by the memory sweep, and up to 1,500 characters per task in the review; test fixes</td><td class="num">none</td><td class="num">5,325 → 5,325</td></tr>
@@ -1540,8 +1495,7 @@
           </tbody>
         </table>
       </div>
-      <p class="where">Versions not listed (#18, #20–21, #29–30) are not recorded on this page. Dev runs main (#52) with the dev agent switched on since 2026-11-10; the dev Worker is shared, so the next dev build must include every branch still being tried there. Each feature's full notes: <code>docs/fork-customizations.md</code>.</p>
+      <p class="where">Versions not listed (#18, #20–21, #29–30) are not recorded on this page. Dev runs main (#53) plus the Talk branch, the morning + button and the proposed-change removal (branch <code>dev/remove-agent-proposal</code>, 2026-11-12) with the dev agent switched on since 2026-11-10; the dev Worker is shared, so the next dev build must include every branch still being tried there. Each feature's full notes: <code>docs/fork-customizations.md</code>.</p>
     </section>
   </main>
 </div>
-
