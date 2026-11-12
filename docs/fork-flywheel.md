@@ -88,7 +88,14 @@ week, and done on time.
 - **Every Sunday**, Look back's side panel shows the three numbers against last
   week and one question: "What should the agent do differently?". The answer,
   or a skip, is saved on `planner_week.tuning_note` with the active version.
-- **Once every four weeks** the card offers "Suggest a change to the agent".
+- **Not on the card any more (2026-11-12).** The owner asked to remove the
+  "Proposed change to the agent" block, so the card no longer shows a pending
+  proposal or the "Suggest a change to the agent" button. The routes, tables
+  and the four-week verdict below are unchanged; a version already accepted
+  still gets its keep or roll back. To bring the block back, revert the commit
+  "remove the proposed change to the agent from the review card". What follows
+  describes the loop as it was built.
+- **Once every four weeks** the card offered "Suggest a change to the agent".
   One model call (the weekly review's model) reads the current instructions,
   eight weeks of numbers and the owner's notes, and proposes one revision aimed
   at one metric. No diary text is sent. The owner can also write a version
