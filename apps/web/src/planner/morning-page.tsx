@@ -7,13 +7,22 @@ import type {
 import { plannerCardColumn } from "@flaremo/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  PlusIcon,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { TIMELINE_SEARCH } from "@/lib/timeline-search";
 import { cn } from "@/lib/utils";
-import { plannerFetchBoard, plannerUpdateTaskRequest } from "./api";
+import {
+  plannerCreateTaskRequest,
+  plannerFetchBoard,
+  plannerUpdateTaskRequest,
+} from "./api";
 import { plannerPillarClass } from "./goal-cards";
 import {
   plannerFetchMorning,
@@ -29,7 +38,9 @@ import {
   plannerMorningDueWindow,
   plannerMorningGoals,
   plannerMorningGoalsHeading,
+  plannerMorningIdeaTaskInput,
   plannerMorningLateLabel,
+  plannerMorningLineIsTask,
 } from "./morning-model";
 import { plannerQueryKeys } from "./query-keys";
 import { usePlannerToday } from "./use-planner-clock";
@@ -99,6 +110,31 @@ export function PlannerMorningPage() {
     }
   };
 
+  // "+": the idea becomes a task due today, in To Do, and shows in Due today.
+  const [adding, setAdding] = useState(false);
+  const addAsTask = async () => {
+    const line = data?.line;
+    if (!line || adding) return;
+    if (plannerMorningLineIsTask(board.data, line.text, today)) return;
+    setAdding(true);
+    try {
+      await plannerCreateTaskRequest(
+        plannerMorningIdeaTaskInput(line.text, today),
+      );
+      await queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.boards,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: plannerQueryKeys.overdue(today),
+      });
+      toast("Added to Due today.");
+    } catch {
+      toast("That didn't save. Try again.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const [starting, setStarting] = useState(false);
   const startTheDay = async () => {
     setStarting(true);
@@ -124,7 +160,14 @@ export function PlannerMorningPage() {
         response={data}
         loading={morning.isPending}
         writing={writing}
+        added={
+          adding ||
+          (data?.line
+            ? plannerMorningLineIsTask(board.data, data.line.text, today)
+            : false)
+        }
         onAnother={() => void another()}
+        onAdd={() => void addAsTask()}
       />
       {board.data ? (
         <MorningPanels board={board.data} today={today} />
@@ -152,12 +195,17 @@ function IdeaLine({
   response,
   loading,
   writing,
+  added,
   onAnother,
+  onAdd,
 }: {
   response: PlannerMorningResponse | undefined;
   loading: boolean;
   writing: boolean;
+  /** The idea is already a task due today (or is being added). */
+  added: boolean;
   onAnother: () => void;
+  onAdd: () => void;
 }) {
   const line = response?.line ?? null;
   if (line) {
@@ -173,15 +221,28 @@ function IdeaLine({
         >
           {line.text}
         </p>
-        <Button
-          className="rounded-full text-sm"
-          disabled={writing}
-          size="sm"
-          variant="outline"
-          onClick={onAnother}
-        >
-          {writing ? "Writing…" : "Another"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            className="rounded-full text-sm"
+            disabled={writing}
+            size="sm"
+            variant="outline"
+            onClick={onAnother}
+          >
+            {writing ? "Writing…" : "Another"}
+          </Button>
+          <Button
+            aria-label={added ? "Added to Due today" : "Add to Due today"}
+            className="rounded-full"
+            disabled={writing || added}
+            size="icon-sm"
+            title={added ? "Added to Due today" : "Add to Due today"}
+            variant="outline"
+            onClick={onAdd}
+          >
+            {added ? <CheckIcon /> : <PlusIcon />}
+          </Button>
+        </div>
       </div>
     );
   }
