@@ -187,6 +187,8 @@ export type PlannerGoalsStrings = {
       talk: string;
       speaking: string;
       listening: string;
+      /** Under "Listening": pauses never end the turn. */
+      listeningHint: string;
       hearing: string;
       thinking: string;
       waiting: string;
@@ -532,11 +534,12 @@ const en: PlannerGoalsStrings = {
     voice: {
       talk: "Talk",
       speaking: "Coach is speaking",
-      listening: "Listening · tap Done when you finish",
+      listening: "Listening",
+      listeningHint: "Pause as long as you like. Tap the bubble to send.",
       hearing: "Writing down what you said",
       thinking: "Thinking",
       waiting: "Pick an option above, or type",
-      done: "Done",
+      done: "Send",
       skip: "Skip",
       type: "Type instead",
       again: "Try again",
@@ -863,11 +866,12 @@ const zhCN: PlannerGoalsStrings = {
     voice: {
       talk: "说话",
       speaking: "教练正在说",
-      listening: "正在听 · 说完点“完成”",
+      listening: "正在听",
+      listeningHint: "可以随意停顿。说完点气泡发送。",
       hearing: "正在记下你说的话",
       thinking: "思考中",
       waiting: "选上面的一个选项，或者打字",
-      done: "完成",
+      done: "发送",
       skip: "跳过",
       type: "改为打字",
       again: "再试一次",

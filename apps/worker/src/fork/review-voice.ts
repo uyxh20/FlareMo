@@ -14,8 +14,8 @@
 
 export type ReviewVoiceMode = "natural" | "basic" | "off";
 
-/** Longest clip one answer may be: about 3 minutes of speech. */
-export const REVIEW_VOICE_MAX_AUDIO_BYTES = 4 * 1024 * 1024;
+/** Longest clip one answer may be: 6 minutes of speech, even as AAC. */
+export const REVIEW_VOICE_MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 /** Longest text read out in one go. Aura-2 takes up to 2,000 characters. */
 export const REVIEW_VOICE_MAX_TEXT_CHARS = 1_900;
 

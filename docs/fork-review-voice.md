@@ -13,9 +13,11 @@ aloud. Nothing is recorded or kept.
    microphone the first time.
 2. **Coach is speaking**: the newest coach message or question is read out.
    **Skip** stops it and goes straight to listening.
-3. **Listening**: speak. The answer ends on its own after about 1.8 seconds of
-   quiet once you have said something, or when you tap **Done**. One answer may
-   run up to about 3 minutes.
+3. **Listening**: speak, and pause as long as you like. Pauses never end your
+   turn (Anon's call on 12 Nov 2026, after the first version cut people off
+   mid-thought): you end it by tapping the **Send** bubble, as in the
+   tap-to-send mode of the big voice assistants. The bar shows how long you
+   have been talking. Only at 6 minutes is the answer sent without a tap.
 4. **Writing down what you said**, then **Thinking**: the words appear in the
    chat as your answer and the coach replies as usual. Its reply is read out,
    and the loop goes on. Messages that arrive together (a reply and the next
@@ -60,7 +62,7 @@ rate-limited with the planner's limit.
 | Route                                    | Takes                                                               | Answers                                                 |
 | ---------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
 | `GET /api/app/planner/voice`             |                                                                     | `{ mode }`                                              |
-| `POST /api/app/planner/voice/transcribe` | the clip, `content-type: audio/*` (4 MB max)                        | `{ text, voice }`                                       |
+| `POST /api/app/planner/voice/transcribe` | the clip, `content-type: audio/*` (8 MB max)                        | `{ text, voice }`                                       |
 | `POST /api/app/planner/voice/speak`      | `{ text }` (markdown and links are stripped, 1,900 characters read) | `audio/mpeg`, header `X-Review-Voice: natural or basic` |
 
 ## Files

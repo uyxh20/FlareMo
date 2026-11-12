@@ -7,8 +7,8 @@ import { expect, type Page, test } from "@playwright/test";
 // playwright.config.ts; like every e2e spec here it runs only when asked.
 //
 // The browser gets a fake microphone that plays a recorded clip (a quiet
-// second, then "speech", then quiet), so the bar's own quiet detection ends
-// the answer. Workers AI cannot run in the local Worker, so the two voice
+// second, then "speech", then quiet, looped). Pauses never end a turn; the
+// send bubble does. Workers AI cannot run in the local Worker, so the two voice
 // calls are answered here: what was "heard" and a short clip for the coach.
 // The real models are checked on the dev Worker.
 
@@ -82,10 +82,14 @@ test("Talk reads the question, listens, and sends what was heard", async ({
   await expect(bar).toHaveAttribute("data-state", "listening", {
     timeout: 10_000,
   });
-  await page.waitForTimeout(1_800);
-  await shot(page, "3-listening");
+  // The clip has a quiet second, "speech", then four quiet seconds, looped:
+  // a long pause. Listening goes on through it; only you end the turn.
+  await page.waitForTimeout(7_000);
+  await expect(bar).toHaveAttribute("data-state", "listening");
+  expect(voice.clips()).toBe(0);
+  await shot(page, "3-listening-through-a-pause");
 
-  // The clip's quiet after the "speech" ends the answer on its own.
+  await page.getByTestId("planner-review-voice-done").click();
   await expect(chat.getByText(HEARD)).toBeVisible({ timeout: 15_000 });
   expect(voice.clips()).toBe(1);
   await shot(page, "4-answer-sent");
@@ -97,7 +101,7 @@ test("Talk reads the question, listens, and sends what was heard", async ({
   await shot(page, "6-back-to-typing");
 });
 
-test("Done ends the answer by hand, and the next question is read out", async ({
+test("the send bubble ends the turn at once, and the next question is read out", async ({
   page,
 }) => {
   const voice = await stubVoice(page);

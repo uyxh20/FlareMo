@@ -1,4 +1,4 @@
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, MessageCircleIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PlannerGoalsStrings } from "./goals-strings";
@@ -6,7 +6,8 @@ import type { PlannerVoiceState } from "./review-voice";
 
 // The voice bar that stands in for the answer box while Talk is on (fork,
 // docs/fork-review-voice.md). Coral bars are the coach's voice, dark bars are
-// yours, flat bars mean nobody is speaking.
+// yours, flat bars mean nobody is speaking. While you talk, pauses never end
+// your turn: the send bubble does.
 
 const BARS = [0.3, 0.7, 1, 0.55, 0.8, 0.4, 0.65, 0.25, 0.5];
 
@@ -14,6 +15,7 @@ export function PlannerReviewVoiceBar({
   state,
   notice,
   level,
+  seconds = 0,
   strings,
   onDone,
   onSkip,
@@ -23,6 +25,8 @@ export function PlannerReviewVoiceBar({
   state: PlannerVoiceState;
   notice: string | null;
   level: number;
+  /** How long you have been talking, while listening. */
+  seconds?: number;
   strings: PlannerGoalsStrings;
   onDone: () => void;
   onSkip: () => void;
@@ -67,6 +71,14 @@ export function PlannerReviewVoiceBar({
           )}
           {label}
         </span>
+        {state === "listening" && (
+          <span
+            className="font-mono text-[13px] font-normal text-muted-foreground tabular-nums"
+            data-testid="planner-review-voice-time"
+          >
+            {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+          </span>
+        )}
       </div>
       <div aria-hidden="true" className="flex h-[34px] items-center gap-1">
         {BARS.map((height, index) => {
@@ -94,6 +106,11 @@ export function PlannerReviewVoiceBar({
           );
         })}
       </div>
+      {state === "listening" && !message && (
+        <p className="text-[13px] text-muted-foreground">
+          {copy.listeningHint}
+        </p>
+      )}
       {message && (
         <p className="text-[13px] text-muted-foreground">{message}</p>
       )}
@@ -105,10 +122,12 @@ export function PlannerReviewVoiceBar({
         )}
         {state === "listening" && (
           <Button
+            aria-label={copy.done}
             className="flex-1"
             data-testid="planner-review-voice-done"
             onClick={onDone}
           >
+            <MessageCircleIcon />
             {copy.done}
           </Button>
         )}

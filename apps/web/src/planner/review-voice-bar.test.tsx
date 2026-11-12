@@ -31,6 +31,7 @@ function mount(state: PlannerVoiceState, notice: string | null = null) {
     <PlannerReviewVoiceBar
       level={0.5}
       notice={notice}
+      seconds={65}
       state={state}
       strings={strings}
       {...handlers}
@@ -51,10 +52,15 @@ describe("PlannerReviewVoiceBar", () => {
     expect(handlers.onSkip).toHaveBeenCalledOnce();
   });
 
-  it("offers Done while listening", () => {
+  it("offers the send bubble while listening, with the time and no auto-end hint", () => {
     const { root, buttons, handlers } = mount("listening");
     expect(root.textContent).toContain("Listening");
-    expect(buttons()).toEqual(["Done", "Type instead"]);
+    expect(root.textContent).toContain("Pause as long as you like");
+    expect(
+      root.querySelector('[data-testid="planner-review-voice-time"]')
+        ?.textContent,
+    ).toBe("1:05");
+    expect(buttons()).toEqual(["Send", "Type instead"]);
     plannerTestClick(
       root.querySelector(
         '[data-testid="planner-review-voice-done"]',

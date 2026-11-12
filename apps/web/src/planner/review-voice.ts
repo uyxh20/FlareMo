@@ -79,12 +79,11 @@ export type PlannerVoiceState =
   | "waiting"
   | "error";
 
-/** Listening ends on its own after this much quiet once you have spoken. */
-const SILENCE_MS = 1_800;
-/** Speech louder than this (RMS of the signal, 0 to 1) counts as talking. */
-const VOICE_LEVEL = 0.03;
-/** The longest one answer may run. */
-const MAX_LISTEN_MS = 170_000;
+/**
+ * The longest one answer may run; only then is it sent without a tap. Pauses
+ * never end a turn: you end it (Anon, 12 Nov 2026).
+ */
+export const PLANNER_VOICE_MAX_LISTEN_MS = 6 * 60_000;
 function preferredClipType() {
   if (typeof MediaRecorder === "undefined") return "";
   for (const type of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]) {
@@ -117,6 +116,7 @@ export function usePlannerReviewVoice({
   const [state, setState] = useState<PlannerVoiceState>("off");
   const [notice, setNotice] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
+  const [seconds, setSeconds] = useState(0);
 
   const props = useRef({ lines, busy, canAnswer, onHeard, notHeard });
   props.current = { lines, busy, canAnswer, onHeard, notHeard };
@@ -210,8 +210,6 @@ export function usePlannerReviewVoice({
     recorder.current = active;
     discard.current = false;
     const chunks: Blob[] = [];
-    let spokeAt = 0;
-    let quietSince = 0;
     active.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data);
     };
@@ -248,36 +246,30 @@ export function usePlannerReviewVoice({
     go("listening");
     active.start(250);
 
-    // Ends the answer after a quiet spell, once something was said.
+    // Pauses never end the answer; you do, with the send bubble. This only
+    // shows your level and the time, and sends at the safety cap.
+    const started = Date.now();
+    setSeconds(0);
     const ctx = context.current;
+    let analyser: AnalyserNode | null = null;
     if (ctx) {
-      const analyser = ctx.createAnalyser();
+      analyser = ctx.createAnalyser();
       analyser.fftSize = 1024;
       ctx.createMediaStreamSource(source).connect(analyser);
-      const samples = new Float32Array(analyser.fftSize);
-      const started = Date.now();
-      const id = window.setInterval(() => {
+    }
+    const samples = new Float32Array(1024);
+    const id = window.setInterval(() => {
+      if (analyser) {
         analyser.getFloatTimeDomainData(samples);
         let sum = 0;
         for (const sample of samples) sum += sample * sample;
-        const rms = Math.sqrt(sum / samples.length);
-        setLevel(Math.min(1, rms * 8));
-        const now = Date.now();
-        if (rms > VOICE_LEVEL) {
-          spokeAt = now;
-          quietSince = 0;
-        } else if (spokeAt && !quietSince) {
-          quietSince = now;
-        }
-        if (
-          (spokeAt && quietSince && now - quietSince > SILENCE_MS) ||
-          now - started > MAX_LISTEN_MS
-        ) {
-          stopRecorder(true);
-        }
-      }, 100);
-      timers.current.push(id);
-    }
+        setLevel(Math.min(1, Math.sqrt(sum / samples.length) * 8));
+      }
+      const ran = Date.now() - started;
+      setSeconds(Math.floor(ran / 1000));
+      if (ran > PLANNER_VOICE_MAX_LISTEN_MS) stopRecorder(true);
+    }, 100);
+    timers.current.push(id);
   }, [go, stopRecorder]);
 
   // The loop: read out what is new, then listen when an answer is wanted.
@@ -367,7 +359,7 @@ export function usePlannerReviewVoice({
     go("off");
   }, [go, release]);
 
-  /** Done: stop listening and send what was said. */
+  /** Send (the chat bubble): end your turn and send what was said. */
   const finish = useCallback(() => {
     if (phase.current === "listening") stopRecorder(true);
   }, [stopRecorder]);
@@ -389,5 +381,16 @@ export function usePlannerReviewVoice({
     void advance();
   }, [go, advance]);
 
-  return { on, state, notice, level, start, stop, finish, skip, retry };
+  return {
+    on,
+    state,
+    notice,
+    level,
+    seconds,
+    start,
+    stop,
+    finish,
+    skip,
+    retry,
+  };
 }
