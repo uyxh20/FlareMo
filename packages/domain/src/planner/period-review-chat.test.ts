@@ -155,6 +155,9 @@ describe("the period chat's words", () => {
     expect(plannerPeriodCoachSystem(context(), "free")).toContain(
       "October 2026 review",
     );
+    expect(plannerPeriodCoachSystem(context(), "free")).toContain(
+      "attach it with the paperclip",
+    );
   });
 
   it("keys the agent's session by the period, never a week", () => {

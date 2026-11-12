@@ -538,11 +538,14 @@ function Composer({
   strings,
   onSend,
   voice,
+  upload,
 }: {
   disabled: boolean;
   attach: boolean;
   strings: PlannerGoalsStrings;
   onSend: (text: string, files: PlannerAnswerFile[]) => void;
+  /** The Upload button beside Send: in view whenever the chat is. */
+  upload: boolean;
   /** Talk (docs/fork-review-voice.md): what to read out, and whether voice is on. */
   voice: { available: boolean; lines: readonly string[]; busy: boolean };
 }) {
@@ -711,7 +714,7 @@ function Composer({
             }
           }}
         />
-        {attach && (
+        {upload && (
           <>
             <input
               className="sr-only"
@@ -727,15 +730,17 @@ function Composer({
               }}
             />
             <Button
-              aria-label={copy.attach}
-              disabled={disabled}
-              size="icon-sm"
-              title={copy.attach}
+              aria-label={attach ? copy.attach : copy.uploadNotHere}
+              data-testid="planner-review-upload"
+              disabled={disabled || !attach}
+              size="sm"
+              title={attach ? copy.attach : copy.uploadNotHere}
               type="button"
-              variant="ghost"
+              variant="outline"
               onClick={() => picker.current?.click()}
             >
               <PaperclipIcon />
+              <span className="max-sm:sr-only">{copy.upload}</span>
             </Button>
           </>
         )}
@@ -990,6 +995,7 @@ export function PlannerLookBack(props: Props) {
           }
           disabled={composerOff}
           strings={strings}
+          upload={stage !== "start"}
           voice={{
             available: stage !== "start" && voiceMode !== "off",
             busy,

@@ -171,6 +171,10 @@ export type PlannerGoalsStrings = {
     answerPlaceholder: string;
     /** Files dropped with an answer: read into it for the coach, not kept. */
     files: {
+      /** The button beside Send, always in view in the chat. */
+      upload: string;
+      /** Its tooltip where an answer takes no file (the question, the verdict). */
+      uploadNotHere: string;
       attach: string;
       drop: string;
       withAnswer: string;
@@ -524,6 +528,9 @@ const en: PlannerGoalsStrings = {
     answer: "Your answer",
     answerPlaceholder: "Write your answer",
     files: {
+      upload: "Upload",
+      uploadNotHere:
+        "Files go with your answers to the prompts and the chat after the scores",
       attach: "Attach a file",
       drop: "Drop a file to read it into your answer",
       withAnswer: "Goes with your answer",
@@ -860,6 +867,8 @@ const zhCN: PlannerGoalsStrings = {
     answer: "你的回答",
     answerPlaceholder: "写下你的回答",
     files: {
+      upload: "上传",
+      uploadNotHere: "文件可以随各个问题的回答和打分后的对话一起发送",
       attach: "附加文件",
       drop: "把文件拖到这里，读进你的回答",
       withAnswer: "随回答一起发送",

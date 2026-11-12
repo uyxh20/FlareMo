@@ -117,9 +117,12 @@ afterEach(() => {
 describe("files in the review's answer box", () => {
   it("reads a pasted file and sends its text with the answer", async () => {
     const container = show(true);
-    expect(
-      container.querySelector('[aria-label="Attach a file"]'),
-    ).not.toBeNull();
+    const button = container.querySelector(
+      '[data-testid="planner-review-upload"]',
+    ) as HTMLButtonElement | null;
+    expect(button?.getAttribute("aria-label")).toBe("Attach a file");
+    expect(button?.disabled).toBe(false);
+    expect(button?.textContent).toBe("Upload");
     const box = container.querySelector(
       '[data-testid="planner-review-composer"]',
     ) as HTMLTextAreaElement;
@@ -152,6 +155,12 @@ describe("files in the review's answer box", () => {
   it("takes no file when no coach replies", async () => {
     const container = show(false);
     expect(container.querySelector('[aria-label="Attach a file"]')).toBeNull();
+    // The Upload button stays in view, greyed out, saying where files go.
+    const button = container.querySelector(
+      '[data-testid="planner-review-upload"]',
+    ) as HTMLButtonElement | null;
+    expect(button?.disabled).toBe(true);
+    expect(button?.textContent).toBe("Upload");
     const box = container.querySelector(
       '[data-testid="planner-review-composer"]',
     ) as HTMLTextAreaElement;
