@@ -36,8 +36,9 @@ test("the Goals deep link opens the year and survives a refresh", async ({
   await page.goto("/goals");
   await expect(heading(page, GOALS)).toBeVisible();
   await expect(page.getByTestId("planner-goals")).toBeVisible();
-  // The Year map has a chip for each of the year's 52 or 53 weeks.
-  await expect(page.getByTestId("planner-year-map")).toBeVisible();
+  // The timeline (the default view) has a chip for each of the year's 52 or
+  // 53 weeks.
+  await expect(page.getByTestId("planner-goals-timeline")).toBeVisible();
   expect(await page.getByTestId("planner-week-cell").count()).toBeGreaterThan(
     51,
   );
@@ -52,7 +53,7 @@ test("a bad Goals address shows the year instead of an error", async ({
   for (const search of ["?week=40", "?week=2026-10-06", "?year=2026&q=9"]) {
     await page.goto(`/goals${search}`);
     await expect(page.getByTestId("planner-goals")).toBeVisible();
-    await expect(page.getByTestId("planner-year-map")).toBeVisible();
+    await expect(page.getByTestId("planner-goals-timeline")).toBeVisible();
     expect(await page.getByTestId("planner-week-cell").count()).toBeGreaterThan(
       51,
     );
@@ -63,6 +64,8 @@ test("the Year map follows one pillar and opens a month's weeks", async ({
   page,
 }) => {
   await page.goto("/goals?year=2026");
+  // The grid is the second view: the switch brings it up.
+  await page.getByTestId("planner-goals-view-grid").click();
   const map = page.getByTestId("planner-year-map");
   await expect(map).toBeVisible();
   const work = page.getByRole("button", { name: /^(Work|工作)$/ });
@@ -77,6 +80,37 @@ test("the Year map follows one pillar and opens a month's weeks", async ({
   await expect(
     page.getByRole("link", { name: /Week 1$|第 1 周/ }),
   ).toBeVisible();
+});
+
+test("Goals opens on the timeline; the switch shows the grid and is remembered", async ({
+  page,
+}) => {
+  await page.goto("/goals?year=2026");
+  const timeline = page.getByTestId("planner-goals-timeline");
+  const grid = page.getByTestId("planner-year-map");
+  await expect(timeline).toBeVisible();
+  await expect(grid).toHaveCount(0);
+  await expect(page.getByTestId("planner-goals-view-timeline")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  // Following one pillar leaves its row only.
+  const work = page.getByRole("button", { name: /^(Work|工作)$/ });
+  await work.click();
+  await expect(timeline).toHaveClass(/is-following/);
+
+  await page.getByTestId("planner-goals-view-grid").click();
+  await expect(grid).toBeVisible();
+  await expect(timeline).toHaveCount(0);
+
+  // The choice is kept on this device.
+  await page.reload();
+  await expect(grid).toBeVisible();
+  await page.getByTestId("planner-goals-view-timeline").click();
+  await expect(timeline).toBeVisible();
+  await page.reload();
+  await expect(timeline).toBeVisible();
 });
 
 test("the sidebar links to Goals and the review", async ({ page }) => {

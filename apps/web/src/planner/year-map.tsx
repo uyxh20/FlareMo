@@ -72,7 +72,7 @@ type Edit = (target: PlannerGoalEditorTarget) => void;
 
 const PHONE = "(max-width: 640px)";
 
-function initialFollow(): PlannerPillar | null {
+export function initialFollow(): PlannerPillar | null {
   if (typeof window === "undefined" || !window.matchMedia) return null;
   return window.matchMedia(PHONE).matches ? "work" : null;
 }
@@ -83,12 +83,15 @@ export function PlannerYearMap({
   today,
   strings,
   onEdit,
+  toolbar,
 }: {
   map: PlannerYearMapData;
   currentWeek: string;
   today: string;
   strings: PlannerGoalsStrings;
   onEdit: Edit;
+  /** Sits at the end of the picker's row: the Goals page's view switch. */
+  toolbar?: ReactNode;
 }) {
   const [follow, setFollow] = useState<PlannerPillar | null>(initialFollow);
   const [open, setOpen] = useState<Set<string>>(() =>
@@ -333,27 +336,30 @@ export function PlannerYearMap({
 
   return (
     <div className="flex flex-col gap-3.5">
-      <fieldset aria-label={strings.map.follow} className="planner-picker">
-        <button
-          aria-pressed={follow === null}
-          type="button"
-          onClick={() => setFollow(null)}
-        >
-          {strings.map.allPillars}
-        </button>
-        {plannerPillars.map((pillar) => (
+      <div className="planner-viewbar">
+        <fieldset aria-label={strings.map.follow} className="planner-picker">
           <button
-            aria-pressed={follow === pillar}
-            className={plannerPillarClass(pillar)}
-            key={pillar}
+            aria-pressed={follow === null}
             type="button"
-            onClick={() => setFollow(pillar)}
+            onClick={() => setFollow(null)}
           >
-            <i aria-hidden="true" className="planner-dot" />
-            {strings.pillar[pillar]}
+            {strings.map.allPillars}
           </button>
-        ))}
-      </fieldset>
+          {plannerPillars.map((pillar) => (
+            <button
+              aria-pressed={follow === pillar}
+              className={plannerPillarClass(pillar)}
+              key={pillar}
+              type="button"
+              onClick={() => setFollow(pillar)}
+            >
+              <i aria-hidden="true" className="planner-dot" />
+              {strings.pillar[pillar]}
+            </button>
+          ))}
+        </fieldset>
+        {toolbar}
+      </div>
       <div className="overflow-x-auto pb-1">
         <div
           className={cn("planner-ymap", follow && "is-following")}
@@ -535,7 +541,7 @@ export function PlannerYearMap({
 }
 
 /** "6 Apr": a week's Monday, always with its month. */
-function shortDay(monday: string, strings: PlannerGoalsStrings): string {
+export function shortDay(monday: string, strings: PlannerGoalsStrings): string {
   return strings.day({
     month: Number(monday.slice(5, 7)) - 1,
     day: Number(monday.slice(8, 10)),
@@ -572,7 +578,7 @@ function markText(
  * goal. Year and quarter rows are larger; only the current month and week are
  * coloured. `span` lays it across the four columns (goals with no objective).
  */
-function Split({
+export function Split({
   strong,
   current,
   span = false,
@@ -601,7 +607,7 @@ function Split({
  * is read out but not drawn. A quarter goal that lights up its column gets a
  * pencil to open the editor.
  */
-function MapUnit({
+export function MapUnit({
   goal,
   mark,
   label,
@@ -732,7 +738,7 @@ function MapUnit({
 }
 
 /** A weekly goal's pop-up: the goals above it, its tasks, and a way to add one. */
-function TaskPop({
+export function TaskPop({
   goal,
   map,
   today,

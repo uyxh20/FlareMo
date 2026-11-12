@@ -973,3 +973,174 @@ button.planner-yl.planner-ml[aria-expanded="true"]::after {
   border-color: var(--planner-p, var(--foreground));
   color: var(--planner-p, var(--foreground));
 }
+
+/* --- The timeline (goals-timeline.tsx) ------------------------------------ */
+
+/* The picker's row, with the view switch at its end. */
+.planner-viewbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.planner-viewtoggle {
+  display: inline-flex;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  padding: 2px;
+}
+.planner-viewtoggle button {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--muted-foreground);
+}
+.planner-viewtoggle button[aria-pressed="true"] {
+  background: var(--foreground);
+  color: var(--background);
+}
+.planner-viewtoggle button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* The north star (and, following one objective, its year goal) above the months. */
+.planner-tl-star {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 6px;
+}
+
+/* Pinned names, then twelve months left to right. */
+.planner-tl-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.planner-tl {
+  --tl-label: 156px;
+  --tl-col: 220px;
+  /* Where a quarter's label and heading stop while its months scroll past. */
+  --tl-pin: calc(var(--tl-label) + 8px);
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--tl-label) repeat(12, var(--tl-col));
+  column-gap: 8px;
+  row-gap: 6px;
+  width: max-content;
+}
+.planner-tl.is-following {
+  --tl-col: 260px;
+  --tl-pin: 0px;
+  grid-template-columns: repeat(12, var(--tl-col));
+}
+.planner-tl-label {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--background);
+  padding-right: 8px;
+}
+.planner-tl-corner {
+  grid-row: span 3;
+}
+.planner-tl-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-top: 9px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.planner-tl-year {
+  display: -webkit-box;
+  overflow: hidden;
+  border-radius: 6px;
+  text-align: left;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted-foreground);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.planner-tl-year:hover {
+  color: var(--foreground);
+}
+.planner-tl .planner-tl-q {
+  grid-column: span 3;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 6px;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.planner-tl-q > b {
+  position: sticky;
+  left: var(--tl-pin);
+  display: inline-block;
+  font-weight: inherit;
+}
+/* A quarter goal lies across three months: its heading stays in view. */
+.planner-tl-span > .planner-split {
+  overflow: visible;
+}
+.planner-tl-span > .planner-split > .planner-u {
+  border-radius: 9px;
+}
+.planner-tl-span .planner-u-h {
+  position: sticky;
+  left: calc(var(--tl-pin) + 11px);
+  align-self: flex-start;
+  max-width: calc(var(--tl-col) * 2);
+}
+.planner-tl .planner-ml {
+  padding-top: 2px;
+}
+.planner-tl .planner-wstrip {
+  margin: 0;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+.planner-tl .planner-wchip {
+  padding: 5px 6px;
+}
+.planner-tl-span {
+  grid-column: span 3;
+}
+/* A little air above each objective's first row. */
+.planner-tl-top {
+  margin-top: 10px;
+}
+.planner-tl-week {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.planner-tl-week .planner-wl {
+  padding-top: 2px;
+}
+.planner-tl button:focus-visible,
+.planner-tl a:focus-visible,
+.planner-tl-star button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .planner-tl {
+    --tl-label: 104px;
+    --tl-col: 200px;
+  }
+  .planner-tl.is-following {
+    --tl-col: min(78vw, 280px);
+  }
+}

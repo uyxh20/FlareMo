@@ -47,6 +47,12 @@ import {
   type PlannerGoalsStrings,
   usePlannerGoalsStrings,
 } from "./goals-strings";
+import { PlannerGoalsTimeline, PlannerGoalsViewToggle } from "./goals-timeline";
+import {
+  type PlannerGoalsView,
+  plannerReadGoalsView,
+  plannerWriteGoalsView,
+} from "./goals-timeline-model";
 import {
   PlannerCrumbs,
   PlannerGoalBody,
@@ -259,13 +265,27 @@ function YearView({
   today,
   onEdit,
 }: ViewProps & { year: number; today: string }) {
+  // The timeline is the default; the grid is one click away and the choice
+  // is remembered on this device (fork change, 2026-11-12).
+  const [view, setView] = useState<PlannerGoalsView>(plannerReadGoalsView);
+  const View = view === "grid" ? PlannerYearMap : PlannerGoalsTimeline;
   return (
-    <PlannerYearMap
+    <View
       currentWeek={data.current_week}
       key={year}
       map={plannerYearMap(data, year)}
       strings={strings}
       today={today}
+      toolbar={
+        <PlannerGoalsViewToggle
+          strings={strings}
+          view={view}
+          onChange={(next) => {
+            plannerWriteGoalsView(next);
+            setView(next);
+          }}
+        />
+      }
       onEdit={onEdit}
     />
   );

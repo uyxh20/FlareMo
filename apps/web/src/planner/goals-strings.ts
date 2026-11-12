@@ -113,6 +113,10 @@ export type PlannerGoalsStrings = {
     addTaskFailed: string;
     openCockpit: string;
     editGoal: string;
+    /** The Goals page's view switch: months across, or the grid down. */
+    view: string;
+    timeline: string;
+    grid: string;
   };
 
   editor: {
@@ -472,6 +476,9 @@ const en: PlannerGoalsStrings = {
     addTaskFailed: "Couldn't add the task.",
     openCockpit: "Open in cockpit",
     editGoal: "Edit goal",
+    view: "View",
+    timeline: "Timeline",
+    grid: "Grid",
   },
 
   editor: {
@@ -811,6 +818,9 @@ const zhCN: PlannerGoalsStrings = {
     addTaskFailed: "任务添加失败。",
     openCockpit: "在驾驶舱打开",
     editGoal: "编辑目标",
+    view: "视图",
+    timeline: "时间线",
+    grid: "网格",
   },
 
   editor: {
