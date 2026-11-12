@@ -55,6 +55,7 @@ import {
   plannerAssertToday,
   plannerResolveActor,
 } from "./planner-route-helpers";
+import { plannerVoiceApi } from "./planner-voice-api";
 
 // The planning cockpit's HTTP API (fork-owned add-on,
 // docs/planning-cockpit-implementation-plan.md, section 4), mounted lazily at
@@ -485,6 +486,9 @@ plannerApi.route("/", plannerAttachmentsApi);
 // The flywheel: the scorecard card and the tuning (planner-flywheel-api.ts,
 // docs/fork-flywheel.md).
 plannerApi.route("/", plannerFlywheelApi);
+// The weekly review's voice: Talk in the answer box (planner-voice-api.ts,
+// docs/fork-review-voice.md).
+plannerApi.route("/", plannerVoiceApi);
 // The morning page's idea line and "Start the day" (planner-morning-api.ts,
 // docs/fork-customizations.md "Morning page").
 plannerApi.route("/", plannerMorningApi);

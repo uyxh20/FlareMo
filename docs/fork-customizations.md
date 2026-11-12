@@ -194,6 +194,10 @@ Layout B of the morning card, chosen by Anon on 11 Nov 2026 (mockup and tuning: 
 - Data (`migrations/9019_planner_morning.sql`): `planner_morning_line` keeps every line with its direction, model, tokens, `shown`, `chosen` (still on screen at "Start the day") and `replaced_by` (the "Another" that replaced it): flywheel data, never deleted. `planner_morning_day` holds the day's `dismissed_at`. Both are in the registry, the backup and (the lines) the personal export.
 - Undo: remove the `PlannerMorningEntry` line and import in `workspace-header.tsx` (the page is then never opened), then the route, the API mount and the files listed under "Fork-owned files". The tables are additive; leave them.
 
+### 14. Talk: the weekly review by voice
+
+Built 11 Nov 2026 (see `docs/fork-review-voice.md`). A Talk button beside Send in Look back turns the answer box into a voice bar: the coach's newest message is read out, the microphone listens, and what was heard is sent as a typed answer. Listening and speaking run on Workers AI (Deepgram nova-3 and aura-2 by default, Whisper and MeloTTS with `FLAREMO_REVIEW_VOICE=basic`, hidden with `off`). Nothing is stored, no migration. Undo: `FLAREMO_REVIEW_VOICE=off`, or revert the commit.
+
 ## Upstream files with a hook-in
 
 These are all the upstream files this fork changes, compared with the upstream commit `main` last merged (named on the first line of `packages/domain/src/fork/upstream-manifest.txt`). `packages/domain/src/fork/upstream-hookins.test.ts` fails when a changed upstream file has no row here, or a row names a file that is back to upstream, so the list cannot drift. Line counts: `git diff --numstat <that commit> -- <file>`.
@@ -247,7 +251,7 @@ These are all the upstream files this fork changes, compared with the upstream c
 | `apps/worker/src/mcp-streamable.test.ts` | The six fork task tools added to the expected `tools/list`. |
 | `apps/worker/src/api/branding.test.ts`, `apps/worker/src/scheduled.test.ts` | Expectations for the default name, plus one case that clearing the custom name restores it. |
 | `tests/e2e/branding.spec.ts` | Expectations for the new name: the login text. Not run. |
-| `playwright.config.ts` | `cockpit`, `fork-ui` and `goals-review` added to the `memo-ui` project's `testMatch` alternation. |
+| `playwright.config.ts` | `cockpit`, `fork-ui`, `goals-review` and `review-voice` added to the `memo-ui` project's `testMatch` alternation. |
 | `scripts/persistence-manifest.mjs` | The planner and health tables in `RESTORE_TABLES`. |
 | `scripts/e2e-server.mjs` | `FLAREMO_REVIEW_AI:off` in the test bindings, so the weekly review e2e runs on the page's own drafts instead of waiting on Workers AI. |
 | `AGENTS.md` | A "Fork: shipping to live" section at the top; the production-deploy lines and the workflow line point at `scripts/fork/prod-deploy.mjs`. |
@@ -305,6 +309,7 @@ All new, none in conflict with anything upstream ships.
 | `apps/web/src/planner/overdue-reminders.tsx`, `packages/domain/src/planner/overdue.ts`, their tests | The sidebar's overdue reminder that opens the cockpit (section 8), and its read-only count behind `GET /api/app/planner/overdue`. |
 | `packages/domain/src/fork/search-catchup.ts`, `search-catchup.test.ts`, `apps/worker/src/fork/search-catchup.ts` | The search catch-up (section 9): indexes a few `not_indexed` entries every 10 minutes within the Free plan's query cap. |
 | `packages/domain/src/fork/export.ts`, `packages/domain/src/fork/export.test.ts`, `apps/worker/src/fork/weekly-backup.ts`, `apps/worker/src/fork/weekly-backup.test.ts` | The fork section of the personal export and the weekly R2 backup (section 10). |
+| `apps/worker/src/fork/review-voice.ts`, `apps/worker/src/routes/planner-voice-api.ts`, `apps/web/src/planner/review-voice.ts`, `review-voice-bar.tsx`, their tests, `tests/e2e/review-voice.spec.ts`, `tests/e2e/fixtures/review-voice-*.wav`, `docs/fork-review-voice.md` | Talk in the weekly review (section 14): the Workers AI voice calls and their routes, the loop and the voice bar, and the Talk button hook in `review-back.tsx`. |
 | `docs/fork-customizations.md`                                                        | This file.                                                                                                                                                                                                                                     |
 
 ## Removed fork code (14 Oct 2026, cleanup wave 1)
