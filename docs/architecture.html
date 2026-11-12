@@ -947,6 +947,7 @@
         <figcaption>Fork fields sit beside upstream ones, so an upstream update can't break the cockpit. <b>Live since 2026-10-13:</b> the task's Goal field picks from this week's goals instead of projects. Project pickers are gone from the cockpit, but the old project links stay in the database. Code: <code>packages/domain/src/planner/</code>, page <code>apps/web/src/planner/cockpit-page.tsx</code>.</figcaption>
       </figure>
       <p class="note">A task can also carry <a href="#files">files</a>, and its Notes have an <b>Ask agent</b> button that opens the task's own <a href="#agent">agent chat</a>. Six cockpit tools are open to outside AI agents over <code>/mcp</code> (see <a href="#access">Login, apps and MCP</a>).</p>
+      <p class="note"><b>Notes and comments as Markdown</b> <span class="chip">fork</span> <span class="chip">on dev since 2026-11-12</span>: a task's Notes open drawn: to-do boxes, headings (a numbered line right above a list counts as one), lists, quotes, bold, code and links. A to-do can be ticked while reading, which rewrites that one line (<code>[ ]</code> to <code>[x]</code>) and saves at once; a click on the text or Edit opens the plain box with a small toolbar. Comments are drawn the same way, with tickable boxes and Write and Preview tabs. Nothing is stored differently: notes and comments are still the plain text typed, so search, the review, MCP and the export read them as before (<code>apps/web/src/planner/task-markdown.tsx</code>).</p>
       <p class="note"><b>Sidebar reminders.</b> The red "N overdue" line and the "still open today" box above the time horizon count cockpit tasks that are open (not done, not dropped) and due before or on today, from any month, and both open the cockpit. The count is one read-only query (<code>GET /api/app/planner/overdue</code>, <code>packages/domain/src/planner/overdue.ts</code>) that never writes to D1. Upstream's version counted only this month's first 100 tasks and opened the hidden Projects page; the one-line swap is in <code>flaremo-explorer.tsx</code>.</p>
     </section>
 
@@ -1497,7 +1498,7 @@
           </tbody>
         </table>
       </div>
-      <p class="where">Versions not listed (#18, #20–21, #29–30) are not recorded on this page. Dev runs main (#53) plus the Talk branch, the morning + button and the proposed-change removal (branch <code>dev/remove-agent-proposal</code>, 2026-11-12) with the dev agent switched on since 2026-11-10; the dev Worker is shared, so the next dev build must include every branch still being tried there. Each feature's full notes: <code>docs/fork-customizations.md</code>.</p>
+      <p class="where">Versions not listed (#18, #20–21, #29–30) are not recorded on this page. Dev runs main (#54) plus the Talk branch with the voice mic, the proposed-change removal and task notes and comments as Markdown (branch <code>dev/notes-markdown</code>, dev version 98e2779d, 2026-11-12); the dev Worker is shared, so the next dev build must include every branch still being tried there. Each feature's full notes: <code>docs/fork-customizations.md</code>.</p>
     </section>
   </main>
 </div>
