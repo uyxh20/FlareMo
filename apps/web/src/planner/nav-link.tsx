@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { CalendarCheck2Icon, GaugeIcon, TargetIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { NAV_ACTIVE_CLASS, NAV_ITEM_CLASS } from "@/components/nav-item-styles";
 import { HealthNavLink } from "@/health/nav-link"; // fork: health tracker
 import { useI18n } from "@/i18n";
 import { plannerFetchReviewStatus } from "./goals-api";
@@ -31,12 +32,10 @@ import { usePlannerToday } from "./use-planner-clock";
 // closes with the reviewed week, until its chapter is saved too
 // (`GET /period-review/status`, docs/planning-cockpit-period-review.md).
 
-const LINK_CLASS =
-  "flex h-9 items-center gap-3 rounded-lg px-2.5 text-muted-foreground motion-safe:transition-[background-color,color,transform] motion-safe:duration-150 hover:bg-muted hover:text-foreground motion-safe:hover:translate-x-0.5";
-
-const ACTIVE = {
-  className: "!bg-accent !text-accent-foreground font-medium",
-};
+// Same row and active look as the explorer's own links (Notes): one shared
+// style, so every sidebar item matches and only the current page is raised.
+const LINK_CLASS = NAV_ITEM_CLASS;
+const ACTIVE = { className: NAV_ACTIVE_CLASS };
 
 function PlannerLink({
   to,
@@ -98,19 +97,19 @@ export function PlannerNavLink({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
       <PlannerLink
-        icon={<GaugeIcon className="size-4 shrink-0" />}
+        icon={<GaugeIcon />}
         label={plannerNavLabelFor(locale)}
         to="/cockpit"
         onNavigate={onNavigate}
       />
       <PlannerLink
-        icon={<TargetIcon className="size-4 shrink-0" />}
+        icon={<TargetIcon />}
         label={plannerGoalsNavLabelFor(locale)}
         to="/goals"
         onNavigate={onNavigate}
       />
       <PlannerLink
-        icon={<CalendarCheck2Icon className="size-4 shrink-0" />}
+        icon={<CalendarCheck2Icon />}
         label={plannerReviewNavLabelFor(locale)}
         to="/review"
         onNavigate={onNavigate}
