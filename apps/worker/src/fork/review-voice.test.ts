@@ -21,8 +21,11 @@ function fakeAi(answers: Record<string, (input: unknown) => unknown>) {
 }
 
 describe("reviewVoiceMode", () => {
-  it("defaults to the natural voice and honours basic and off", () => {
-    expect(reviewVoiceMode({ AI: {} })).toBe("natural");
+  it("is off unless a voice is asked for, and honours natural and basic", () => {
+    expect(reviewVoiceMode({ AI: {} })).toBe("off");
+    expect(reviewVoiceMode({ AI: {}, FLAREMO_REVIEW_VOICE: "natural" })).toBe(
+      "natural",
+    );
     expect(reviewVoiceMode({ AI: {}, FLAREMO_REVIEW_VOICE: "basic" })).toBe(
       "basic",
     );

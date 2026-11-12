@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 
 // Talk in the weekly review (fork-owned add-on, docs/fork-review-voice.md).
+// Off by default since 12 Nov 2026; the first two cases turn it on through
+// the stubbed GET /voice.
 // Registered in the opt-in memo-ui project through the regex in
 // playwright.config.ts; like every e2e spec here it runs only when asked.
 //
@@ -101,7 +103,7 @@ test("Talk reads the question, listens, and sends what was heard", async ({
   await shot(page, "6-back-to-typing");
 });
 
-test("the send bubble ends the turn at once, and the next question is read out", async ({
+test("the mic button pauses and resumes, the send bubble ends the turn, and the next question is read out", async ({
   page,
 }) => {
   const voice = await stubVoice(page);
@@ -116,6 +118,22 @@ test("the send bubble ends the turn at once, and the next question is read out",
   await expect(bar).toHaveAttribute("data-state", "listening", {
     timeout: 10_000,
   });
+  // The mic button pauses recording: the clock stops and the turn stays open.
+  const mic = page.getByTestId("planner-review-voice-mic");
+  const clock = page.getByTestId("planner-review-voice-time");
+  await page.waitForTimeout(1_200);
+  await mic.click();
+  await expect(mic).toHaveAttribute("aria-pressed", "true");
+  await expect(bar).toContainText(/Mic paused|麦克风已暂停/);
+  const held = await clock.textContent();
+  await page.waitForTimeout(2_200);
+  await expect(clock).toHaveText(held ?? "");
+  expect(voice.clips()).toBe(0);
+  await shot(page, "3b-mic-paused");
+  await mic.click();
+  await expect(mic).toHaveAttribute("aria-pressed", "false");
+  await expect(bar).toContainText(/Listening|正在听/);
+
   await page.getByTestId("planner-review-voice-done").click();
   await expect(
     page.getByTestId("planner-review-chat").getByText(HEARD).last(),
@@ -127,4 +145,16 @@ test("the send bubble ends the turn at once, and the next question is read out",
   await expect.poll(() => voice.spoken.length).toBeGreaterThan(before);
   await expect(bar).toHaveAttribute("data-state", "speaking");
   await shot(page, "5-next-question-read-out");
+});
+
+test("Talk is hidden unless the Worker turns a voice on", async ({ page }) => {
+  // No stub: the local Worker has FLAREMO_REVIEW_VOICE unset, so voice is off.
+  await page.goto("/review?part=back");
+  await expect(page.getByTestId("planner-review-chat")).toBeVisible();
+  const start = page.getByTestId("planner-start-look-back");
+  if (await start.isVisible()) await start.click();
+  await expect(page.getByTestId("planner-review-composer")).toBeEnabled();
+  await page.waitForTimeout(1_000);
+  await expect(page.getByTestId("planner-review-talk")).toHaveCount(0);
+  await shot(page, "0-voice-off-no-talk-button");
 });
