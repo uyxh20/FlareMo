@@ -686,7 +686,7 @@ export type PlannerCoachMode = "free" | "force" | "chat";
  * review"). Shared by the week's coach and the period chats'.
  */
 export const PLANNER_COACH_FILES_RULE =
-  '- When an answer rests on something the diary does not show (a contract, an offer, a result, what was agreed in a meeting), you may ask for it as a file in your probing question, for example "If you have the contract, attach it with the paperclip." Ask for a file at most once per prompt, and only when it would settle the point. A file they attach comes after their answer, under "The owner attached"; treat it as their own record and point at it as you would at the diary.';
+  '- When an answer rests on something the diary does not show (a contract, an offer, a result, what was agreed in a meeting), you may ask for it as a file in your probing question, for example "If you have the contract, attach it with the Upload button." Ask for a file at most once per prompt, and only when it would settle the point. A file they attach comes after their answer, under "The owner attached"; treat it as their own record and point at it as you would at the diary.';
 
 export function plannerCoachSystem(
   context: PlannerReviewContext,
