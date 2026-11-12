@@ -1,4 +1,9 @@
-import { Loader2Icon, MessageCircleIcon } from "lucide-react";
+import {
+  Loader2Icon,
+  MessageCircleIcon,
+  MicIcon,
+  MicOffIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PlannerGoalsStrings } from "./goals-strings";
@@ -16,8 +21,10 @@ export function PlannerReviewVoiceBar({
   notice,
   level,
   seconds = 0,
+  paused = false,
   strings,
   onDone,
+  onMic,
   onSkip,
   onRetry,
   onType,
@@ -27,8 +34,12 @@ export function PlannerReviewVoiceBar({
   level: number;
   /** How long you have been talking, while listening. */
   seconds?: number;
+  /** While listening: the mic is paused, the turn still open. */
+  paused?: boolean;
   strings: PlannerGoalsStrings;
   onDone: () => void;
+  /** The mic button: pause or resume recording. */
+  onMic?: () => void;
   onSkip: () => void;
   onRetry: () => void;
   onType: () => void;
@@ -38,7 +49,9 @@ export function PlannerReviewVoiceBar({
     state === "speaking"
       ? copy.speaking
       : state === "listening"
-        ? copy.listening
+        ? paused
+          ? copy.paused
+          : copy.listening
         : state === "hearing"
           ? copy.hearing
           : state === "thinking"
@@ -48,7 +61,7 @@ export function PlannerReviewVoiceBar({
                 ? copy.noMic
                 : copy.failed
               : copy.waiting;
-  const moving = state === "speaking" || state === "listening";
+  const moving = state === "speaking" || (state === "listening" && !paused);
   const message =
     state === "error" ? (notice === "mic" ? null : notice) : notice;
 
@@ -92,7 +105,7 @@ export function PlannerReviewVoiceBar({
                 "flex-1 rounded-[3px] transition-[height] duration-150",
                 state === "speaking"
                   ? "planner-voice-bar bg-brand-500"
-                  : state === "listening"
+                  : state === "listening" && !paused
                     ? "bg-foreground"
                     : "bg-border",
               )}
@@ -108,7 +121,7 @@ export function PlannerReviewVoiceBar({
       </div>
       {state === "listening" && !message && (
         <p className="text-[13px] text-muted-foreground">
-          {copy.listeningHint}
+          {paused ? copy.pausedHint : copy.listeningHint}
         </p>
       )}
       {message && (
@@ -118,6 +131,20 @@ export function PlannerReviewVoiceBar({
         {state === "speaking" && (
           <Button className="flex-1" variant="outline" onClick={onSkip}>
             {copy.skip}
+          </Button>
+        )}
+        {state === "listening" && onMic && (
+          <Button
+            aria-label={paused ? copy.micResume : copy.micPause}
+            aria-pressed={paused}
+            className={cn(paused && "border-brand-500 text-brand-500")}
+            data-testid="planner-review-voice-mic"
+            size="icon"
+            title={paused ? copy.micResume : copy.micPause}
+            variant="outline"
+            onClick={onMic}
+          >
+            {paused ? <MicOffIcon /> : <MicIcon />}
           </Button>
         )}
         {state === "listening" && (

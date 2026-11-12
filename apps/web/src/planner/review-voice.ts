@@ -117,6 +117,8 @@ export function usePlannerReviewVoice({
   const [notice, setNotice] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
   const [seconds, setSeconds] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
 
   const props = useRef({ lines, busy, canAnswer, onHeard, notHeard });
   props.current = { lines, busy, canAnswer, onHeard, notHeard };
@@ -248,8 +250,11 @@ export function usePlannerReviewVoice({
 
     // Pauses never end the answer; you do, with the send bubble. This only
     // shows your level and the time, and sends at the safety cap.
-    const started = Date.now();
+    // Time counts only while the mic records: a paused stretch is not sent.
+    let recorded = 0;
     setSeconds(0);
+    pausedRef.current = false;
+    setPaused(false);
     const ctx = context.current;
     let analyser: AnalyserNode | null = null;
     if (ctx) {
@@ -259,15 +264,16 @@ export function usePlannerReviewVoice({
     }
     const samples = new Float32Array(1024);
     const id = window.setInterval(() => {
+      if (pausedRef.current) return;
+      recorded += 100;
       if (analyser) {
         analyser.getFloatTimeDomainData(samples);
         let sum = 0;
         for (const sample of samples) sum += sample * sample;
         setLevel(Math.min(1, Math.sqrt(sum / samples.length) * 8));
       }
-      const ran = Date.now() - started;
-      setSeconds(Math.floor(ran / 1000));
-      if (ran > PLANNER_VOICE_MAX_LISTEN_MS) stopRecorder(true);
+      setSeconds(Math.floor(recorded / 1000));
+      if (recorded > PLANNER_VOICE_MAX_LISTEN_MS) stopRecorder(true);
     }, 100);
     timers.current.push(id);
   }, [go, stopRecorder]);
@@ -359,6 +365,25 @@ export function usePlannerReviewVoice({
     go("off");
   }, [go, release]);
 
+  /**
+   * The mic button: pause recording (nothing is captured, the turn stays
+   * open) and resume it. Send works either way.
+   */
+  const toggleMic = useCallback(() => {
+    const active = recorder.current;
+    if (phase.current !== "listening" || !active) return;
+    if (active.state === "recording") {
+      active.pause();
+      pausedRef.current = true;
+      setPaused(true);
+      setLevel(0);
+    } else if (active.state === "paused") {
+      active.resume();
+      pausedRef.current = false;
+      setPaused(false);
+    }
+  }, []);
+
   /** Send (the chat bubble): end your turn and send what was said. */
   const finish = useCallback(() => {
     if (phase.current === "listening") stopRecorder(true);
@@ -387,6 +412,8 @@ export function usePlannerReviewVoice({
     notice,
     level,
     seconds,
+    paused,
+    toggleMic,
     start,
     stop,
     finish,
