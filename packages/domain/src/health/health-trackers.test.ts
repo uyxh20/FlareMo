@@ -88,6 +88,24 @@ describe("the reader with an owner's tracker", () => {
     expect(read("hyrox tomorrow")).toEqual([]);
   });
 
+  it("never turns a wellness word saved as an extra Training word into training", () => {
+    // Live had "sauna" as an extra Training word from before Wellness existed.
+    const config = {
+      builtins: { training: { words: ["sauna", "hyrox"], blocked: [] } },
+    };
+    const read = (content: string) =>
+      healthParseMemo(
+        { content, createdAt: "2026-10-14T10:00:00.000Z", tags: ["fitness"] },
+        config,
+      ).map((entry) => [entry.kind, entry.variant, entry.minutes]);
+    expect(read("#fitness sauna 20 min")).toEqual([["wellness", "sauna", 20]]);
+    expect(read("sauna 20 min")).toEqual([["wellness", "sauna", 20]]);
+    expect(read("hyrox done, sauna after")).toEqual([
+      ["wellness", "sauna", null],
+      ["training", null, null],
+    ]);
+  });
+
   it("is the fixed reader when nothing is set", () => {
     const text = "crossfit done, wim hof 10, went out til 3";
     const at = "2026-10-14T10:00:00.000Z";

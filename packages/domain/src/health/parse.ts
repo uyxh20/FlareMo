@@ -443,6 +443,14 @@ const WELLNESS_WORDS: Array<[RegExp, HealthWellnessVariant]> = [
   [/\bspa\b/g, "spa"],
 ];
 
+/** True when a word or phrase names a wellness session ("sauna", "ice bath"). */
+export function healthIsWellnessWord(word: string): boolean {
+  const lower = word.toLowerCase();
+  return WELLNESS_WORDS.some(([pattern]) =>
+    new RegExp(pattern.source).test(lower),
+  );
+}
+
 type WellnessHit = {
   variant: HealthWellnessVariant;
   minutes: number | null;
@@ -805,7 +813,13 @@ export function healthParseMemo(
   for (const kind of ["training", "breath", "night_out", "wellness"] as const) {
     const extra = builtins[kind];
     if (!extra || entries.some((entry) => entry.kind === kind)) continue;
-    const hit = findWord(context, extra.words, kind === "night_out");
+    // A wellness word (sauna, massage...) saved as an extra Training word,
+    // before Wellness was its own kind, never makes a training session.
+    const words =
+      kind === "training"
+        ? extra.words.filter((word) => !healthIsWellnessWord(word))
+        : extra.words;
+    const hit = findWord(context, words, kind === "night_out");
     if (!hit.found) continue;
     if (kind === "night_out") {
       const read = readNight(hit.sentence, text);
