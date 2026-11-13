@@ -200,6 +200,10 @@ export function plannerHealthLines(context: PlannerReviewContext): string[] {
     (entry) =>
       `${dayName(entry.day)} ${HEALTH_VARIANTS[entry.variant ?? ""] ?? entry.variant ?? "session"}${entry.minutes ? ` ${entry.minutes} min` : ""}${feel(entry.feel)}`,
   );
+  const wellness = of("wellness").map(
+    (entry) =>
+      `${dayName(entry.day)} ${(entry.variant ?? "session").replace("_", " ")}${entry.minutes ? ` ${entry.minutes} min` : ""}${feel(entry.feel)}`,
+  );
   const nights = of("night_out").map((entry) => {
     const parts = [
       entry.home_at ? `home ${entry.home_at}` : null,
@@ -215,6 +219,11 @@ export function plannerHealthLines(context: PlannerReviewContext): string[] {
     `Health tracker for this week, read from the diary by fixed word rules or set by hand. Its totals are exact; copy them:`,
     `- Training: ${plural(summary.training.sessions, "session")}, target ${summary.training.target} a week${training.length ? `. ${training.join("; ")}` : ""}`,
     `- Breathwork: ${summary.breath.days} of ${summary.breath.target} days (${plural(summary.breath.sessions, "session")}, ${summary.breath.minutes} min)${breath.length ? `. ${breath.join("; ")}` : ""}`,
+    ...(wellness.length
+      ? [
+          `- Wellness (sauna, cold plunge, massage; not training, no target): ${plural(wellness.length, "session")}. ${wellness.join("; ")}`,
+        ]
+      : []),
     `- Nights out: ${plural(summary.night_out.nights, "night")}, ${plural(summary.night_out.units, "unit")} this week${nights.length ? `. ${nights.join("; ")}` : ""}. Year so far: ${summary.night_out.year_used} of ${summary.night_out.year_target} units.${
       summary.night_out.needs_check
         ? ` ${plural(summary.night_out.needs_check, "night")} still ${summary.night_out.needs_check === 1 ? "needs" : "need"} a check.`

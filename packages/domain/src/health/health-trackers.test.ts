@@ -170,9 +170,10 @@ describe("health trackers", () => {
       ["training", true],
       ["breath", true],
       ["night_out", true],
-      [list[3]?.id, false],
+      ["wellness", true],
+      [list[4]?.id, false],
     ]);
-    expect(list[3]?.kind).toBe(`t:${list[3]?.id}`);
+    expect(list[4]?.kind).toBe(`t:${list[4]?.id}`);
   });
 
   it("reads saved memos with a new tracker, previews and re-reads on change", async () => {
@@ -251,7 +252,7 @@ describe("health trackers", () => {
     expect(events.map((event) => event.action)).toEqual(["create", "archive"]);
     expect(
       (await healthListTrackers(rt.db, rt.user.id)).map((t) => t.id),
-    ).toEqual(["training", "breath", "night_out"]);
+    ).toEqual(["training", "breath", "night_out", "wellness"]);
     const week = await healthReadWeek(rt.db, { userId: rt.user.id });
     expect(week.trackers).toEqual([]);
   });

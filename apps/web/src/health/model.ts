@@ -53,7 +53,7 @@ export function healthVariantLabel(variant: string | null): string {
   return (variant && healthStrings.variant[variant]) || "";
 }
 
-/** The words on a label chip: "Gym · Back", "Wim Hof · 10 min", "Night out · Fri · home 03:30 · 1". */
+/** The words on a label chip: "Fitness · Gym · Back", "Fitness · Sauna · 20 min", "Wim Hof · 10 min", "Night out · Fri · home 03:30 · 1". */
 export function healthChipText(
   entry: HealthEntryDto,
   trackers?: readonly HealthTrackerDto[],
@@ -75,12 +75,21 @@ export function healthChipText(
     const variant = entry.variant ?? "gym";
     const parts =
       variant === "gym" || variant === "crossfit" || variant === "cardio"
-        ? [healthVariantLabel(variant)]
-        : [s.variant.gym, healthVariantLabel(variant)];
+        ? [s.fitness, healthVariantLabel(variant)]
+        : [s.fitness, s.variant.gym, healthVariantLabel(variant)];
     if (variant === "cardio" && entry.minutes) {
       parts.push(s.chip.minutes(entry.minutes));
     }
     return parts.join(" · ");
+  }
+  if (entry.kind === "wellness") {
+    return [
+      s.fitness,
+      healthVariantLabel(entry.variant) || s.kind.wellness,
+      entry.minutes ? s.chip.minutes(entry.minutes) : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
   }
   if (entry.kind === "breath") {
     return [
@@ -116,6 +125,15 @@ export type HealthStripDay = {
   isToday: boolean;
 };
 
+/** Days this week with a Fitness entry of either kind (gym or wellness). */
+export function healthFitnessDays(entries: readonly HealthEntryDto[]): number {
+  return new Set(
+    entries
+      .filter((e) => e.kind === "training" || e.kind === "wellness")
+      .map((e) => e.day),
+  ).size;
+}
+
 /** Seven days from `start`, marking today. */
 export function healthStripDays(
   start: string,
@@ -134,12 +152,17 @@ export function healthStripDays(
  */
 export function healthDotState(
   entries: readonly HealthEntryDto[],
-  kind: HealthEntryKind,
+  kind: HealthEntryKind | readonly HealthEntryKind[],
   day: string,
 ): { state: HealthDotState; count: number } {
-  const here = entries.filter((e) => e.kind === kind && e.day === day);
+  const kinds: readonly HealthEntryKind[] = Array.isArray(kind)
+    ? kind
+    : [kind as HealthEntryKind];
+  const here = entries.filter((e) => kinds.includes(e.kind) && e.day === day);
   if (here.length === 0) return { state: "none", count: 0 };
-  if (kind !== "night_out") return { state: "done", count: here.length };
+  if (!kinds.includes("night_out")) {
+    return { state: "done", count: here.length };
+  }
   if (here.some((e) => e.needs_check)) {
     return { state: "check", count: here.length };
   }
@@ -156,6 +179,8 @@ export type HealthYearWeek = {
   start: string;
   training: number;
   breath: number;
+  /** Days with a sauna, cold plunge, massage and the like. */
+  wellness: number;
   out: number;
   /** Days with an entry, per owner tracker kind. */
   trackers: Record<string, number>;
@@ -167,6 +192,7 @@ type YearDay = {
   day: string;
   training: number;
   breath: number;
+  wellness?: number;
   night_out: number | null;
   trackers?: Record<string, number>;
 };
@@ -185,6 +211,7 @@ export function healthYearWeeks(
       start,
       training: 0,
       breath: 0,
+      wellness: 0,
       out: 0,
       trackers: {},
       future: start > today,
@@ -195,6 +222,7 @@ export function healthYearWeeks(
     if (!week) continue;
     week.training += day.training;
     if (day.breath > 0) week.breath += 1;
+    if ((day.wellness ?? 0) > 0) week.wellness += 1;
     week.out += day.night_out ?? 0;
     for (const [kind, count] of Object.entries(day.trackers ?? {})) {
       if (count > 0) week.trackers[kind] = (week.trackers[kind] ?? 0) + 1;

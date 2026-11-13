@@ -42,9 +42,10 @@ import {
 type BatchItems = Parameters<FlareMoDb["batch"]>[0];
 
 const BUILTIN_LABELS: Record<HealthKind, string> = {
-  training: "Training",
+  training: "Fitness · Gym",
   breath: "Breath",
   night_out: "Nights out",
+  wellness: "Fitness · Wellness",
 };
 
 function parseWords(json: string): string[] {
@@ -407,7 +408,10 @@ export async function healthSetBuiltinWords(
       kind: input.kind,
       label: BUILTIN_LABELS[input.kind],
       color: "",
-      measure: input.kind === "breath" ? "minutes" : "days",
+      measure:
+        input.kind === "breath" || input.kind === "wellness"
+          ? "minutes"
+          : "days",
       wordsJson: JSON.stringify(input.words.words),
       blockedJson: JSON.stringify(input.words.blocked),
       goalId: null,

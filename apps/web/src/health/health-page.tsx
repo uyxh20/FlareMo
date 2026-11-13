@@ -125,12 +125,21 @@ function WeekSection() {
       hint={s.weekRange(healthDayShort(start), healthDayShort(end))}
       title={s.thisWeek}
     >
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Tile
           big={String(summary.training.sessions)}
           kind="training"
           note={s.trainingNote(summary.training.sessions)}
           title={s.trainingTile}
+        />
+        <Tile
+          big={String(summary.wellness?.sessions ?? 0)}
+          kind="wellness"
+          note={s.wellnessNote(
+            summary.wellness?.days ?? 0,
+            summary.wellness?.minutes ?? 0,
+          )}
+          title={s.wellnessTile}
         />
         <Tile
           big={String(summary.breath.days)}
@@ -221,14 +230,14 @@ type GridRow = {
   full: number;
 };
 
-const GRID_ROWS: GridRow[] = (["training", "breath", "night_out"] as const).map(
-  (kind) => ({
-    kind,
-    label: healthStrings.kind[kind],
-    kindClass: `health-kind-${kind}`,
-    full: kind === "training" ? 3 : kind === "breath" ? 7 : 2,
-  }),
-);
+const GRID_ROWS: GridRow[] = (
+  ["training", "wellness", "breath", "night_out"] as const
+).map((kind) => ({
+  kind,
+  label: healthStrings.kind[kind],
+  kindClass: `health-kind-${kind}`,
+  full: kind === "training" ? 3 : kind === "night_out" ? 2 : 7,
+}));
 
 function gridRowsWith(trackers: readonly HealthTrackerDto[] | undefined) {
   return [
@@ -298,9 +307,11 @@ function YearGrid({
                       ? week.training
                       : row.kind === "breath"
                         ? week.breath
-                        : row.kind === "night_out"
-                          ? week.out
-                          : (week.trackers[row.kind] ?? 0);
+                        : row.kind === "wellness"
+                          ? week.wellness
+                          : row.kind === "night_out"
+                            ? week.out
+                            : (week.trackers[row.kind] ?? 0);
                   const text =
                     row.kind === "training"
                       ? s.sessions(value)

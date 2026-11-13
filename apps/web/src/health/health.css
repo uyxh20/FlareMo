@@ -1,8 +1,8 @@
 /*
  * The health tracker's colours (fork-owned add-on, docs/fork-health-tracker.md).
- * Three kinds, defined once here with light and dark values: training takes the
+ * Four kinds, defined once here with light and dark values: training takes the
  * brand flame (so it follows the accent preset), breath is a teal, a night out is
- * a violet. Layout is Tailwind in the components; this file holds only what
+ * a violet, wellness (sauna, cold plunge) a sea green. Layout is Tailwind in the components; this file holds only what
  * utilities cannot say well: the kind tokens, the strip's dots and the year
  * grid's cells. Unlayered on purpose, like planner/goals.css.
  */
@@ -14,6 +14,8 @@
   --health-breath-ink: oklch(0.4 0.075 195);
   --health-out: oklch(0.56 0.15 295);
   --health-out-ink: oklch(0.42 0.14 295);
+  --health-wellness: oklch(0.6 0.1 165);
+  --health-wellness-ink: oklch(0.4 0.08 165);
   --health-soft: 13%;
 }
 
@@ -24,6 +26,8 @@
   --health-breath-ink: oklch(0.84 0.08 195);
   --health-out: oklch(0.72 0.13 295);
   --health-out-ink: oklch(0.84 0.1 295);
+  --health-wellness: oklch(0.76 0.1 165);
+  --health-wellness-ink: oklch(0.86 0.08 165);
   --health-soft: 20%;
 }
 
@@ -35,6 +39,10 @@
 .health-kind-breath {
   --k: var(--health-breath);
   --k-ink: var(--health-breath-ink);
+}
+.health-kind-wellness {
+  --k: var(--health-wellness);
+  --k-ink: var(--health-wellness-ink);
 }
 .health-kind-night_out {
   --k: var(--health-out);

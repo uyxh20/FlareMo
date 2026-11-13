@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   type HealthDotState,
   healthDotState,
+  healthFitnessDays,
   healthFormatUnits,
   healthStripDays,
 } from "./model";
@@ -26,17 +27,56 @@ import "./health.css";
 
 // The week strip on top of the diary timeline (fork-owned add-on,
 // docs/fork-health-tracker.md): a compact grid of this week, Monday to Sunday,
-// one row per kind, with how many times each happened this week. A filled dot is something done, a half dot is half a unit, a dashed
+// one row per kind (Fitness with Gym and Wellness under it), with how many times each happened this week. A filled dot is something done, a half dot is half a unit, a dashed
 // ring is a night that still needs a home time. Tapping it opens the Health page.
 //
 // It shares `useHealthThisWeek` with the Health page: one request, one cache
 // entry. After a note is saved the timeline refreshes its stats; the strip
 // listens for that and reads again.
 
-const ROWS: Array<{ kind: HealthKind; label: string }> = [
-  { kind: "training", label: healthStrings.kind.training },
-  { kind: "breath", label: healthStrings.kind.breath },
-  { kind: "night_out", label: healthStrings.kind.night_out },
+// Fitness is one family (#fitness): a row for any day with either kind, then
+// Gym (training, which counts toward the target) and Wellness (sauna, cold
+// plunge, massage; counted on its own) as indented rows under it.
+type StripRow = {
+  key: string;
+  kinds: readonly HealthKind[];
+  label: string;
+  kindClass: string;
+  sub?: boolean;
+};
+const ROWS: StripRow[] = [
+  {
+    key: "fitness",
+    kinds: ["training", "wellness"],
+    label: healthStrings.fitness,
+    kindClass: "health-kind-training",
+  },
+  {
+    key: "training",
+    kinds: ["training"],
+    label: healthStrings.kind.training,
+    kindClass: "health-kind-training",
+    sub: true,
+  },
+  {
+    key: "wellness",
+    kinds: ["wellness"],
+    label: healthStrings.kind.wellness,
+    kindClass: "health-kind-wellness",
+    sub: true,
+  },
+  {
+    key: "breath",
+    kinds: ["breath"],
+    label: healthStrings.kind.breath,
+    kindClass: "health-kind-breath",
+  },
+  {
+    key: "night_out",
+    kinds: ["night_out"],
+    label: healthStrings.kind.night_out,
+    kindClass: "health-kind-night_out",
+  },
 ];
 
 const STATE_TEXT: Record<HealthDotState, string> = {
@@ -55,7 +95,7 @@ function Dot({
   weekday,
 }: {
   entries: readonly HealthEntryDto[];
-  kind: HealthEntryKind;
+  kind: HealthEntryKind | readonly HealthEntryKind[];
   kindClass: string;
   day: string;
   weekday: string;
@@ -66,7 +106,7 @@ function Dot({
     <span
       className={cn("flex h-5 items-center justify-center", kindClass)}
       data-day={day}
-      data-kind={kind}
+      data-kind={Array.isArray(kind) ? kind.join("+") : kind}
       data-state={state}
       data-testid="health-dot"
       title={text ? `${weekday} · ${text}` : undefined}
@@ -102,7 +142,7 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
 
   if (!visible) return null;
   if (query.isPending) {
-    return <Skeleton className="h-[8.25rem] rounded-xl" />;
+    return <Skeleton className="h-[10.75rem] rounded-xl" />;
   }
   // A strip that cannot load stays out of the timeline's way.
   if (query.isError || !query.data) return null;
@@ -111,8 +151,10 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
   const own = healthOwnTrackers(trackers);
   const days = healthStripDays(start, today);
   // What happened this week, no targets (the owner never set any).
-  const counts: Record<HealthKind, string> = {
+  const counts: Record<string, string> = {
+    fitness: String(healthFitnessDays(entries)),
     training: String(summary.training.sessions),
+    wellness: String(summary.wellness?.sessions ?? 0),
     breath: String(summary.breath.days),
     night_out: healthFormatUnits(summary.night_out.units),
   };
@@ -141,13 +183,16 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
         <span />
         {ROWS.map((row) => (
           <RowCells
-            count={counts[row.kind]}
+            count={counts[row.key] ?? "0"}
             days={days}
             entries={entries}
-            key={row.kind}
-            kind={row.kind}
-            kindClass={`health-kind-${row.kind}`}
+            key={row.key}
+            kind={
+              row.kinds.length === 1 ? (row.kinds[0] as HealthKind) : row.kinds
+            }
+            kindClass={row.kindClass}
             label={row.label}
+            sub={row.sub}
           />
         ))}
         {own.map((tracker) => (
@@ -176,17 +221,26 @@ function RowCells({
   days,
   entries,
   count,
+  sub = false,
 }: {
-  kind: HealthEntryKind;
+  kind: HealthEntryKind | readonly HealthEntryKind[];
   kindClass: string;
   label: string;
   days: ReturnType<typeof healthStripDays>;
   entries: readonly HealthEntryDto[];
   count: string;
+  sub?: boolean;
 }) {
   return (
     <>
-      <span className="truncate text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "truncate text-muted-foreground",
+          sub && "pl-2.5 text-[0.6875rem]",
+        )}
+      >
+        {label}
+      </span>
       {days.map((day) => (
         <Dot
           day={day.day}

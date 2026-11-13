@@ -17,7 +17,12 @@ import { z } from "zod";
  */
 export const FORK_HEALTH_TIME_ZONE = "Europe/Copenhagen";
 
-export const healthKinds = ["training", "breath", "night_out"] as const;
+export const healthKinds = [
+  "training",
+  "breath",
+  "night_out",
+  "wellness",
+] as const;
 export type HealthKind = (typeof healthKinds)[number];
 
 /** The kind of a tracker the owner made in the app: `t:` and its id. */
@@ -48,6 +53,20 @@ export type HealthTrainingVariant = (typeof healthTrainingVariants)[number];
 
 export const healthBreathVariants = ["wim_hof", "meditation"] as const;
 export type HealthBreathVariant = (typeof healthBreathVariants)[number];
+
+/**
+ * Wellness (since 13 Nov 2026): recovery that goes under #fitness but is not a
+ * training session. Shown as Fitness · Sauna · 20 min, beside Fitness · Gym.
+ */
+export const healthWellnessVariants = [
+  "sauna",
+  "steam",
+  "cold_plunge",
+  "ice_bath",
+  "massage",
+  "spa",
+] as const;
+export type HealthWellnessVariant = (typeof healthWellnessVariants)[number];
 
 export const healthTargetPeriods = ["week", "year"] as const;
 export type HealthTargetPeriod = (typeof healthTargetPeriods)[number];
@@ -332,6 +351,14 @@ export const healthWeekSummarySchema = z.object({
     year_target: z.number(),
     year_used: z.number(),
   }),
+  /** Sauna, cold plunge, massage…: under Fitness, never a training session. */
+  wellness: z
+    .object({
+      days: z.number().int(),
+      sessions: z.number().int(),
+      minutes: z.number().int(),
+    })
+    .optional(),
 });
 export type HealthWeekSummary = z.infer<typeof healthWeekSummarySchema>;
 
@@ -364,6 +391,8 @@ export const healthYearDaySchema = z.object({
   day: healthDaySchema,
   training: z.number().int(),
   breath: z.number().int(),
+  /** Wellness sessions that day (sauna, cold plunge…). */
+  wellness: z.number().int().optional(),
   /** Units of the night that started this day; null when it needs a check. */
   night_out: z.number().nullable(),
   /** Entries of the owner's own trackers this day, by kind. */
@@ -391,6 +420,7 @@ export const healthYearResponseSchema = z.object({
   totals: z.object({
     training: z.number().int(),
     breath_days: z.number().int(),
+    wellness_days: z.number().int().optional(),
   }),
   /** The owner's own trackers over the year, in their order. */
   trackers: z.array(healthTrackerCountSchema),
@@ -495,6 +525,14 @@ export const healthBuiltinWords: Record<HealthKind, readonly string[]> = {
     "bender",
     "clubbing",
     "home at…",
+  ],
+  wellness: [
+    "#fitness sauna",
+    "sauna",
+    "steam room",
+    "cold plunge",
+    "ice bath",
+    "massage",
   ],
 };
 

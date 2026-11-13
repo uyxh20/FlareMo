@@ -47,16 +47,34 @@ describe("chip text", () => {
   });
 
   it("names a training session by its variant", () => {
-    expect(healthChipText(healthTestEntry({ variant: "gym" }))).toBe("Gym");
+    expect(healthChipText(healthTestEntry({ variant: "gym" }))).toBe(
+      "Fitness · Gym",
+    );
     expect(healthChipText(healthTestEntry({ variant: "back" }))).toBe(
-      "Gym · Back",
+      "Fitness · Gym · Back",
     );
     expect(healthChipText(healthTestEntry({ variant: "crossfit" }))).toBe(
-      "CrossFit",
+      "Fitness · CrossFit",
     );
     expect(
       healthChipText(healthTestEntry({ variant: "cardio", minutes: 40 })),
-    ).toBe("Cardio · 40 min");
+    ).toBe("Fitness · Cardio · 40 min");
+  });
+
+  it("names a wellness session under Fitness, with its minutes", () => {
+    expect(
+      healthChipText(
+        healthTestEntry({ kind: "wellness", variant: "sauna", minutes: 20 }),
+      ),
+    ).toBe("Fitness · Sauna · 20 min");
+    expect(
+      healthChipText(
+        healthTestEntry({ kind: "wellness", variant: "cold_plunge" }),
+      ),
+    ).toBe("Fitness · Cold plunge");
+    expect(
+      healthChipText(healthTestEntry({ kind: "wellness", variant: null })),
+    ).toBe("Fitness · Wellness");
   });
 
   it("names a breath session with its minutes", () => {
