@@ -219,6 +219,8 @@ Variant 1 ("Read, then Edit") of the five mocks in `/mnt/project-files/task-mark
 
 ### 16. #gym became #fitness (13 Nov 2026)
 
+Live since version #58. On live 27 of 28 entries were renamed; one (#gym plus sauna, 13 Nov) was held back by the health check pending the owner's call. The wellness rule applies only to notes under 300 characters.
+
 Anon renamed the diary tag `#gym` to `#fitness` (sauna and other wellness go under it too), with every past entry rewritten.
 
 - **Health reader** (`packages/domain/src/health/parse.ts`): `#fitness` reads exactly like `#gym` did (bare tag = a gym session; splits, bench and so on beside it). `#gym` still works. One new rule: a `#fitness` note about only sauna, steam room, hammam, banya, cold plunge, ice bath, massage or spa, with no training word and no `#gym`, is not a training session. Stretching still counts, as it did under `#gym`. The plain word "fitness" and tags such as `#fitnessfirst` or `#gymnastics` count for nothing.
