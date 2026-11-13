@@ -232,11 +232,22 @@ const SPLIT_NAMES: Record<string, HealthTrainingVariant> = {
 const SPLIT_DAY =
   /\b(push|pull|back|chest|legs?|upper)(?: body)? (?:day|session|workout)\b/;
 const SPLIT_NEAR_GYM =
-  /(?:#?\bgym|#gym)[ :,-]+(push|pull|back|chest|legs?|upper)\b|\b(push|pull|back|chest|legs?|upper)[ :,-]+#?gym\b/;
+  /(?:#?\bgym|#gym|#fitness)[ :,-]+(push|pull|back|chest|legs?|upper)\b|\b(push|pull|back|chest|legs?|upper)[ :,-]+(?:#?gym|#fitness)\b/;
 const CROSSFIT = /(?:#crossfit|\bcross ?fit)\b/;
 const BENCH = /\bbench(?: press)?\b/;
 const DEADLIFT = /\bdeadlifts?\b/;
-const GYM_TAG = /(?:^|[^\w])#gym(?![\w-])/;
+// #fitness is the training tag since 2026-11 (it replaced #gym in the diary);
+// #gym is still read the same way, for old habits and imports.
+const GYM_TAG = /(?:^|[^\w])#(?:gym|fitness)(?![\w-])/;
+const FITNESS_TAG = /(?:^|[^\w])#fitness(?![\w-])/;
+const GYM_TAG_ONLY = /(?:^|[^\w])#gym(?![\w-])/;
+/**
+ * Recovery and wellness words. #fitness covers these too, and a #fitness note
+ * about only these is not a training session (see healthParseMemo). Stretching
+ * and mobility are left out on purpose: old #gym notes counted them.
+ */
+const RECOVERY =
+  /\b(?:sauna|steam ?room|hammam|banya|cold plunge|ice bath|massage|spa)\b/;
 const GYM_WORD = /(?<![#\w])gym\b/g;
 const GYM_PLACE_BEFORE =
   /\b(?:outside|before|after|near|beside|behind|inside|around|from|at|in|leaving|left|walking to|walk to|drive to|driving to)(?: (?:the|a|my|our))?\s*$/;
@@ -253,6 +264,8 @@ type TrainingHit = {
   rank: number;
   minutes: number | null;
   explicit: boolean;
+  /** Only a bare #fitness tag made this a session (no other training word). */
+  fitnessTagOnly?: boolean;
 };
 
 function durationMinutes(text: string): number | null {
@@ -291,7 +304,9 @@ function trainingHit(clause: string): TrainingHit | null {
     bench &&
     !negatedAt(clause, bench.index, bench[0].length) &&
     (/bench press/.test(clause) ||
-      /\b(?:done|day|session|gym|reps|sets|kg|pb|\d)\b|#gym/.test(clause))
+      /\b(?:done|day|session|gym|reps|sets|kg|pb|\d)\b|#gym|#fitness/.test(
+        clause,
+      ))
   ) {
     return { variant: "chest", rank: 7, minutes: null, explicit };
   }
@@ -324,7 +339,13 @@ function trainingHit(clause: string): TrainingHit | null {
   if (explicit) {
     const tag = GYM_TAG.exec(clause);
     if (tag && !negatedAt(clause, tag.index, tag[0].length)) {
-      return { variant: "gym", rank: 3, minutes: null, explicit: true };
+      return {
+        variant: "gym",
+        rank: 3,
+        minutes: null,
+        explicit: true,
+        fitnessTagOnly: FITNESS_TAG.test(clause) && !GYM_TAG_ONLY.test(clause),
+      };
     }
     return null;
   }
@@ -577,7 +598,9 @@ export function healthParseMemo(
     return entry.day;
   };
 
-  let training: (HealthParsedEntry & { rank: number }) | undefined;
+  let training:
+    | (HealthParsedEntry & { rank: number; fitnessTagOnly: boolean })
+    | undefined;
   let breath: HealthParsedEntry | undefined;
   let night: HealthParsedEntry | undefined;
 
@@ -594,6 +617,7 @@ export function healthParseMemo(
           if (!training || hit.rank > training.rank) {
             training = {
               rank: hit.rank,
+              fitnessTagOnly: hit.fitnessTagOnly === true,
               kind: "training",
               day: sessionDay(sentence),
               variant: hit.variant,
@@ -662,9 +686,20 @@ export function healthParseMemo(
     }
   }
 
+  // A #fitness note that is only about recovery ("#fitness sauna 20 min") is
+  // wellness, not a training session. A training word (a split, bench, a run,
+  // the word gym) or the old #gym tag still makes it one.
+  if (
+    training?.fitnessTagOnly &&
+    RECOVERY.test(text) &&
+    !/\bgym\b/.test(text)
+  ) {
+    training = undefined;
+  }
+
   const entries: HealthParsedEntry[] = [];
   if (training) {
-    const { rank: _rank, ...rest } = training;
+    const { rank: _rank, fitnessTagOnly: _fitness, ...rest } = training;
     entries.push(rest);
   }
   if (breath) entries.push(breath);

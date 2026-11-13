@@ -120,7 +120,7 @@ export function plannerSoundsDone(sentence: string): boolean {
 
 /** A sentence that mentions training, breathwork or a night out. */
 const HEALTH =
-  /(?:#(?:gym|crossfit|wimhof|wh|meditat\w*|out)\b|\b(?:gym|crossfit|cross fit|workout|trained|training|lifted|deadlifts?|bench|squats?|run|ran|running|jog|swim|swam|cycling|bike ride|yoga|wim ?-?hof|breathwork|breath work|breathing|meditat\w*|went out|night out|drinks|bar|pub|club|party|got home|came home|home at|hangover|hungover)\b)/i;
+  /(?:#(?:gym|fitness|crossfit|wimhof|wh|meditat\w*|out)\b|\b(?:gym|crossfit|cross fit|workout|trained|training|lifted|deadlifts?|bench|squats?|run|ran|running|jog|swim|swam|cycling|bike ride|yoga|wim ?-?hof|breathwork|breath work|breathing|meditat\w*|went out|night out|drinks|bar|pub|club|party|got home|came home|home at|hangover|hungover)\b)/i;
 
 /** Whether a sentence mentions something the health tracker logs. */
 export function plannerMentionsHealth(sentence: string): boolean {
@@ -147,7 +147,7 @@ export function plannerHealthKindOf(
   if (BREATH.test(sentence)) return "breath";
   if (
     NIGHT.test(sentence) &&
-    !/\b(?:gym|run|ran|workout|training)\b/i.test(sentence)
+    !/\b(?:gym|fitness|run|ran|workout|training)\b/i.test(sentence)
   ) {
     return "night_out";
   }

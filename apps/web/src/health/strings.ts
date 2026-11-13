@@ -180,7 +180,7 @@ export const healthStrings = {
       `Read ${memos} notes: ${created} new, ${updated} changed, ${removed} removed.`,
     rereadFailed: "Could not read the diary. Try again.",
     empty:
-      "Nothing logged yet. Write it in your notes, like “#gym back day done” or “wim hof 10”, and it shows up here.",
+      "Nothing logged yet. Write it in your notes, like “#fitness back day done” or “wim hof 10”, and it shows up here.",
     error: "Could not load health.",
     retry: "Retry",
   },

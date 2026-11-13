@@ -21,6 +21,7 @@ import {
   healthWeekQuerySchema,
   healthYearQuerySchema,
 } from "@flaremo/contracts";
+import { forkRenameTag } from "@flaremo/domain/src/fork/tag-rename";
 import {
   healthArchiveTracker,
   healthCreateTracker,
@@ -41,6 +42,7 @@ import {
 } from "@flaremo/domain/src/health";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { z } from "zod";
 import { getRequestContext, type HonoBindings } from "../context";
 import { jsonError } from "../http";
 import { rateLimitGuard } from "../rate-limit";
@@ -197,6 +199,41 @@ healthApi.post("/rescan", async (c) => {
     return jsonError(c, error);
   }
 });
+
+// A careful rename of one diary tag across every past memo (used to turn #gym
+// into #fitness). It lives here because its safety check is the health
+// reader: a run stops before writing if any memo would be read differently.
+// `dry_run` (the default) changes nothing. `memo_ids` limits a run to those
+// memos, which is how a run is undone. See packages/domain/src/fork/tag-rename.ts.
+const tagRenameSchema = z.object({
+  from: z.string().min(1).max(100),
+  to: z.string().min(1).max(100),
+  dry_run: z.boolean().default(true),
+  memo_ids: z.array(z.string().min(1).max(200)).max(5000).optional(),
+});
+
+healthApi.post(
+  "/tag-rename",
+  zValidator("json", tagRenameSchema),
+  async (c) => {
+    try {
+      const context = await getRequestContext(c);
+      const throttled = await rateLimitGuard(c, "health", context.user.id);
+      if (throttled) return throttled;
+      const body = c.req.valid("json");
+      return c.json(
+        await forkRenameTag(context.db, context.user, {
+          from: body.from,
+          to: body.to,
+          dryRun: body.dry_run,
+          memoIds: body.memo_ids,
+        }),
+      );
+    } catch (error) {
+      return jsonError(c, error);
+    }
+  },
+);
 
 // --- Trackers ----------------------------------------------------------------
 //

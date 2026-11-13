@@ -16,6 +16,8 @@ A note is read at save time and again by a nightly safety net (see "Keeping it i
 | `breath` | Wim Hof or meditation, with minutes when given (10 when not) | `variant` (`wim_hof`, `meditation`), `minutes` |
 | `night_out` | A night out, with the time the owner got home when the note says one | `home_at`, `units`, `bender`, `needs_check` |
 
+`#fitness` is the training tag (it replaced `#gym` on 13 Nov 2026; `#gym` still reads the same). A `#fitness` note about only sauna, steam room, hammam, banya, cold plunge, ice bath, massage or spa, with no training word, is wellness, not a training session.
+
 A plan is not a session: "tomorrow gym", "going to the gym later" and "no gym today" produce nothing. A note with a skip tag (`vault-summary`, `vault-theme`, `vault-thinking`, `vault-tracker`, `seed`, `agent-memory`), one written by the weekly review, or one longer than 1500 characters is never read. A note of 300 to 1500 characters is read only when it carries an explicit tag or a "done" word next to the keyword.
 
 ### Trackers you edit in the app

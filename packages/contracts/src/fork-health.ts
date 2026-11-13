@@ -477,6 +477,7 @@ export const healthMaxTrackerWords = 40;
  */
 export const healthBuiltinWords: Record<HealthKind, readonly string[]> = {
   training: [
+    "#fitness",
     "#gym",
     "#crossfit",
     "gym",

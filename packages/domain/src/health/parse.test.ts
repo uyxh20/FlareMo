@@ -78,6 +78,97 @@ const TUE_EVENING = "2026-10-13 19:30";
 
 const CASES: Case[] = [
   // --- Training: what counts ------------------------------------------------
+  // #fitness replaced #gym as the training tag; both read the same way.
+  {
+    name: "the bare #fitness tag is an unspecified gym session",
+    when: TUE_EVENING,
+    content: "#fitness",
+    expected: [training("2026-10-13", "gym")],
+  },
+  {
+    name: "a #fitness back day",
+    when: TUE_EVENING,
+    content: "#fitness back day done",
+    expected: [training("2026-10-13", "back")],
+  },
+  {
+    name: "a split next to #fitness",
+    when: TUE_EVENING,
+    content: "#fitness legs",
+    expected: [training("2026-10-13", "legs")],
+  },
+  {
+    name: "#fitness with bench sets is chest",
+    when: TUE_EVENING,
+    content: "#fitness bench 5 sets",
+    expected: [training("2026-10-13", "chest")],
+  },
+  {
+    name: "#fitness sauna only is wellness, not training",
+    when: TUE_EVENING,
+    content: "#fitness sauna 20 min",
+    expected: [],
+  },
+  {
+    name: "#fitness ice bath and a massage is not training",
+    when: TUE_EVENING,
+    content: "#fitness. Ice bath then massage",
+    expected: [],
+  },
+  {
+    name: "#fitness stretching still counts, as #gym stretching did",
+    when: TUE_EVENING,
+    content: "#fitness stretching",
+    expected: [training("2026-10-13", "gym")],
+  },
+  {
+    name: "#fitness gym then sauna is still a session",
+    when: TUE_EVENING,
+    content: "#fitness gym then sauna",
+    expected: [training("2026-10-13", "gym")],
+  },
+  {
+    name: "#fitness push day then sauna keeps the split",
+    when: TUE_EVENING,
+    content: "#fitness push day, sauna after",
+    expected: [training("2026-10-13", "push")],
+  },
+  {
+    name: "the old #gym tag with sauna is still a session",
+    when: TUE_EVENING,
+    content: "#gym then sauna",
+    expected: [training("2026-10-13", "gym")],
+  },
+  {
+    name: "no #fitness today",
+    when: TUE_EVENING,
+    content: "no #fitness today",
+    expected: [],
+  },
+  {
+    name: "#fitness tomorrow is a plan",
+    when: TUE_EVENING,
+    content: "#fitness tomorrow",
+    expected: [],
+  },
+  {
+    name: "the word fitness alone is not a session",
+    when: TUE_EVENING,
+    content: "reading about fitness trends",
+    expected: [],
+  },
+  {
+    name: "#fitnessfirst is a different tag",
+    when: TUE_EVENING,
+    content: "#fitnessfirst",
+    expected: [],
+  },
+  {
+    name: "#gymnastics is a different tag",
+    when: TUE_EVENING,
+    content: "#gymnastics",
+    expected: [],
+  },
   {
     name: "a tagged back day",
     when: TUE_EVENING,
