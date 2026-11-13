@@ -686,11 +686,14 @@ export function healthParseMemo(
     }
   }
 
-  // A #fitness note that is only about recovery ("#fitness sauna 20 min") is
-  // wellness, not a training session. A training word (a split, bench, a run,
+  // A short #fitness note that is only about recovery ("#fitness sauna 20 min")
+  // is wellness, not a training session. A training word (a split, bench, a run,
   // the word gym) or the old #gym tag still makes it one.
+  // Only a short log line: in a longer note a passing "spa" or "massage"
+  // says nothing about the session.
   if (
     training?.fitnessTagOnly &&
+    !long &&
     RECOVERY.test(text) &&
     !/\bgym\b/.test(text)
   ) {

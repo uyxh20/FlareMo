@@ -122,6 +122,12 @@ const CASES: Case[] = [
     expected: [training("2026-10-13", "gym")],
   },
   {
+    name: "a long #fitness note with a passing spa is still a session",
+    when: TUE_EVENING,
+    content: `${"Thinking about the week and what to change. ".repeat(8)}Booked a spa voucher for mum. #fitness`,
+    expected: [training("2026-10-13", "gym")],
+  },
+  {
     name: "#fitness gym then sauna is still a session",
     when: TUE_EVENING,
     content: "#fitness gym then sauna",
