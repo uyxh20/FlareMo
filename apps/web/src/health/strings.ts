@@ -10,10 +10,14 @@ export const healthStrings = {
   title: "Health",
   loading: "Loading health",
 
+  /** The family every #fitness label belongs to: "Fitness · Gym · Back". */
+  fitness: "Fitness",
+
   kind: {
-    training: "Training",
+    training: "Gym",
     breath: "Breath",
     night_out: "Out",
+    wellness: "Wellness",
   },
 
   strip: {
@@ -35,6 +39,12 @@ export const healthStrings = {
     cardio: "Cardio",
     wim_hof: "Wim Hof",
     meditation: "Meditation",
+    sauna: "Sauna",
+    steam: "Steam room",
+    cold_plunge: "Cold plunge",
+    ice_bath: "Ice bath",
+    massage: "Massage",
+    spa: "Spa",
   } as Record<string, string>,
 
   chip: {
@@ -130,11 +140,16 @@ export const healthStrings = {
   page: {
     thisWeek: "This week",
     weekRange: (from: string, to: string) => `${from} to ${to}`,
-    trainingTile: "Training",
+    trainingTile: "Fitness · Gym",
     trainingNote: (sessions: number) =>
       sessions === 0
         ? "No training yet this week"
         : `Trained ${sessions} ${sessions === 1 ? "time" : "times"} this week`,
+    wellnessTile: "Fitness · Wellness",
+    wellnessNote: (days: number, minutes: number) =>
+      minutes > 0
+        ? `${days} ${days === 1 ? "day" : "days"}, ${minutes} min · not training`
+        : `${days} ${days === 1 ? "day" : "days"} · not training`,
     breathTile: "Breath work",
     breathNote: (days: number, minutes: number) =>
       days === 0

@@ -124,6 +124,7 @@ function summarise(
   const training = rows.filter((row) => row.kind === "training");
   const breath = rows.filter((row) => row.kind === "breath");
   const nights = rows.filter((row) => row.kind === "night_out");
+  const wellness = rows.filter((row) => row.kind === "wellness");
   return {
     training: {
       sessions: training.length,
@@ -141,6 +142,11 @@ function summarise(
       needs_check: nights.filter((row) => row.needsCheck).length,
       year_target: targetOf(targets, "night_out", "year"),
       year_used: yearUsed,
+    },
+    wellness: {
+      days: new Set(wellness.map((row) => row.day)).size,
+      sessions: wellness.length,
+      minutes: wellness.reduce((sum, row) => sum + (row.minutes ?? 0), 0),
     },
   };
 }
@@ -219,6 +225,7 @@ export async function healthReadYear(
         day: key,
         training: 0,
         breath: 0,
+        wellness: 0,
         night_out: null,
         trackers: {},
       };
@@ -231,6 +238,8 @@ export async function healthReadYear(
     const entry = day(row.day);
     if (row.kind === "training") entry.training += 1;
     else if (row.kind === "breath") entry.breath += 1;
+    else if (row.kind === "wellness")
+      entry.wellness = (entry.wellness ?? 0) + 1;
     else if (row.kind !== "night_out") {
       entry.trackers[row.kind] = (entry.trackers[row.kind] ?? 0) + 1;
     } else if (row.units !== null) {
@@ -269,6 +278,9 @@ export async function healthReadYear(
       training: rows.filter((row) => row.kind === "training").length,
       breath_days: new Set(
         rows.filter((row) => row.kind === "breath").map((row) => row.day),
+      ).size,
+      wellness_days: new Set(
+        rows.filter((row) => row.kind === "wellness").map((row) => row.day),
       ).size,
     },
     trackers: countTrackers(rows, kinds),

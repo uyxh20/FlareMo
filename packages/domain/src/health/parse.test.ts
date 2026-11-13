@@ -49,6 +49,14 @@ function breath(
   return { ...BLANK, kind: "breath", day, variant, minutes, ...extra };
 }
 
+function wellness(
+  day: string,
+  variant: HealthParsedEntry["variant"],
+  minutes: number | null = null,
+): HealthParsedEntry {
+  return { ...BLANK, kind: "wellness", day, variant, minutes };
+}
+
 function night(
   day: string,
   extra: Partial & { homeAt: string | null },
@@ -107,13 +115,13 @@ const CASES: Case[] = [
     name: "#fitness sauna only is wellness, not training",
     when: TUE_EVENING,
     content: "#fitness sauna 20 min",
-    expected: [],
+    expected: [wellness("2026-10-13", "sauna", 20)],
   },
   {
     name: "#fitness ice bath and a massage is not training",
     when: TUE_EVENING,
     content: "#fitness. Ice bath then massage",
-    expected: [],
+    expected: [wellness("2026-10-13", "ice_bath")],
   },
   {
     name: "#fitness stretching still counts, as #gym stretching did",
@@ -131,19 +139,65 @@ const CASES: Case[] = [
     name: "#fitness gym then sauna is still a session",
     when: TUE_EVENING,
     content: "#fitness gym then sauna",
-    expected: [training("2026-10-13", "gym")],
+    expected: [training("2026-10-13", "gym"), wellness("2026-10-13", "sauna")],
   },
   {
     name: "#fitness push day then sauna keeps the split",
     when: TUE_EVENING,
     content: "#fitness push day, sauna after",
-    expected: [training("2026-10-13", "push")],
+    expected: [training("2026-10-13", "push"), wellness("2026-10-13", "sauna")],
   },
   {
     name: "the old #gym tag with sauna is still a session",
     when: TUE_EVENING,
     content: "#gym then sauna",
-    expected: [training("2026-10-13", "gym")],
+    expected: [training("2026-10-13", "gym"), wellness("2026-10-13", "sauna")],
+  },
+  {
+    name: "a short sauna note without a tag is wellness",
+    when: TUE_EVENING,
+    content: "Sauna 30 min",
+    expected: [wellness("2026-10-13", "sauna", 30)],
+  },
+  {
+    name: "#fitness legs then cold plunge is both",
+    when: TUE_EVENING,
+    content: "#fitness legs, then cold plunge 3 min",
+    expected: [
+      training("2026-10-13", "legs"),
+      wellness("2026-10-13", "cold_plunge", 3),
+    ],
+  },
+  {
+    name: "#fitness massage is wellness",
+    when: TUE_EVENING,
+    content: "#fitness massage",
+    expected: [wellness("2026-10-13", "massage")],
+  },
+  {
+    name: "no sauna today is nothing",
+    when: TUE_EVENING,
+    content: "no sauna today, too tired",
+    expected: [],
+  },
+  {
+    name: "a sauna planned for tomorrow is nothing",
+    when: TUE_EVENING,
+    content: "#fitness sauna tomorrow",
+    expected: [],
+  },
+  {
+    name: "a passing sauna in a longer note without the tag is nothing",
+    when: TUE_EVENING,
+    content:
+      "Talked with Sam about how the new sauna place downtown looks nice but pricey",
+    expected: [],
+  },
+  {
+    name: "a spa voucher in a long #fitness note is not wellness",
+    when: TUE_EVENING,
+    content: `${"Thinking about the week and what to change. ".repeat(8)}Booked a spa voucher for mum.`,
+    expected: [],
   },
   {
     name: "no #fitness today",

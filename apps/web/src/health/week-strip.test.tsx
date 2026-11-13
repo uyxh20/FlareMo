@@ -96,18 +96,20 @@ afterEach(() => {
 });
 
 describe("the week strip", () => {
-  it("draws three rows of seven days", async () => {
+  it("draws Fitness with Gym and Wellness under it, then Breath and Out", async () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
     const dots = container.querySelectorAll('[data-testid="health-dot"]');
-    expect(dots).toHaveLength(21);
+    expect(dots).toHaveLength(35);
     const state = (kind: string, day: string) =>
       container
         .querySelector(`[data-kind="${kind}"][data-day="${day}"]`)
         ?.getAttribute("data-state");
     expect(state("training", "2026-10-12")).toBe("done");
     expect(state("training", "2026-10-11")).toBe("none");
+    expect(state("training+wellness", "2026-10-12")).toBe("done");
+    expect(state("wellness", "2026-10-12")).toBe("none");
     expect(state("breath", "2026-10-13")).toBe("done");
     expect(state("night_out", "2026-10-09")).toBe("done");
     expect(state("night_out", "2026-10-10")).toBe("check");
@@ -120,7 +122,8 @@ describe("the week strip", () => {
     const counts = Array.from(container.querySelectorAll(".text-right")).map(
       (cell) => cell.textContent,
     );
-    expect(counts).toEqual(["1", "1", "1"]);
+    // Fitness days, Gym sessions, Wellness sessions, Breath days, Out units.
+    expect(counts).toEqual(["1", "1", "0", "1", "1"]);
     expect(container.textContent).not.toContain("/");
   });
 

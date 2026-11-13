@@ -7,6 +7,7 @@ import {
   healthKinds,
   healthNightUnitsFor,
   healthParseDay,
+  healthWellnessVariants,
   healthTrainingVariants,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -94,7 +95,9 @@ export async function healthCreateEntry(
       ? healthTrainingVariants
       : kind === "breath"
         ? healthBreathVariants
-        : null;
+        : kind === "wellness"
+          ? healthWellnessVariants
+          : null;
   if (variant !== null && !allowed) {
     throw new ValidationError("A night out has no variant.");
   }
@@ -250,7 +253,9 @@ export async function healthPatchEntry(
         ? healthTrainingVariants
         : before.kind === "breath"
           ? healthBreathVariants
-          : null;
+          : before.kind === "wellness"
+            ? healthWellnessVariants
+            : null;
     if (!allowed) {
       throw new ValidationError("A night out has no variant.");
     }

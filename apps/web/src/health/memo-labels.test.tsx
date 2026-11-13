@@ -91,7 +91,7 @@ describe("the chips", () => {
       container.querySelectorAll('[data-testid="health-chip"]'),
     );
     expect(chips.map((c) => c.textContent)).toEqual([
-      "Gym · Back",
+      "Fitness · Gym · Back",
       "Wim Hof · 10 min",
     ]);
   });
@@ -116,7 +116,7 @@ describe("the chips", () => {
     dismiss.mockResolvedValue({ entry });
     const container = await show([entry]);
     const remove = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Remove label: Gym · Legs"]',
+      'button[aria-label="Remove label: Fitness · Gym · Legs"]',
     );
     plannerTestClick(remove);
     await settle();

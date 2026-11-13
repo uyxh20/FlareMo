@@ -165,16 +165,20 @@ describe("the Health page", () => {
     );
     expect(tiles.map((t) => t.getAttribute("data-kind"))).toEqual([
       "training",
+      "wellness",
       "breath",
       "night_out",
       "t:fast00000001",
     ]);
-    expect(tiles[3]?.textContent).toContain("Fasting");
-    expect(tiles[3]?.textContent).toContain("34 h in total");
-    expect(tiles[3]?.className).toContain("health-kind-t-green");
+    expect(tiles[4]?.textContent).toContain("Fasting");
+    expect(tiles[4]?.textContent).toContain("34 h in total");
+    expect(tiles[4]?.className).toContain("health-kind-t-green");
+    expect(tiles[0]?.textContent).toContain("Fitness · Gym");
     expect(tiles[0]?.textContent).toContain("Trained 2 times this week");
-    expect(tiles[1]?.textContent).toContain("5 days this week, 50 min");
-    expect(tiles[2]?.textContent).toContain("1½ units this week");
+    expect(tiles[1]?.textContent).toContain("Fitness · Wellness");
+    expect(tiles[1]?.textContent).toContain("0 days · not training");
+    expect(tiles[2]?.textContent).toContain("5 days this week, 50 min");
+    expect(tiles[3]?.textContent).toContain("1½ units this week");
     expect(tiles.map((t) => t.textContent).join(" ")).not.toMatch(/ of \d/);
     // Monday to Sunday: the Monday of the week of Tuesday 13 October.
     expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
@@ -239,20 +243,18 @@ describe("the Health page", () => {
     const container = await show();
     const grid = container.querySelector('[data-testid="health-year-grid"]');
     const rows = grid?.querySelectorAll('[role="img"]');
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(5);
     expect(
-      rows?.[3]
+      rows?.[4]
         ?.querySelector('.health-cell[title^="Fasting, week of 12 Oct"]')
         ?.getAttribute("title"),
     ).toBe("Fasting, week of 12 Oct: 1 day");
     expect(rows?.[0]?.querySelectorAll(".health-cell")).toHaveLength(53);
     // The week of 12 October holds one session and one breath day.
     const cell = rows?.[0]?.querySelector(
-      '.health-cell[title^="Training, week of 12 Oct"]',
+      '.health-cell[title^="Gym, week of 12 Oct"]',
     );
-    expect(cell?.getAttribute("title")).toBe(
-      "Training, week of 12 Oct: 1 session",
-    );
+    expect(cell?.getAttribute("title")).toBe("Gym, week of 12 Oct: 1 session");
   });
 
   it("reads the diary again and says what it found", async () => {

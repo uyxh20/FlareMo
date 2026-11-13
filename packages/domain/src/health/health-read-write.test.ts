@@ -165,6 +165,7 @@ describe("health read and write", () => {
       expect(week.summary).toEqual({
         training: { sessions: 2, target: 3 },
         breath: { days: 2, sessions: 3, minutes: 25, target: 7 },
+        wellness: { days: 0, sessions: 0, minutes: 0 },
         night_out: {
           units: 1,
           nights: 2,
@@ -215,6 +216,7 @@ describe("health read and write", () => {
         day: "2026-01-02",
         training: 2,
         breath: 1,
+        wellness: 0,
         night_out: null,
         trackers: {},
       });
@@ -234,7 +236,11 @@ describe("health read and write", () => {
         needs_check: 1,
         last_day: "2026-10-11",
       });
-      expect(year.totals).toEqual({ training: 2, breath_days: 1 });
+      expect(year.totals).toEqual({
+        training: 2,
+        breath_days: 1,
+        wellness_days: 0,
+      });
       expect(year.needs_check_entries.map((entry) => entry.id)).toEqual(["n3"]);
     });
 

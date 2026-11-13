@@ -1,5 +1,6 @@
 import {
   type HealthBreathVariant,
+  type HealthWellnessVariant,
   type HealthEntryKind,
   type HealthKind,
   type HealthTrackerKind,
@@ -66,7 +67,11 @@ export type HealthParsedEntry = {
   kind: HealthEntryKind;
   /** The local day, `YYYY-MM-DD`. */
   day: string;
-  variant: HealthTrainingVariant | HealthBreathVariant | null;
+  variant:
+    | HealthTrainingVariant
+    | HealthBreathVariant
+    | HealthWellnessVariant
+    | null;
   minutes: number | null;
   /** `HH:MM`, night_out only. */
   homeAt: string | null;
@@ -424,6 +429,63 @@ function breathHit(clause: string, sentence: string): BreathHit | null {
   return null;
 }
 
+// --- Wellness -------------------------------------------------------------------------
+//
+// Sauna, steam, cold plunge, ice bath, massage, spa: recovery under #fitness,
+// never a training session (shown as Fitness · Sauna · 20 min).
+
+const WELLNESS_WORDS: Array<[RegExp, HealthWellnessVariant]> = [
+  [/(?:#sauna|\bsauna|\bbanya)(?![\w-])/g, "sauna"],
+  [/\b(?:steam ?room|steam bath|hammam)\b/g, "steam"],
+  [/\b(?:cold plunge|cold water plunge|plunge pool)\b/g, "cold_plunge"],
+  [/\b(?:ice bath|ice-bath)\b/g, "ice_bath"],
+  [/\bmassage\b/g, "massage"],
+  [/\bspa\b/g, "spa"],
+];
+
+type WellnessHit = {
+  variant: HealthWellnessVariant;
+  minutes: number | null;
+  explicit: boolean;
+};
+
+function wellnessHit(
+  clause: string,
+  sentence: string,
+  fitnessTagged: boolean,
+): WellnessHit | null {
+  const candidates: Array<{
+    variant: HealthWellnessVariant;
+    match: RegExpMatchArray;
+  }> = [];
+  for (const [pattern, variant] of WELLNESS_WORDS) {
+    for (const match of clause.matchAll(pattern)) {
+      candidates.push({ variant, match });
+    }
+  }
+  candidates.sort((a, b) => (a.match.index ?? 0) - (b.match.index ?? 0));
+  for (const { variant, match } of candidates) {
+    const index = match.index ?? 0;
+    if (negatedAt(clause, index, match[0].length)) continue;
+    const explicit = fitnessTagged || match[0].startsWith("#");
+    const minutes = durationMinutes(clause);
+    // A bare mention ("the hotel has a spa") is not a session: it needs the
+    // #fitness tag, a duration, a done word, or to be the whole short entry.
+    if (
+      !(
+        explicit ||
+        minutes !== null ||
+        DONE.test(sentence) ||
+        wordCount(sentence) <= 4
+      )
+    ) {
+      continue;
+    }
+    return { variant, minutes, explicit };
+  }
+  return null;
+}
+
 // --- Feel ------------------------------------------------------------------------------
 
 const FEEL =
@@ -603,6 +665,10 @@ export function healthParseMemo(
     | undefined;
   let breath: HealthParsedEntry | undefined;
   let night: HealthParsedEntry | undefined;
+  let wellness: HealthParsedEntry | undefined;
+  const fitnessTagged =
+    FITNESS_TAG.test(text) ||
+    (input.tags ?? []).some((tag) => tag.toLowerCase() === "fitness");
 
   for (const sentence of sentences) {
     const planned = PLAN.test(sentence) && !DONE.test(sentence);
@@ -622,6 +688,22 @@ export function healthParseMemo(
               day: sessionDay(sentence),
               variant: hit.variant,
               minutes: hit.minutes,
+              homeAt: null,
+              units: null,
+              bender: false,
+              needsCheck: false,
+              feel,
+            };
+          }
+        }
+        if (!wellness) {
+          const well = wellnessHit(clause, sentence, fitnessTagged);
+          if (well && longAllows(well.explicit)) {
+            wellness = {
+              kind: "wellness",
+              day: sessionDay(sentence),
+              variant: well.variant,
+              minutes: well.minutes,
               homeAt: null,
               units: null,
               bender: false,
@@ -707,6 +789,7 @@ export function healthParseMemo(
   }
   if (breath) entries.push(breath);
   if (night) entries.push(night);
+  if (wellness) entries.push(wellness);
 
   const context: WordContext = {
     text,
@@ -719,7 +802,7 @@ export function healthParseMemo(
   // The owner's extra words for a built-in kind: only when its own reader found
   // nothing, so they add, never replace.
   const builtins = config.builtins ?? {};
-  for (const kind of ["training", "breath", "night_out"] as const) {
+  for (const kind of ["training", "breath", "night_out", "wellness"] as const) {
     const extra = builtins[kind];
     if (!extra || entries.some((entry) => entry.kind === kind)) continue;
     const hit = findWord(context, extra.words, kind === "night_out");
@@ -790,7 +873,12 @@ export function healthParseMemo(
 // memo's own tag.
 
 function healthIsBuiltinKindLocal(kind: string): kind is HealthKind {
-  return kind === "training" || kind === "breath" || kind === "night_out";
+  return (
+    kind === "training" ||
+    kind === "breath" ||
+    kind === "night_out" ||
+    kind === "wellness"
+  );
 }
 
 const wordPatterns = new Map<string, RegExp>();

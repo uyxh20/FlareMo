@@ -35,7 +35,7 @@ export const healthEntry = sqliteTable(
     // training | breath | night_out, or `t:<tracker id>` for a tracker the
     // owner made in the app (health_tracker, migrations/9011).
     kind: text("kind")
-      .$type<"training" | "breath" | "night_out" | `t:${string}`>()
+      .$type<"training" | "breath" | "night_out" | "wellness" | `t:${string}`>()
       .notNull(),
     // YYYY-MM-DD, the local day (the evening a night out started).
     day: text("day").notNull(),
@@ -97,7 +97,9 @@ export const healthTarget = sqliteTable(
   "health_target",
   {
     userId: text("user_id").notNull(),
-    kind: text("kind", { enum: ["training", "breath", "night_out"] }).notNull(),
+    kind: text("kind", {
+      enum: ["training", "breath", "night_out", "wellness"],
+    }).notNull(),
     period: text("period", { enum: ["week", "year"] }).notNull(),
     amount: real("amount").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -136,7 +138,7 @@ export const healthTracker = sqliteTable(
     userId: text("user_id").notNull(),
     // t:<id> for the owner's own tracker, or the built-in kind.
     kind: text("kind")
-      .$type<"training" | "breath" | "night_out" | `t:${string}`>()
+      .$type<"training" | "breath" | "night_out" | "wellness" | `t:${string}`>()
       .notNull(),
     label: text("label").notNull(),
     color: text("color").notNull(),

@@ -364,6 +364,7 @@ describe("health API", () => {
           day: today,
           training: 1,
           breath: 1,
+          wellness: 0,
           night_out: null,
           trackers: {},
         },
@@ -538,9 +539,10 @@ describe("health API", () => {
         await body<HealthTrackersResponse>(send("GET", `${API}/trackers`)),
       );
       expect(listed.trackers.map((tracker) => tracker.label)).toEqual([
-        "Training",
+        "Fitness · Gym",
         "Breath",
         "Nights out",
+        "Fitness · Wellness",
         "Fasting",
       ]);
       // Not linked to a goal, so no goal card shows it.
