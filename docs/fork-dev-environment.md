@@ -123,6 +123,13 @@ node scripts/fork/prod-deploy.mjs rollback --confirm flaremo
 
 `deploy` refuses unless HEAD equals `origin/main`, the tree is clean, and every
 `.sql` in `migrations/` is committed (wrangler would apply an untracked one).
+It also refuses while the tests on main are red: it reads the newest run of the
+`checks` workflow on main that really ran the tests (a nightly that skipped
+because only docs changed, or a cancelled run, proves nothing and is passed
+over) and stops if that run failed, or if GitHub cannot be read. After a fix,
+run the workflow by hand (Actions tab, `checks`, Run workflow) and deploy once
+it is green. `--dry-run` only says it would stop. A red nightly also opens a
+"Nightly checks are red" issue, which the next green nightly closes.
 Steps: rebuild the gitignored root `wrangler.jsonc` from `wrangler.jsonc.example`
 plus the live Worker's vars (checked to name only production resources; it
 refuses if live has a binding the example lacks, and notes vars that would come

@@ -108,3 +108,35 @@ jobs:
       - name: Persistence manifest check
         if: ${{ !cancelled() }}
         run: pnpm persistence:check
+
+  # Fork: a red nightly opens (or comments on) one GitHub issue, so it is seen
+  # the same day rather than weeks later (11 red nights went unnoticed in
+  # Oct-Nov 2026). The next green nightly closes it. prod-deploy.mjs refuses
+  # to deploy while the newest run of `checks` on main is red.
+  nightly-alert:
+    name: nightly alert (issue while checks are red)
+    needs: checks
+    if: ${{ !cancelled() && github.event_name == 'schedule' && (needs.checks.result == 'failure' || needs.checks.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RESULT: ${{ needs.checks.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the alert issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          title="Nightly checks are red"
+          open="$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [ "$RESULT" = "failure" ]; then
+            body="The nightly checks failed: $RUN_URL. Live deploys are refused until a run of the checks workflow on main is green."
+            if [ -n "$open" ]; then gh issue comment "$open" --body "Still red: $RUN_URL"
+            else gh issue create --title "$title" --body "$body"; fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "Green again: $RUN_URL"
+          fi

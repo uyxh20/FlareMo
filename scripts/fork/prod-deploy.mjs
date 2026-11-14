@@ -303,6 +303,90 @@ export function previousDeployment(deployments, currentId) {
   return null;
 }
 
+/** The job in .github/workflows/ci.yml that runs format, lint, typecheck and tests. */
+const CHECKS_JOB = /^checks \(/;
+
+/**
+ * Whether the tests on main allow a deploy (fork QA rule: deploys refuse while
+ * the nightly tests are red). `runs` are completed `checks` workflow runs on
+ * main, newest first, each with the conclusion of its checks job. A nightly
+ * run that skipped the job (only docs changed) or was cancelled proved
+ * nothing, so the verdict comes from the newest run that really ran it.
+ */
+export function ciVerdict(runs, headSha) {
+  const run = runs.find(
+    (r) => r.checks === "success" || r.checks === "failure",
+  );
+  if (!run) {
+    return {
+      ok: false,
+      reason:
+        "No run of the checks workflow on main ran the tests. Run it from the Actions tab (Run workflow) and deploy once it is green.",
+    };
+  }
+  if (run.checks === "failure") {
+    return {
+      ok: false,
+      run,
+      reason: `The newest test run on main is red (${run.url}). Fix main, run the checks workflow again (Actions tab, Run workflow), and deploy once it is green.`,
+    };
+  }
+  return { ok: true, run, current: run.headSha === headSha };
+}
+
+/** Completed `checks` runs on main with their checks-job result, newest first. */
+function checksRuns(io) {
+  const listing = JSON.parse(
+    io.run("gh", [
+      "api",
+      "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?branch=main&status=completed&per_page=15",
+    ]),
+  );
+  const runs = [];
+  for (const workflowRun of listing.workflow_runs ?? []) {
+    const jobs = JSON.parse(
+      io.run("gh", [
+        "api",
+        `repos/{owner}/{repo}/actions/runs/${workflowRun.id}/jobs`,
+      ]),
+    ).jobs;
+    const job = (jobs ?? []).find((j) => CHECKS_JOB.test(j.name));
+    runs.push({
+      headSha: workflowRun.head_sha,
+      url: workflowRun.html_url,
+      createdAt: workflowRun.created_at,
+      checks: job?.conclusion ?? null,
+    });
+    if (job?.conclusion === "success" || job?.conclusion === "failure") break;
+  }
+  return runs;
+}
+
+/** Throws unless the newest test run on main is green (see ciVerdict). */
+function checkTests(io, { dryRun }) {
+  let verdict;
+  try {
+    verdict = ciVerdict(checksRuns(io), git(io, "rev-parse", "HEAD"));
+  } catch (error) {
+    verdict = {
+      ok: false,
+      reason: `Could not read the test runs from GitHub (${error.message.split("\n")[0]}).`,
+    };
+  }
+  if (!verdict.ok) {
+    if (dryRun) {
+      io.say(`A real deploy would stop here: ${verdict.reason}`);
+      return;
+    }
+    throw new Error(`Refusing to deploy. ${verdict.reason}`);
+  }
+  io.say(
+    verdict.current
+      ? `Tests on main: green on this commit (${verdict.run.url}).`
+      : `Tests on main: last run green (${verdict.run.url}), on an older commit; this commit has not had its own run.`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Cloudflare + wrangler plumbing
 // ---------------------------------------------------------------------------
@@ -570,6 +654,7 @@ function checkCheckout(io) {
 /** Returns true when live ended on the new version with every check passed. */
 export async function deploy(io, { dryRun }) {
   checkCheckout(io);
+  checkTests(io, { dryRun });
   const head = git(io, "rev-parse", "--short", "HEAD");
   io.say(`Shipping ${head} ${dryRun ? "[dry run: nothing will change]" : ""}`);
   return withRootConfig(io, () => deploySteps(io, { dryRun }));

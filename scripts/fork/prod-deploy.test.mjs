@@ -7,6 +7,7 @@ import {
   assertProdConfig,
   bindingDrift,
   buildProdConfig,
+  ciVerdict,
   compareCounts,
   deploy,
   droppedTables,
@@ -174,6 +175,8 @@ function fakeLive({
     events: [],
     out: [],
     fetchStatus: { "/": 200, "/openapi.json": 200, "/feed.xml": 200 },
+    // Newest first: [run id, checks-job conclusion].
+    ciRuns: [[1, "success"]],
   };
   const live = () => state.deployments.at(-1).versions[0].version_id;
   const fail = (key) => {
@@ -230,6 +233,29 @@ function fakeLive({
       throw new Error(`unexpected Cloudflare call ${method} ${path}`);
     },
     run(command, args) {
+      if (command === "gh") {
+        const path = args[1];
+        if (path.includes("/workflows/")) {
+          return JSON.stringify({
+            workflow_runs: state.ciRuns.map(([id]) => ({
+              id,
+              head_sha: "abc123",
+              html_url: `https://ci/${id}`,
+            })),
+          });
+        }
+        const id = Number(/runs\/(\d+)\/jobs/.exec(path)[1]);
+        const conclusion = state.ciRuns.find(([runId]) => runId === id)[1];
+        return JSON.stringify({
+          jobs: [
+            {
+              name: "changes (non-doc files touched in the last 24h?)",
+              conclusion: "success",
+            },
+            { name: "checks (format / lint / typecheck / unit)", conclusion },
+          ],
+        });
+      }
       if (command === "git") {
         if (args[0] === "ls-tree") {
           return tracked.map((f) => `migrations/${f}`).join("\n");
@@ -281,6 +307,78 @@ function fakeLive({
   };
   return { io, state, live };
 }
+
+describe("deploy refuses while the tests on main are red", () => {
+  const run = (checks, headSha = "old") => ({ checks, headSha, url: "u" });
+
+  test("a green run allows it and says whether it tested this commit", () => {
+    assert.deepEqual(
+      [
+        ciVerdict([run("success", "abc")], "abc").current,
+        ciVerdict([run("success")], "abc").current,
+      ],
+      [true, false],
+    );
+  });
+
+  test("a skipped or cancelled night does not hide an earlier red run", () => {
+    const verdict = ciVerdict(
+      [
+        run("skipped"),
+        run("cancelled"),
+        run(null),
+        run("failure"),
+        run("success"),
+      ],
+      "abc",
+    );
+    assert.equal(verdict.ok, false);
+    assert.match(verdict.reason, /red/);
+  });
+
+  test("no run that ran the tests refuses too", () => {
+    assert.equal(ciVerdict([run("skipped")], "abc").ok, false);
+  });
+
+  test("a red main stops a real deploy before anything runs", async () => {
+    const { io, state, live } = fakeLive();
+    state.ciRuns = [
+      [3, "skipped"],
+      [2, "failure"],
+      [1, "success"],
+    ];
+    await assert.rejects(
+      deploy(io, { dryRun: false }),
+      /Refusing to deploy.*https:\/\/ci\/2/,
+    );
+    assert.deepEqual(state.events, []);
+    assert.equal(live(), "v1");
+  });
+
+  test("a dry run says it would stop and carries on", async () => {
+    const { io, state } = fakeLive();
+    state.ciRuns = [[2, "failure"]];
+    assert.equal(await deploy(io, { dryRun: true }), true);
+    assert.ok(
+      state.out.some((line) =>
+        line.startsWith("A real deploy would stop here"),
+      ),
+    );
+  });
+
+  test("GitHub being unreachable refuses rather than guessing", async () => {
+    const { io } = fakeLive();
+    const realRun = io.run;
+    io.run = (command, args) => {
+      if (command === "gh") throw new Error("gh: not logged in");
+      return realRun(command, args);
+    };
+    await assert.rejects(
+      deploy(io, { dryRun: false }),
+      /Could not read the test runs/,
+    );
+  });
+});
 
 describe("prod-deploy flow", () => {
   test("builds everything before the first write, counts last, then deploys", async () => {

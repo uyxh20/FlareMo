@@ -193,6 +193,7 @@ Rules and what enforces them. `correct` keeps this table: add a row when a mista
 | Applied fork migrations are never edited | `packages/domain/src/fork/guards.test.ts` (frozen hashes) |
 | No raw writes to live | `.claude/settings.json` asks first; `scripts/fork/prod-deploy.mjs` bookmarks, checks counts and rolls back |
 | Format and types are clean before a merge to `main` | `scripts/fork/pre-merge.mjs` (by hand; 7 of 10 red nights before 14 Nov were this) |
+| No deploy while the tests on main are red; a red nightly is seen the same day | `scripts/fork/prod-deploy.mjs` checks the newest `checks` run on main that ran the tests; the `nightly-alert` job in `ci.yml` opens an issue while red |
 | One failing CI step does not hide the others | `.github/workflows/ci.yml`: every step `if: !cancelled()`, tests `--no-bail` |
 | Fork tests pass on any date, not just today | `scripts/fork/shifted-clock/run.mjs`, nightly at a date that rotates by weekday (fork paths only) |
 | Tests that read today's date pin the clock | docs only (the shifted-clock run catches some misses) |
