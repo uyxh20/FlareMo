@@ -11,6 +11,7 @@ import {
   healthNightUnitsFor,
   healthParseDay,
   healthTrainingVariants,
+  healthWellnessVariants,
   listMemosQuerySchema,
   PLANNER_FLYWHEEL_MIN_SAMPLE,
   PLANNER_STALE_BACKLOG_WEEKS,
@@ -1815,7 +1816,9 @@ const handlers: Handlers = {
         ? healthTrainingVariants
         : kind === "breath"
           ? healthBreathVariants
-          : null;
+          : kind === "wellness"
+            ? healthWellnessVariants
+            : null;
     const checkFields = (kind: string) => {
       const allowed = variantsOf(kind);
       if (input.variant !== undefined) {

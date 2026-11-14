@@ -1,7 +1,9 @@
 import {
   type HealthEntryDto,
   type HealthEntryKind,
-  type HealthTrackerDto,
+  type HealthFamily,
+  type HealthYearResponse,
+  healthAddDays,
   healthDaysBetween,
   healthLocalMoment,
 } from "@flaremo/contracts";
@@ -20,9 +22,19 @@ import {
   healthPatchEntryRequest,
   healthRescanRequest,
 } from "./api";
+import {
+  type HealthBreakdown,
+  HealthBreakdownDialog,
+} from "./breakdown-dialog";
 import { HealthHomeAnswers } from "./memo-labels";
 import {
+  type HealthFamilyRow,
+  type HealthYearWeek,
+  healthBreakdownOfDays,
+  healthBreakdownOfEntries,
   healthDayShort,
+  healthFamilyDays,
+  healthFamilyRows,
   healthFormatUnits,
   healthLevel,
   healthMonthMarks,
@@ -33,11 +45,7 @@ import { healthQueryKeys } from "./query-keys";
 import { HealthSinceStrip } from "./since-strip";
 import { healthStrings } from "./strings";
 import { useHealthThisWeek } from "./this-week";
-import {
-  healthKindClass,
-  healthOwnTrackers,
-  useHealthTrackers,
-} from "./trackers";
+import { useHealthTrackers } from "./trackers";
 import { HealthTrackersPanel } from "./trackers-panel";
 import "./health.css";
 
@@ -76,21 +84,26 @@ function Tile({
   title,
   big,
   note,
+  onOpen,
 }: {
-  kind: HealthEntryKind;
+  kind: HealthEntryKind | HealthFamily;
   kindClass?: string;
   title: string;
   big: string;
   note: string;
+  onOpen: () => void;
 }) {
   return (
-    <div
+    <button
+      aria-label={healthStrings.breakdown.open(title)}
       className={cn(
-        "flex flex-col gap-2 rounded-xl border border-border/50 bg-card/60 p-4",
+        "flex flex-col gap-2 rounded-xl border border-border/50 bg-card/60 p-4 text-left outline-none hover:border-border focus-visible:ring-2 focus-visible:ring-ring/50",
         kindClass,
       )}
       data-kind={kind}
       data-testid="health-tile"
+      type="button"
+      onClick={onOpen}
     >
       <span className="text-xs font-medium text-muted-foreground">{title}</span>
       <div className="flex items-baseline gap-1.5">
@@ -101,14 +114,15 @@ function Tile({
           {big}
         </span>
       </div>
-      <span className="text-xs text-muted-foreground">{note}</span>
-    </div>
+      <span className="truncate text-xs text-muted-foreground">{note}</span>
+    </button>
   );
 }
 
 function WeekSection() {
   const trackers = useHealthTrackers().data?.trackers;
   const query = useHealthThisWeek();
+  const [open, setOpen] = useState<HealthBreakdown | null>(null);
   if (query.isError) {
     return (
       <QueryErrorState
@@ -119,63 +133,75 @@ function WeekSection() {
     );
   }
   if (!query.data) return <Skeleton className="h-36 rounded-xl" />;
-  const { start, end, summary } = query.data;
+  const { start, end, summary, entries } = query.data;
+  const breakdownOf = (row: HealthFamilyRow) =>
+    healthBreakdownOfEntries(entries, row.family, trackers);
+  const subtypeNote = (row: HealthFamilyRow) =>
+    breakdownOf(row)
+      .map((item) => `${item.label} ${item.count}`)
+      .join(" · ");
+  const noteOf = (row: HealthFamilyRow): string => {
+    const days = healthFamilyDays(entries, row.family);
+    if (row.family === "fitness") {
+      return days === 0 ? s.fitnessNone : subtypeNote(row);
+    }
+    if (row.family === "breath") {
+      return days === 0
+        ? s.breathNote(0, 0)
+        : `${subtypeNote(row)}${summary.breath.minutes > 0 ? ` · ${summary.breath.minutes} min` : ""}`;
+    }
+    if (row.family === "night_out") {
+      return s.outNote(healthFormatUnits(summary.night_out.units));
+    }
+    const tracker = trackers?.find((item) => item.kind === row.family);
+    const count = query.data.trackers.find((item) => item.kind === row.family);
+    const minutes = count?.minutes ?? 0;
+    const sub = tracker?.subtypes.length ? subtypeNote(row) : "";
+    const length =
+      minutes > 0 && tracker?.measure === "hours"
+        ? healthStrings.trackers.weekHours(minutes)
+        : minutes > 0 && tracker?.measure === "minutes"
+          ? healthStrings.trackers.weekMinutes(minutes)
+          : healthStrings.trackers.weekNote(count?.days ?? 0);
+    return [sub, length].filter(Boolean).join(" · ");
+  };
   return (
     <Section
       hint={s.weekRange(healthDayShort(start), healthDayShort(end))}
       title={s.thisWeek}
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Tile
-          big={String(summary.training.sessions)}
-          kind="training"
-          note={s.trainingNote(summary.training.sessions)}
-          title={s.trainingTile}
-        />
-        <Tile
-          big={String(summary.wellness?.sessions ?? 0)}
-          kind="wellness"
-          note={s.wellnessNote(
-            summary.wellness?.days ?? 0,
-            summary.wellness?.minutes ?? 0,
-          )}
-          title={s.wellnessTile}
-        />
-        <Tile
-          big={String(summary.breath.days)}
-          kind="breath"
-          note={s.breathNote(summary.breath.days, summary.breath.minutes)}
-          title={s.breathTile}
-        />
-        <Tile
-          big={healthFormatUnits(summary.night_out.units)}
-          kind="night_out"
-          note={s.outNote(healthFormatUnits(summary.night_out.units))}
-          title={s.outTile}
-        />
-        {healthOwnTrackers(trackers).map((tracker) => {
-          const count = query.data.trackers.find(
-            (item) => item.kind === tracker.kind,
-          );
-          const minutes = count?.minutes ?? 0;
+        {healthFamilyRows(trackers).map((row) => {
+          const days = healthFamilyDays(entries, row.family);
           return (
             <Tile
-              big={String(count?.days ?? 0)}
-              key={tracker.kind}
-              kind={tracker.kind}
-              kindClass={healthKindClass(tracker.kind, trackers)}
-              note={
-                minutes > 0 && tracker.measure === "hours"
-                  ? healthStrings.trackers.weekHours(minutes)
-                  : minutes > 0 && tracker.measure === "minutes"
-                    ? healthStrings.trackers.weekMinutes(minutes)
-                    : healthStrings.trackers.weekNote(count?.days ?? 0)
+              big={
+                row.family === "night_out"
+                  ? healthFormatUnits(summary.night_out.units)
+                  : String(days)
               }
-              title={tracker.label}
+              key={row.family}
+              kind={row.family}
+              kindClass={row.kindClass}
+              note={noteOf(row)}
+              title={row.label}
+              onOpen={() =>
+                setOpen({
+                  title: healthStrings.breakdown.week(row.label),
+                  kindClass: row.kindClass,
+                  totalLabel:
+                    row.family === "night_out"
+                      ? healthStrings.breakdown.nights
+                      : healthStrings.breakdown.days,
+                  total: days,
+                  rows: breakdownOf(row),
+                })
+              }
             />
           );
         })}
       </div>
+      <HealthBreakdownDialog breakdown={open} onClose={() => setOpen(null)} />
     </Section>
   );
 }
@@ -223,32 +249,16 @@ function NeedsCheck({
   );
 }
 
-type GridRow = {
-  kind: HealthEntryKind;
-  label: string;
-  kindClass: string;
-  full: number;
-};
+/** A full week for a row's darkest cell: Fitness 3 days, Out 2 units, else 7 days. */
+function fullWeek(family: HealthFamily): number {
+  return family === "fitness" ? 3 : family === "night_out" ? 2 : 7;
+}
 
-const GRID_ROWS: GridRow[] = (
-  ["training", "wellness", "breath", "night_out"] as const
-).map((kind) => ({
-  kind,
-  label: healthStrings.kind[kind],
-  kindClass: `health-kind-${kind}`,
-  full: kind === "training" ? 3 : kind === "night_out" ? 2 : 7,
-}));
-
-function gridRowsWith(trackers: readonly HealthTrackerDto[] | undefined) {
-  return [
-    ...GRID_ROWS,
-    ...healthOwnTrackers(trackers).map((tracker) => ({
-      kind: tracker.kind,
-      label: tracker.label,
-      kindClass: healthKindClass(tracker.kind, trackers),
-      full: 7,
-    })),
-  ];
+function weekValue(week: HealthYearWeek, family: HealthFamily): number {
+  if (family === "fitness") return week.fitness;
+  if (family === "breath") return week.breath;
+  if (family === "night_out") return week.out;
+  return week.trackers[family] ?? 0;
 }
 
 function YearGrid({
@@ -258,12 +268,30 @@ function YearGrid({
 }: {
   year: number;
   today: string;
-  days: Parameters<typeof healthYearWeeks>[1];
+  days: HealthYearResponse["days"];
 }) {
   const trackers = useHealthTrackers().data?.trackers;
+  const [open, setOpen] = useState<HealthBreakdown | null>(null);
   const weeks = healthYearWeeks(year, days, today);
   const marks = healthMonthMarks(weeks);
   const columns = `repeat(${weeks.length}, minmax(0.875rem, 1fr))`;
+  const show = (
+    row: HealthFamilyRow,
+    title: string,
+    range: { from: string; to: string },
+  ) => {
+    const split = healthBreakdownOfDays(days, row.family, range, trackers);
+    setOpen({
+      title,
+      kindClass: row.kindClass,
+      totalLabel:
+        row.family === "night_out"
+          ? healthStrings.breakdown.nights
+          : healthStrings.breakdown.days,
+      total: split.days,
+      rows: split.rows,
+    });
+  };
   return (
     <div className="overflow-x-auto pb-1" data-testid="health-year-grid">
       <div className="flex min-w-[44rem] flex-col gap-1.5">
@@ -285,49 +313,70 @@ function YearGrid({
             );
           })}
         </div>
-        {gridRowsWith(trackers).map((row) => {
+        {healthFamilyRows(trackers).map((row) => {
           const label = row.label;
           return (
             <div
               className={cn("flex items-center gap-2", row.kindClass)}
-              key={row.kind}
-              role="img"
-              aria-label={s.gridLabel(label)}
+              data-family={row.family}
+              key={row.family}
             >
-              <span className="w-16 shrink-0 text-xs text-muted-foreground">
+              <button
+                aria-label={healthStrings.breakdown.open(label)}
+                className="w-16 shrink-0 truncate rounded text-left text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                data-testid="health-grid-name"
+                type="button"
+                onClick={() =>
+                  show(row, healthStrings.breakdown.year(label, year), {
+                    from: `${year}-01-01`,
+                    to: `${year}-12-31`,
+                  })
+                }
+              >
                 {label}
-              </span>
+              </button>
               <div
+                aria-label={s.gridLabel(label)}
                 className="grid flex-1 gap-[3px]"
+                role="img"
                 style={{ gridTemplateColumns: columns }}
               >
                 {weeks.map((week) => {
-                  const value =
-                    row.kind === "training"
-                      ? week.training
-                      : row.kind === "breath"
-                        ? week.breath
-                        : row.kind === "wellness"
-                          ? week.wellness
-                          : row.kind === "night_out"
-                            ? week.out
-                            : (week.trackers[row.kind] ?? 0);
+                  const value = weekValue(week, row.family);
                   const text =
-                    row.kind === "training"
-                      ? s.sessions(value)
-                      : row.kind === "night_out"
-                        ? s.units(healthFormatUnits(value))
-                        : s.days(value);
+                    row.family === "night_out"
+                      ? s.units(healthFormatUnits(value))
+                      : s.days(value);
                   return (
-                    <span
-                      className="health-cell aspect-square"
+                    <button
+                      aria-label={
+                        week.future
+                          ? undefined
+                          : s.cell(label, healthDayShort(week.start), text)
+                      }
+                      className="health-cell aspect-square outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default"
                       data-future={week.future}
-                      data-level={healthLevel(value, row.full)}
+                      data-level={healthLevel(value, fullWeek(row.family))}
+                      disabled={week.future}
                       key={week.start}
                       title={
                         week.future
                           ? undefined
                           : s.cell(label, healthDayShort(week.start), text)
+                      }
+                      type="button"
+                      onClick={() =>
+                        show(
+                          row,
+                          healthStrings.breakdown.weekOf(
+                            label,
+                            healthDayShort(week.start),
+                          ),
+                          {
+                            from: week.start,
+                            to: healthAddDays(week.start, 6),
+                          },
+                        )
                       }
                     />
                   );
@@ -337,6 +386,7 @@ function YearGrid({
           );
         })}
       </div>
+      <HealthBreakdownDialog breakdown={open} onClose={() => setOpen(null)} />
     </div>
   );
 }

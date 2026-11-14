@@ -4,8 +4,10 @@ import {
   type HealthTrackerDto,
   type HealthTrackerMeasure,
   type HealthTrackerPreviewResponse,
+  type HealthTrackerSubtype,
   type HealthTrackerTestResponse,
   healthLocalMoment,
+  healthMaxTrackerSubtypes,
   healthNormaliseTrackerWord,
   healthTrackerColors,
   healthTrackerMeasures,
@@ -45,8 +47,26 @@ type Draft = {
   measure: HealthTrackerMeasure;
   words: string[];
   blocked: string[];
+  subtypes: HealthTrackerSubtype[];
   goalId: string | null;
 };
+
+/** A short random id for a new sub-type (its rows keep it when it is renamed). */
+function newSubtypeId(): string {
+  return Math.random().toString(36).slice(2, 10).padEnd(6, "0");
+}
+
+/** Every word that counts: the tracker's own and its sub-types'. */
+function countingWords(draft: Draft): string[] {
+  return [...draft.words, ...draft.subtypes.flatMap((sub) => sub.words)];
+}
+
+/** Sub-types worth sending: named, with at least one word. */
+function liveSubtypes(draft: Draft): HealthTrackerSubtype[] {
+  return draft.subtypes
+    .map((sub) => ({ ...sub, label: sub.label.trim() }))
+    .filter((sub) => sub.label && sub.words.length > 0);
+}
 
 function draftOf(tracker: HealthTrackerDto | null): Draft {
   return {
@@ -55,6 +75,7 @@ function draftOf(tracker: HealthTrackerDto | null): Draft {
     measure: tracker?.measure ?? "days",
     words: tracker?.words ?? [],
     blocked: tracker?.blocked ?? [],
+    subtypes: tracker?.subtypes ?? [],
     goalId: tracker?.goal_id ?? null,
   };
 }
@@ -72,6 +93,7 @@ function wireDraft(
     measure: draft.measure,
     words: draft.words,
     blocked: draft.blocked,
+    subtypes: liveSubtypes(draft),
   };
 }
 
@@ -232,7 +254,7 @@ function Tester({ draft, id }: { draft: Draft; id?: string }) {
   const wire = JSON.stringify({ text, draft });
   // biome-ignore lint/correctness/useExhaustiveDependencies: `wire` stands for text and draft.
   useEffect(() => {
-    if (!text.trim() || draft.words.length === 0) {
+    if (!text.trim() || countingWords(draft).length === 0) {
       setResult(null);
       return;
     }
@@ -243,6 +265,7 @@ function Tester({ draft, id }: { draft: Draft; id?: string }) {
         measure: draft.measure,
         words: draft.words,
         blocked: draft.blocked,
+        subtypes: liveSubtypes(draft),
       })
         .then((response) => live && setResult(response))
         .catch(() => live && setResult(null));
@@ -274,6 +297,9 @@ function Tester({ draft, id }: { draft: Draft; id?: string }) {
               <span className="text-muted-foreground">
                 {" · "}
                 {result.match}
+                {result.subtype
+                  ? ` · ${draft.subtypes.find((sub) => sub.id === result.subtype)?.label ?? ""}`
+                  : ""}
                 {result.minutes
                   ? ` · ${draft.measure === "hours" ? t.hours(result.minutes) : healthStrings.chip.minutes(result.minutes)}`
                   : ""}
@@ -355,8 +381,11 @@ function PreviewResult({
 function Editor({
   tracker,
   trackers,
+  title,
   onClose,
 }: {
+  /** The heading of a built-in: "Fitness › Gym". */
+  title?: string;
   /** null for a new tracker. */
   tracker: HealthTrackerDto | null;
   trackers: readonly HealthTrackerDto[];
@@ -376,7 +405,7 @@ function Editor({
   const problem =
     !builtin && !draft.label.trim()
       ? t.needsName
-      : !builtin && draft.words.length === 0
+      : !builtin && countingWords(draft).length === 0
         ? t.needsWord
         : null;
 
@@ -410,6 +439,7 @@ function Editor({
         measure: draft.measure,
         words: draft.words,
         blocked: draft.blocked,
+        subtypes: liveSubtypes(draft),
         goal_id: draft.goalId,
       };
       return tracker
@@ -427,6 +457,13 @@ function Editor({
 
   const set = (patch: Partial<Draft>) =>
     setDraft((current) => ({ ...current, ...patch }));
+  const setSubtype = (index: number, patch: Partial<HealthTrackerSubtype>) =>
+    setDraft((current) => ({
+      ...current,
+      subtypes: current.subtypes.map((sub, i) =>
+        i === index ? { ...sub, ...patch } : sub,
+      ),
+    }));
   const addTo = (field: "words" | "blocked", word: string) =>
     setDraft((current) => {
       const other = field === "words" ? "blocked" : "words";
@@ -458,7 +495,9 @@ function Editor({
             aria-hidden="true"
             className="health-swatch size-2.5 rounded-full"
           />
-          <span className="text-sm font-semibold">{tracker?.label}</span>
+          <span className="text-sm font-semibold">
+            {title ?? tracker?.label}
+          </span>
           <span className="text-xs text-muted-foreground">{t.builtin}</span>
         </div>
       ) : (
@@ -545,6 +584,86 @@ function Editor({
           onAdd={(word) => addTo("blocked", word)}
         />
       </Field>
+
+      {!builtin && (
+        <Field label={t.subtypes}>
+          <div className="flex flex-col gap-2" data-testid="health-subtypes">
+            {draft.subtypes.map((sub, index) => (
+              <div
+                className="flex flex-col gap-1.5 rounded-lg border border-border/60 p-2"
+                data-testid="health-subtype"
+                key={sub.id}
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    aria-label={t.subtypeName}
+                    className="h-7 w-40 text-sm"
+                    data-testid="health-subtype-name"
+                    maxLength={24}
+                    placeholder={t.subtypeName}
+                    value={sub.label}
+                    onChange={(event) =>
+                      setSubtype(index, { label: event.target.value })
+                    }
+                  />
+                  <Button
+                    size="xs"
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      set({
+                        subtypes: draft.subtypes.filter((_, i) => i !== index),
+                      })
+                    }
+                  >
+                    {t.removeSubtype}
+                  </Button>
+                </div>
+                <WordChips
+                  kindClass={liveClass}
+                  words={sub.words}
+                  onRemove={(word) =>
+                    setSubtype(index, {
+                      words: sub.words.filter((existing) => existing !== word),
+                    })
+                  }
+                />
+                <WordAdder
+                  placeholder={t.addWord}
+                  testId="health-subtype-word"
+                  onAdd={(word) =>
+                    setSubtype(index, {
+                      words: sub.words.includes(word)
+                        ? sub.words
+                        : [...sub.words, word],
+                    })
+                  }
+                />
+              </div>
+            ))}
+            {draft.subtypes.length < healthMaxTrackerSubtypes && (
+              <Button
+                className="self-start"
+                data-testid="health-add-subtype"
+                size="xs"
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  set({
+                    subtypes: [
+                      ...draft.subtypes,
+                      { id: newSubtypeId(), label: "", words: [] },
+                    ],
+                  })
+                }
+              >
+                <PlusIcon data-icon="inline-start" />
+                {t.addSubtype}
+              </Button>
+            )}
+          </div>
+        </Field>
+      )}
 
       {!builtin && (
         <Field label={t.goal}>
@@ -659,15 +778,66 @@ function Editor({
 
 // --- The panel ------------------------------------------------------------------------
 
+/** A pill on the panel: one family, its built-in parts or the owner's tracker. */
+type Pill = {
+  id: string;
+  label: string;
+  kindClass: string;
+  /** The editors it opens, each with its heading. */
+  parts: Array<{ tracker: HealthTrackerDto; title: string }>;
+};
+
+/** Fitness (Gym and Wellness inside), Breath, Out, then the owner's trackers. */
+function pillsOf(trackers: readonly HealthTrackerDto[]): Pill[] {
+  const builtin = (kind: string) => trackers.find((x) => x.kind === kind);
+  const parts = (entries: Array<[string, string]>): Pill["parts"] =>
+    entries.flatMap(([kind, title]) => {
+      const tracker = builtin(kind);
+      return tracker ? [{ tracker, title }] : [];
+    });
+  const f = healthStrings.family;
+  const pills: Pill[] = [
+    {
+      id: "fitness",
+      label: f.fitness ?? "Fitness",
+      kindClass: "health-kind-training",
+      parts: parts([
+        ["training", `${f.fitness} › ${healthStrings.kind.training}`],
+        ["wellness", `${f.fitness} › ${healthStrings.kind.wellness}`],
+      ]),
+    },
+    {
+      id: "breath",
+      label: f.breath ?? "Breath",
+      kindClass: "health-kind-breath",
+      parts: parts([["breath", f.breath ?? "Breath"]]),
+    },
+    {
+      id: "night_out",
+      label: f.night_out ?? "Out",
+      kindClass: "health-kind-night_out",
+      parts: parts([["night_out", f.night_out ?? "Out"]]),
+    },
+  ];
+  for (const tracker of trackers) {
+    if (tracker.builtin) continue;
+    pills.push({
+      id: tracker.id,
+      label: tracker.label,
+      kindClass: healthKindClass(tracker.kind, trackers),
+      parts: [{ tracker, title: tracker.label }],
+    });
+  }
+  return pills.filter((pill) => pill.parts.length > 0);
+}
+
 export function HealthTrackersPanel() {
   const query = useHealthTrackers();
   const [open, setOpen] = useState<string | null>(null);
   const trackers = query.data?.trackers ?? [];
   if (!query.data) return null;
-  const selected =
-    open === "new"
-      ? null
-      : (trackers.find((tracker) => tracker.id === open) ?? null);
+  const pills = pillsOf(trackers);
+  const selected = pills.find((pill) => pill.id === open);
   return (
     <section
       className="flex flex-col gap-3 motion-safe:animate-rise"
@@ -678,24 +848,24 @@ export function HealthTrackersPanel() {
         <p className="text-xs text-muted-foreground">{t.hint}</p>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        {trackers.map((tracker) => (
+        {pills.map((pill) => (
           <button
-            aria-pressed={open === tracker.id}
+            aria-pressed={open === pill.id}
             className={cn(
               "health-chip inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              healthKindClass(tracker.kind, trackers),
-              open === tracker.id && "ring-2 ring-[color:var(--k)]",
+              pill.kindClass,
+              open === pill.id && "ring-2 ring-[color:var(--k)]",
             )}
             data-testid="health-tracker-pill"
-            key={tracker.id}
+            key={pill.id}
             type="button"
-            onClick={() => setOpen(open === tracker.id ? null : tracker.id)}
+            onClick={() => setOpen(open === pill.id ? null : pill.id)}
           >
             <span
               aria-hidden="true"
               className="health-swatch size-2 rounded-full"
             />
-            {tracker.label}
+            {pill.label}
           </button>
         ))}
         <Button
@@ -710,14 +880,23 @@ export function HealthTrackersPanel() {
           {t.add}
         </Button>
       </div>
-      {open && (
+      {open === "new" && (
         <Editor
-          key={open}
-          tracker={selected}
+          key="new"
+          tracker={null}
           trackers={trackers}
           onClose={() => setOpen(null)}
         />
       )}
+      {selected?.parts.map((part) => (
+        <Editor
+          key={part.tracker.id}
+          title={part.title}
+          tracker={part.tracker}
+          trackers={trackers}
+          onClose={() => setOpen(null)}
+        />
+      ))}
     </section>
   );
 }

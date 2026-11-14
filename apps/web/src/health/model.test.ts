@@ -1,8 +1,12 @@
+import type { HealthTrackerDto } from "@flaremo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  healthBreakdownOfDays,
+  healthBreakdownOfEntries,
   healthChipText,
   healthDayShort,
   healthDotState,
+  healthFamilyDays,
   healthFormatUnits,
   healthLevel,
   healthMonthMarks,
@@ -82,7 +86,7 @@ describe("chip text", () => {
       healthChipText(
         healthTestEntry({ kind: "breath", variant: "wim_hof", minutes: 10 }),
       ),
-    ).toBe("Wim Hof · 10 min");
+    ).toBe("Breath · Wim Hof · 10 min");
   });
 
   it("names a night by its weekday, home time and units", () => {
@@ -90,12 +94,12 @@ describe("chip text", () => {
       healthChipText(
         healthTestNight({ day: "2026-10-09", home_at: "03:30", units: 1 }),
       ),
-    ).toBe("Night out · Fri · home 03:30 · 1");
+    ).toBe("Out · Fri · Big night · home 03:30");
     expect(
       healthChipText(
         healthTestNight({ day: "2026-10-10", home_at: "01:00", units: 0.5 }),
       ),
-    ).toBe("Night out · Sat · home 01:00 · ½");
+    ).toBe("Out · Sat · Late · home 01:00");
   });
 
   it("asks for the home time while a night needs one", () => {
@@ -103,7 +107,7 @@ describe("chip text", () => {
       healthChipText(
         healthTestNight({ day: "2026-10-09", needs_check: true, units: null }),
       ),
-    ).toBe("Night out · Fri · home when?");
+    ).toBe("Out · Fri · home when?");
   });
 
   it("shows a bender without a time", () => {
@@ -111,7 +115,97 @@ describe("chip text", () => {
       healthChipText(
         healthTestNight({ day: "2026-10-09", bender: true, units: 1 }),
       ),
-    ).toBe("Night out · Fri · bender · 1");
+    ).toBe("Out · Fri · Bender");
+  });
+});
+
+describe("families and sub-types", () => {
+  it("joins two breath sub-types in one label", () => {
+    expect(
+      healthChipText(
+        healthTestEntry({
+          kind: "breath",
+          variant: "wim_hof+meditation",
+          minutes: 30,
+        }),
+      ),
+    ).toBe("Breath · Wim Hof + Meditation · 30 min");
+  });
+
+  it("names mobility and an owner's sub-type", () => {
+    expect(healthChipText(healthTestEntry({ variant: "mobility" }))).toBe(
+      "Fitness · Mobility",
+    );
+    const fast = {
+      ...(healthTestTrackers()[3] as HealthTrackerDto),
+      subtypes: [{ id: "s168ab", label: "16:8", words: ["16:8"] }],
+    };
+    expect(
+      healthChipText(
+        healthTestEntry({ kind: fast.kind, variant: "s168ab", minutes: 960 }),
+        [fast],
+      ),
+    ).toBe("Fasting · 16:8 · 16 h");
+  });
+
+  it("splits a week's entries by sub-type, most first", () => {
+    const entries = [
+      healthTestEntry({ id: "a", variant: "back" }),
+      healthTestEntry({ id: "b", variant: "crossfit", day: "2026-10-13" }),
+      healthTestEntry({ id: "c", variant: "chest", day: "2026-10-14" }),
+      healthTestEntry({ id: "d", kind: "wellness", variant: "sauna" }),
+      healthTestEntry({ id: "e", kind: "breath", variant: "wim_hof" }),
+    ];
+    expect(healthBreakdownOfEntries(entries, "fitness")).toEqual([
+      { key: "gym", label: "Gym", count: 2 },
+      { key: "crossfit", label: "CrossFit", count: 1 },
+      { key: "wellness", label: "Wellness", count: 1 },
+    ]);
+    expect(healthFamilyDays(entries, "fitness")).toBe(3);
+  });
+
+  it("splits the year's days by sub-type within a range", () => {
+    const days: Array<{
+      day: string;
+      training: number;
+      breath: number;
+      night_out: null;
+      subtypes: Record<string, number>;
+    }> = [
+      {
+        day: "2026-01-05",
+        training: 1,
+        breath: 0,
+        night_out: null,
+        subtypes: { "fitness:gym": 1 },
+      },
+      {
+        day: "2026-01-06",
+        training: 0,
+        breath: 1,
+        night_out: null,
+        subtypes: { "breath:wim_hof": 1, "fitness:wellness": 1 },
+      },
+      {
+        day: "2026-02-01",
+        training: 1,
+        breath: 0,
+        night_out: null,
+        subtypes: { "fitness:crossfit": 1 },
+      },
+    ];
+    expect(
+      healthBreakdownOfDays(days, "fitness", {
+        from: "2026-01-05",
+        to: "2026-01-11",
+      }),
+    ).toEqual({
+      days: 2,
+      rows: [
+        { key: "gym", label: "Gym", count: 1 },
+        { key: "wellness", label: "Wellness", count: 1 },
+      ],
+    });
   });
 });
 

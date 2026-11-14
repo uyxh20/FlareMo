@@ -1,12 +1,12 @@
 import {
   type HealthBreathVariant,
-  type HealthWellnessVariant,
   type HealthEntryKind,
   type HealthKind,
   type HealthTrackerKind,
   type HealthTrackerMeasure,
   type HealthTrackerTestReason,
   type HealthTrainingVariant,
+  type HealthWellnessVariant,
   healthAddDays,
   healthDefaultBreathMinutes,
   healthLocalMoment,
@@ -49,6 +49,12 @@ export type HealthParseTracker = {
   /** Normalised words or phrases; a leading # makes a tag. */
   words: readonly string[];
   blocked: readonly string[];
+  /**
+   * Sub-types, each with its own words (since 14 Nov 2026). A sub-type's word
+   * counts for the tracker too; the row's variant is the first sub-type whose
+   * word the counted sentence (or the entry) holds.
+   */
+  subtypes?: ReadonlyArray<{ id: string; words: readonly string[] }>;
 };
 
 /**
@@ -67,10 +73,12 @@ export type HealthParsedEntry = {
   kind: HealthEntryKind;
   /** The local day, `YYYY-MM-DD`. */
   day: string;
+  /** A built-in sub-type, two breath ones joined by "+", or an owner's sub-type id. */
   variant:
     | HealthTrainingVariant
     | HealthBreathVariant
     | HealthWellnessVariant
+    | (string & {})
     | null;
   minutes: number | null;
   /** `HH:MM`, night_out only. */
@@ -258,7 +266,9 @@ const GYM_PLACE_BEFORE =
   /\b(?:outside|before|after|near|beside|behind|inside|around|from|at|in|leaving|left|walking to|walk to|drive to|driving to)(?: (?:the|a|my|our))?\s*$/;
 const ZONE2 = /\bzone ?2\b/;
 const CARDIO_WORD =
-  /\b(?:bike|biking|cycling|run|ran|running|jog|jogging|cardio)\b/g;
+  /\b(?:bike|biking|cycling|run|ran|running|jog|jogging|cardio|swim|swam|swimming)\b/g;
+/** Yoga, stretching, pilates: training, as Fitness · Mobility (since 14 Nov 2026). */
+const MOBILITY = /\b(?:yoga|stretch(?:ing|ed)?|pilates|mobility)\b/;
 const DURATION =
   /\b(\d{1,3}(?:\.\d)?)\s*(min|mins|minutes|km|k|miles|mi|hours?|hrs?|h)\b/;
 const SESSION_EVIDENCE = /\b(?:session|workout|day|lifted|reps|sets|pb)\b/;
@@ -341,6 +351,19 @@ function trainingHit(clause: string): TrainingHit | null {
       };
     }
   }
+  const mobility = MOBILITY.exec(clause);
+  if (
+    mobility &&
+    !negatedAt(clause, mobility.index, mobility[0].length) &&
+    (explicit || DURATION.test(clause) || DONE.test(clause))
+  ) {
+    return {
+      variant: "mobility",
+      rank: 3.5,
+      minutes: durationMinutes(clause),
+      explicit,
+    };
+  }
   if (explicit) {
     const tag = GYM_TAG.exec(clause);
     if (tag && !negatedAt(clause, tag.index, tag[0].length)) {
@@ -372,7 +395,10 @@ function trainingHit(clause: string): TrainingHit | null {
 // --- Breath -------------------------------------------------------------------------
 
 const WIM_HOF = /(?:#wimhof|#wh|\bwim ?-?hof|\bwh)(?![\w-])/g;
-const MEDITATION = /(?:#meditat\w*|\bmeditat\w*|\bbreath ?work)(?![\w-])/g;
+const MEDITATION = /(?:#meditat\w*|\bmeditat\w*)(?![\w-])/g;
+/** Breathwork, #breath (since 14 Nov 2026): Breath · Breathwork. */
+const BREATHWORK =
+  /(?:#breath(?:work)?|\bbreath ?work|\bbox breathing|\bpranayama|\bbreathing exercises?)(?![\w-])/g;
 
 type BreathHit = {
   variant: HealthBreathVariant;
@@ -404,6 +430,9 @@ function breathHit(clause: string, sentence: string): BreathHit | null {
   }
   for (const match of clause.matchAll(MEDITATION)) {
     candidates.push({ variant: "meditation", match });
+  }
+  for (const match of clause.matchAll(BREATHWORK)) {
+    candidates.push({ variant: "breathwork", match });
   }
   candidates.sort((a, b) => (a.match.index ?? 0) - (b.match.index ?? 0));
   for (const { variant, match } of candidates) {
@@ -720,8 +749,21 @@ export function healthParseMemo(
             };
           }
         }
-        if (!breath) {
-          const breathing = breathHit(clause, sentence);
+        const breathing = breathHit(clause, sentence);
+        if (breath && breathing && longAllows(breathing.explicit)) {
+          // A second sub-type in the same note ("wim hof 10, meditated 20"):
+          // one row of both, minutes summed.
+          const have = (breath.variant ?? "").split("+");
+          if (!have.includes(breathing.variant)) {
+            breath = {
+              ...breath,
+              variant: [...have, breathing.variant].join(
+                "+",
+              ) as HealthBreathVariant,
+              minutes: (breath.minutes ?? 0) + breathing.minutes,
+            };
+          }
+        } else if (!breath) {
           if (breathing && longAllows(breathing.explicit)) {
             breath = {
               kind: "breath",
@@ -853,12 +895,12 @@ export function healthParseMemo(
   }
 
   for (const tracker of config.trackers ?? []) {
-    const hit = findWord(context, tracker.words, false);
+    const hit = findWord(context, trackerWords(tracker), false);
     if (!hit.found) continue;
     entries.push({
       kind: tracker.kind,
       day: hit.day,
-      variant: null,
+      variant: subtypeOf(tracker.subtypes, hit.sentence, input.tags ?? []),
       minutes: trackerMinutes(tracker.measure, hit.sentence),
       homeAt: null,
       units: null,
@@ -879,6 +921,31 @@ export function healthParseMemo(
 }
 
 // --- The owner's words -------------------------------------------------------------
+
+/** A tracker's words and its sub-types' words. */
+function trackerWords(tracker: {
+  words: readonly string[];
+  subtypes?: ReadonlyArray<{ words: readonly string[] }>;
+}): string[] {
+  return [
+    ...new Set([
+      ...tracker.words,
+      ...(tracker.subtypes ?? []).flatMap((sub) => sub.words),
+    ]),
+  ];
+}
+
+/** The first sub-type with a word in the counted sentence, else none. */
+function subtypeOf(
+  subtypes: HealthParseTracker["subtypes"],
+  sentence: string,
+  tags: readonly string[],
+): string | null {
+  for (const sub of subtypes ?? []) {
+    if (hasAnyWord(sentence, tags, sub.words)) return sub.id;
+  }
+  return null;
+}
 //
 // A tracker's words are read with the same care as the built-in keywords: a
 // sentence that is a plan ("tomorrow I'll start fasting") or a denial ("no
@@ -1029,12 +1096,14 @@ export function healthExplainTracker(input: {
   measure: HealthTrackerMeasure;
   words: readonly string[];
   blocked: readonly string[];
+  subtypes?: HealthParseTracker["subtypes"];
   night?: boolean;
 }): {
   reason: HealthTrackerTestReason;
   match: string | null;
   dayOffset: number | null;
   minutes: number | null;
+  subtype: string | null;
 } {
   const text = normalise(healthStripTimestampPrefix(input.text));
   const sentences = sentencesOf(text);
@@ -1048,11 +1117,17 @@ export function healthExplainTracker(input: {
       sessionDay: (sentence) =>
         !retro && /\byesterday\b/.test(sentence) ? "-1" : "0",
     },
-    input.words,
+    trackerWords(input),
     input.night ?? false,
   );
   if (!hit.found) {
-    return { reason: hit.reason, match: null, dayOffset: null, minutes: null };
+    return {
+      reason: hit.reason,
+      match: null,
+      dayOffset: null,
+      minutes: null,
+      subtype: null,
+    };
   }
   if (input.blocked.length > 0 && hasAnyWord(text, [], input.blocked)) {
     return {
@@ -1060,6 +1135,7 @@ export function healthExplainTracker(input: {
       match: hit.match,
       dayOffset: null,
       minutes: null,
+      subtype: null,
     };
   }
   return {
@@ -1067,5 +1143,6 @@ export function healthExplainTracker(input: {
     match: hit.match,
     dayOffset: Number(hit.day),
     minutes: trackerMinutes(input.measure, hit.sentence),
+    subtype: subtypeOf(input.subtypes, hit.sentence, []),
   };
 }

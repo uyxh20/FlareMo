@@ -147,6 +147,8 @@ export const healthTracker = sqliteTable(
       .default("days"),
     wordsJson: text("words_json").notNull().default("[]"),
     blockedJson: text("blocked_json").notNull().default("[]"),
+    // Sub-types, JSON [{id, label, words}] (migrations/9020_planner_health_subtypes.sql).
+    subtypesJson: text("subtypes_json").notNull().default("[]"),
     goalId: text("goal_id"),
     builtin: integer("builtin", { mode: "boolean" }).notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),

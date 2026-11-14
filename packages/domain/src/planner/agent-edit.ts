@@ -2,6 +2,7 @@ import {
   healthBreathVariants,
   healthParseDay,
   healthTrainingVariants,
+  healthWellnessVariants,
   type PlannerAgentEdit,
   type PlannerAgentEditKey,
   type PlannerGoalLine,
@@ -280,7 +281,9 @@ const variantsOf = (kind: string): readonly string[] | null =>
     ? healthTrainingVariants
     : kind === "breath"
       ? healthBreathVariants
-      : null;
+      : kind === "wellness"
+        ? healthWellnessVariants
+        : null;
 
 /** A health row to add or fix: kind, variant, minutes and day. */
 async function editHealth(

@@ -34,6 +34,8 @@ export function healthKindClass(
   kind: HealthEntryKind,
   trackers: readonly HealthTrackerDto[] | undefined,
 ): string {
+  // Wellness is part of Fitness and wears its colour.
+  if (kind === "wellness") return "health-kind-training";
   if (healthIsBuiltinKind(kind)) return `health-kind-${kind}`;
   const color = trackers?.find((tracker) => tracker.kind === kind)?.color;
   return `health-kind-t-${color ?? "slate"}`;

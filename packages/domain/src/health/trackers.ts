@@ -9,12 +9,14 @@ import {
   type HealthTrackerKind,
   type HealthTrackerMeasure,
   type HealthTrackerPreviewResponse,
+  type HealthTrackerSubtype,
   type HealthTrackerTestResponse,
   healthBuiltinWords,
   healthIsBuiltinKind,
   healthKinds,
   healthMaxTrackers,
   healthTrackerColors,
+  healthTrackerSubtypeSchema,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import {
@@ -57,6 +59,31 @@ function parseWords(json: string): string[] {
   } catch {
     return [];
   }
+}
+
+/** A tracker's sub-types as stored; anything malformed is left out. */
+export function healthParseSubtypes(
+  json: string | null | undefined,
+): HealthTrackerSubtype[] {
+  if (!json) return [];
+  try {
+    const value: unknown = JSON.parse(json);
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((item) => {
+      const parsed = healthTrackerSubtypeSchema.safeParse(item);
+      return parsed.success ? [parsed.data] : [];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** Every word that counts for a tracker: its own and its sub-types'. */
+function allWords(
+  words: readonly string[],
+  subtypes: readonly HealthTrackerSubtype[],
+): string[] {
+  return [...new Set([...words, ...subtypes.flatMap((sub) => sub.words)])];
 }
 
 function isMissingTable(error: unknown): boolean {
@@ -105,12 +132,15 @@ export function healthParseConfigOf(
       if (words.length > 0 || blocked.length > 0) {
         builtins[row.kind] = { words, blocked };
       }
-    } else if (words.length > 0) {
+    } else {
+      const subtypes = healthParseSubtypes(row.subtypesJson);
+      if (allWords(words, subtypes).length === 0) continue;
       trackers.push({
         kind: row.kind as HealthTrackerKind,
         measure: row.measure,
         words,
         blocked,
+        subtypes: subtypes.map(({ id, words: own }) => ({ id, words: own })),
       });
     }
   }
@@ -144,6 +174,7 @@ function toDto(row: HealthTrackerRow): HealthTrackerDto {
     measure: row.measure,
     words: parseWords(row.wordsJson),
     blocked: parseWords(row.blockedJson),
+    subtypes: builtin ? [] : healthParseSubtypes(row.subtypesJson),
     goal_id: row.goalId,
     builtin,
     fixed_words: builtin ? [...healthBuiltinWords[row.kind as HealthKind]] : [],
@@ -160,6 +191,7 @@ function builtinDto(kind: HealthKind): HealthTrackerDto {
     measure: kind === "breath" ? "minutes" : "days",
     words: [],
     blocked: [],
+    subtypes: [],
     goal_id: null,
     builtin: true,
     fixed_words: [...healthBuiltinWords[kind]],
@@ -266,15 +298,21 @@ function assertWordsDiffer(words: string[], blocked: string[]): void {
   }
 }
 
+/** A tracker needs a word (its own or a sub-type's), and none of them blocked. */
+function assertTrackerWords(tracker: HealthTrackerInput): void {
+  const words = allWords(tracker.words, tracker.subtypes ?? []);
+  if (words.length === 0) {
+    throw new ValidationError("A tracker needs at least one word or tag.");
+  }
+  assertWordsDiffer(words, tracker.blocked);
+}
+
 export async function healthCreateTracker(
   db: FlareMoDb,
   input: { userId: string; tracker: HealthTrackerInput; now?: Date },
 ): Promise<HealthTrackerRow> {
   const { tracker } = input;
-  if (tracker.words.length === 0) {
-    throw new ValidationError("A tracker needs at least one word or tag.");
-  }
-  assertWordsDiffer(tracker.words, tracker.blocked);
+  assertTrackerWords(tracker);
   await assertGoal(db, input.userId, tracker.goal_id);
   const rows = await healthReadTrackerRows(db, input.userId);
   const live = rows.filter(
@@ -296,6 +334,7 @@ export async function healthCreateTracker(
     measure: tracker.measure,
     wordsJson: JSON.stringify(tracker.words),
     blockedJson: JSON.stringify(tracker.blocked),
+    subtypesJson: JSON.stringify(tracker.subtypes ?? []),
     goalId: tracker.goal_id,
     builtin: false,
     sortOrder: Math.max(0, ...live.map((other) => other.sortOrder + 1)),
@@ -332,10 +371,7 @@ export async function healthUpdateTracker(
   },
 ): Promise<HealthTrackerRow> {
   const { tracker } = input;
-  if (tracker.words.length === 0) {
-    throw new ValidationError("A tracker needs at least one word or tag.");
-  }
-  assertWordsDiffer(tracker.words, tracker.blocked);
+  assertTrackerWords(tracker);
   await assertGoal(db, input.userId, tracker.goal_id);
   const before = await readOwnTracker(db, input.userId, input.id);
   if (before.archivedAt !== null) throw new NotFoundError("Tracker not found");
@@ -347,6 +383,7 @@ export async function healthUpdateTracker(
     measure: tracker.measure,
     wordsJson: JSON.stringify(tracker.words),
     blockedJson: JSON.stringify(tracker.blocked),
+    subtypesJson: JSON.stringify(tracker.subtypes ?? []),
     goalId: tracker.goal_id,
     updatedAt: at,
   };
@@ -359,6 +396,7 @@ export async function healthUpdateTracker(
         measure: after.measure,
         wordsJson: after.wordsJson,
         blockedJson: after.blockedJson,
+        subtypesJson: after.subtypesJson,
         goalId: after.goalId,
         updatedAt: at,
       })
@@ -414,6 +452,7 @@ export async function healthSetBuiltinWords(
           : "days",
       wordsJson: JSON.stringify(input.words.words),
       blockedJson: JSON.stringify(input.words.blocked),
+      subtypesJson: "[]",
       goalId: null,
       builtin: true,
       sortOrder: 0,
@@ -499,6 +538,10 @@ export function healthConfigWithDraft(
           measure: draft.measure as HealthTrackerMeasure,
           words: draft.words,
           blocked: draft.blocked,
+          subtypes: (draft.subtypes ?? []).map(({ id, words }) => ({
+            id,
+            words,
+          })),
         },
       ],
     },
@@ -515,6 +558,10 @@ export function healthTestTracker(input: {
     measure: input.draft.measure,
     words: input.draft.words,
     blocked: input.draft.blocked,
+    subtypes: (input.draft.subtypes ?? []).map(({ id, words }) => ({
+      id,
+      words,
+    })),
     night: input.draft.id === "night_out",
   });
   return {
@@ -522,6 +569,7 @@ export function healthTestTracker(input: {
     match: result.match,
     day_offset: result.dayOffset,
     minutes: result.minutes,
+    subtype: result.subtype,
   };
 }
 
