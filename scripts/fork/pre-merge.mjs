@@ -6,6 +6,7 @@
 // branch touches (compared with origin/main). Exits non-zero on any failure.
 // Usage: node scripts/fork/pre-merge.mjs [--base origin/main]
 import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const PACKAGE_DIRS = [
@@ -41,6 +42,20 @@ export function touchedPackages(files) {
   return [...names].sort();
 }
 
+/**
+ * `pnpm format:check` as package.json defines it, minus `wrangler.jsonc` when
+ * that gitignored file is absent (thread sandboxes and CI have none, and Biome
+ * reports the missing file as an error).
+ */
+export function formatCheckArgs(script, hasWranglerConfig) {
+  const words = script.trim().split(/\s+/);
+  if (words[0] !== "biome")
+    throw new Error(`Unexpected format:check: ${script}`);
+  return hasWranglerConfig
+    ? words
+    : words.filter((w) => w !== "wrangler.jsonc");
+}
+
 function run(label, command, args) {
   console.log(`\n== ${label}`);
   const result = spawnSync(command, args, { stdio: "inherit" });
@@ -57,7 +72,11 @@ function main(argv) {
     .filter(Boolean);
   const packages = touchedPackages(files);
   const failed = [];
-  if (!run("format check", "pnpm", ["format:check"])) failed.push("format");
+  const script = JSON.parse(readFileSync("package.json", "utf8")).scripts[
+    "format:check"
+  ];
+  const format = formatCheckArgs(script, existsSync("wrangler.jsonc"));
+  if (!run("format check", "pnpm", ["exec", ...format])) failed.push("format");
   for (const name of packages) {
     if (!run(`typecheck ${name}`, "pnpm", ["--filter", name, "typecheck"])) {
       failed.push(name);

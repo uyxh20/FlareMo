@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { touchedPackages } from "./pre-merge.mjs";
+import { formatCheckArgs, touchedPackages } from "./pre-merge.mjs";
 
 test("names each package a change touches, once", () => {
   assert.deepEqual(
@@ -21,4 +21,21 @@ test("a web-only change typechecks only the web app", () => {
 
 test("docs-only changes need no typecheck", () => {
   assert.deepEqual(touchedPackages(["AGENTS.md", "docs/a.md"]), []);
+});
+
+test("drops wrangler.jsonc from the format check only when it is absent", () => {
+  const script = "biome ci AGENTS.md wrangler.jsonc docs";
+  assert.deepEqual(formatCheckArgs(script, false), [
+    "biome",
+    "ci",
+    "AGENTS.md",
+    "docs",
+  ]);
+  assert.deepEqual(formatCheckArgs(script, true), [
+    "biome",
+    "ci",
+    "AGENTS.md",
+    "wrangler.jsonc",
+    "docs",
+  ]);
 });
