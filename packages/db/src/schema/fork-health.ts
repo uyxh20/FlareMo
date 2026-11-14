@@ -147,14 +147,14 @@ export const healthTracker = sqliteTable(
       .default("days"),
     wordsJson: text("words_json").notNull().default("[]"),
     blockedJson: text("blocked_json").notNull().default("[]"),
-    // Sub-types, JSON [{id, label, words}] (migrations/9020_planner_health_subtypes.sql).
-    subtypesJson: text("subtypes_json").notNull().default("[]"),
     goalId: text("goal_id"),
     builtin: integer("builtin", { mode: "boolean" }).notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     archivedAt: text("archived_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+    // Sub-types, JSON [{id, label, words}] (migrations/9020_planner_health_subtypes.sql).
+    subtypesJson: text("subtypes_json").notNull().default("[]"),
   },
   (table) => [
     uniqueIndex("health_tracker_user_kind_uq").on(table.userId, table.kind),
