@@ -176,7 +176,8 @@ The QA skills live in `.claude/skills/` (adapted from pstack, MIT; `.claude/skil
 | The same mistake or correction shows up a second time | `correct`, `encode-lessons-in-structure` |
 | "Why is it like this?", "why did it break?", post-mortems | `why` |
 | Refactor, cleanup or a feature that touches old code | `subtract-before-you-add` |
-| Before merging to `main`, and before asking Anon for "push to prod" | `blast-radius` |
+| Before merging to `main` | `node scripts/fork/pre-merge.mjs` (must pass), then `blast-radius` |
+| Before asking Anon for "push to prod" | `blast-radius` |
 | Big or risky change before release (migrations, data writes or deletes, agent Accept / Undo, uploads and sync, deploy scripts) | `interrogate` (costly: big changes only) |
 | A flow with states: Accept / Undo, review save and Start over, upload retry, deploy and rollback | `statechart` |
 | Sandbox test with step-by-step screenshots | `verify-schizo-diary`, made once by `create-verification-skill` |
@@ -191,5 +192,8 @@ Rules and what enforces them. `correct` keeps this table: add a row when a mista
 | Every upstream file the fork touches is listed in `docs/fork-customizations.md` | `packages/domain/src/fork/upstream-hookins.test.ts` |
 | Applied fork migrations are never edited | `packages/domain/src/fork/guards.test.ts` (frozen hashes) |
 | No raw writes to live | `.claude/settings.json` asks first; `scripts/fork/prod-deploy.mjs` bookmarks, checks counts and rolls back |
-| Fork tests pass on any date, not just today | `scripts/fork/shifted-clock/run.mjs`, run nightly by `checks` at a date that rotates by weekday |
+| Format and types are clean before a merge to `main` | `scripts/fork/pre-merge.mjs` (by hand; 7 of 10 red nights before 14 Nov were this) |
+| One failing CI step does not hide the others | `.github/workflows/ci.yml`: every step `if: !cancelled()`, tests `--no-bail` |
+| Fork tests pass on any date, not just today | `scripts/fork/shifted-clock/run.mjs`, nightly at a date that rotates by weekday (fork paths only) |
+| Tests that read today's date pin the clock | docs only (the shifted-clock run catches some misses) |
 | A bug fix comes with a test that failed before the fix | docs only (`tdd`) |

@@ -6,13 +6,15 @@
 // and is printed so a failure can be re-run exactly:
 //   FLAREMO_TEST_NOW=<date> pnpm exec vitest run --config scripts/fork/shifted-clock/vitest.config.mjs <paths>
 // Usage: node scripts/fork/shifted-clock/run.mjs [--date <ISO>] [paths...]
+// Limits: a test that calls vi.useRealTimers() drops the shift for the rest of
+// its file, and upstream tests are not covered (they may assume today).
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 // Times are UTC; the app's week runs on Europe/Copenhagen time.
 export const SHIFTED_DATES = [
   {
-    at: "2026-12-31T22:30:00Z",
+    at: "2026-12-31T23:30:00Z",
     why: "half past midnight on New Year's Day, Copenhagen",
   },
   {
@@ -35,6 +37,9 @@ export const FORK_TEST_PATHS = [
   "packages/domain/src/fork",
   "apps/web/src/planner",
   "apps/web/src/health",
+  "apps/web/src/fork",
+  "apps/worker/src/routes/planner-",
+  "apps/worker/src/routes/health-api.test",
 ];
 
 export function pickDate(day = new Date()) {

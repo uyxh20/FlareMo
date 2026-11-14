@@ -60,7 +60,9 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.changes.outputs.run == 'true') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Fork: 55, not 30. A full green run is now about 30 minutes (domain and
+    # worker tests have grown) plus about 10 for the shifted-clock step.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v7
 
@@ -74,25 +76,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Fork: every step below runs even when an earlier one failed
+      # (`!cancelled()`), and `--no-bail` runs every package's tests, so one
+      # failure no longer hides the rest (format errors hid all tests from
+      # 19 Oct to 10 Nov).
       - name: Format check
+        if: ${{ !cancelled() }}
         run: pnpm format:check
 
       - name: Lint & typecheck
+        if: ${{ !cancelled() }}
         run: pnpm check
 
       - name: Unit tests
-        run: pnpm test
+        if: ${{ !cancelled() }}
+        run: pnpm -r --no-bail test
+
+      # Fork: the fork's tests again with the clock moved to a risky date
+      # (year end, a new week, the clock change...), nightly only. The date
+      # rotates by weekday and is printed, so a failure can be re-run exactly.
+      - name: Fork tests at a shifted date
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        run: node scripts/fork/shifted-clock/run.mjs
 
       # Fork: the deploy and dev-environment scripts guard live data, so their
       # tests and the persistence manifest check run here too.
-      # Fork: the fork's tests again with the clock moved to a risky date
-      # (year end, a new week, the clock change...). The date rotates by
-      # weekday and is printed, so a failure can be re-run exactly.
-      - name: Fork tests at a shifted date
-        run: node scripts/fork/shifted-clock/run.mjs
-
       - name: Fork script tests
+        if: ${{ !cancelled() }}
         run: node --test scripts/fork/*.test.mjs
 
       - name: Persistence manifest check
+        if: ${{ !cancelled() }}
         run: pnpm persistence:check

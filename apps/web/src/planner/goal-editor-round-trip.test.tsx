@@ -44,7 +44,7 @@ const goal: PlannerGoalDto = {
 };
 
 function saveButton(): HTMLButtonElement {
-  const button = [...document.querySelectorAll("button")].find(
+  const button = Array.from(document.querySelectorAll("button")).find(
     (b) => b.textContent?.trim() === "Save",
   );
   if (!button) throw new Error("No Save button in the editor.");
