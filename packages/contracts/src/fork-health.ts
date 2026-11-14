@@ -291,27 +291,21 @@ let localFormatter: Intl.DateTimeFormat | undefined;
  * available in Workers and browsers alike; nothing depends on the machine's
  * own zone.
  */
-export function healthLocalMoment(
-  instant: Date | string,
-  timeZone: string = FORK_HEALTH_TIME_ZONE,
-): HealthLocalMoment {
+export function healthLocalMoment(instant: Date | string): HealthLocalMoment {
   const date = typeof instant === "string" ? new Date(instant) : instant;
   if (Number.isNaN(date.getTime())) {
     throw new RangeError(`Not a timestamp: ${String(instant)}`);
   }
-  const formatter =
-    timeZone === FORK_HEALTH_TIME_ZONE && localFormatter
-      ? localFormatter
-      : new Intl.DateTimeFormat("en-CA", {
-          timeZone,
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        });
-  if (timeZone === FORK_HEALTH_TIME_ZONE) localFormatter = formatter;
+  localFormatter ??= new Intl.DateTimeFormat("en-CA", {
+    timeZone: FORK_HEALTH_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const formatter = localFormatter;
   const parts: Record<string, string> = {};
   for (const part of formatter.formatToParts(date)) {
     parts[part.type] = part.value;
@@ -330,13 +324,10 @@ export function healthLocalMoment(
  * saving is handled by checking the zone's offset at the guess and again at the
  * answer.
  */
-export function healthLocalDayStart(
-  day: string,
-  timeZone: string = FORK_HEALTH_TIME_ZONE,
-): string {
+export function healthLocalDayStart(day: string): string {
   const midnightUtc = requireDay(day).getTime();
   const offsetAt = (instant: number) => {
-    const local = healthLocalMoment(new Date(instant), timeZone);
+    const local = healthLocalMoment(new Date(instant));
     const wall = Date.UTC(
       Number(local.day.slice(0, 4)),
       Number(local.day.slice(5, 7)) - 1,
@@ -347,10 +338,8 @@ export function healthLocalDayStart(
     // Seconds are not in the formatter's parts; zones have whole-minute offsets.
     return wall - Math.floor(instant / 60_000) * 60_000;
   };
-  let instant = midnightUtc - offsetAt(midnightUtc);
-  const second = midnightUtc - offsetAt(instant);
-  if (second !== instant) instant = second;
-  return new Date(instant).toISOString();
+  const guess = midnightUtc - offsetAt(midnightUtc);
+  return new Date(midnightUtc - offsetAt(guess)).toISOString();
 }
 
 // --- HTTP API --------------------------------------------------------------

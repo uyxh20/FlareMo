@@ -229,7 +229,6 @@ export type PlannerStrings = {
       deleteConfirm: string;
       write: string;
       preview: string;
-      previewEmpty: string;
     };
     /** The task's files (docs/fork-task-attachments.md). */
     attachments: {
@@ -532,7 +531,6 @@ const en: PlannerStrings = {
       deleteConfirm: "Delete",
       write: "Write",
       preview: "Preview",
-      previewEmpty: "Nothing to preview",
     },
     attachments: {
       title: "Attachments",
@@ -819,7 +817,6 @@ const zhCN: PlannerStrings = {
       deleteConfirm: "删除",
       write: "编辑",
       preview: "预览",
-      previewEmpty: "没有可预览的内容",
     },
     attachments: {
       title: "附件",

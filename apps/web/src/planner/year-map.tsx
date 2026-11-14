@@ -218,36 +218,18 @@ export function PlannerYearMap({
     );
   };
 
-  const themeRow = (
-    label: ReactNode,
-    theme: PlannerGoalDto | null,
-    add?: () => void,
-  ) => (
+  const themeRow = (label: ReactNode, theme: PlannerGoalDto) => (
     <>
       {label}
       <div className="planner-qband">
-        {theme ? (
-          <button
-            className="planner-theme"
-            title={strings.editor.edit(plannerGoalText(theme))}
-            type="button"
-            onClick={() => onEdit({ kind: "edit", goal: theme })}
-          >
-            {plannerGoalText(theme)}
-          </button>
-        ) : (
-          add && (
-            <button
-              aria-label={strings.editor.add}
-              className="planner-theme planner-theme-add"
-              title={strings.editor.add}
-              type="button"
-              onClick={add}
-            >
-              <PlusIcon aria-hidden="true" className="size-3.5" />
-            </button>
-          )
-        )}
+        <button
+          className="planner-theme"
+          title={strings.editor.edit(plannerGoalText(theme))}
+          type="button"
+          onClick={() => onEdit({ kind: "edit", goal: theme })}
+        >
+          {plannerGoalText(theme)}
+        </button>
       </div>
     </>
   );
@@ -397,7 +379,7 @@ export function PlannerYearMap({
               </button>
             )}
           </div>
-          {map.theme && themeRow(<span />, map.theme, () => {})}
+          {map.theme && themeRow(<span />, map.theme)}
           {periodRow(
             <span className="planner-yl is-period">
               {strings.goals.year(map.year)}
@@ -548,28 +530,22 @@ export function shortDay(monday: string, strings: PlannerGoalsStrings): string {
   });
 }
 
-function markText(
-  mark: PlannerMapMark,
-  strings: PlannerGoalsStrings,
-): { text: string; label: string } {
+function markLabel(mark: PlannerMapMark, strings: PlannerGoalsStrings): string {
   switch (mark.kind) {
     case "met":
-      return { text: "✓", label: strings.result.met };
+      return strings.result.met;
     case "partial":
-      return { text: "◐", label: strings.result.partial };
+      return strings.result.partial;
     case "missed":
-      return { text: "✕", label: strings.result.missed };
+      return strings.result.missed;
     case "contested":
-      return { text: "⚑", label: strings.status.contested };
+      return strings.status.contested;
     case "draft":
-      return { text: strings.status.draft, label: strings.status.draft };
+      return strings.status.draft;
     case "closed":
-      return { text: "—", label: strings.status.closed };
+      return strings.status.closed;
     case "tasks":
-      return {
-        text: `${mark.done}/${mark.total}`,
-        label: strings.map.tasksDone(mark.done, mark.total),
-      };
+      return strings.map.tasksDone(mark.done, mark.total);
   }
 }
 
@@ -628,16 +604,14 @@ export function MapUnit({
 }) {
   const text = plannerGoalText(goal);
   const { head, points } = plannerGoalParts(goal);
-  const shown = mark ? markText(mark, strings) : null;
+  const shown = mark ? markLabel(mark, strings) : null;
   const slots = points.slice(0, PLANNER_MAP_POINTS);
   const done = slots.filter((point) => point.struck).length;
   const count =
     progress && slots.length > 0
       ? strings.map.pointsDone(done, slots.length)
       : null;
-  const hint = [text, shown?.label, count, goal.note]
-    .filter(Boolean)
-    .join("\n");
+  const hint = [text, shown, count, goal.note].filter(Boolean).join("\n");
   const name = onEditGoal
     ? strings.map.showThread(head)
     : (label ?? strings.editor.edit(text));
@@ -687,7 +661,7 @@ export function MapUnit({
       )}
     </>
   );
-  const aria = [name, shown?.label, count].filter(Boolean).join(", ");
+  const aria = [name, shown, count].filter(Boolean).join(", ");
   if (!onEditGoal) {
     return (
       <button

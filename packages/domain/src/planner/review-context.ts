@@ -35,7 +35,6 @@ import {
   eq,
   gte,
   inArray,
-  isNotNull,
   isNull,
   lt,
   ne,
@@ -1002,22 +1001,4 @@ export async function plannerReadTaskDetails(
       },
     ];
   });
-}
-
-/** Whether any task is linked to a goal (used by tests and the seed check). */
-export async function plannerCountLinkedTasks(
-  db: FlareMoDb,
-  userId: string,
-): Promise<number> {
-  const row = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(plannerTaskPlan)
-    .where(
-      and(
-        eq(plannerTaskPlan.userId, userId),
-        isNotNull(plannerTaskPlan.goalId),
-      ),
-    )
-    .get();
-  return row?.count ?? 0;
 }
