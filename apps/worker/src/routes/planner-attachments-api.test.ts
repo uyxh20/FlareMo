@@ -625,7 +625,10 @@ describe("planner attachments API", () => {
     const sent = stubAnthropic();
     const task = await createTask("Capped");
     const other = await createTask("Other");
-    const month = `${TODAY.slice(0, 7)}-01T12:00:00.000Z`;
+    // Started just now, so they fall in this month however the month is cut
+    // (the cap counts the owner's local month; a UTC month start failed this
+    // test in the last hours of a month, found by the shifted-clock run).
+    const month = new Date().toISOString();
     const rows = Array.from({ length: 200 }, (_, n) =>
       ctx.d1
         .prepare(

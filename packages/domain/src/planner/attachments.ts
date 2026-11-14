@@ -1,4 +1,5 @@
 import {
+  healthLocalDayStart,
   healthLocalMoment,
   type PlannerAgentActionDto,
   type PlannerAttachmentDto,
@@ -307,9 +308,15 @@ export async function plannerSetAttachmentReadState(
     );
 }
 
-/** The first instant of the owner's local month `now` falls in. */
+/**
+ * The first instant of the owner's local month `now` falls in: local midnight
+ * on the 1st, as UTC (an hour or two before UTC midnight). Cutting at UTC
+ * midnight left reads from the month's first local hours in no month.
+ */
 function localMonthStart(now: Date): string {
-  return `${healthLocalMoment(now.toISOString()).day.slice(0, 7)}-01T00:00:00.000Z`;
+  return healthLocalDayStart(
+    `${healthLocalMoment(now.toISOString()).day.slice(0, 7)}-01`,
+  );
 }
 
 /**
