@@ -535,7 +535,10 @@ export async function importData(
   }
   const relationChanges = await flushImportStatements(db, relationStatements);
   if (relationChanges) {
-    importedRelations = relationChanges.reduce((sum, n) => sum + n, 0);
+    // Fork: one statement inserts at most one relation, but D1 also counts
+    // the row the sync trigger (migration 0049) writes, so count statements
+    // that changed anything rather than summing their changes.
+    importedRelations = relationChanges.filter((n) => n > 0).length;
   }
 
   const existingShareIds = new Set<string>();

@@ -191,5 +191,5 @@ Rules and what enforces them. `correct` keeps this table: add a row when a mista
 | Every upstream file the fork touches is listed in `docs/fork-customizations.md` | `packages/domain/src/fork/upstream-hookins.test.ts` |
 | Applied fork migrations are never edited | `packages/domain/src/fork/guards.test.ts` (frozen hashes) |
 | No raw writes to live | `.claude/settings.json` asks first; `scripts/fork/prod-deploy.mjs` bookmarks, checks counts and rolls back |
-| Tests that read today's date pin the clock | docs only (this line) |
+| Fork tests pass on any date, not just today | `scripts/fork/shifted-clock/run.mjs`, run nightly by `checks` at a date that rotates by weekday |
 | A bug fix comes with a test that failed before the fix | docs only (`tdd`) |

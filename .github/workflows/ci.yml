@@ -85,6 +85,12 @@ jobs:
 
       # Fork: the deploy and dev-environment scripts guard live data, so their
       # tests and the persistence manifest check run here too.
+      # Fork: the fork's tests again with the clock moved to a risky date
+      # (year end, a new week, the clock change...). The date rotates by
+      # weekday and is printed, so a failure can be re-run exactly.
+      - name: Fork tests at a shifted date
+        run: node scripts/fork/shifted-clock/run.mjs
+
       - name: Fork script tests
         run: node --test scripts/fork/*.test.mjs
 
