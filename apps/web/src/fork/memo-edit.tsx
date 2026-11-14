@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { filterUnreferencedAttachments } from "@/lib/attachment-refs";
 import { extractTags } from "@/lib/memo";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { ForkDropOverlay, useForkFileDrop } from "./file-drop";
 import { forkWithUploadRetry } from "./memo-upload-retry";
@@ -195,8 +196,10 @@ export function useForkEditFiles(
     } finally {
       setBusy(false);
       if (changed) {
-        void queryClient.invalidateQueries({ queryKey: ["memos"] });
-        void queryClient.invalidateQueries({ queryKey: ["memo-context"] });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.memos.all });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.memoContext.all,
+        });
       }
     }
   };
