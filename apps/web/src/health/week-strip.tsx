@@ -145,7 +145,12 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
       data-testid="health-week-strip"
       role="link"
       tabIndex={0}
-      onClick={() => void navigate({ to: "/health" })}
+      onClick={(event) => {
+        // The pop-up lives in a portal: React still bubbles its clicks here,
+        // but they are not inside this card, so they must not open the page.
+        if (!event.currentTarget.contains(event.target as Node)) return;
+        void navigate({ to: "/health" });
+      }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter") void navigate({ to: "/health" });
@@ -189,14 +194,7 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
           />
         ))}
       </div>
-      {/* The pop-up lives in a portal; its clicks must not open the page. */}
-      <span
-        className="contents"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        <HealthBreakdownDialog breakdown={open} onClose={() => setOpen(null)} />
-      </span>
+      <HealthBreakdownDialog breakdown={open} onClose={() => setOpen(null)} />
     </div>
   );
 }
