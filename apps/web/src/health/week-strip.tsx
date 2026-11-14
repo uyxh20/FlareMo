@@ -18,7 +18,7 @@ import {
   healthBreakdownOfEntries,
   healthChipText,
   healthDotState,
-  healthFamilyDays,
+  healthFamilyCount,
   healthFamilyRows,
   healthStripDays,
 } from "./model";
@@ -173,7 +173,7 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
         <span />
         {rows.map((row) => (
           <RowCells
-            count={String(healthFamilyDays(entries, row.family))}
+            count={String(healthFamilyCount(entries, row.family))}
             days={days}
             entries={entries}
             key={row.family}
@@ -186,8 +186,8 @@ export function HealthWeekStrip({ visible = true }: { visible?: boolean }) {
                 totalLabel:
                   row.family === "night_out"
                     ? healthStrings.breakdown.nights
-                    : healthStrings.breakdown.days,
-                total: healthFamilyDays(entries, row.family),
+                    : healthStrings.breakdown.sessions,
+                total: healthFamilyCount(entries, row.family),
                 rows: healthBreakdownOfEntries(entries, row.family, trackers),
               })
             }

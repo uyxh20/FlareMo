@@ -6,7 +6,7 @@ import {
   healthChipText,
   healthDayShort,
   healthDotState,
-  healthFamilyDays,
+  healthFamilyCount,
   healthFormatUnits,
   healthLevel,
   healthMonthMarks,
@@ -161,7 +161,18 @@ describe("families and sub-types", () => {
       { key: "crossfit", label: "CrossFit", count: 1 },
       { key: "wellness", label: "Wellness", count: 1 },
     ]);
-    expect(healthFamilyDays(entries, "fitness")).toBe(3);
+    // Gym and sauna on the same day are two sessions: the owner counts both.
+    expect(healthFamilyCount(entries, "fitness")).toBe(4);
+    expect(healthFamilyCount(entries, "breath")).toBe(1);
+  });
+
+  it("counts nights out once per night", () => {
+    const entries = [
+      healthTestNight({ id: "a", day: "2026-10-09" }),
+      healthTestNight({ id: "b", day: "2026-10-09" }),
+      healthTestNight({ id: "c", day: "2026-10-10" }),
+    ];
+    expect(healthFamilyCount(entries, "night_out")).toBe(2);
   });
 
   it("splits the year's days by sub-type within a range", () => {
@@ -200,7 +211,7 @@ describe("families and sub-types", () => {
         to: "2026-01-11",
       }),
     ).toEqual({
-      days: 2,
+      total: 2,
       rows: [
         { key: "gym", label: "Gym", count: 1 },
         { key: "wellness", label: "Wellness", count: 1 },

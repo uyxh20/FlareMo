@@ -47,7 +47,7 @@ Every tracker works the same way: a **family** is a row everywhere, and its **su
 
 A tracker's sub-type words also count for the tracker. The row's sub-type is the first one whose word is in the counted sentence; with none, the row has no sub-type. Sub-types are stored in `health_tracker.subtypes_json` (`migrations/9020_planner_health_subtypes.sql`), at most 8 per tracker, each `{id, label, words}`; renaming one keeps its rows (the id stays).
 
-On screen the four families (Fitness, Breath, Out, then your trackers) are the only rows: the week strip, the tiles, the year grid and the Trackers pills. Sub-types show on a dot's tooltip ("Fri · Gym · Back") and in a pop-up when you tap a row's name, a tile or a year square. Labels read family first: `Fitness · Gym · Back`, `Breath · Wim Hof · 10 min`, `Out · Fri · Big night · home 03:30`, `Fast · 16:8 · 16 h`.
+On screen the four families (Fitness, Breath, Out, then your trackers) are the only rows: the week strip, the tiles, the year grid and the Trackers pills. Sub-types show on a dot's tooltip ("Fri · Gym · Back") and in a pop-up when you tap a row's name, a tile or a year square. Labels read family first: `Fitness · Gym · Back`, `Breath · Wim Hof · 10 min`, `Out · Fri · Big night · home 03:30`, `Fast · 16:8 · 16 h`. A row's number counts sessions (rows): a gym session and a sauna on one day are 2 for Fitness. Out counts nights, so two notes about one night count once (14 Nov 2026, `healthFamilyCount` in `apps/web/src/health/model.ts`).
 
 ### Which day a note belongs to
 

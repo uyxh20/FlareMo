@@ -41,7 +41,7 @@ export const healthStrings = {
     week: (family: string) => `${family} this week`,
     weekOf: (family: string, day: string) => `${family}, week of ${day}`,
     year: (family: string, year: number) => `${family} in ${year}`,
-    days: "Days",
+    sessions: "Sessions",
     nights: "Nights",
     none: "Nothing logged.",
     noSubtype: "No sub-type",

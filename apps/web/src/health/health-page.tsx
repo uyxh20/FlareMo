@@ -33,7 +33,7 @@ import {
   healthBreakdownOfDays,
   healthBreakdownOfEntries,
   healthDayShort,
-  healthFamilyDays,
+  healthFamilyCount,
   healthFamilyRows,
   healthFormatUnits,
   healthLevel,
@@ -141,12 +141,12 @@ function WeekSection() {
       .map((item) => `${item.label} ${item.count}`)
       .join(" · ");
   const noteOf = (row: HealthFamilyRow): string => {
-    const days = healthFamilyDays(entries, row.family);
+    const total = healthFamilyCount(entries, row.family);
     if (row.family === "fitness") {
-      return days === 0 ? s.fitnessNone : subtypeNote(row);
+      return total === 0 ? s.fitnessNone : subtypeNote(row);
     }
     if (row.family === "breath") {
-      return days === 0
+      return total === 0
         ? s.breathNote(0, 0)
         : `${subtypeNote(row)}${summary.breath.minutes > 0 ? ` · ${summary.breath.minutes} min` : ""}`;
     }
@@ -172,13 +172,13 @@ function WeekSection() {
     >
       <div className="grid gap-3 sm:grid-cols-2">
         {healthFamilyRows(trackers).map((row) => {
-          const days = healthFamilyDays(entries, row.family);
+          const count = healthFamilyCount(entries, row.family);
           return (
             <Tile
               big={
                 row.family === "night_out"
                   ? healthFormatUnits(summary.night_out.units)
-                  : String(days)
+                  : String(count)
               }
               key={row.family}
               kind={row.family}
@@ -192,8 +192,8 @@ function WeekSection() {
                   totalLabel:
                     row.family === "night_out"
                       ? healthStrings.breakdown.nights
-                      : healthStrings.breakdown.days,
-                  total: days,
+                      : healthStrings.breakdown.sessions,
+                  total: count,
                   rows: breakdownOf(row),
                 })
               }
@@ -287,8 +287,8 @@ function YearGrid({
       totalLabel:
         row.family === "night_out"
           ? healthStrings.breakdown.nights
-          : healthStrings.breakdown.days,
-      total: split.days,
+          : healthStrings.breakdown.sessions,
+      total: split.total,
       rows: split.rows,
     });
   };

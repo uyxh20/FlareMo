@@ -126,7 +126,7 @@ describe("the week strip", () => {
     );
   });
 
-  it("counts days this week, with no targets", async () => {
+  it("counts this week, with no targets", async () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
@@ -136,6 +136,28 @@ describe("the week strip", () => {
     // Days (nights) with a row of each family.
     expect(counts).toEqual(["1", "1", "2"]);
     expect(container.textContent).not.toContain("/");
+  });
+
+  it("counts a gym session and a sauna on one day as two", async () => {
+    fetchWeek.mockResolvedValue({
+      ...WEEK,
+      entries: [
+        ...WEEK.entries,
+        healthTestEntry({
+          id: "w1",
+          kind: "wellness",
+          variant: "sauna",
+          day: "2026-10-12",
+        }),
+      ],
+    });
+    const { container } = mount();
+    await settle();
+    const counts = Array.from(container.querySelectorAll(".text-right")).map(
+      (cell) => cell.textContent,
+    );
+    // Fitness counts sessions; Out still counts nights.
+    expect(counts).toEqual(["2", "1", "2"]);
   });
 
   it("opens a family's sub-types, and not the Health page", async () => {

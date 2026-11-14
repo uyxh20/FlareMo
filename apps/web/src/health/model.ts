@@ -215,40 +215,52 @@ export function healthBreakdownOfEntries(
   return breakdownRows(family, counts, trackers);
 }
 
-/** The same, from the year's days, between two days (inclusive). */
+/**
+ * The same, from the year's days, between two days (inclusive), with the
+ * family's count over the range (see healthFamilyCount).
+ */
 export function healthBreakdownOfDays(
   days: readonly YearDay[],
   family: HealthFamily,
   range: { from: string; to: string },
   trackers?: readonly HealthTrackerDto[],
-): { days: number; rows: HealthBreakdownRow[] } {
+): { total: number; rows: HealthBreakdownRow[] } {
   const counts = new Map<string, number>();
-  let active = 0;
+  let nights = 0;
+  let sessions = 0;
   for (const day of days) {
     if (day.day < range.from || day.day > range.to) continue;
-    let any = false;
+    let rows = 0;
     for (const [key, count] of Object.entries(day.subtypes ?? {})) {
       const cut = key.lastIndexOf(":");
       if (key.slice(0, cut) !== family) continue;
       const sub = key.slice(cut + 1);
       counts.set(sub, (counts.get(sub) ?? 0) + count);
-      if (count > 0) any = true;
+      rows += count;
     }
-    if (any) active += 1;
+    if (rows > 0) nights += 1;
+    // A breath row with two sub-types (Wim Hof + Meditation) is one session.
+    sessions += family === "breath" ? day.breath : rows;
   }
-  return { days: active, rows: breakdownRows(family, counts, trackers) };
+  return {
+    total: family === "night_out" ? nights : sessions,
+    rows: breakdownRows(family, counts, trackers),
+  };
 }
 
-/** Days in a list of entries with a row of the family. */
-export function healthFamilyDays(
+/**
+ * The number a family's row shows: sessions (rows) for Fitness, Breath and the
+ * owner's trackers, so a gym session and a sauna on one day count as two;
+ * nights for Out, so two notes about one night count once.
+ */
+export function healthFamilyCount(
   entries: readonly HealthEntryDto[],
   family: HealthFamily,
 ): number {
-  return new Set(
-    entries
-      .filter((entry) => healthFamilyOf(entry.kind) === family)
-      .map((entry) => entry.day),
-  ).size;
+  const own = entries.filter((entry) => healthFamilyOf(entry.kind) === family);
+  return family === "night_out"
+    ? new Set(own.map((entry) => entry.day)).size
+    : own.length;
 }
 
 /** A tooltip for a chip: the feeling, when the diary gave one. */
