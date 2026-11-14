@@ -3,6 +3,7 @@ import {
   type PlannerReviewResponse,
   plannerGoalResults,
   plannerJoinAnswers,
+  plannerReviewLimits,
   plannerReviewPrompts,
   plannerScoreRubric,
   plannerVerdictKinds,
@@ -682,7 +683,7 @@ function Composer({
           className="max-h-40 min-h-10 flex-1 resize-none rounded-[10px] border border-border bg-background px-3 py-2 leading-snug outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:opacity-60"
           data-testid="planner-review-composer"
           disabled={disabled}
-          maxLength={4000}
+          maxLength={plannerReviewLimits.answer}
           placeholder={over ? copy.drop : strings.review.answerPlaceholder}
           ref={area}
           rows={1}

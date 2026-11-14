@@ -12,6 +12,7 @@ import {
   plannerKeyQuestionLine,
   plannerMemoNextSteps,
   plannerReviewDueDay,
+  plannerReviewLimits,
   plannerReviewStateMax,
   plannerReviewWeekFor,
   plannerSnapScore,
@@ -690,9 +691,9 @@ export type PlannerCommitBody = {
   }>;
 };
 
-/** Lines a goal may hold (plannerGoalLineSchema, at most 24 of 500 characters). */
-const GOAL_LINES_MAX = 24;
-const GOAL_LINE_TEXT_MAX = 500;
+/** Lines a goal may hold, and the length of one (plannerGoalLineSchema). */
+const { goalLines: GOAL_LINES_MAX, goalLineText: GOAL_LINE_TEXT_MAX } =
+  plannerReviewLimits;
 
 /**
  * Settles the flags the owner answered in Check goals. "Keep for now" only

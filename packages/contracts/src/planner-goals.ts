@@ -335,17 +335,50 @@ export const plannerScoreSchema = z
     "Expected a score in half steps (1, 1.5, ... 5).",
   );
 
+/**
+ * The size limits of goal saves and of the weekly review's AI and save
+ * requests. The schemas below read them, and so do the web page's inputs and
+ * clipping and the domain's own checks, so a change here reaches all of them.
+ */
+export const plannerReviewLimits = {
+  goalTitle: 1000,
+  goalLines: 24,
+  goalLineText: 500,
+  goalLineNote: 200,
+  goalNote: 2000,
+  question: 500,
+  verdict: 1000,
+  goalResults: 24,
+  planGoals: 12,
+  planTasks: 40,
+  taskTitle: 2000,
+  answer: 4000,
+  answers: 12,
+  coachNote: 2000,
+  coachNotes: 20,
+  chatMessage: 8000,
+  chatMessages: 60,
+  draft: 1000,
+} as const;
+
 /** One line under a goal's title: a point, with an optional short note, maybe struck. */
 export const plannerGoalLineSchema = z.strictObject({
-  text: z.string().trim().min(1).max(500),
-  note: z.string().trim().min(1).max(200).optional(),
+  text: z.string().trim().min(1).max(plannerReviewLimits.goalLineText),
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .max(plannerReviewLimits.goalLineNote)
+    .optional(),
   struck: z.boolean().optional(),
 });
 
-export const plannerGoalTitleMax = 1000;
+export const plannerGoalTitleMax = plannerReviewLimits.goalTitle;
 const goalTitleSchema = z.string().trim().max(plannerGoalTitleMax);
-const goalLinesSchema = z.array(plannerGoalLineSchema).max(24);
-const goalNoteSchema = z.string().trim().max(2000);
+const goalLinesSchema = z
+  .array(plannerGoalLineSchema)
+  .max(plannerReviewLimits.goalLines);
+const goalNoteSchema = z.string().trim().max(plannerReviewLimits.goalNote);
 
 /**
  * A new goal. `period_start` may be any day inside the period: the server keeps
@@ -430,7 +463,7 @@ export const plannerGoalResultInputSchema = z.strictObject({
 
 const verdictInputSchema = z.strictObject({
   kind: plannerVerdictKindSchema,
-  text: z.string().trim().min(1).max(1000),
+  text: z.string().trim().min(1).max(plannerReviewLimits.verdict),
 });
 
 /**
@@ -441,9 +474,11 @@ const verdictInputSchema = z.strictObject({
 export const plannerLookBackSchema = z.strictObject({
   today: daySchema,
   scores: z.strictObject({ auth: plannerScoreSchema, ach: plannerScoreSchema }),
-  question: z.string().trim().max(500).nullable(),
+  question: z.string().trim().max(plannerReviewLimits.question).nullable(),
   verdict: verdictInputSchema.nullable(),
-  goal_results: z.array(plannerGoalResultInputSchema).max(24),
+  goal_results: z
+    .array(plannerGoalResultInputSchema)
+    .max(plannerReviewLimits.goalResults),
   memo: z.string().trim().min(1).max(100_000),
 });
 
@@ -464,7 +499,12 @@ export const plannerPlanTaskSchema = z
     ref: z.string().trim().min(1).max(64),
     goal_id: z.uuid(),
     task_id: idSchema.optional(),
-    title: z.string().trim().min(1).max(2000).optional(),
+    title: z
+      .string()
+      .trim()
+      .min(1)
+      .max(plannerReviewLimits.taskTitle)
+      .optional(),
   })
   .refine(
     (value) => (value.task_id === undefined) !== (value.title === undefined),
@@ -504,13 +544,13 @@ export const plannerFlagInputSchema = z.strictObject({
 export const plannerCommitSchema = z
   .strictObject({
     today: daySchema,
-    goals: z.array(plannerPlanGoalSchema).max(12),
+    goals: z.array(plannerPlanGoalSchema).max(plannerReviewLimits.planGoals),
     // The plan week's goals the page started from, plus any it saved since.
     // Left out, nothing outside `goals` is removed.
     known_goal_ids: z.array(z.uuid()).max(100).optional(),
-    tasks: z.array(plannerPlanTaskSchema).max(40),
+    tasks: z.array(plannerPlanTaskSchema).max(plannerReviewLimits.planTasks),
     to_backlog: z.array(idSchema).max(100),
-    question: z.string().trim().max(500).nullable(),
+    question: z.string().trim().max(plannerReviewLimits.question).nullable(),
     settled: z.array(plannerSettleFlagSchema).max(24),
     flags: z.array(plannerFlagInputSchema).max(5),
   })
@@ -532,16 +572,22 @@ export const plannerCommitSchema = z
 
 // --- AI requests ------------------------------------------------------------
 
-const answerSchema = z.string().trim().min(1).max(4000);
+const answerSchema = z.string().trim().min(1).max(plannerReviewLimits.answer);
 
 /** What the owner has answered so far, which the close, the memo and the coach read. */
 const reviewAnswersShape = {
-  last_answer: z.array(answerSchema).max(12),
+  last_answer: z.array(answerSchema).max(plannerReviewLimits.answers),
   // One list per prompt, in order; an empty list is a skipped prompt.
-  answers: z.array(z.array(answerSchema).max(12)).length(7),
-  goal_results: z.array(plannerGoalResultInputSchema).max(24),
+  answers: z
+    .array(z.array(answerSchema).max(plannerReviewLimits.answers))
+    .length(7),
+  goal_results: z
+    .array(plannerGoalResultInputSchema)
+    .max(plannerReviewLimits.goalResults),
   // The coach's replies during the chat, newest last.
-  coach_notes: z.array(z.string().trim().min(1).max(2000)).max(20),
+  coach_notes: z
+    .array(z.string().trim().min(1).max(plannerReviewLimits.coachNote))
+    .max(plannerReviewLimits.coachNotes),
 };
 
 /**
@@ -571,7 +617,7 @@ export const plannerAiCloseSchema = z.strictObject({
 
 export const plannerReviewChatMessageSchema = z.strictObject({
   role: z.enum(["user", "assistant"]),
-  content: z.string().trim().min(1).max(8000),
+  content: z.string().trim().min(1).max(plannerReviewLimits.chatMessage),
 });
 
 /**
@@ -586,7 +632,10 @@ export const plannerReviewFileTextMax = 5400;
 export const plannerAiCoachSchema = z.strictObject({
   today: daySchema,
   mode: z.enum(["free", "force", "chat"]),
-  messages: z.array(plannerReviewChatMessageSchema).min(1).max(60),
+  messages: z
+    .array(plannerReviewChatMessageSchema)
+    .min(1)
+    .max(plannerReviewLimits.chatMessages),
   ...agentSessionShape,
   /**
    * Files dropped with the latest answer (fork, docs/fork-task-attachments.md,
@@ -614,15 +663,15 @@ export const plannerAiMemoSchema = z.strictObject({
     .strictObject({ auth: plannerScoreSchema, ach: plannerScoreSchema })
     .nullable()
     .optional(),
-  question: z.string().trim().max(500).nullable(),
+  question: z.string().trim().max(plannerReviewLimits.question).nullable(),
   verdict: verdictInputSchema.nullable(),
   recommended: plannerVerdictKindSchema,
   drafts: z.strictObject({
-    auth_evidence: z.string().trim().max(1000),
-    ach_evidence: z.string().trim().max(1000),
-    pattern: z.string().trim().max(1000),
-    risk: z.string().trim().max(1000),
-    opportunity: z.string().trim().max(1000),
+    auth_evidence: z.string().trim().max(plannerReviewLimits.draft),
+    ach_evidence: z.string().trim().max(plannerReviewLimits.draft),
+    pattern: z.string().trim().max(plannerReviewLimits.draft),
+    risk: z.string().trim().max(plannerReviewLimits.draft),
+    opportunity: z.string().trim().max(plannerReviewLimits.draft),
   }),
   ...agentSessionShape,
 });
@@ -635,10 +684,12 @@ export const plannerAiCheckSchema = z.strictObject({
         id: z.uuid(),
         pillar: plannerPillarSchema.nullable(),
         title: z.string().trim().min(1).max(plannerGoalTitleMax),
-        tasks: z.array(z.string().trim().min(1).max(2000)).max(20),
+        tasks: z
+          .array(z.string().trim().min(1).max(plannerReviewLimits.taskTitle))
+          .max(20),
       }),
     )
-    .max(12),
+    .max(plannerReviewLimits.planGoals),
   settled: z.array(plannerSettleFlagSchema).max(24),
   ...agentSessionShape,
 });

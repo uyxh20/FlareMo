@@ -13,6 +13,7 @@ import {
   plannerOnTarget,
   plannerQuarterStartOf,
   plannerReviewDueDay,
+  plannerReviewLimits,
   plannerReviewWeekFor,
   plannerSnapScore,
   plannerUpdateGoalSchema,
@@ -234,5 +235,44 @@ describe("review requests", () => {
         scores: { auth: 4.25, ach: 3.5 },
       }).success,
     ).toBe(false);
+  });
+
+  // The web page clips and sizes its inputs with plannerReviewLimits, so the
+  // schemas must allow exactly those sizes: at the limit passes, one over fails.
+  it("takes text exactly up to the shared review limits", () => {
+    const lookBack = {
+      today: "2026-10-11",
+      scores: { auth: 4, ach: 3.5 },
+      question: null,
+      verdict: null,
+      goal_results: [],
+      memo: "# Week 41",
+    };
+    const sized = (question: number, verdict: number) =>
+      plannerLookBackSchema.safeParse({
+        ...lookBack,
+        question: "q".repeat(question),
+        verdict: { kind: "continue", text: "v".repeat(verdict) },
+      }).success;
+    const { question, verdict } = plannerReviewLimits;
+    expect(sized(question, verdict)).toBe(true);
+    expect(sized(question + 1, verdict)).toBe(false);
+    expect(sized(question, verdict + 1)).toBe(false);
+
+    const goal = (title: number, lines: number, line: number) =>
+      plannerCreateGoalSchema.safeParse({
+        level: "month",
+        period_start: "2026-10-01",
+        pillar: "health",
+        title: "t".repeat(title),
+        lines: Array.from({ length: lines }, () => ({
+          text: "l".repeat(line),
+        })),
+      }).success;
+    const { goalTitle, goalLines, goalLineText } = plannerReviewLimits;
+    expect(goal(goalTitle, goalLines, goalLineText)).toBe(true);
+    expect(goal(goalTitle + 1, 1, 1)).toBe(false);
+    expect(goal(1, goalLines + 1, 1)).toBe(false);
+    expect(goal(1, 1, goalLineText + 1)).toBe(false);
   });
 });

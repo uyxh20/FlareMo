@@ -11,6 +11,7 @@ import {
   plannerPeriodsClosingWith,
   plannerPeriodWeeks,
   plannerPillars,
+  plannerReviewLimits,
   plannerTodoCap,
 } from "@flaremo/contracts";
 import {
@@ -1049,12 +1050,14 @@ function ReviewSession({
           ...agentSession(current),
           scores,
           question: current.question?.trim()
-            ? current.question.trim().slice(0, 500)
+            ? current.question.trim().slice(0, plannerReviewLimits.question)
             : null,
           verdict: current.verdict?.text.trim()
             ? {
                 kind: current.verdict.kind,
-                text: current.verdict.text.trim().slice(0, 1000),
+                text: current.verdict.text
+                  .trim()
+                  .slice(0, plannerReviewLimits.verdict),
               }
             : null,
           recommended: written.trajectory.recommended ?? "continue",
@@ -1463,7 +1466,8 @@ function ReviewSession({
             ),
           };
         }
-        if (current.goals.length >= 12) return current;
+        if (current.goals.length >= plannerReviewLimits.planGoals)
+          return current;
         return {
           ...current,
           edited: true,

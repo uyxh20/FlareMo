@@ -6,6 +6,7 @@ import {
   type PlannerPillar,
   type PlannerReviewResponse,
   plannerPillars,
+  plannerReviewLimits,
   plannerTodoCap,
 } from "@flaremo/contracts";
 import { Link } from "@tanstack/react-router";
@@ -197,7 +198,7 @@ function FlagCard({ flag, props }: { flag: PlannerGoalFlagDto; props: Props }) {
             autoFocus
             className="min-h-20"
             id={fieldId}
-            maxLength={1000}
+            maxLength={plannerReviewLimits.goalTitle}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
           />
@@ -345,7 +346,7 @@ function GoalSlot({ goal, props }: { goal: PlannerPlanGoal; props: Props }) {
       <Textarea
         aria-label={text.goalFor(pillarName(goal.pillar, strings))}
         className="min-h-16 bg-background"
-        maxLength={1000}
+        maxLength={plannerReviewLimits.goalTitle}
         placeholder={text.goalPlaceholder}
         value={goal.title}
         onChange={(event) => actions.setGoalTitle(goal.id, event.target.value)}
@@ -373,7 +374,7 @@ function ChooseWeek(props: Props) {
       </div>
       <div className="mt-3">
         <Button
-          disabled={forward.goals.length >= 12}
+          disabled={forward.goals.length >= plannerReviewLimits.planGoals}
           variant="outline"
           onClick={actions.addGoal}
         >
@@ -414,7 +415,7 @@ function NewTaskForm({
         autoComplete="off"
         className="h-8"
         disabled={full}
-        maxLength={2000}
+        maxLength={plannerReviewLimits.taskTitle}
         placeholder={strings.review.forward.newTask}
         value={title}
         onChange={(event) => setTitle(event.target.value)}
@@ -691,7 +692,7 @@ function Commit(props: Props) {
           </label>
           <Input
             id={fieldId}
-            maxLength={500}
+            maxLength={plannerReviewLimits.question}
             value={question}
             onChange={(event) => actions.setQuestion(event.target.value)}
           />

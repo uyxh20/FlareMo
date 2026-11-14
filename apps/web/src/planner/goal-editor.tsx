@@ -7,6 +7,7 @@ import {
   plannerGoalResults,
   plannerGoalStatuses,
   plannerPillars,
+  plannerReviewLimits,
 } from "@flaremo/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
@@ -269,7 +270,7 @@ function GoalForm({
         <Textarea
           className="min-h-14"
           id={`${ids}-title`}
-          maxLength={1000}
+          maxLength={plannerReviewLimits.goalTitle}
           placeholder={strings.editor.titlePlaceholder}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -290,7 +291,7 @@ function GoalForm({
               <Input
                 aria-label={strings.editor.lineText}
                 className={line.struck ? "line-through" : undefined}
-                maxLength={500}
+                maxLength={plannerReviewLimits.goalLineText}
                 value={line.text}
                 onChange={(event) =>
                   setLine(index, { text: event.target.value })
@@ -406,7 +407,7 @@ function GoalForm({
         <Textarea
           className="min-h-14"
           id={`${ids}-note`}
-          maxLength={2000}
+          maxLength={plannerReviewLimits.goalNote}
           placeholder={strings.editor.notePlaceholder}
           value={note}
           onChange={(event) => setNote(event.target.value)}

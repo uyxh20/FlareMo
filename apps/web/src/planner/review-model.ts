@@ -18,6 +18,7 @@ import {
   plannerMemoNextSteps,
   plannerPillarNames,
   plannerPillars,
+  plannerReviewLimits,
   plannerReviewPrompts,
   plannerScoreFloors,
   plannerSnapScore,
@@ -201,16 +202,19 @@ type Review = Pick<
 
 const PROMPT_COUNT = plannerReviewPrompts.length;
 
-// The limits of the AI and save requests (packages/contracts/src/planner-goals.ts).
-const MAX_ANSWER = 4000;
-const MAX_ANSWERS = 12;
-const MAX_COACH_NOTES = 20;
-const MAX_COACH_NOTE = 2000;
-const MAX_DRAFT = 1000;
-const MAX_QUESTION = 500;
-const MAX_VERDICT = 1000;
+// The limits of the AI and save requests (plannerReviewLimits in contracts).
+const {
+  answer: MAX_ANSWER,
+  answers: MAX_ANSWERS,
+  coachNotes: MAX_COACH_NOTES,
+  coachNote: MAX_COACH_NOTE,
+  draft: MAX_DRAFT,
+  question: MAX_QUESTION,
+  verdict: MAX_VERDICT,
+  chatMessage: MAX_CHAT_MESSAGE,
+} = plannerReviewLimits;
+// The chat history sent to the coach: fewer than the request allows.
 const MAX_CHAT = 40;
-const MAX_CHAT_MESSAGE = 8000;
 
 const clip = (value: string, max: number) => value.trim().slice(0, max).trim();
 
@@ -1029,7 +1033,7 @@ export function plannerAddNewTask(
   goalId: string,
   title: string,
 ): PlannerForwardState {
-  const text = title.trim().slice(0, 2000);
+  const text = title.trim().slice(0, plannerReviewLimits.taskTitle);
   if (!text) return forward;
   return {
     ...forward,
@@ -1062,10 +1066,12 @@ export function plannerCheckInput(
       .map((goal) => ({
         id: goal.id,
         pillar: goal.pillar,
-        title: goal.title.trim().slice(0, 1000),
+        title: goal.title.trim().slice(0, plannerReviewLimits.goalTitle),
         tasks: forward.tasks
           .filter((task) => task.goal_id === goal.id)
-          .map((task) => task.title.trim().slice(0, 2000))
+          .map((task) =>
+            task.title.trim().slice(0, plannerReviewLimits.taskTitle),
+          )
           .filter(Boolean)
           .slice(0, 20),
       })),
@@ -1097,7 +1103,7 @@ export function plannerSettledInput(
         ? {
             flag_id: flagId,
             state: "rewritten" as const,
-            title: entry.title.trim().slice(0, 1000),
+            title: entry.title.trim().slice(0, plannerReviewLimits.goalTitle),
           }
         : { flag_id: flagId, state: "kept" as const },
     );
@@ -1143,7 +1149,7 @@ export function plannerCommitInput(
     goals: goals.map((goal) => ({
       id: goal.id,
       pillar: goal.pillar,
-      title: goal.title.trim().slice(0, 1000),
+      title: goal.title.trim().slice(0, plannerReviewLimits.goalTitle),
     })),
     tasks: tasks.map((task) =>
       task.task_id

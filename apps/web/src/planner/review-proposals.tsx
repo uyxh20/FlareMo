@@ -5,6 +5,7 @@ import {
   type PlannerBoardResponse,
   type PlannerPillar,
   plannerPillars,
+  plannerReviewLimits,
   plannerTodoCap,
 } from "@flaremo/contracts";
 import { type ReactNode, useId, useState } from "react";
@@ -52,7 +53,7 @@ export function plannerAddProposedGoal(
   forward: PlannerForwardState,
   proposal: Pick<PlannerAgentProposalDto, "id" | "pillar" | "title">,
 ): PlannerForwardState {
-  const title = proposal.title.trim().slice(0, 1000);
+  const title = proposal.title.trim().slice(0, plannerReviewLimits.goalTitle);
   if (!title) return forward;
   // Added already: the goal carries the proposal's id.
   if (forward.goals.some((goal) => goal.id === proposal.id)) return forward;
@@ -83,7 +84,7 @@ export function plannerAddProposedGoal(
             ),
     };
   }
-  if (forward.goals.length >= 12) return forward;
+  if (forward.goals.length >= plannerReviewLimits.planGoals) return forward;
   return {
     ...forward,
     edited: true,
@@ -322,7 +323,7 @@ function GoalProposal({
             aria-label={strings.review.forward.goalPlaceholder}
             className="min-h-14 bg-background"
             data-testid="planner-proposal-title"
-            maxLength={1000}
+            maxLength={plannerReviewLimits.goalTitle}
             placeholder={strings.review.forward.goalPlaceholder}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
