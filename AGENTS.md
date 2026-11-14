@@ -164,3 +164,32 @@ This repository is a personal fork of FlareMo ("Schizo Diary"). The sections abo
 - **README files**: do not edit `README.md` for the fork. Every README change must be mirrored into seven translations (rule above), and it is upstream's file. Deploy guidance for the fork lives here and in the fork docs.
 - **Fork docs**: start with `docs/fork-customizations.md` (what is customized, hook-ins, and the "Where things live" directory map). Then, as needed: `docs/fork-dev-environment.md` (dev and prod deploy), `docs/fork-data-sources.md` (which data reaches which feature), `docs/fork-health-tracker.md`, `docs/planning-cockpit-implementation-plan.md` and `docs/planning-cockpit-goals-review.md`.
 - No diary text, secrets or tokens in docs, tests or commit messages.
+
+## Fork: QA rules and what enforces them
+
+The QA skills live in `.claude/skills/` (adapted from pstack, MIT; `.claude/skills/pstack-in-this-repo.md` maps their Cursor wording and lists the repo rules that win). They start by themselves; nobody has to name them. Use this table to pick the skill at each moment.
+
+| Moment | Skill |
+| --- | --- |
+| Fixing any bug, red nightly test or failed QA check | `tdd` (failing test first) |
+| Writing, changing, keeping or deleting a test | `test-behavior-not-implementation` |
+| The same mistake or correction shows up a second time | `correct`, `encode-lessons-in-structure` |
+| "Why is it like this?", "why did it break?", post-mortems | `why` |
+| Refactor, cleanup or a feature that touches old code | `subtract-before-you-add` |
+| Before merging to `main`, and before asking Anon for "push to prod" | `blast-radius` |
+| Big or risky change before release (migrations, data writes or deletes, agent Accept / Undo, uploads and sync, deploy scripts) | `interrogate` (costly: big changes only) |
+| A flow with states: Accept / Undo, review save and Start over, upload retry, deploy and rollback | `statechart` |
+| Sandbox test with step-by-step screenshots | `verify-schizo-diary`, made once by `create-verification-skill` |
+| About monthly, or after a shipped change alters a mapped screen | `maintain-verification-skill` |
+| Anon asks to understand something | `teach` |
+
+Rules and what enforces them. `correct` keeps this table: add a row when a mistake repeats, and move a rule up from "docs only" once something enforces it.
+
+| Rule | Enforced by |
+| --- | --- |
+| Every new table or column is registered with its consumers | `packages/domain/src/fork/data-sources.test.ts` |
+| Every upstream file the fork touches is listed in `docs/fork-customizations.md` | `packages/domain/src/fork/upstream-hookins.test.ts` |
+| Applied fork migrations are never edited | `packages/domain/src/fork/guards.test.ts` (frozen hashes) |
+| No raw writes to live | `.claude/settings.json` asks first; `scripts/fork/prod-deploy.mjs` bookmarks, checks counts and rolls back |
+| Tests that read today's date pin the clock | docs only (this line) |
+| A bug fix comes with a test that failed before the fix | docs only (`tdd`) |

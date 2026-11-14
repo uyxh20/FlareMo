@@ -27,6 +27,7 @@ Where the story of the project is kept:
 | [planning-cockpit-period-review.md](planning-cockpit-period-review.md)               | Month, quarter and year reviews                                       | Current (status line fixed 2026-11-08: live since 2026-10-17). The cascade ladder is described in fork-general-agent.md. |
 | [../skills/](../skills) (`weekly-review`, `period-review`, `ask-my-diary`, `goal-check`) | The diary agent's skills (`skills/flaremo-memory` is upstream's; upstream has since renamed it `flaremo-notes`) | Current.                     |
 | `.claude/settings.json`                                                              | Ask-first rules for anything that writes to live                      | Current.                                                                       |
+| [../.claude/skills/](../.claude/skills) | QA and engineering skills adapted from pstack, and how they map to this repo (`pstack-in-this-repo.md`) | Current. |
 
 ## Upstream docs the fork uses as they are
 
