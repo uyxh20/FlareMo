@@ -232,7 +232,7 @@ Anon renamed the diary tag `#gym` to `#fitness` (sauna and other wellness go und
 
 ### 17. Memo editing: files, hidden tags, failed uploads (14 Nov 2026)
 
-Three editor bugs Anon hit on live, plus the edit-mode file button they asked for.
+Live since version #61 (14 Nov 2026). Three editor bugs Anon hit on live, plus the edit-mode file button they asked for.
 
 - **Hidden tags were wiped by Save.** Most notes (510 of 617 on 14 Nov: the vault import, reviews, agent drafts) keep tags in `payload.tags` that the text does not spell out. The card shows them in its footer, but Edit only edited the text and the server re-reads tags from the text on every edit, so one Save deleted them. Edit now starts from `forkEditDraftContent`: the text plus those tags as a last line (`#carlsberg #vipex`). Under the box a chip row lists the draft's tags: click a chip to rename it, × removes it, "+ Tag" adds one. Every chip action edits the draft text, so the editor and the chips never disagree. One live note (`a818360b`, #linkedin #vipex, wiped by an edit on 5 Oct) was restored on 14 Nov through the app API (report in the project files, `memo-editing/prod-tag-restore/`); the other tag differences against old revisions were deliberate renames.
 - **Files in Edit.** "Add file" in the edit footer (or a drop on the box) lists new files as dashed chips; the note's existing files show as chips with × (marks them for removal, ↺ keeps them). Nothing is sent until Save: removals first (one bind call that keeps every other file, inline images included), then the uploads. Cancel changes nothing. A failed upload keeps the editor open with the files that did not go, and Save tries again.
