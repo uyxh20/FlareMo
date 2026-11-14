@@ -6,6 +6,10 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { MemoSpace } from "@/api";
 import { MemoComposer } from "@/components/memo-composer";
+import {
+  ForkAttachmentUploadError,
+  forkShowUploadFailedToast,
+} from "@/fork/memo-upload-retry"; // fork: memo editing
 import { useMemoMutations } from "@/hooks/use-memo-mutations";
 import { useNewMemoCapture } from "@/hooks/use-new-memo-capture";
 import { useI18n } from "@/i18n";
@@ -90,8 +94,24 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
   // into a lost note. Returns the toast the send should show.
   const createMemoAndSchedule = useCallback(
     async (submission: MemoCaptureInput) => {
-      const memo = await createMemoAsync(submission);
-      if (!submission.schedule) return { memo, message: t("toast.saved") };
+      // fork: a note whose file failed is still saved; say so plainly with a
+      // Retry instead of queuing the whole note as "offline".
+      let memo: Awaited<ReturnType<typeof createMemoAsync>>;
+      let uploadFailed = false;
+      try {
+        memo = await createMemoAsync(submission);
+      } catch (error) {
+        if (!(error instanceof ForkAttachmentUploadError)) throw error;
+        memo = error.memo;
+        uploadFailed = true;
+        forkShowUploadFailedToast(
+          error,
+          () => void queryClient.invalidateQueries({ queryKey: ["memos"] }),
+        );
+      }
+      if (!submission.schedule) {
+        return { memo, message: uploadFailed ? undefined : t("toast.saved") };
+      }
       try {
         const count = await fileScheduledTasks(
           memo.name,
@@ -101,8 +121,11 @@ export const WorkspaceComposer = memo(function WorkspaceComposer({
         invalidateTaskSurfaces(queryClient);
         return {
           memo,
-          message:
-            count > 0 ? t("toast.scheduledTasks", { count }) : t("toast.saved"),
+          message: uploadFailed
+            ? undefined
+            : count > 0
+              ? t("toast.scheduledTasks", { count })
+              : t("toast.saved"),
         };
       } catch {
         toast.error(t("toast.scheduleFailed"));

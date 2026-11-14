@@ -75,10 +75,13 @@ export async function uploadAndInsertImages(
     // Read the chip's mapped position before removing it: the insertion point
     // tracks any edits the user made while the network was pending. A chip
     // that vanished inserts at the document end rather than dropping the image.
-    const pos = findUploadPlaceholder(editorNow, placeholder.id);
+    // fork: a vanished chip used to `continue` here, dropping an image that
+    // was already uploaded (and, in the composer, never bound to the note).
+    const pos =
+      findUploadPlaceholder(editorNow, placeholder.id) ??
+      editorNow.state.doc.content.size;
     removeUploadPlaceholder(editorNow, placeholder.id);
     const markdown = inlineImageMarkdown(attachment.id, attachment.filename);
-    if (pos === null) continue;
     const src = `/file/attachments/${attachment.id}/${encodeURIComponent(attachment.filename)}`;
     // Insert as a JSON image node, not by re-parsing markdown: the markdown
     // path yields a doc-level node and trips the inline-only schema.
