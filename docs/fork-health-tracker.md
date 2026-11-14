@@ -12,8 +12,8 @@ A note is read at save time and again by a nightly safety net (see "Keeping it i
 
 | Kind | What it looks for | Row holds |
 | --- | --- | --- |
-| `training` | A gym, CrossFit, push, pull, back, chest, legs, upper-body or cardio session that was done | `variant`, optional `minutes` (cardio), optional `feel` word |
-| `breath` | Wim Hof or meditation, with minutes when given (10 when not) | `variant` (`wim_hof`, `meditation`), `minutes` |
+| `training` | A gym, CrossFit, push, pull, back, chest, legs, upper-body, cardio (run, ride, swim, zone 2) or mobility (yoga, stretching, pilates, with `#fitness`, a time or a done word) session that was done | `variant`, optional `minutes` (cardio, mobility), optional `feel` word |
+| `breath` | Wim Hof, meditation or breathwork (`#breath`, box breathing, pranayama), with minutes when given (10 when not). Two of them in one note make one row of both (`wim_hof+meditation`, minutes summed) | `variant` (`wim_hof`, `meditation`, `breathwork`, or two joined by `+`), `minutes` |
 | `wellness` | Sauna (also banya), steam room or hammam, cold plunge, ice bath, massage or spa that was done. Needs `#fitness` (or `#sauna`) in the note, a duration, a done word, or a short note (four words or fewer) | `variant` (`sauna`, `steam`, `cold_plunge`, `ice_bath`, `massage`, `spa`), optional `minutes` |
 | `night_out` | A night out, with the time the owner got home when the note says one | `home_at`, `units`, `bender`, `needs_check` |
 
@@ -25,14 +25,29 @@ A plan is not a session: "tomorrow gym", "going to the gym later" and "no gym to
 
 The **Trackers** section of the Health page lists every tracker as a pill. Opening one shows the words it looks for, and **New tracker** adds one for a new habit (fasting, cold plunges…) with no code change.
 
-- **Your own tracker**: a name, one of six colours, what it counts (days, days + minutes, or days + hours), the words and #tags that count, the words that never count, and the goal it feeds. There is no target on a tracker: the target lives on the goal it links to.
-- **A built-in** (Fitness · Gym, Breath, Nights out, Fitness · Wellness): its fixed reader stays as described above and is shown greyed out. You can add extra words, used only when the fixed reader found nothing in that note, and block words: a note containing a blocked word never counts for that tracker.
+- **Your own tracker**: a name, one of six colours, what it counts (days, days + minutes, or days + hours), the words and #tags that count, the words that never count, its sub-types (each a name and its own words), and the goal it feeds. There is no target on a tracker: the target lives on the goal it links to.
+- **A built-in** (Fitness, which opens Gym and Wellness; Breath; Out): its fixed reader stays as described above and is shown greyed out. You can add extra words, used only when the fixed reader found nothing in that note, and block words: a note containing a blocked word never counts for that tracker.
 
 Your words are read with the same care as the built-in keywords: a plan ("tomorrow I'll start fasting") or a denial ("no fasting today") does not count, a long note needs a #tag or a done word, "yesterday" moves the day back, and a #tag also matches the note's own tag. Hours come from "16h", "18 hours" or an eating window such as "16:8"; minutes from "20 min".
 
 **Test a sentence** (folded away until opened) says whether a sentence would count and why not. **Preview changes** (shown only once something changed) reads the whole diary with the new words and says how many entries would start or stop counting, without writing anything. **Apply** saves the tracker and re-reads the diary: labels you removed or fixed by hand stay as you left them. Removing a tracker archives it; its rows are soft-deleted by the re-read, never hard-deleted. Every save is kept in `health_tracker_event`.
 
 New trackers show as a tile in this week, a row in the year grid and the week strip, and as chips on notes (`Fasting · 16 h`). A tracker linked to a goal also shows on that goal's card on the Goals page, counted over the goal's period up to today (`Fasting · 9 days so far · avg 16 h`); the goal's own words hold the target. The weekly review reads every tracker too (see below).
+
+### Families and sub-types (14 Nov 2026)
+
+Every tracker works the same way: a **family** is a row everywhere, and its **sub-types** are a detail. Nothing extra is stored for the built-ins: the sub-type is worked out from a row's kind and values (`healthSubtypesOf` in `fork-health.ts`).
+
+| Family | Sub-types | From |
+| --- | --- | --- |
+| Fitness | Gym (with the split as detail: Back, Push…), CrossFit, Cardio, Mobility, Wellness (with Sauna, Cold plunge… as detail) | `training` and `wellness` rows |
+| Breath | Wim Hof, Meditation, Breathwork | `breath` variant |
+| Out | Social (home before midnight), Late (½), Big night (1), Bender, Home time? | `night_out` home time, units and bender |
+| Your own tracker | The sub-types you give it, each with its own words | `variant` = the sub-type's id |
+
+A tracker's sub-type words also count for the tracker. The row's sub-type is the first one whose word is in the counted sentence; with none, the row has no sub-type. Sub-types are stored in `health_tracker.subtypes_json` (`migrations/9020_planner_health_subtypes.sql`), at most 8 per tracker, each `{id, label, words}`; renaming one keeps its rows (the id stays).
+
+On screen the four families (Fitness, Breath, Out, then your trackers) are the only rows: the week strip, the tiles, the year grid and the Trackers pills. Sub-types show on a dot's tooltip ("Fri · Gym · Back") and in a pop-up when you tap a row's name, a tile or a year square. Labels read family first: `Fitness · Gym · Back`, `Breath · Wim Hof · 10 min`, `Out · Fri · Big night · home 03:30`, `Fast · 16:8 · 16 h`.
 
 ### Which day a note belongs to
 
@@ -53,7 +68,7 @@ A bare hour 7 to 11 after "til" or "until" is taken as the evening (`til 9` is 2
 
 ## Data
 
-Created by `migrations/9010_planner_health.sql` and `9011_planner_health_trackers.sql` (hand-written, additive, not in the Drizzle journal, no foreign keys to upstream tables, like the planner's `9NNN` files). The Drizzle mirror is `packages/db/src/schema/fork-health.ts`, which is deliberately **not** in the schema barrel.
+Created by `migrations/9010_planner_health.sql`, `9011_planner_health_trackers.sql` and `9020_planner_health_subtypes.sql` (hand-written, additive, not in the Drizzle journal, no foreign keys to upstream tables, like the planner's `9NNN` files). The Drizzle mirror is `packages/db/src/schema/fork-health.ts`, which is deliberately **not** in the schema barrel.
 
 | Table | Holds |
 | --- | --- |
@@ -61,7 +76,7 @@ Created by `migrations/9010_planner_health.sql` and `9011_planner_health_tracker
 | `health_entry_event` | Append-only history, written in the same D1 batch as each row change. |
 | `health_target` | The owner's targets. Defaults when empty: training 3 a week, breath 7 a week, night out 12 units a year. Empty on live (counted 14 Oct 2026); the route that set it was removed, and the table is kept. |
 | `health_sync_state` | The marker that the first full read of the diary happened, plus the bookmarks (migration 9012): where an unfinished full read stopped, who is running it, and where an unfinished nightly read stopped. |
-| `health_tracker` | The owner's trackers (`migrations/9011_planner_health_trackers.sql`): kind `t:<id>` or a built-in kind, name, colour, what it counts, words and blocked words (JSON), linked goal (`planner_goal.id` by value), `archived_at`. |
+| `health_tracker` | The owner's trackers (`migrations/9011_planner_health_trackers.sql`): kind `t:<id>` or a built-in kind, name, colour, what it counts, words and blocked words (JSON), sub-types (JSON, `9020`), linked goal (`planner_goal.id` by value), `archived_at`. |
 | `health_tracker_event` | Append-only history of every save of a tracker, written in the same batch. |
 
 All six are in `RESTORE_TABLES` in `scripts/persistence-manifest.mjs`, so backups and restores include them (`pnpm persistence:check`).
@@ -86,7 +101,7 @@ Mounted at `/api/app/health-tracker` (not `/api/app/health`, which is upstream's
 | Method and path | Does |
 | --- | --- |
 | `GET /week?start=` | Seven days (the last seven when `start` is absent; the app asks for this week's Monday): entries and a summary. The summary still carries the default targets, which only the weekly review reads (on hold). |
-| `GET /year?year=` | The year: per-day cells, night-out budget and pace, totals, nights that need a check. |
+| `GET /year?year=` | The year: per-day cells (with `subtypes`, rows per `family:sub-type`), night-out budget and pace, totals, nights that need a check. |
 | `GET /memos?ids=a,b,c` | The labels of up to 100 memos in one request (the timeline's batch). |
 | `PATCH /entries/:id` | Fix a row: `home_at`, `variant`, `minutes` or `day`. Marks it `edited`. |
 | `POST /entries/:id/dismiss` | Remove a label. |
@@ -104,13 +119,13 @@ Mounted at `/api/app/health-tracker` (not `/api/app/health`, which is upstream's
 
 All in `apps/web/src/health/`, English only (the strings are in `strings.ts`, not in the eight upstream catalogs, so a sync never conflicts on them).
 
-- **Week strip** above the timeline (only on the unfiltered "all" view): five rows by seven days: Fitness (a dot on any day with gym or wellness), then Gym and Wellness indented under it, then Breath and Out. A filled dot is something done, a half dot is half a unit, a dashed ring is a night still needing a home time, a hairline ring is a night home before midnight. The strip shows this week, Monday to Sunday, and the right-hand column is what happened this week: Fitness days, Gym sessions, Wellness sessions, breath days, night-out units. There are no targets: the defaults (3, 7, 12) were never changed, so they were dropped from the screens (Q05, 15 Oct 2026). The strip and the page share one request (`useHealthThisWeek`). The strip is a link to the Health page.
-- **Chips** under a memo card, for example `Fitness · Gym · Back`, `Fitness · CrossFit`, `Fitness · Sauna · 20 min`, `Fitness · Cold plunge`, `Wim Hof · 10 min`, `Night out · Fri · home 03:30 · 1`. The x removes the label. A night without a time shows **home when?** and four buttons: Before 00:00, 00-03, 03-06, Morning, which set the home time to 23:30, 01:30, 04:30 and 08:00. All cards on a page get their labels through one request.
-- **/health** (sidebar link "Health"): this week's counts ("Fitness · Gym: Trained 2 times this week", "Fitness · Wellness: 2 days, 40 min · not training"), the year's nights out (a count of nights; units are no longer shown on this card) and, beside them, the days since the last night out with a strip of one small grey square per day (squares at least 10px wide, wrapping into new rows, capped at 6 rows; past that it shows only the most recent days and says so, `since-strip.tsx`; nights, benders and the pace line left this card on 11 Nov 2026), the list of nights that need a home time, the year as rows of weekly cells (Gym, Wellness, Breath, Out, then your own trackers), and the Re-read diary button.
+- **Week strip** above the timeline (only on the unfiltered "all" view): one row per family by seven days: Fitness (any day with gym or wellness), Breath, Out, then your own trackers. A filled dot is something done, a half dot is half a unit, a dashed ring is a night still needing a home time, a hairline ring is a night home before midnight. A dot's tooltip names the sub-type. The right-hand column is the days (nights for Out) with a row this week. Tapping a row's name opens its sub-types in a pop-up; tapping anywhere else opens the Health page. There are no targets (Q05, 15 Oct 2026). The strip and the page share one request (`useHealthThisWeek`).
+- **Chips** under a memo card, family first, for example `Fitness · Gym · Back`, `Fitness · CrossFit`, `Fitness · Sauna · 20 min`, `Breath · Wim Hof · 10 min`, `Out · Fri · Big night · home 03:30`, `Fast · 16:8 · 16 h`. The x removes the label. A night without a time shows **home when?** and four buttons: Before 00:00, 00-03, 03-06, Morning, which set the home time to 23:30, 01:30, 04:30 and 08:00. All cards on a page get their labels through one request.
+- **/health** (sidebar link "Health"): this week's tiles, one per family (Fitness days with "Gym 3 · Wellness 1" under it, Breath days, Out units, your trackers), each opening its sub-types in a pop-up, the year's nights out (a count of nights; units are no longer shown on this card) and, beside them, the days since the last night out with a strip of one small grey square per day (squares at least 10px wide, wrapping into new rows, capped at 6 rows; past that it shows only the most recent days and says so, `since-strip.tsx`; nights, benders and the pace line left this card on 11 Nov 2026), the list of nights that need a home time, the year as rows of weekly cells (Fitness, Breath, Out, then your own trackers; tap a name for the year's sub-types, a square for that week's), and the Re-read diary button.
 
 **The weekly review** reads the reviewed week's rows and totals (Monday to Sunday, local days) into every Look back prompt: what was done on which day, the targets, bender nights, nights still needing a check and the year's night-out units. Each of the owner's own trackers gets a line too: its days (and hours or minutes) that week, and, when it is linked to a goal, how far it has got in that goal's period. It reads them through `healthReadWeek`, so it counts exactly what the /health page counts. The change history (`health_entry_event`) is not read. See [planning-cockpit-goals-review.md](planning-cockpit-goals-review.md).
 
-Colours are the CSS variables `--health-training`, `--health-breath`, `--health-wellness` and `--health-out` (with light and dark values) in `health.css`.
+Colours are the CSS variables `--health-training` (Fitness, wellness included), `--health-breath`, `--health-wellness` (no longer used on screen) and `--health-out` (with light and dark values) in `health.css`.
 
 ## Tests
 

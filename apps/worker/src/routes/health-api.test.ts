@@ -367,6 +367,7 @@ describe("health API", () => {
           wellness: 0,
           night_out: null,
           trackers: {},
+          subtypes: { "breath:wim_hof": 1, "fitness:crossfit": 1 },
         },
       ]);
     });

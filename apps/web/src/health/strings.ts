@@ -13,6 +13,41 @@ export const healthStrings = {
   /** The family every #fitness label belongs to: "Fitness · Gym · Back". */
   fitness: "Fitness",
 
+  /** The four rows everywhere: a family, its sub-types one tap away. */
+  family: {
+    fitness: "Fitness",
+    breath: "Breath",
+    night_out: "Out",
+  } as Record<string, string>,
+
+  /** Sub-type names by family key (`fitness:gym`); an owner's tracker uses its own. */
+  subtype: {
+    "fitness:gym": "Gym",
+    "fitness:crossfit": "CrossFit",
+    "fitness:cardio": "Cardio",
+    "fitness:mobility": "Mobility",
+    "fitness:wellness": "Wellness",
+    "breath:wim_hof": "Wim Hof",
+    "breath:meditation": "Meditation",
+    "breath:breathwork": "Breathwork",
+    "night_out:social": "Social",
+    "night_out:late": "Late",
+    "night_out:big": "Big night",
+    "night_out:bender": "Bender",
+    "night_out:check": "Home time?",
+  } as Record<string, string>,
+
+  breakdown: {
+    week: (family: string) => `${family} this week`,
+    weekOf: (family: string, day: string) => `${family}, week of ${day}`,
+    year: (family: string, year: number) => `${family} in ${year}`,
+    days: "Days",
+    nights: "Nights",
+    none: "Nothing logged.",
+    noSubtype: "No sub-type",
+    open: (family: string) => `${family}: open the breakdown`,
+  },
+
   kind: {
     training: "Gym",
     breath: "Breath",
@@ -37,8 +72,10 @@ export const healthStrings = {
     legs: "Legs",
     upper: "Upper",
     cardio: "Cardio",
+    mobility: "Mobility",
     wim_hof: "Wim Hof",
     meditation: "Meditation",
+    breathwork: "Breathwork",
     sauna: "Sauna",
     steam: "Steam room",
     cold_plunge: "Cold plunge",
@@ -48,7 +85,7 @@ export const healthStrings = {
   } as Record<string, string>,
 
   chip: {
-    nightOut: "Night out",
+    nightOut: "Out",
     homeWhen: "home when?",
     home: (time: string) => `home ${time}`,
     bender: "bender",
@@ -77,6 +114,10 @@ export const healthStrings = {
     fixedWords: "Already read",
     fixedHint: "built in, always on",
     blocked: "Never counts",
+    subtypes: "Sub-types",
+    subtypeName: "Sub-type name",
+    addSubtype: "Add sub-type",
+    removeSubtype: "Remove",
     addWord: "Add a word or #tag",
     addBlocked: "Add a word",
     addButton: "Add",
@@ -140,6 +181,7 @@ export const healthStrings = {
   page: {
     thisWeek: "This week",
     weekRange: (from: string, to: string) => `${from} to ${to}`,
+    fitnessNone: "Nothing yet this week",
     trainingTile: "Fitness · Gym",
     trainingNote: (sessions: number) =>
       sessions === 0

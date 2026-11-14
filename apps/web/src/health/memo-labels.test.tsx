@@ -92,7 +92,7 @@ describe("the chips", () => {
     );
     expect(chips.map((c) => c.textContent)).toEqual([
       "Fitness · Gym · Back",
-      "Wim Hof · 10 min",
+      "Breath · Wim Hof · 10 min",
     ]);
   });
 
@@ -179,7 +179,7 @@ describe("home when?", () => {
     expect(patch).toHaveBeenCalledWith("n1", { home_at: "04:30" });
     expect(
       container.querySelector('[data-testid="health-chip"]')?.textContent,
-    ).toBe("Night out · Fri · home 04:30 · 1");
+    ).toBe("Out · Fri · Big night · home 04:30");
     expect(
       container.querySelector('[data-testid="health-home-answers"]'),
     ).toBeNull();

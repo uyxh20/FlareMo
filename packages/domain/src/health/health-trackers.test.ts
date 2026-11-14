@@ -91,7 +91,9 @@ describe("the reader with an owner's tracker", () => {
   it("never turns a wellness word saved as an extra Training word into training", () => {
     // Live had "sauna" as an extra Training word from before Wellness existed.
     const config = {
-      builtins: { training: { words: ["sauna", "hyrox"], blocked: [] } },
+      builtins: {
+        training: { words: ["sauna", "hyrox"], blocked: [], subtypes: [] },
+      },
     };
     const read = (content: string) =>
       healthParseMemo(
@@ -115,12 +117,18 @@ describe("the reader with an owner's tracker", () => {
   });
 
   it("explains a test sentence", () => {
-    const draft = { measure: "hours" as const, words: FAST.words, blocked: [] };
+    const draft = {
+      measure: "hours" as const,
+      words: FAST.words,
+      blocked: [],
+      subtypes: [],
+    };
     expect(healthTestTracker({ text: "Fasted 16h", draft })).toEqual({
       reason: "counted",
       match: "fasted",
       day_offset: 0,
       minutes: 960,
+      subtype: null,
     });
     expect(
       healthTestTracker({ text: "Going to try fasting tomorrow", draft })
@@ -164,6 +172,7 @@ describe("health trackers", () => {
     measure: "hours",
     words: ["#fast", "fasted", "omad"],
     blocked: [],
+    subtypes: [],
     goal_id: null,
   };
 
@@ -213,6 +222,7 @@ describe("health trackers", () => {
       draft: {
         id: created.id,
         measure: "hours",
+        subtypes: [],
         words: ["fasted", "crossfit"],
         blocked: [],
       },
@@ -367,5 +377,54 @@ describe("health trackers", () => {
         goal: null,
       },
     ]);
+  });
+});
+
+describe("a tracker's sub-types", () => {
+  const fast = {
+    kind: "t:fast01" as const,
+    measure: "hours" as const,
+    words: ["#fast"],
+    blocked: [],
+    subtypes: [
+      { id: "s168", words: ["16:8", "16h"] },
+      { id: "omad01", words: ["omad"] },
+    ],
+  };
+  const read = (content: string) =>
+    healthParseMemo(
+      { content, createdAt: "2026-10-13T18:00:00Z" },
+      { trackers: [fast] },
+    ).filter((entry) => entry.kind === fast.kind);
+
+  it("labels a row with the sub-type its words name", () => {
+    expect(read("#fast 16:8 done")[0]?.variant).toBe("s168");
+    expect(read("omad today")[0]?.variant).toBe("omad01");
+  });
+
+  it("counts the tracker's own words without a sub-type", () => {
+    expect(read("#fast")[0]?.variant).toBeNull();
+  });
+
+  it("a sub-type word alone still counts for the tracker", () => {
+    expect(read("did omad")).toHaveLength(1);
+  });
+
+  it("does not count a denied sub-type", () => {
+    expect(read("no omad today")).toHaveLength(0);
+  });
+
+  it("the test box names the sub-type", () => {
+    expect(
+      healthTestTracker({
+        text: "16h fast done #fast",
+        draft: {
+          measure: "hours",
+          words: ["#fast"],
+          blocked: [],
+          subtypes: [{ id: "s168", label: "16:8", words: ["16h"] }],
+        },
+      }).subtype,
+    ).toBe("s168");
   });
 });

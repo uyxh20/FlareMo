@@ -13,8 +13,10 @@ import {
   healthDayOfYear,
   healthDaysInYear,
   healthDefaultTargets,
+  healthFamilyOf,
   healthIsBuiltinKind,
   healthLocalMoment,
+  healthSubtypesOf,
   healthTrackerColors,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
@@ -228,6 +230,7 @@ export async function healthReadYear(
         wellness: 0,
         night_out: null,
         trackers: {},
+        subtypes: {},
       };
       byDay.set(key, entry);
     }
@@ -236,6 +239,20 @@ export async function healthReadYear(
   for (const row of rows) {
     if (!healthIsBuiltinKind(row.kind) && !kinds.includes(row.kind)) continue;
     const entry = day(row.day);
+    const family = healthFamilyOf(row.kind);
+    const subs = healthSubtypesOf({
+      kind: row.kind,
+      variant: row.variant,
+      units: row.units,
+      bender: row.bender,
+      needs_check: row.needsCheck,
+    });
+    // An owner's tracker row with no sub-type counts under "" (no sub-type).
+    for (const sub of subs.length > 0 ? subs : [""]) {
+      const key = `${family}:${sub}`;
+      entry.subtypes = entry.subtypes ?? {};
+      entry.subtypes[key] = (entry.subtypes[key] ?? 0) + 1;
+    }
     if (row.kind === "training") entry.training += 1;
     else if (row.kind === "breath") entry.breath += 1;
     else if (row.kind === "wellness")

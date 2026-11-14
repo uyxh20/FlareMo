@@ -7,8 +7,8 @@ import {
   healthKinds,
   healthNightUnitsFor,
   healthParseDay,
-  healthWellnessVariants,
   healthTrainingVariants,
+  healthWellnessVariants,
 } from "@flaremo/contracts";
 import type { FlareMoDb } from "@flaremo/db";
 import { healthEntry } from "@flaremo/db/src/schema/fork-health";

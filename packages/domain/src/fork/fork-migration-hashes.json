@@ -13,5 +13,6 @@
   "9016_planner_task_attachment.sql": "6c047695d6d22dbc5b9bb19394c11deebf3b1d661e4e2759fa31029af6ba70ac",
   "9017_planner_flywheel.sql": "37d6c653909e4588fcc743ef12f9c0f8b2bb8446dad88cd39cb26ccb3614d736",
   "9018_planner_goal_version.sql": "a84665e2af3236a822d18e6c486d07b1578f832e60a32d1a99c966c44a70edfe",
-  "9019_planner_morning.sql": "c43362e070835cda8656660a185437088c4e2ee8938dfbcd652192ca6fa2290e"
+  "9019_planner_morning.sql": "c43362e070835cda8656660a185437088c4e2ee8938dfbcd652192ca6fa2290e",
+  "9020_planner_health_subtypes.sql": "1bb4042e1172783fd4f46c136a3e7495762b33a4574420fa47fa49b3a7411043"
 }

@@ -6,10 +6,17 @@ import {
   Suspense,
 } from "react";
 import { toast } from "sonner";
-import { uploadAttachment } from "@/api";
+import { type Attachment, uploadAttachment } from "@/api";
 import { RichComposerEditor } from "@/components/rich-composer-editor-lazy";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  ForkEditAddFileButton,
+  ForkEditFileChips,
+  type ForkEditFiles,
+  ForkEditTagChips,
+  useForkEditDrop,
+} from "@/fork/memo-edit"; // fork: memo editing
 import { useI18n } from "@/i18n";
 import { uploadAndInsertImages } from "@/lib/rich-editor-upload";
 
@@ -26,6 +33,9 @@ type MemoCardEditorProps = {
   onCancel: () => void;
   onContentChange: (content: string) => void;
   onSave: () => void;
+  /** fork: memo editing — the note's files and this edit's file changes. */
+  forkAttachments?: Attachment[];
+  forkFiles?: ForkEditFiles;
 };
 
 /** The card's edit face: the composer, the inline-upload chips, save/cancel. */
@@ -39,8 +49,11 @@ export function MemoCardEditor({
   onCancel,
   onContentChange,
   onSave,
+  forkAttachments = [],
+  forkFiles,
 }: MemoCardEditorProps) {
   const { t } = useI18n();
+  const forkDrop = useForkEditDrop(forkFiles, !isSaving && !!forkFiles); // fork
 
   // Editing an existing memo: pasted images upload bound to the memo right
   // away, so a cancelled edit leaves nothing to clean up except an
@@ -59,7 +72,11 @@ export function MemoCardEditor({
   };
 
   return (
-    <div className="flex flex-col gap-3 motion-safe:animate-fade">
+    <div
+      className="relative flex flex-col gap-3 motion-safe:animate-fade"
+      {...forkDrop.props}
+    >
+      {forkDrop.overlay}
       <Suspense fallback={<div className="min-h-7" aria-hidden="true" />}>
         <RichComposerEditor
           ariaLabel={t("common.edit")}
@@ -78,7 +95,24 @@ export function MemoCardEditor({
           placeholder={t("composer.placeholder")}
         />
       </Suspense>
+      {/* fork: memo editing — tags and files, edited by hand */}
+      <ForkEditTagChips
+        content={content}
+        disabled={isSaving}
+        onChange={onContentChange}
+      />
+      {forkFiles && (
+        <ForkEditFileChips
+          attachments={forkAttachments}
+          content={content}
+          disabled={isSaving}
+          files={forkFiles}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
+        {forkFiles && (
+          <ForkEditAddFileButton disabled={isSaving} files={forkFiles} />
+        )}
         <span className="hidden sm:inline text-xs text-muted-foreground">
           ⌘Enter / Esc
         </span>

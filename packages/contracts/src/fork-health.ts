@@ -38,6 +38,68 @@ export function healthIsTrackerKind(kind: string): kind is HealthTrackerKind {
   return /^t:[a-z0-9]{6,24}$/.test(kind);
 }
 
+// --- Families and sub-types (since 14 Nov 2026) -------------------------------
+//
+// Every tracker is a family with sub-types: Fitness (Gym, CrossFit, Cardio,
+// Mobility, Wellness), Breath (Wim Hof, Meditation, Breathwork), Out (Social,
+// Late, Big night, Bender, from the home time) and each of the owner's own
+// trackers (its own sub-types). The four families are the rows everywhere; a
+// sub-type is a detail shown on a label or when a row is opened. Worked out
+// from a row's kind and values: nothing extra is stored.
+
+/** A family: one of the three built-in ones, or an owner's tracker kind. */
+export type HealthFamily =
+  | "fitness"
+  | "breath"
+  | "night_out"
+  | HealthTrackerKind;
+
+export function healthFamilyOf(kind: HealthEntryKind): HealthFamily {
+  if (kind === "training" || kind === "wellness") return "fitness";
+  if (kind === "breath" || kind === "night_out") return kind;
+  return kind;
+}
+
+/** The kinds a family's rows carry. */
+export function healthFamilyKinds(family: HealthFamily): HealthEntryKind[] {
+  return family === "fitness" ? ["training", "wellness"] : [family];
+}
+
+/**
+ * The sub-type keys of one row. Usually one; a breath row of two sub-types
+ * (`wim_hof+meditation`) has both. An owner's tracker row without a sub-type
+ * has none.
+ */
+export function healthSubtypesOf(entry: {
+  kind: HealthEntryKind;
+  variant: string | null;
+  units: number | null;
+  bender: boolean;
+  needs_check: boolean;
+}): string[] {
+  switch (entry.kind) {
+    case "training": {
+      const variant = entry.variant ?? "gym";
+      return [
+        variant === "crossfit" || variant === "cardio" || variant === "mobility"
+          ? variant
+          : "gym",
+      ];
+    }
+    case "wellness":
+      return ["wellness"];
+    case "breath":
+      return (entry.variant ?? "wim_hof").split("+").filter(Boolean);
+    case "night_out":
+      if (entry.needs_check) return ["check"];
+      if (entry.bender) return ["bender"];
+      if (entry.units === null || entry.units <= 0) return ["social"];
+      return [entry.units < 1 ? "late" : "big"];
+    default:
+      return entry.variant ? [entry.variant] : [];
+  }
+}
+
 export const healthTrainingVariants = [
   "crossfit",
   "push",
@@ -47,11 +109,22 @@ export const healthTrainingVariants = [
   "legs",
   "upper",
   "cardio",
+  // Yoga, stretching, pilates (since 14 Nov 2026): training, shown Fitness · Mobility.
+  "mobility",
   "gym",
 ] as const;
 export type HealthTrainingVariant = (typeof healthTrainingVariants)[number];
 
-export const healthBreathVariants = ["wim_hof", "meditation"] as const;
+/**
+ * Breath sub-types. Breathwork (box breathing, pranayama, #breath) since 14 Nov
+ * 2026. A note with two of them keeps one row whose variant joins them with
+ * "+" (`wim_hof+meditation`), its minutes summed: one row per kind per note.
+ */
+export const healthBreathVariants = [
+  "wim_hof",
+  "meditation",
+  "breathwork",
+] as const;
 export type HealthBreathVariant = (typeof healthBreathVariants)[number];
 
 /**
@@ -397,6 +470,8 @@ export const healthYearDaySchema = z.object({
   night_out: z.number().nullable(),
   /** Entries of the owner's own trackers this day, by kind. */
   trackers: z.record(z.string(), z.number().int()),
+  /** Rows this day by family and sub-type, `fitness:gym`, `t:abc:16-8` (since 14 Nov 2026). */
+  subtypes: z.record(z.string(), z.number().int()).optional(),
 });
 export type HealthYearDay = z.infer<typeof healthYearDaySchema>;
 
@@ -565,6 +640,30 @@ const trackerWordsSchema = z
   .max(healthMaxTrackerWords)
   .transform((words) => [...new Set(words)]);
 
+/** Most sub-types on one tracker. */
+export const healthMaxTrackerSubtypes = 8;
+
+/**
+ * A sub-type of an owner's tracker (since 14 Nov 2026): "16:8" under Fast, with
+ * its own words. A word of a sub-type also counts for the tracker; the row's
+ * variant is the sub-type's id, so renaming one keeps its rows.
+ */
+export const healthTrackerSubtypeSchema = z.object({
+  id: z.string().regex(/^[a-z0-9]{4,16}$/, "Expected a short id."),
+  label: z.string().trim().min(1).max(24),
+  words: trackerWordsSchema,
+});
+export type HealthTrackerSubtype = z.infer<typeof healthTrackerSubtypeSchema>;
+
+const trackerSubtypesSchema = z
+  .array(healthTrackerSubtypeSchema)
+  .max(healthMaxTrackerSubtypes)
+  .refine(
+    (subtypes) =>
+      new Set(subtypes.map((sub) => sub.id)).size === subtypes.length,
+    "Two sub-types share an id.",
+  );
+
 export const healthTrackerDtoSchema = z.object({
   /** A short random id, or the built-in kind itself. */
   id: z.string(),
@@ -575,6 +674,8 @@ export const healthTrackerDtoSchema = z.object({
   measure: z.enum(healthTrackerMeasures),
   words: z.array(z.string()),
   blocked: z.array(z.string()),
+  /** The owner's tracker's sub-types; always empty for a built-in. */
+  subtypes: z.array(healthTrackerSubtypeSchema),
   goal_id: z.string().nullable(),
   builtin: z.boolean(),
   /** For a built-in: a few of the words its fixed reader already knows. */
@@ -597,6 +698,7 @@ export const healthTrackerInputSchema = z.object({
   measure: z.enum(healthTrackerMeasures),
   words: trackerWordsSchema,
   blocked: trackerWordsSchema,
+  subtypes: trackerSubtypesSchema.default([]),
   goal_id: z.string().min(1).max(64).nullable(),
 });
 export type HealthTrackerInput = z.infer<typeof healthTrackerInputSchema>;
@@ -617,6 +719,7 @@ export const healthTrackerDraftSchema = z.object({
   measure: z.enum(healthTrackerMeasures).default("days"),
   words: trackerWordsSchema,
   blocked: trackerWordsSchema,
+  subtypes: trackerSubtypesSchema.default([]),
 });
 export type HealthTrackerDraft = z.infer<typeof healthTrackerDraftSchema>;
 
@@ -661,6 +764,8 @@ export const healthTrackerTestResponseSchema = z.object({
   /** Relative to the day the sentence is written: 0 that day, -1 the day before. */
   day_offset: z.number().int().nullable(),
   minutes: z.number().int().nullable(),
+  /** The sub-type the text counts under, by id, when one matched. */
+  subtype: z.string().nullable().optional(),
 });
 export type HealthTrackerTestResponse = z.infer<
   typeof healthTrackerTestResponseSchema

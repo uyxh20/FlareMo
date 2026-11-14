@@ -219,6 +219,7 @@ describe("health read and write", () => {
         wellness: 0,
         night_out: null,
         trackers: {},
+        subtypes: { "fitness:gym": 2, "breath:wim_hof": 1 },
       });
       expect(year.days.find((day) => day.day === "2026-10-10")).toMatchObject({
         night_out: null,

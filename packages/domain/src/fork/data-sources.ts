@@ -965,7 +965,7 @@ export const forkDataSources: readonly ForkDataSource[] = [
     kind: "bookkeeping",
     owner: "fork",
     holds:
-      "The owner's trackers: name, colour, the words and tags that count, blocked words and the linked goal",
+      "The owner's trackers: name, colour, the words and tags that count, blocked words, sub-types with their own words, and the linked goal",
     uses: plumbing("health tracker settings"),
   },
   {

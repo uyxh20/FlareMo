@@ -8,19 +8,13 @@ import { healthFetchWeek } from "./api";
 import { healthTestEntry, healthTestNight } from "./test-fixtures";
 import { HealthWeekStrip } from "./week-strip";
 
-// The week strip above the timeline: three rows of seven dots, a link to the
-// Health page, nothing at all when it is hidden or cannot load.
+// The week strip above the timeline: one row of seven dots per family
+// (Fitness, Breath, Out, own trackers), a way to the Health page, a pop-up of
+// sub-types behind each name, nothing at all when it is hidden or cannot load.
 
+const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({
-    to,
-    children,
-    ...props
-  }: { to: string; children: React.ReactNode } & Record<string, unknown>) => (
-    <a href={to} {...props}>
-      {children}
-    </a>
-  ),
+  useNavigate: () => navigate,
 }));
 vi.mock("./api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./api")>()),
@@ -96,35 +90,68 @@ afterEach(() => {
 });
 
 describe("the week strip", () => {
-  it("draws Fitness with Gym and Wellness under it, then Breath and Out", async () => {
+  it("draws the four families: Fitness, Breath and Out", async () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
+    const names = Array.from(
+      container.querySelectorAll('[data-testid="health-row-name"]'),
+    ).map((name) => name.textContent);
+    expect(names).toEqual(["Fitness", "Breath", "Out"]);
     const dots = container.querySelectorAll('[data-testid="health-dot"]');
-    expect(dots).toHaveLength(35);
+    expect(dots).toHaveLength(21);
     const state = (kind: string, day: string) =>
       container
         .querySelector(`[data-kind="${kind}"][data-day="${day}"]`)
         ?.getAttribute("data-state");
-    expect(state("training", "2026-10-12")).toBe("done");
-    expect(state("training", "2026-10-11")).toBe("none");
     expect(state("training+wellness", "2026-10-12")).toBe("done");
-    expect(state("wellness", "2026-10-12")).toBe("none");
+    expect(state("training+wellness", "2026-10-11")).toBe("none");
     expect(state("breath", "2026-10-13")).toBe("done");
     expect(state("night_out", "2026-10-09")).toBe("done");
     expect(state("night_out", "2026-10-10")).toBe("check");
   });
 
-  it("counts this week, with no targets", async () => {
+  it("names the sub-type on a dot", async () => {
+    fetchWeek.mockResolvedValue(WEEK);
+    const { container } = mount();
+    await settle();
+    const title = (kind: string, day: string) =>
+      container
+        .querySelector(`[data-kind="${kind}"][data-day="${day}"]`)
+        ?.getAttribute("title");
+    expect(title("training+wellness", "2026-10-12")).toBe("Mon · Gym");
+    expect(title("breath", "2026-10-13")).toBe("Tue · Wim Hof");
+    expect(title("night_out", "2026-10-09")).toBe(
+      "Fri · Big night · home 04:00",
+    );
+  });
+
+  it("counts days this week, with no targets", async () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
     const counts = Array.from(container.querySelectorAll(".text-right")).map(
       (cell) => cell.textContent,
     );
-    // Fitness days, Gym sessions, Wellness sessions, Breath days, Out units.
-    expect(counts).toEqual(["1", "1", "0", "1", "1"]);
+    // Days (nights) with a row of each family.
+    expect(counts).toEqual(["1", "1", "2"]);
     expect(container.textContent).not.toContain("/");
+  });
+
+  it("opens a family's sub-types, and not the Health page", async () => {
+    fetchWeek.mockResolvedValue(WEEK);
+    const { container } = mount();
+    await settle();
+    navigate.mockReset();
+    const fitness = container.querySelector<HTMLButtonElement>(
+      '[data-testid="health-row-name"][data-family="fitness"]',
+    );
+    await act(async () => fitness?.click());
+    await settle();
+    const dialog = document.querySelector('[data-testid="health-breakdown"]');
+    expect(dialog?.textContent).toContain("Fitness this week");
+    expect(dialog?.textContent).toContain("Gym");
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("asks for this week, Monday to Sunday", async () => {
@@ -144,11 +171,13 @@ describe("the week strip", () => {
     fetchWeek.mockResolvedValue(WEEK);
     const { container } = mount();
     await settle();
-    expect(
+    navigate.mockReset();
+    await act(async () =>
       container
-        .querySelector('[data-testid="health-week-strip"]')
-        ?.getAttribute("href"),
-    ).toBe("/health");
+        .querySelector<HTMLElement>('[data-testid="health-week-strip"]')
+        ?.click(),
+    );
+    expect(navigate).toHaveBeenCalledWith({ to: "/health" });
   });
 
   it("says in words what a ring means, for a reader without eyes", async () => {

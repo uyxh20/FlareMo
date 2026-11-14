@@ -124,10 +124,34 @@ const CASES: Case[] = [
     expected: [wellness("2026-10-13", "ice_bath")],
   },
   {
-    name: "#fitness stretching still counts, as #gym stretching did",
+    name: "#fitness stretching still counts, as Fitness · Mobility",
     when: TUE_EVENING,
     content: "#fitness stretching",
-    expected: [training("2026-10-13", "gym")],
+    expected: [training("2026-10-13", "mobility")],
+  },
+  {
+    name: "yoga with a time is mobility",
+    when: TUE_EVENING,
+    content: "yoga 30 min",
+    expected: [training("2026-10-13", "mobility", { minutes: 30 })],
+  },
+  {
+    name: "a back day with stretching after stays a back day",
+    when: TUE_EVENING,
+    content: "#fitness back day, stretching after",
+    expected: [training("2026-10-13", "back")],
+  },
+  {
+    name: "talking about yoga is not a session",
+    when: TUE_EVENING,
+    content: "I keep meaning to look into yoga classes near the office",
+    expected: [],
+  },
+  {
+    name: "a swim with a time is cardio",
+    when: TUE_EVENING,
+    content: "swim 40 min",
+    expected: [training("2026-10-13", "cardio", { minutes: 40 })],
   },
   {
     name: "a long #fitness note with a passing spa is still a session",
@@ -450,10 +474,28 @@ const CASES: Case[] = [
     expected: [breath("2026-10-13", "meditation", 15)],
   },
   {
-    name: "breathwork counts as meditation",
+    name: "breathwork is its own sub-type",
     when: "2026-10-13 08:00",
     content: "breathwork 12 mins done",
-    expected: [breath("2026-10-13", "meditation", 12)],
+    expected: [breath("2026-10-13", "breathwork", 12)],
+  },
+  {
+    name: "the #breath tag and box breathing",
+    when: "2026-10-13 08:00",
+    content: "#breath box breathing 8 min",
+    expected: [breath("2026-10-13", "breathwork", 8)],
+  },
+  {
+    name: "two breath sub-types in one note make one row of both",
+    when: "2026-10-13 08:00",
+    content: "wim hof 10 and meditated 20 min",
+    expected: [breath("2026-10-13", "wim_hof+meditation", 30)],
+  },
+  {
+    name: "the same sub-type twice counts once",
+    when: "2026-10-13 08:00",
+    content: "#wimhof 10. wim hof again later",
+    expected: [breath("2026-10-13", "wim_hof", 10)],
   },
   {
     name: "the meditation tag alone",

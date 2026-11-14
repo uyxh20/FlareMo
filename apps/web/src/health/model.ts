@@ -1,10 +1,14 @@
 import {
   type HealthEntryDto,
   type HealthEntryKind,
+  type HealthFamily,
   type HealthGoalProgress,
   type HealthTrackerDto,
   healthAddDays,
+  healthFamilyKinds,
+  healthFamilyOf,
   healthIsBuiltinKind,
+  healthSubtypesOf,
   healthWeekdayOf,
   healthWeekStartOf,
 } from "@flaremo/contracts";
@@ -53,15 +57,52 @@ export function healthVariantLabel(variant: string | null): string {
   return (variant && healthStrings.variant[variant]) || "";
 }
 
-/** The words on a label chip: "Fitness · Gym · Back", "Fitness · Sauna · 20 min", "Wim Hof · 10 min", "Night out · Fri · home 03:30 · 1". */
+/** A family's name: Fitness, Breath, Out, or the tracker's own. */
+export function healthFamilyLabel(
+  family: HealthFamily,
+  trackers?: readonly HealthTrackerDto[],
+): string {
+  return (
+    healthStrings.family[family] ??
+    trackers?.find((t) => t.kind === family)?.label ??
+    healthStrings.trackers.unknown
+  );
+}
+
+/** A sub-type's name: "Gym", "Big night", or an owner's sub-type's label. */
+export function healthSubtypeLabel(
+  family: HealthFamily,
+  key: string,
+  trackers?: readonly HealthTrackerDto[],
+): string {
+  return (
+    healthStrings.subtype[`${family}:${key}`] ??
+    trackers
+      ?.find((t) => t.kind === family)
+      ?.subtypes.find((sub) => sub.id === key)?.label ??
+    healthStrings.breakdown.noSubtype
+  );
+}
+
+/**
+ * The words on a label chip, family first: "Fitness · Gym · Back",
+ * "Fitness · Sauna · 20 min", "Breath · Wim Hof · 10 min",
+ * "Out · Fri · Big night · home 03:30", "Fast · 16:8 · 16 h".
+ */
 export function healthChipText(
   entry: HealthEntryDto,
   trackers?: readonly HealthTrackerDto[],
 ): string {
   const s = healthStrings;
+  const family = healthFamilyOf(entry.kind);
+  const parts: string[] = [healthFamilyLabel(family, trackers)];
+  const minutes = entry.minutes ? s.chip.minutes(entry.minutes) : "";
   if (!healthIsBuiltinKind(entry.kind)) {
     const tracker = trackers?.find((t) => t.kind === entry.kind);
-    const parts = [tracker?.label ?? s.trackers.unknown];
+    const sub = entry.variant
+      ? tracker?.subtypes.find((item) => item.id === entry.variant)?.label
+      : undefined;
+    if (sub) parts.push(sub);
     if (entry.minutes) {
       parts.push(
         tracker?.measure === "hours"
@@ -72,42 +113,142 @@ export function healthChipText(
     return parts.join(" · ");
   }
   if (entry.kind === "training") {
+    const [sub = "gym"] = healthSubtypesOf(entry);
+    parts.push(healthSubtypeLabel(family, sub));
     const variant = entry.variant ?? "gym";
-    const parts =
-      variant === "gym" || variant === "crossfit" || variant === "cardio"
-        ? [s.fitness, healthVariantLabel(variant)]
-        : [s.fitness, s.variant.gym, healthVariantLabel(variant)];
-    if (variant === "cardio" && entry.minutes) {
-      parts.push(s.chip.minutes(entry.minutes));
+    // A split (Back, Push…) is the detail of a gym session.
+    if (sub === "gym" && variant !== "gym") {
+      parts.push(healthVariantLabel(variant));
     }
-    return parts.join(" · ");
+    parts.push(minutes);
+    return parts.filter(Boolean).join(" · ");
   }
   if (entry.kind === "wellness") {
-    return [
-      s.fitness,
-      healthVariantLabel(entry.variant) || s.kind.wellness,
-      entry.minutes ? s.chip.minutes(entry.minutes) : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    parts.push(healthVariantLabel(entry.variant) || s.kind.wellness, minutes);
+    return parts.filter(Boolean).join(" · ");
   }
   if (entry.kind === "breath") {
-    return [
-      healthVariantLabel(entry.variant ?? "wim_hof"),
-      entry.minutes ? s.chip.minutes(entry.minutes) : "",
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    parts.push(
+      healthSubtypesOf(entry)
+        .map((sub) => healthSubtypeLabel(family, sub))
+        .join(" + "),
+      minutes,
+    );
+    return parts.filter(Boolean).join(" · ");
   }
-  const parts: string[] = [s.chip.nightOut, healthWeekdayShort(entry.day)];
+  parts.push(healthWeekdayShort(entry.day));
   if (entry.needs_check) {
     parts.push(s.chip.homeWhen);
   } else {
+    const [sub = "social"] = healthSubtypesOf(entry);
+    parts.push(healthSubtypeLabel(family, sub));
     if (entry.home_at) parts.push(s.chip.home(entry.home_at));
-    else if (entry.bender) parts.push(s.chip.bender);
-    if (entry.units !== null) parts.push(healthFormatUnits(entry.units));
   }
   return parts.join(" · ");
+}
+
+// --- Families: the four rows and what opens under them --------------------------
+
+export type HealthFamilyRow = {
+  family: HealthFamily;
+  label: string;
+  kinds: HealthEntryKind[];
+  kindClass: string;
+};
+
+/** The rows everywhere: Fitness, Breath, Out, then the owner's own trackers. */
+export function healthFamilyRows(
+  trackers: readonly HealthTrackerDto[] | undefined,
+): HealthFamilyRow[] {
+  const builtin: HealthFamilyRow[] = (
+    ["fitness", "breath", "night_out"] as const
+  ).map((family) => ({
+    family,
+    label: healthFamilyLabel(family),
+    kinds: healthFamilyKinds(family),
+    kindClass: `health-kind-${family === "fitness" ? "training" : family}`,
+  }));
+  const own = (trackers ?? [])
+    .filter((tracker) => !tracker.builtin)
+    .map((tracker) => ({
+      family: tracker.kind as HealthFamily,
+      label: tracker.label,
+      kinds: [tracker.kind],
+      kindClass: `health-kind-t-${tracker.color ?? "slate"}`,
+    }));
+  return [...builtin, ...own];
+}
+
+export type HealthBreakdownRow = { key: string; label: string; count: number };
+
+function breakdownRows(
+  family: HealthFamily,
+  counts: Map<string, number>,
+  trackers?: readonly HealthTrackerDto[],
+): HealthBreakdownRow[] {
+  return [...counts]
+    .filter(([, count]) => count > 0)
+    .map(([key, count]) => ({
+      key,
+      label: key
+        ? healthSubtypeLabel(family, key, trackers)
+        : healthStrings.breakdown.noSubtype,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+/** A family's entries split by sub-type, most first: sessions per sub-type. */
+export function healthBreakdownOfEntries(
+  entries: readonly HealthEntryDto[],
+  family: HealthFamily,
+  trackers?: readonly HealthTrackerDto[],
+): HealthBreakdownRow[] {
+  const counts = new Map<string, number>();
+  for (const entry of entries) {
+    if (healthFamilyOf(entry.kind) !== family) continue;
+    const subs = healthSubtypesOf(entry);
+    for (const sub of subs.length ? subs : [""]) {
+      counts.set(sub, (counts.get(sub) ?? 0) + 1);
+    }
+  }
+  return breakdownRows(family, counts, trackers);
+}
+
+/** The same, from the year's days, between two days (inclusive). */
+export function healthBreakdownOfDays(
+  days: readonly YearDay[],
+  family: HealthFamily,
+  range: { from: string; to: string },
+  trackers?: readonly HealthTrackerDto[],
+): { days: number; rows: HealthBreakdownRow[] } {
+  const counts = new Map<string, number>();
+  let active = 0;
+  for (const day of days) {
+    if (day.day < range.from || day.day > range.to) continue;
+    let any = false;
+    for (const [key, count] of Object.entries(day.subtypes ?? {})) {
+      const cut = key.lastIndexOf(":");
+      if (key.slice(0, cut) !== family) continue;
+      const sub = key.slice(cut + 1);
+      counts.set(sub, (counts.get(sub) ?? 0) + count);
+      if (count > 0) any = true;
+    }
+    if (any) active += 1;
+  }
+  return { days: active, rows: breakdownRows(family, counts, trackers) };
+}
+
+/** Days in a list of entries with a row of the family. */
+export function healthFamilyDays(
+  entries: readonly HealthEntryDto[],
+  family: HealthFamily,
+): number {
+  return new Set(
+    entries
+      .filter((entry) => healthFamilyOf(entry.kind) === family)
+      .map((entry) => entry.day),
+  ).size;
 }
 
 /** A tooltip for a chip: the feeling, when the diary gave one. */
@@ -181,6 +322,8 @@ export type HealthYearWeek = {
   breath: number;
   /** Days with a sauna, cold plunge, massage and the like. */
   wellness: number;
+  /** Days with any Fitness row (a session or wellness). */
+  fitness: number;
   out: number;
   /** Days with an entry, per owner tracker kind. */
   trackers: Record<string, number>;
@@ -195,6 +338,7 @@ type YearDay = {
   wellness?: number;
   night_out: number | null;
   trackers?: Record<string, number>;
+  subtypes?: Record<string, number>;
 };
 
 /** The weeks of a year, Monday to Sunday, each with what its days hold. */
@@ -212,6 +356,7 @@ export function healthYearWeeks(
       training: 0,
       breath: 0,
       wellness: 0,
+      fitness: 0,
       out: 0,
       trackers: {},
       future: start > today,
@@ -223,6 +368,7 @@ export function healthYearWeeks(
     week.training += day.training;
     if (day.breath > 0) week.breath += 1;
     if ((day.wellness ?? 0) > 0) week.wellness += 1;
+    if (day.training > 0 || (day.wellness ?? 0) > 0) week.fitness += 1;
     week.out += day.night_out ?? 0;
     for (const [kind, count] of Object.entries(day.trackers ?? {})) {
       if (count > 0) week.trackers[kind] = (week.trackers[kind] ?? 0) + 1;

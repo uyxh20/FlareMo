@@ -4,6 +4,11 @@ import {
   createMemo,
   uploadAttachment,
 } from "@/api";
+import {
+  ForkAttachmentUploadError,
+  forkMemoTakesFiles,
+  forkWithUploadRetry,
+} from "@/fork/memo-upload-retry"; // fork: memo editing
 import type { TranslationKey } from "@/i18n";
 import type { MemoCaptureInput } from "@/lib/local-memo-capture";
 import {
@@ -33,6 +38,9 @@ export async function createMemoWithAttachments(input: MemoCaptureInput) {
     source: "web",
   });
 
+  // fork: a replayed capture whose note was trashed meanwhile takes no files.
+  if (!forkMemoTakesFiles(memo)) return memo;
+
   // Inline-pasted images were uploaded before the memo existed; claim them
   // first — the bind replaces the (still empty) list, so it must run before
   // the per-file uploads below append to it.
@@ -43,11 +51,28 @@ export async function createMemoWithAttachments(input: MemoCaptureInput) {
   // A mobile queue can hold many large files. Upload them in order so a
   // transient failure stops early, and each retry only replays stable ids.
   for (const [index, file] of input.files.entries()) {
-    await uploadAttachment({
-      file,
-      memo: memo.name,
-      clientId: getAttachmentCaptureClientId(input.clientId, index),
-    });
+    // fork: retried, and a lasting failure names the saved note instead of
+    // sending the whole capture to the offline queue.
+    try {
+      await forkWithUploadRetry(() =>
+        uploadAttachment({
+          file,
+          memo: memo.name,
+          clientId: getAttachmentCaptureClientId(input.clientId, index),
+        }),
+      );
+    } catch (error) {
+      throw new ForkAttachmentUploadError(
+        memo,
+        input.files.slice(index),
+        error,
+        input.files
+          .slice(index)
+          .map((_, offset) =>
+            getAttachmentCaptureClientId(input.clientId, index + offset),
+          ),
+      );
+    }
   }
 
   return memo;

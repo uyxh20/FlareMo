@@ -79,7 +79,23 @@ const WEEK: HealthWeekResponse = {
   start: "2026-10-07",
   end: "2026-10-13",
   today: "2026-10-13",
-  entries: [healthTestEntry({ day: "2026-10-12" }), NEEDS],
+  entries: [
+    healthTestEntry({ day: "2026-10-12", variant: "back" }),
+    healthTestEntry({
+      id: "w1",
+      kind: "wellness",
+      variant: "sauna",
+      day: "2026-10-13",
+    }),
+    healthTestEntry({
+      id: "b1",
+      kind: "breath",
+      variant: "wim_hof",
+      minutes: 10,
+      day: "2026-10-12",
+    }),
+    NEEDS,
+  ],
   summary: {
     training: { sessions: 2, target: 3 },
     breath: { days: 5, sessions: 5, minutes: 50, target: 7 },
@@ -104,6 +120,11 @@ const YEAR: HealthYearResponse = {
       breath: 1,
       night_out: null,
       trackers: { "t:fast00000001": 1 },
+      subtypes: {
+        "fitness:gym": 1,
+        "breath:wim_hof": 1,
+        "t:fast00000001:": 1,
+      },
     },
   ],
   night_out: {
@@ -164,21 +185,20 @@ describe("the Health page", () => {
       container.querySelectorAll('[data-testid="health-tile"]'),
     );
     expect(tiles.map((t) => t.getAttribute("data-kind"))).toEqual([
-      "training",
-      "wellness",
+      "fitness",
       "breath",
       "night_out",
       "t:fast00000001",
     ]);
-    expect(tiles[4]?.textContent).toContain("Fasting");
-    expect(tiles[4]?.textContent).toContain("34 h in total");
-    expect(tiles[4]?.className).toContain("health-kind-t-green");
-    expect(tiles[0]?.textContent).toContain("Fitness · Gym");
-    expect(tiles[0]?.textContent).toContain("Trained 2 times this week");
-    expect(tiles[1]?.textContent).toContain("Fitness · Wellness");
-    expect(tiles[1]?.textContent).toContain("0 days · not training");
-    expect(tiles[2]?.textContent).toContain("5 days this week, 50 min");
-    expect(tiles[3]?.textContent).toContain("1½ units this week");
+    expect(tiles[3]?.textContent).toContain("Fasting");
+    expect(tiles[3]?.textContent).toContain("34 h in total");
+    expect(tiles[3]?.className).toContain("health-kind-t-green");
+    // Fitness: days, split by sub-type in a quiet line.
+    expect(tiles[0]?.textContent).toContain("Fitness");
+    expect(tiles[0]?.textContent).toContain("2");
+    expect(tiles[0]?.textContent).toContain("Gym 1 · Wellness 1");
+    expect(tiles[1]?.textContent).toContain("Wim Hof 1 · 50 min");
+    expect(tiles[2]?.textContent).toContain("1½ units this week");
     expect(tiles.map((t) => t.textContent).join(" ")).not.toMatch(/ of \d/);
     // Monday to Sunday: the Monday of the week of Tuesday 13 October.
     expect(fetchWeek).toHaveBeenCalledWith("2026-10-12");
@@ -239,22 +259,44 @@ describe("the Health page", () => {
     ).toBeNull();
   });
 
-  it("draws the year as a row of weeks per tracker", async () => {
+  it("opens a tile's sub-types in a pop-up", async () => {
+    const container = await show();
+    const tile = container.querySelector<HTMLButtonElement>(
+      '[data-testid="health-tile"][data-kind="fitness"]',
+    );
+    plannerTestClick(tile);
+    await settle();
+    const rows = Array.from(
+      document.querySelectorAll('[data-testid="health-breakdown-row"]'),
+    ).map((row) => row.textContent);
+    expect(rows).toEqual(["Gym1", "Wellness1"]);
+  });
+
+  it("draws the year as a row of weeks per family", async () => {
     const container = await show();
     const grid = container.querySelector('[data-testid="health-year-grid"]');
+    const names = Array.from(
+      grid?.querySelectorAll('[data-testid="health-grid-name"]') ?? [],
+    ).map((name) => name.textContent);
+    expect(names).toEqual(["Fitness", "Breath", "Out", "Fasting"]);
     const rows = grid?.querySelectorAll('[role="img"]');
-    expect(rows).toHaveLength(5);
+    expect(rows).toHaveLength(4);
     expect(
-      rows?.[4]
+      rows?.[3]
         ?.querySelector('.health-cell[title^="Fasting, week of 12 Oct"]')
         ?.getAttribute("title"),
     ).toBe("Fasting, week of 12 Oct: 1 day");
     expect(rows?.[0]?.querySelectorAll(".health-cell")).toHaveLength(53);
-    // The week of 12 October holds one session and one breath day.
-    const cell = rows?.[0]?.querySelector(
-      '.health-cell[title^="Gym, week of 12 Oct"]',
+    // The week of 12 October holds one Fitness day.
+    const cell = rows?.[0]?.querySelector<HTMLButtonElement>(
+      '.health-cell[title^="Fitness, week of 12 Oct"]',
     );
-    expect(cell?.getAttribute("title")).toBe("Gym, week of 12 Oct: 1 session");
+    expect(cell?.getAttribute("title")).toBe("Fitness, week of 12 Oct: 1 day");
+    plannerTestClick(cell);
+    await settle();
+    const dialog = document.querySelector('[data-testid="health-breakdown"]');
+    expect(dialog?.textContent).toContain("Fitness, week of 12 Oct");
+    expect(dialog?.textContent).toContain("Gym");
   });
 
   it("reads the diary again and says what it found", async () => {
@@ -298,9 +340,9 @@ describe("the Health page", () => {
         '[data-testid="health-tracker-pill"]',
       );
       expect(Array.from(pills ?? []).map((p) => p.textContent)).toEqual([
-        "Training",
+        "Fitness",
         "Breath",
-        "Nights out",
+        "Out",
         "Fasting",
       ]);
       expect(
@@ -310,7 +352,11 @@ describe("the Health page", () => {
 
     it("opens a tracker calmly: no preview button and no tester until asked", async () => {
       const container = await show();
-      plannerTestClick(button(container, "Fasting"));
+      plannerTestClick(
+        Array.from(
+          container.querySelectorAll('[data-testid="health-tracker-pill"]'),
+        ).find((pill) => pill.textContent === "Fasting"),
+      );
       await settle();
       const editor = container.querySelector(
         '[data-testid="health-tracker-editor"]',
@@ -331,6 +377,58 @@ describe("the Health page", () => {
         container.querySelector('[data-testid="health-tester"]'),
       ).not.toBeNull();
       expect(testTracker).not.toHaveBeenCalled();
+    });
+
+    it("gives a tracker sub-types, each with its own words", async () => {
+      previewTracker.mockResolvedValue({
+        added: 2,
+        removed: 0,
+        kept: 0,
+        unchanged: 0,
+        added_days: [],
+        removed_days: [],
+        memos: 579,
+      });
+      const container = await show();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-new-tracker"]'),
+      );
+      await settle();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-add-subtype"]'),
+      );
+      await settle();
+      const name = container.querySelector<HTMLInputElement>(
+        '[data-testid="health-tracker-name"]',
+      );
+      const subName = container.querySelector<HTMLInputElement>(
+        '[data-testid="health-subtype-name"]',
+      );
+      const subWord = container.querySelector<HTMLInputElement>(
+        '[data-testid="health-subtype-word"]',
+      );
+      await act(async () => {
+        typeInto(name, "Fast");
+        typeInto(subName, "16:8");
+        typeInto(subWord, "16:8");
+      });
+      await act(async () => {
+        subWord?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+      });
+      await settle();
+      plannerTestClick(
+        container.querySelector('[data-testid="health-preview-button"]'),
+      );
+      await settle();
+      const draft = previewTracker.mock.calls[0]?.[0];
+      expect(draft?.words).toEqual([]);
+      expect(draft?.subtypes).toHaveLength(1);
+      expect(draft?.subtypes[0]).toMatchObject({
+        label: "16:8",
+        words: ["16:8"],
+      });
     });
 
     it("previews a new tracker against the diary, then applies it", async () => {
@@ -373,6 +471,7 @@ describe("the Health page", () => {
         measure: "days",
         words: ["#plunge"],
         blocked: [],
+        subtypes: [],
       });
       expect(
         container.querySelector('[data-testid="health-preview"]')?.textContent,
@@ -385,6 +484,7 @@ describe("the Health page", () => {
         measure: "days",
         words: ["#plunge"],
         blocked: [],
+        subtypes: [],
         goal_id: null,
       });
       expect(

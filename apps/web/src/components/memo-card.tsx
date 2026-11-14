@@ -17,6 +17,7 @@ import { MemoCardEditor } from "@/components/memo-card/memo-card-editor";
 import { MemoCardHeader } from "@/components/memo-card/memo-card-header";
 import { useMemoCardActions } from "@/components/memo-card/use-memo-card-actions";
 import { MemoComments } from "@/components/memo-comments";
+import { forkEditDraftContent, useForkEditFiles } from "@/fork/memo-edit"; // fork: memo editing
 import { HealthMemoLabels } from "@/health/memo-labels"; // fork: health tracker
 import { cn } from "@/lib/utils";
 
@@ -155,8 +156,16 @@ export const MemoCard = memo(function MemoCard({
 
   const canOpenThread = canOpenMemoThread(memo, commentsEnabled);
 
+  // fork: memo editing (hidden tags join the text, files are editable).
+  const forkFiles = useForkEditFiles(memo, attachments);
+  const forkSave = async () => {
+    if (!(await forkFiles.apply())) return;
+    await saveEditing();
+  };
+
   const startEditing = () => {
-    setDraftContent(memo.content);
+    setDraftContent(forkEditDraftContent(memo)); // fork: memo editing
+    forkFiles.reset(); // fork: memo editing
     setEditing(true);
   };
 
@@ -210,14 +219,16 @@ export const MemoCard = memo(function MemoCard({
       {isEditing ? (
         <MemoCardEditor
           content={draftContent}
-          isSaving={isSaving}
+          isSaving={isSaving || forkFiles.busy}
+          forkAttachments={attachments}
+          forkFiles={forkFiles}
           isUploadingInline={isUploadingInline}
           setIsUploadingInline={setIsUploadingInline}
           editorRef={editEditorRef}
           memoName={memo.name}
           onCancel={stopEditing}
           onContentChange={setDraftContent}
-          onSave={saveEditing}
+          onSave={forkSave}
         />
       ) : (
         <MemoCardBody

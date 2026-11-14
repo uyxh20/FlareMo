@@ -598,9 +598,11 @@ export const plannerAgentToolInputs = {
           "fix: the corrected day. add: the day of the session or night (the evening it started).",
         ),
       kind: z
-        .enum(["training", "breath", "night_out"])
+        .enum(["training", "breath", "night_out", "wellness"])
         .optional()
-        .describe("Only with add."),
+        .describe(
+          "Only with add. Wellness is sauna, steam, cold plunge, ice bath, massage or spa: under Fitness, never training.",
+        ),
       variant: z
         .string()
         .trim()
@@ -608,7 +610,7 @@ export const plannerAgentToolInputs = {
         .max(32)
         .optional()
         .describe(
-          "Training: crossfit, push, pull, back, chest, legs, upper, cardio or gym (a run, ride, swim or zone 2 is cardio). Breathwork: wim_hof or meditation. Not for a night out.",
+          "Training: crossfit, push, pull, back, chest, legs, upper, cardio, mobility or gym (a run, ride, swim or zone 2 is cardio; yoga, stretching or pilates is mobility). Breathwork: wim_hof, meditation or breathwork (box breathing, pranayama). Wellness: sauna, steam, cold_plunge, ice_bath, massage or spa. Not for a night out.",
         ),
       minutes: z
         .number()
@@ -616,7 +618,7 @@ export const plannerAgentToolInputs = {
         .min(1)
         .max(600)
         .optional()
-        .describe("Training or breathwork only."),
+        .describe("Training, breathwork or wellness only."),
       home_at: z
         .string()
         .regex(/^\d{2}:\d{2}$/)
@@ -1110,7 +1112,7 @@ export const plannerAgentEditSchema = z.strictObject({
   /** A place: top or bottom of the column, or the agent's own anchor. */
   spot: z.enum(["top", "bottom", "anchor"]).optional(),
   /** A health row to add: its kind, with variant and minutes. */
-  kind: z.enum(["training", "breath", "night_out"]).optional(),
+  kind: z.enum(["training", "breath", "night_out", "wellness"]).optional(),
   variant: z.string().trim().min(1).max(32).nullable().optional(),
   minutes: z.number().int().min(1).max(600).nullable().optional(),
   day: daySchema.optional(),
