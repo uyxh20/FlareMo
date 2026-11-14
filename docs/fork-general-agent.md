@@ -39,7 +39,9 @@ open. Dev has no Sunday cron.
 
 The agent's MCP server is `POST /api/app/planner/agent/mcp`
 (`apps/worker/src/routes/planner-agent-mcp.ts`). Its tools
-(`packages/domain/src/planner/agent-tools.ts`):
+(`packages/domain/src/planner/agent-tools.ts`, which runs the read tools in
+`agent-tools-read.ts` and the propose tools in `agent-tools-propose.ts`, with
+their shared helpers in `agent-tools-shared.ts`):
 
 - reads: `review_week`, `review_period`, `week_diary`, `list_entries`,
   `read_entries`, `search_entries`, `read_goals`, `read_tasks`, `read_health`,
