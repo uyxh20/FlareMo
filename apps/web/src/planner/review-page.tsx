@@ -271,6 +271,7 @@ export function PlannerReviewPage() {
 
   return (
     <WorkspaceLayout
+      centerFrame
       contentMaxWidth={1320}
       header={({
         sidebarCollapsed,
@@ -344,7 +345,7 @@ function ReviewSkeleton() {
         <Skeleton className="h-16" />
         <Skeleton className="h-16" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Skeleton className="h-[480px]" />
         <Skeleton className="h-[480px]" />
       </div>
@@ -387,7 +388,7 @@ function Chapters({
   return (
     <nav
       aria-label={strings.review.parts}
-      className="sticky top-0 z-10 -mx-1 grid grid-cols-2 gap-1.5 bg-background px-1 py-2 sm:grid-cols-[repeat(var(--chapters),minmax(0,1fr))] sm:gap-2.5"
+      className="sticky top-0 z-10 -mx-1 grid grid-cols-2 gap-1.5 bg-background px-1 py-1.5 sm:grid-cols-[repeat(var(--chapters),minmax(0,1fr))] sm:gap-2"
       style={{ "--chapters": chapters.length } as CSSProperties}
     >
       {chapters.map((chapter, index) => (
@@ -438,9 +439,9 @@ function ChapterTile({
   periodStrings: PlannerPeriodStrings;
 }) {
   const text = strings.review;
-  const tile = `grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-xl border border-border bg-card px-2.5 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${stacked ? "sm:gap-x-3 sm:px-3.5" : "sm:flex sm:gap-3.5 sm:px-4"} sm:py-3 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)] aria-disabled:opacity-60`;
+  const tile = `grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 rounded-lg border border-border bg-card px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${stacked ? "sm:gap-x-2.5 sm:px-3" : "sm:flex sm:gap-3 sm:px-3.5"} sm:py-2 aria-[current=step]:border-brand-500 aria-[current=step]:bg-brand-500/[0.07] aria-[current=step]:shadow-[inset_0_0_0_1px_var(--color-brand-500)] aria-disabled:opacity-60`;
   const arrow =
-    "row-span-2 grid size-7 flex-none place-items-center rounded-[10px] bg-muted text-sm sm:size-[34px] sm:text-[17px] in-aria-[current=step]:bg-brand-500 in-aria-[current=step]:text-white";
+    "row-span-2 grid size-7 flex-none place-items-center rounded-lg bg-muted text-sm sm:size-8 sm:text-base in-aria-[current=step]:bg-brand-500 in-aria-[current=step]:text-white";
   // "Week 42 · 12 – 18 Oct", or "W42 · 12 – 18 Oct" where the tile is narrow.
   const weekLine = (monday: string) => {
     const number = plannerWeekNumber(monday);
@@ -495,8 +496,8 @@ function ChapterTile({
         {mark}
       </span>
       <span className="min-w-0">
-        <span className="block text-sm font-semibold sm:text-base">{name}</span>
-        <span className="block truncate text-xs text-muted-foreground sm:text-[13px]">
+        <span className="block text-sm font-semibold">{name}</span>
+        <span className="block truncate text-xs text-muted-foreground">
           {line}
         </span>
       </span>

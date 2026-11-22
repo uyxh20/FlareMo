@@ -105,6 +105,8 @@ type WorkspaceShellValue = {
   mobileSheetOpen: boolean;
   setMobileSheetOpen: (open: boolean) => void;
   explorer: WorkspaceSidebarContent;
+  /** Fork: a wide page asks the frame to center around its own width. */
+  setFramePageWidth: (width: number | null) => void;
 };
 
 const WorkspaceShellContext = createContext<WorkspaceShellValue | null>(null);
@@ -164,6 +166,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   // an always-on transition made the layout trail the window edge by 400ms,
   // so narrowing the window felt like the page refused to get narrower.
   const [animating, setAnimating] = useState(false);
+  // Fork: width of a wide page that wants the whole frame centered (review).
+  const [framePageWidth, setFramePageWidth] = useState<number | null>(null);
   const animationTimer = useRef<number | undefined>(undefined);
   const startToggleAnimation = useCallback(() => {
     window.clearTimeout(animationTimer.current);
@@ -405,6 +409,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       setMobileSheetOpen,
       sidebarCollapsed,
       toggleSidebarCollapsed,
+      setFramePageWidth,
     }),
     [explorer, mobileSheetOpen, sidebarCollapsed, toggleSidebarCollapsed],
   );
@@ -431,7 +436,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
                 (sidebarCollapsed
                   ? 0
                   : FRAME_GUTTER + effectiveSidebarWidth + RESIZER_WIDTH) +
-                DEFAULT_CONTENT_MAX_WIDTH
+                (framePageWidth ?? DEFAULT_CONTENT_MAX_WIDTH)
               }px) / 2))`,
             } as CSSProperties
           }

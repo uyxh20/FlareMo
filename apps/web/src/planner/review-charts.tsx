@@ -17,7 +17,7 @@ import type { PlannerGoalsStrings } from "./goals-strings";
 // week that was not scored. Hovering a week shows its numbers.
 
 const W = 328;
-const H = 112;
+const H = 100;
 const LEFT = 18;
 const RIGHT = 28;
 const TOP = 24;
