@@ -1,10 +1,10 @@
 import {
-  useLayoutEffect,
   createContext,
   type ReactNode,
   type RefObject,
   type UIEvent,
   useContext,
+  useLayoutEffect,
 } from "react";
 import {
   DEFAULT_CONTENT_MAX_WIDTH,
