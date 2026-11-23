@@ -802,29 +802,29 @@ function Panel(props: Props) {
 
   return (
     <aside className="flex flex-col gap-3 md:max-lg:grid md:max-lg:grid-cols-2 md:max-lg:items-start">
-      <section className="rounded-xl border border-border bg-card px-4 py-3.5">
-        <h3 className="mb-2.5 text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase">
+      <section className="rounded-lg border border-border bg-card px-3.5 py-3">
+        <h3 className="mb-2 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
           {strings.review.chartsTitle(
             code(first?.week_start),
             code(last?.week_start),
           )}
         </h3>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2.5">
           <PlannerScoreChart kind="auth" strings={strings} weeks={scores} />
           <PlannerScoreChart kind="ach" strings={strings} weeks={scores} />
         </div>
       </section>
-      <section className="rounded-xl border border-border bg-card px-4 py-3.5">
-        <h3 className="mb-2.5 text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase">
+      <section className="rounded-lg border border-border bg-card px-3.5 py-3">
+        <h3 className="mb-2 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
           {strings.review.panelChecklist}
         </h3>
         <ul
-          className="flex flex-col gap-2"
+          className="flex flex-col gap-1.5"
           data-testid="planner-review-checklist"
         >
           {items.map(([name, answer]) => (
             <li
-              className="grid grid-cols-[18px_1fr] gap-2 text-[13px] leading-snug"
+              className="grid grid-cols-[18px_1fr] gap-1.5 text-xs leading-snug"
               key={name}
             >
               <span
@@ -846,7 +846,7 @@ function Panel(props: Props) {
           ))}
         </ul>
         <Button
-          className="mt-3.5 w-full"
+          className="mt-3 w-full"
           disabled={!canWrite && !hasMemo}
           variant={canWrite && !hasMemo ? "default" : "outline"}
           onClick={hasMemo ? actions.openMemo : actions.writeMemo}
@@ -893,7 +893,7 @@ export function PlannerLookBack(props: Props) {
         : null;
 
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section
         aria-label={strings.review.lookBack}
         className="flex h-[calc(100dvh-200px)] min-h-[440px] flex-col rounded-xl border border-border bg-card lg:h-[calc(100dvh-210px)] lg:min-h-[520px]"

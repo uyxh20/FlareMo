@@ -4,6 +4,7 @@ import {
   type RefObject,
   type UIEvent,
   useContext,
+  useLayoutEffect,
 } from "react";
 import {
   DEFAULT_CONTENT_MAX_WIDTH,
@@ -46,6 +47,8 @@ export type WorkspaceLayoutProps = {
   /** Content column width in px; the sidebar column is added on top of it. */
   contentMaxWidth?: number;
   mainClassName?: string;
+  /** Fork: center the sidebar and this wide column as one group. */
+  centerFrame?: boolean;
 };
 
 export function WorkspaceLayout({
@@ -55,6 +58,7 @@ export function WorkspaceLayout({
   onScroll,
   contentMaxWidth = DEFAULT_CONTENT_MAX_WIDTH,
   mainClassName,
+  centerFrame,
 }: WorkspaceLayoutProps) {
   const {
     explorer,
@@ -62,7 +66,13 @@ export function WorkspaceLayout({
     setMobileSheetOpen,
     sidebarCollapsed,
     toggleSidebarCollapsed,
+    setFramePageWidth,
   } = useWorkspaceShell();
+  useLayoutEffect(() => {
+    if (!centerFrame) return;
+    setFramePageWidth(contentMaxWidth);
+    return () => setFramePageWidth(null);
+  }, [centerFrame, contentMaxWidth, setFramePageWidth]);
 
   return (
     <PageWidthContext.Provider value={contentMaxWidth}>
